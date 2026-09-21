@@ -11,12 +11,12 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "db:generate": "prisma generate --no-engine",
+    "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "cf:build": "prisma generate --no-engine && opennextjs-cloudflare build",
-    "cf:preview": "prisma generate --no-engine && opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "cf:deploy": "prisma generate --no-engine && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf:build": "prisma generate && opennextjs-cloudflare build",
+    "cf:preview": "prisma generate && opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "prisma generate && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
