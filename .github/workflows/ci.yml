@@ -9,11 +9,14 @@ permissions:
 jobs:
   web:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://hrbp:hrbp@localhost:5432/hrbp
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm install
+      - run: npx prisma validate
       - run: npm run typecheck
       - run: npm run build
