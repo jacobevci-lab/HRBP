@@ -22,7 +22,7 @@ The initial enterprise shell is live in the repository and includes:
 - Restricted Employee Relations data boundary
 - Append-only audit ledger direction
 - Local PostgreSQL, Redis and MinIO development stack
-- GitHub Actions CI for type checking and production builds
+- GitHub Actions CI for type checking, Next.js production builds and Cloudflare Workers builds
 
 ## Product architecture
 
@@ -54,6 +54,7 @@ External services may integrate with HRBP One, but employee, employment, recruit
 - Prisma + PostgreSQL
 - Redis for ephemeral coordination/cache
 - S3-compatible private object storage (MinIO locally)
+- Cloudflare Workers deployment through OpenNext
 - GitHub Actions CI
 - Domain-oriented modular architecture
 
@@ -69,12 +70,46 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Cloudflare Workers deployment
+
+The repository is ready for deployment to Cloudflare Workers. The existing Next.js 15 application uses the Cloudflare OpenNext adapter so the current application can be deployed without a framework-major upgrade.
+
+Cloudflare Workers configuration lives in `wrangler.jsonc`; the adapter configuration lives in `open-next.config.ts`.
+
+Useful local commands:
+
+```bash
+npm run cf:build
+npm run cf:preview
+npm run cf:deploy
+```
+
+For automatic deployment from GitHub:
+
+1. Cloudflare Dashboard → **Workers & Pages** → **Create application**.
+2. Choose **Import a repository** and select `jacobevci-lab/HRBP`.
+3. Set **Production branch** to `main`.
+4. Set **Build command** to `npm run cf:build`.
+5. Set **Deploy command** to `npx wrangler deploy`.
+6. Leave the root directory at the repository root.
+7. Add required build/runtime variables and secrets in Cloudflare instead of committing them to Git.
+8. Deploy first to the generated `*.workers.dev` address, then attach the production custom domain.
+
+For the first UI-only staging deployment, a syntactically valid `DATABASE_URL` build variable is sufficient because the current dashboard and module workspaces do not require a live database during static build. Before enabling real API-backed HR records, replace this with the production PostgreSQL connectivity design (recommended: PostgreSQL through Cloudflare Hyperdrive) and configure private object storage bindings.
+
+Recommended custom domain:
+
+```text
+hrbp.fornostsecurity.com
+```
+
 ## Quality checks
 
 ```bash
 npm run typecheck
 npm run lint
 npm run build
+npm run cf:build
 ```
 
 ## Documentation
@@ -103,4 +138,4 @@ Initial build sequence:
 
 ---
 
-**Status:** enterprise foundation bootstrapped; CI typecheck and production build passing on `main`.
+**Status:** enterprise foundation bootstrapped; Next.js production build and Cloudflare Workers adapter build are passing on `main`.
