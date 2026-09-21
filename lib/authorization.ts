@@ -22,13 +22,19 @@ const grants: Record<PlatformRole, Capability[]> = {
   TENANT_ADMIN: ["people:read", "people:write", "organization:read", "organization:write", "positions:read", "positions:write", "documents:read", "documents:write", "audit:read"]
 };
 
+const highlyRestrictedReaders = new Set<PlatformRole>([
+  PlatformRole.ER_INVESTIGATOR,
+  PlatformRole.LEGAL,
+  PlatformRole.PRIVACY_OFFICER
+]);
+
 export function can(ctx: RequestContext, capability: Capability) {
   return grants[ctx.role].includes(capability);
 }
 
 export function canReadClassification(ctx: RequestContext, classification: DataClassification) {
   if (classification !== DataClassification.HIGHLY_RESTRICTED) return true;
-  return [PlatformRole.ER_INVESTIGATOR, PlatformRole.LEGAL, PlatformRole.PRIVACY_OFFICER].includes(ctx.role);
+  return highlyRestrictedReaders.has(ctx.role);
 }
 
 export function forbidden(message = "Access denied by policy.") {
