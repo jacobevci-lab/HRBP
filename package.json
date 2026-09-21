@@ -11,7 +11,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "npm run db:generate && tsc --noEmit",
-    "db:generate": "node scripts/prepare-prisma-workers.mjs && prisma generate --no-engine --schema=.prisma-worker",
+    "db:generate": "node scripts/prepare-prisma-workers.mjs && prisma generate --schema=.prisma-worker",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "cf:build": "npm run db:generate && opennextjs-cloudflare build",
