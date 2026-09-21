@@ -4,6 +4,7 @@ import "./enterprise.css";
 import "./recruiting.css";
 import "./work-pay.css";
 import "./growth.css";
+import "./employee-services.css";
 
 export const metadata: Metadata = {
   title: "HRBP One",

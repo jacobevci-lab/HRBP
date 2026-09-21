@@ -1,0 +1,425 @@
+enum CaseParticipantRole {
+  REPORTER
+  SUBJECT
+  WITNESS
+  REPRESENTATIVE
+  ADVISOR
+  OTHER
+}
+
+enum AllegationStatus {
+  OPEN
+  INVESTIGATING
+  SUBSTANTIATED
+  UNSUBSTANTIATED
+  INCONCLUSIVE
+  CLOSED
+}
+
+enum InvestigationFinding {
+  SUBSTANTIATED
+  UNSUBSTANTIATED
+  INCONCLUSIVE
+  POLICY_BREACH
+  NO_POLICY_BREACH
+}
+
+enum CaseActionStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum CaseAppealStatus {
+  SUBMITTED
+  REVIEWING
+  UPHELD
+  OVERTURNED
+  CLOSED
+}
+
+enum ServiceRequestStatus {
+  OPEN
+  TRIAGE
+  IN_PROGRESS
+  WAITING_EMPLOYEE
+  WAITING_THIRD_PARTY
+  RESOLVED
+  CLOSED
+  CANCELLED
+}
+
+enum ServicePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ServiceVisibility {
+  REQUESTOR
+  HR_ONLY
+  PRIVATE_NOTE
+}
+
+enum PolicyStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  PUBLISHED
+  RETIRED
+}
+
+enum PolicyAssignmentStatus {
+  PENDING
+  ACKNOWLEDGED
+  OVERDUE
+  WAIVED
+}
+
+enum WorkflowDefinitionStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  RETIRED
+}
+
+enum WorkflowInstanceStatus {
+  PENDING
+  RUNNING
+  WAITING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WorkflowTaskStatus {
+  PENDING
+  READY
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+  FAILED
+  CANCELLED
+}
+
+model CaseParticipant {
+  id           String @id @default(cuid())
+  tenantId     String
+  caseId       String
+  personId     String?
+  employmentId String?
+  externalName String?
+  role         CaseParticipantRole
+  confidential Boolean @default(true)
+  addedAt      DateTime @default(now())
+  addedById    String
+
+  @@index([tenantId, caseId, role])
+  @@index([tenantId, personId])
+}
+
+model CaseAllegation {
+  id             String @id @default(cuid())
+  tenantId       String
+  caseId         String
+  category       String
+  description    String
+  severity       String?
+  status         AllegationStatus @default(OPEN)
+  policyCode     String?
+  raisedAt       DateTime @default(now())
+  closedAt       DateTime?
+  classification DataClassification @default(HIGHLY_RESTRICTED)
+
+  @@index([tenantId, caseId, status])
+  @@index([tenantId, category, status])
+}
+
+model CaseInterview {
+  id                   String @id @default(cuid())
+  tenantId             String
+  caseId               String
+  participantId        String?
+  interviewerId        String
+  scheduledAt          DateTime?
+  completedAt          DateTime?
+  summary              String?
+  transcriptDocumentId String?
+  classification       DataClassification @default(HIGHLY_RESTRICTED)
+  createdAt            DateTime @default(now())
+
+  @@index([tenantId, caseId, scheduledAt])
+}
+
+model CaseEvidence {
+  id             String @id @default(cuid())
+  tenantId       String
+  caseId         String
+  documentId     String?
+  label          String
+  evidenceType   String
+  source         String?
+  checksum       String?
+  collectedById String
+  collectedAt    DateTime @default(now())
+  classification DataClassification @default(HIGHLY_RESTRICTED)
+
+  @@index([tenantId, caseId, collectedAt])
+}
+
+model CaseFinding {
+  id             String @id @default(cuid())
+  tenantId       String
+  caseId         String
+  allegationId   String?
+  finding        InvestigationFinding
+  rationale      String
+  decidedById    String
+  decidedAt      DateTime @default(now())
+  classification DataClassification @default(HIGHLY_RESTRICTED)
+
+  @@index([tenantId, caseId, decidedAt])
+}
+
+model CaseAction {
+  id                  String @id @default(cuid())
+  tenantId            String
+  caseId              String
+  subjectEmploymentId String?
+  actionType          String
+  description         String
+  ownerId             String
+  dueAt               DateTime?
+  completedAt         DateTime?
+  status              CaseActionStatus @default(OPEN)
+  createdAt           DateTime @default(now())
+
+  @@index([tenantId, caseId, status])
+  @@index([tenantId, ownerId, dueAt])
+}
+
+model CaseAppeal {
+  id             String @id @default(cuid())
+  tenantId       String
+  caseId         String
+  requestedById  String
+  grounds        String
+  status         CaseAppealStatus @default(SUBMITTED)
+  reviewerId     String?
+  decision       String?
+  submittedAt    DateTime @default(now())
+  decidedAt      DateTime?
+  classification DataClassification @default(HIGHLY_RESTRICTED)
+
+  @@index([tenantId, caseId, status])
+}
+
+model HRServiceRequest {
+  id                  String @id @default(cuid())
+  tenantId            String
+  requestNumber       String
+  requestorId         String
+  subjectEmploymentId String?
+  category            String
+  subcategory         String?
+  title               String
+  description         String
+  status              ServiceRequestStatus @default(OPEN)
+  priority            ServicePriority @default(MEDIUM)
+  assigneeId          String?
+  queue               String?
+  slaDueAt            DateTime?
+  firstResponseAt     DateTime?
+  resolvedAt          DateTime?
+  closedAt            DateTime?
+  classification      DataClassification @default(CONFIDENTIAL)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  comments            HRServiceComment[]
+
+  @@unique([tenantId, requestNumber])
+  @@index([tenantId, status, priority])
+  @@index([tenantId, requestorId, createdAt])
+  @@index([tenantId, assigneeId, slaDueAt])
+}
+
+model HRServiceComment {
+  id         String @id @default(cuid())
+  requestId  String
+  tenantId   String
+  authorId   String
+  body       String
+  visibility ServiceVisibility @default(REQUESTOR)
+  createdAt  DateTime @default(now())
+  request    HRServiceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, requestId, createdAt])
+}
+
+model PolicyRecord {
+  id              String @id @default(cuid())
+  tenantId        String
+  code            String
+  title           String
+  version         String
+  status          PolicyStatus @default(DRAFT)
+  jurisdiction    String?
+  audience        String?
+  ownerId         String
+  contentMarkdown String
+  contentHash     String
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  reviewDueAt     DateTime?
+  approvedById    String?
+  approvedAt      DateTime?
+  publishedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  assignments     PolicyAssignment[]
+  acknowledgements PolicyAcknowledgement[]
+  exceptions      PolicyException[]
+
+  @@unique([tenantId, code, version])
+  @@index([tenantId, status, effectiveFrom])
+  @@index([tenantId, reviewDueAt])
+}
+
+model PolicyAssignment {
+  id           String @id @default(cuid())
+  tenantId     String
+  policyId     String
+  employmentId String
+  dueAt        DateTime?
+  status       PolicyAssignmentStatus @default(PENDING)
+  assignedAt   DateTime @default(now())
+  policy       PolicyRecord @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, employmentId])
+  @@index([tenantId, employmentId, status])
+}
+
+model PolicyAcknowledgement {
+  id             String @id @default(cuid())
+  tenantId       String
+  policyId       String
+  employmentId   String
+  policyVersion  String
+  acknowledgedBy String
+  acknowledgedAt DateTime @default(now())
+  ipAddress      String?
+  policy         PolicyRecord @relation(fields: [policyId], references: [id], onDelete: Restrict)
+
+  @@unique([policyId, employmentId, policyVersion])
+  @@index([tenantId, employmentId, acknowledgedAt])
+}
+
+model PolicyException {
+  id           String @id @default(cuid())
+  tenantId     String
+  policyId     String
+  employmentId String?
+  reason       String
+  compensatingControl String?
+  requestedById String
+  approvedById String?
+  expiresAt    DateTime?
+  active       Boolean @default(true)
+  createdAt    DateTime @default(now())
+  policy       PolicyRecord @relation(fields: [policyId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, policyId, active])
+  @@index([tenantId, expiresAt, active])
+}
+
+model WorkflowDefinition {
+  id          String @id @default(cuid())
+  tenantId    String
+  key         String
+  name        String
+  version     Int @default(1)
+  description String?
+  triggerType String
+  status      WorkflowDefinitionStatus @default(DRAFT)
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  steps       WorkflowStepDefinition[]
+  instances   WorkflowInstance[]
+
+  @@unique([tenantId, key, version])
+  @@index([tenantId, status, key])
+}
+
+model WorkflowStepDefinition {
+  id             String @id @default(cuid())
+  tenantId       String
+  definitionId   String
+  stepKey        String
+  name           String
+  orderIndex     Int
+  actionType     String
+  assigneeRole   String?
+  approvalMode   String?
+  slaMinutes     Int?
+  configuration Json?
+  definition     WorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@unique([definitionId, stepKey])
+  @@index([tenantId, definitionId, orderIndex])
+}
+
+model WorkflowInstance {
+  id            String @id @default(cuid())
+  tenantId      String
+  definitionId  String
+  subjectType   String
+  subjectId     String
+  status        WorkflowInstanceStatus @default(PENDING)
+  startedById   String
+  context       Json?
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  failedAt      DateTime?
+  failureReason String?
+  definition    WorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Restrict)
+  tasks         WorkflowTask[]
+  events        WorkflowEvent[]
+
+  @@index([tenantId, status, startedAt])
+  @@index([tenantId, subjectType, subjectId])
+}
+
+model WorkflowTask {
+  id            String @id @default(cuid())
+  tenantId      String
+  instanceId    String
+  stepKey       String
+  name          String
+  assigneeId    String?
+  assigneeRole  String?
+  status        WorkflowTaskStatus @default(PENDING)
+  dueAt         DateTime?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  result        Json?
+  instance      WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, instanceId, status])
+  @@index([tenantId, assigneeId, dueAt])
+}
+
+model WorkflowEvent {
+  id         String @id @default(cuid())
+  tenantId   String
+  instanceId String
+  eventType  String
+  actorId    String?
+  payload    Json?
+  occurredAt DateTime @default(now())
+  instance   WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, instanceId, occurredAt])
+}

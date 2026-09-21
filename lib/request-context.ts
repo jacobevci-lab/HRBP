@@ -4,6 +4,7 @@ export type RequestContext = {
   tenantId: string;
   actorId: string;
   role: PlatformRole;
+  employmentId?: string;
   purpose?: string;
   ipAddress?: string;
 };
@@ -20,6 +21,7 @@ export function getRequestContext(request: Request): RequestContext | null {
     tenantId,
     actorId,
     role: roleValue,
+    employmentId: request.headers.get("x-employment-id")?.trim() || undefined,
     purpose: request.headers.get("x-purpose")?.trim() || undefined,
     ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined
   };

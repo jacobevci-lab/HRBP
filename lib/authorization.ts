@@ -17,23 +17,27 @@ export type Capability =
   | "talent:read" | "talent:write"
   | "succession:read" | "succession:write"
   | "learning:read" | "learning:write"
-  | "audit:read" | "cases:read";
+  | "cases:read" | "cases:write"
+  | "hr-service:read" | "hr-service:write"
+  | "policies:read" | "policies:write" | "policies:acknowledge"
+  | "workflows:read" | "workflows:write" | "workflows:run"
+  | "audit:read";
 
 const grants: Record<PlatformRole, Capability[]> = {
-  EMPLOYEE: ["people:read", "documents:read", "onboarding:read", "time:read", "leave:read"],
-  MANAGER: ["people:read", "organization:read", "positions:read", "documents:read", "recruiting:read", "onboarding:read", "time:read", "time:write", "leave:read", "leave:write"],
-  HRBP: ["people:read", "people:write", "organization:read", "positions:read", "documents:read", "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write", "time:read", "leave:read", "leave:write", "compensation:read", "benefits:read", "performance:read", "performance:write", "talent:read", "talent:write", "succession:read", "succession:write", "learning:read"],
-  HR_OPERATIONS: ["people:read", "people:write", "organization:read", "organization:write", "positions:read", "positions:write", "documents:read", "documents:write", "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write", "time:read", "time:write", "leave:read", "leave:write", "compensation:read", "benefits:read", "benefits:write", "performance:read", "learning:read", "learning:write"],
-  RECRUITER: ["people:read", "organization:read", "positions:read", "recruiting:read", "recruiting:write", "onboarding:read"],
-  TIME_ADMIN: ["people:read", "organization:read", "time:read", "time:write", "leave:read", "leave:write"],
-  TALENT_ADMIN: ["people:read", "organization:read", "positions:read", "performance:read", "performance:write", "talent:read", "talent:write", "succession:read", "succession:write", "learning:read", "learning:write"],
-  COMPENSATION_ADMIN: ["people:read", "organization:read", "positions:read", "compensation:read", "compensation:write", "payroll:read", "benefits:read"],
-  PAYROLL_ADMIN: ["people:read", "organization:read", "time:read", "leave:read", "compensation:read", "payroll:read", "payroll:write", "benefits:read"],
-  ER_INVESTIGATOR: ["people:read", "cases:read", "documents:read", "documents:write"],
-  LEGAL: ["people:read", "cases:read", "documents:read", "audit:read"],
-  PRIVACY_OFFICER: ["people:read", "documents:read", "audit:read"],
+  EMPLOYEE: ["people:read", "documents:read", "onboarding:read", "time:read", "leave:read", "hr-service:read", "hr-service:write", "policies:read", "policies:acknowledge"],
+  MANAGER: ["people:read", "organization:read", "positions:read", "documents:read", "recruiting:read", "onboarding:read", "time:read", "time:write", "leave:read", "leave:write", "hr-service:read", "hr-service:write", "policies:read", "policies:acknowledge"],
+  HRBP: ["people:read", "people:write", "organization:read", "positions:read", "documents:read", "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write", "time:read", "leave:read", "leave:write", "compensation:read", "benefits:read", "performance:read", "performance:write", "talent:read", "talent:write", "succession:read", "succession:write", "learning:read", "hr-service:read", "hr-service:write", "policies:read", "workflows:read", "workflows:run"],
+  HR_OPERATIONS: ["people:read", "people:write", "organization:read", "organization:write", "positions:read", "positions:write", "documents:read", "documents:write", "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write", "time:read", "time:write", "leave:read", "leave:write", "compensation:read", "benefits:read", "benefits:write", "performance:read", "learning:read", "learning:write", "hr-service:read", "hr-service:write", "policies:read", "policies:write", "workflows:read", "workflows:write", "workflows:run"],
+  RECRUITER: ["people:read", "organization:read", "positions:read", "recruiting:read", "recruiting:write", "onboarding:read", "policies:read"],
+  TIME_ADMIN: ["people:read", "organization:read", "time:read", "time:write", "leave:read", "leave:write", "policies:read"],
+  TALENT_ADMIN: ["people:read", "organization:read", "positions:read", "performance:read", "performance:write", "talent:read", "talent:write", "succession:read", "succession:write", "learning:read", "learning:write", "policies:read"],
+  COMPENSATION_ADMIN: ["people:read", "organization:read", "positions:read", "compensation:read", "compensation:write", "payroll:read", "benefits:read", "policies:read"],
+  PAYROLL_ADMIN: ["people:read", "organization:read", "time:read", "leave:read", "compensation:read", "payroll:read", "payroll:write", "benefits:read", "policies:read"],
+  ER_INVESTIGATOR: ["people:read", "cases:read", "cases:write", "documents:read", "documents:write", "policies:read"],
+  LEGAL: ["people:read", "cases:read", "documents:read", "policies:read", "policies:write", "audit:read"],
+  PRIVACY_OFFICER: ["people:read", "cases:read", "documents:read", "policies:read", "audit:read"],
   SECURITY_AUDITOR: ["audit:read"],
-  TENANT_ADMIN: ["people:read", "people:write", "organization:read", "organization:write", "positions:read", "positions:write", "documents:read", "documents:write", "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write", "time:read", "time:write", "leave:read", "leave:write", "benefits:read", "performance:read", "talent:read", "succession:read", "learning:read", "audit:read"]
+  TENANT_ADMIN: ["people:read", "people:write", "organization:read", "organization:write", "positions:read", "positions:write", "documents:read", "documents:write", "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write", "time:read", "time:write", "leave:read", "leave:write", "benefits:read", "performance:read", "talent:read", "succession:read", "learning:read", "hr-service:read", "hr-service:write", "policies:read", "workflows:read", "workflows:write", "audit:read"]
 };
 
 const highlyRestrictedReaders = new Set<PlatformRole>([

@@ -4,6 +4,7 @@ import { CoreHRWorkspace, coreWorkspaceSlugs } from "@/components/core-hr-worksp
 import { RecruitingWorkspace, recruitingWorkspaceSlugs } from "@/components/recruiting-workspace";
 import { WorkPayWorkspace, workPayWorkspaceSlugs } from "@/components/work-pay-workspace";
 import { GrowthWorkspace, growthWorkspaceSlugs } from "@/components/growth-workspace";
+import { EmployeeServicesWorkspace, employeeServicesWorkspaceSlugs } from "@/components/employee-services-workspace";
 
 const descriptions: Record<string,string> = {
   people: "The employee golden record: identity, employment, position, organization and lifecycle history in one governed workspace.",
@@ -21,12 +22,14 @@ const descriptions: Record<string,string> = {
   talent: "Connect performance and potential assessments to development decisions without opaque automated employee scoring.",
   succession: "Protect business continuity through position-centric succession plans, candidate readiness and development gaps.",
   learning: "Operate a governed skills taxonomy, skill evidence, mandatory learning, development assignments and certification history.",
+  "employee-relations": "Run highly restricted investigations from allegation and interview through evidence, findings, corrective action, appeal and closure inside a case wall.",
+  "hr-service": "Provide a single employee service desk with identity-bound requests, queue routing, SLAs, private HR notes and complete request history.",
+  policies: "Control policy drafting, versions, approvals, publication, acknowledgement evidence, review dates and exceptions in one register.",
   documents: "Store HR records in a private document vault with classification, retention, legal hold and access evidence.",
-  "employee-relations": "Handle sensitive employee relations cases with strict case-wall access controls.",
   privacy: "Govern processing purpose, legal basis, classification, retention, DSRs and privileged access.",
   audit: "Review immutable security-relevant reads and business mutations across the employee lifecycle.",
   analytics: "Turn workforce events into explainable, governed people intelligence.",
-  workflows: "Automate employee lifecycle actions with auditable, event-driven workflows."
+  workflows: "Orchestrate event-driven HR processes with versioned definitions, approvals, tasks, SLAs, failure handling and immutable process history."
 };
 
 export function ModuleLanding({ slug }: { slug: string }) {
@@ -37,12 +40,13 @@ export function ModuleLanding({ slug }: { slug: string }) {
   const specializedRecruiting = recruitingWorkspaceSlugs.has(slug);
   const specializedWorkPay = workPayWorkspaceSlugs.has(slug);
   const specializedGrowth = growthWorkspaceSlugs.has(slug);
+  const specializedServices = employeeServicesWorkspaceSlugs.has(slug);
   return <>
     <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {title}</div><h1>{title}</h1><p>{descriptions[slug] ?? `Enterprise ${title.toLowerCase()} workspace connected to the HRBP One people graph.`}</p></div><button className="create-button"><Plus size={17}/> New record</button></section>
-    {specializedCore ? <CoreHRWorkspace slug={slug}/> : specializedRecruiting ? <RecruitingWorkspace slug={slug}/> : specializedWorkPay ? <WorkPayWorkspace slug={slug}/> : specializedGrowth ? <GrowthWorkspace slug={slug}/> : <>
+    {specializedCore ? <CoreHRWorkspace slug={slug}/> : specializedRecruiting ? <RecruitingWorkspace slug={slug}/> : specializedWorkPay ? <WorkPayWorkspace slug={slug}/> : specializedGrowth ? <GrowthWorkspace slug={slug}/> : specializedServices ? <EmployeeServicesWorkspace slug={slug}/> : <>
       <section className="module-hero card"><div className="module-icon">{Icon && <Icon size={25}/>}</div><div><div className="section-kicker">Connected module</div><h2>{title} is part of the unified employee lifecycle.</h2><p>Records created here inherit tenant isolation, effective dating, classification, retention, workflow and audit controls by default.</p></div><div className="module-health"><CircleCheckBig size={18}/><span>Governance active</span></div></section>
       <section className="module-toolbar"><div className="module-search"><Search size={16}/><input placeholder={`Search ${title.toLowerCase()}…`}/></div><button className="secondary-button"><SlidersHorizontal size={15}/> Filters</button></section>
-      <section className="card module-table"><div className="empty-state"><div className="empty-visual"><span/><span/><span/></div><h3>{title} domain is queued for its vertical slice</h3><p>Core HR, recruiting, work & pay, benefits, performance, talent, succession and learning now share the same employee data and policy plane.</p><button className="secondary-button">View architecture <ChevronRight size={15}/></button></div></section>
+      <section className="card module-table"><div className="empty-state"><div className="empty-visual"><span/><span/><span/></div><h3>{title} domain is queued for its vertical slice</h3><p>Core HR, recruiting, work & pay, growth, employee services and process governance now share the same employee data and policy plane.</p><button className="secondary-button">View architecture <ChevronRight size={15}/></button></div></section>
     </>}
   </>;
 }
