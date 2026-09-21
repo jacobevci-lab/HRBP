@@ -1,0 +1,193 @@
+enum VaultScanStatus {
+  PENDING
+  CLEAN
+  QUARANTINED
+  FAILED
+}
+
+enum SignatureEnvelopeStatus {
+  DRAFT
+  SENT
+  IN_PROGRESS
+  COMPLETED
+  VOIDED
+  EXPIRED
+}
+
+enum SignatureParticipantStatus {
+  PENDING
+  VIEWED
+  SIGNED
+  DECLINED
+}
+
+enum IdentityProviderType {
+  ENTRA_ID
+  OKTA
+  OIDC
+  SAML
+  LDAP
+  LOCAL
+}
+
+enum ConnectionStatus {
+  DRAFT
+  ACTIVE
+  DEGRADED
+  DISABLED
+}
+
+model DocumentVersion {
+  id             String @id @default(cuid())
+  tenantId       String
+  documentId     String
+  version        Int
+  objectKey      String @unique
+  contentType    String
+  sizeBytes      BigInt?
+  contentHash    String
+  classification DataClassification @default(RESTRICTED)
+  scanStatus     VaultScanStatus @default(PENDING)
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@unique([documentId, version])
+  @@index([tenantId, documentId, createdAt])
+  @@index([tenantId, scanStatus])
+}
+
+model DocumentAccessGrant {
+  id            String @id @default(cuid())
+  tenantId      String
+  documentId    String
+  principalType String
+  principalId   String
+  permission    String
+  purpose       String?
+  expiresAt     DateTime?
+  grantedById   String
+  grantedAt     DateTime @default(now())
+
+  @@unique([documentId, principalType, principalId, permission])
+  @@index([tenantId, principalId, expiresAt])
+}
+
+model SignatureEnvelope {
+  id          String @id @default(cuid())
+  tenantId    String
+  documentId  String
+  title       String
+  status      SignatureEnvelopeStatus @default(DRAFT)
+  createdById String
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  participants SignatureParticipant[]
+  events      SignatureEvent[]
+
+  @@index([tenantId, documentId, status])
+}
+
+model SignatureParticipant {
+  id           String @id @default(cuid())
+  tenantId     String
+  envelopeId   String
+  employmentId String?
+  email        String?
+  signingOrder Int @default(1)
+  status       SignatureParticipantStatus @default(PENDING)
+  viewedAt     DateTime?
+  signedAt     DateTime?
+  envelope     SignatureEnvelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, envelopeId, signingOrder])
+}
+
+model SignatureEvent {
+  id         String @id @default(cuid())
+  tenantId   String
+  envelopeId String
+  eventType  String
+  actorId    String?
+  ipAddress  String?
+  metadata   Json?
+  occurredAt DateTime @default(now())
+  envelope   SignatureEnvelope @relation(fields: [envelopeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, envelopeId, occurredAt])
+}
+
+model IdentityProviderConnection {
+  id                String @id @default(cuid())
+  tenantId          String
+  name              String
+  type              IdentityProviderType
+  issuer            String?
+  clientId          String?
+  metadataUrl       String?
+  directoryTenantId String?
+  secretRef         String?
+  scimEnabled       Boolean @default(false)
+  jitEnabled        Boolean @default(false)
+  mfaRequired       Boolean @default(true)
+  status            ConnectionStatus @default(DRAFT)
+  lastValidatedAt   DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@index([tenantId, status, type])
+}
+
+model IntegrationConnection {
+  id           String @id @default(cuid())
+  tenantId     String
+  name         String
+  systemType   String
+  baseUrl      String?
+  authType     String
+  secretRef    String?
+  scopes       Json?
+  enabled      Boolean @default(false)
+  status       ConnectionStatus @default(DRAFT)
+  lastSyncAt   DateTime?
+  lastError    String?
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, name])
+  @@index([tenantId, enabled, status])
+}
+
+model TenantSecurityPolicy {
+  id                    String @id @default(cuid())
+  tenantId              String @unique
+  dataRegion            String
+  kmsKeyRef             String?
+  customerManagedKey    Boolean @default(false)
+  mfaRequired           Boolean @default(true)
+  sessionMaxMinutes     Int @default(480)
+  exportRestrictedData  Boolean @default(false)
+  downloadWatermarking  Boolean @default(true)
+  deviceTrustRequired   Boolean @default(false)
+  breakGlassEnabled     Boolean @default(true)
+  updatedById           String
+  updatedAt             DateTime @updatedAt
+}
+
+model NotificationTemplate {
+  id          String @id @default(cuid())
+  tenantId    String
+  key         String
+  locale      String
+  channel     String
+  subject     String?
+  body        String
+  active      Boolean @default(true)
+  updatedById String
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, key, locale, channel])
+  @@index([tenantId, active, channel])
+}
