@@ -33,7 +33,7 @@ export async function GET() {
       database: "postgresql",
       transport: databaseTransport(),
       orm: "prisma",
-      diagnosticVersion: "db-health-v5-hyperdrive-adapter",
+      diagnosticVersion: "db-health-v6-engine-adapter",
       latencyMs: Date.now() - startedAt
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
@@ -46,7 +46,7 @@ export async function GET() {
         database: "postgresql",
         transport: databaseTransport(),
         orm: "prisma",
-        diagnosticVersion: "db-health-v5-hyperdrive-adapter",
+        diagnosticVersion: "db-health-v6-engine-adapter",
         reason: classify(message),
         errorName: candidate?.name ?? "unknown",
         errorCode: candidate?.code ?? null,
