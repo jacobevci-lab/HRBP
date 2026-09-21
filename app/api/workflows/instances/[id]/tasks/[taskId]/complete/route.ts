@@ -3,4 +3,31 @@ import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
 import { getRequestContext, unauthorized } from "@/lib/request-context";
-export async function POST(request:Request,{params}:{params:Promise<{id:string;taskId:string}>}){const ctx=getRequestContext(request);if(!ctx)return unauthorized();if(!can(ctx,"workflows:run"))return forbidden();const {id,taskId}=await params;const body=await request.json() as {result?:unknown};const data=await db.$transaction(async tx=>{const instance=await tx.workflowInstance.findFirst({where:{id,tenantId:ctx.tenantId,status:{in:[WorkflowInstanceStatus.RUNNING,WorkflowInstanceStatus.WAITING]}},include:{tasks:{orderBy:{id:"asc"}}}});if(!instance)throw new Error("NOT_FOUND");const task=instance.tasks.find(t=>t.id===taskId);if(!task)throw new Error("TASK");if(![WorkflowTaskStatus.READY,WorkflowTaskStatus.IN_PROGRESS].includes(task.status))throw new Error("STATE");const now=new Date();await tx.workflowTask.update({where:{id:taskId},data:{status:WorkflowTaskStatus.COMPLETED,completedAt:now,result:body.result as Prisma.InputJsonValue|undefined}});const remaining=await tx.workflowTask.findMany({where:{tenantId:ctx.tenantId,instanceId:id,status:{in:[WorkflowTaskStatus.PENDING,WorkflowTaskStatus.READY,WorkflowTaskStatus.IN_PROGRESS]}},orderBy:{id:"asc"}});const next=remaining.find(t=>t.id!==taskId);if(next)await tx.workflowTask.update({where:{id:next.id},data:{status:WorkflowTaskStatus.READY,startedAt:next.startedAt??now}});else await tx.workflowInstance.update({where:{id},data:{status:WorkflowInstanceStatus.COMPLETED,completedAt:now}});await tx.workflowEvent.create({data:{tenantId:ctx.tenantId,instanceId:id,eventType:next?"workflow.task-completed":"workflow.completed",actorId:ctx.actorId,payload:{taskId,nextTaskId:next?.id??null}}});await appendAudit(tx,ctx,{action:"workflow.task-completed",resourceType:"WorkflowTask",resourceId:taskId,classification:DataClassification.INTERNAL});return {completedTaskId:taskId,nextTaskId:next?.id??null,instanceCompleted:!next}}).catch(e=>e instanceof Error&&["NOT_FOUND","TASK","STATE"].includes(e.message)?e.message:Promise.reject(e));if(data==="NOT_FOUND")return Response.json({error:"Running workflow instance not found."},{status:404});if(data==="TASK")return Response.json({error:"Task not found in workflow instance."},{status:404});if(data==="STATE")return Response.json({error:"Task is not in a completable state."},{status:409});return Response.json({data})}
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string; taskId: string }> }) {
+  const ctx = getRequestContext(request);
+  if (!ctx) return unauthorized();
+  if (!can(ctx, "workflows:run")) return forbidden();
+  const { id, taskId } = await params;
+  const body = await request.json() as { result?: unknown };
+  const data = await db.$transaction(async (tx) => {
+    const instance = await tx.workflowInstance.findFirst({ where: { id, tenantId: ctx.tenantId, status: { in: [WorkflowInstanceStatus.RUNNING, WorkflowInstanceStatus.WAITING] } }, include: { tasks: { orderBy: { id: "asc" } } } });
+    if (!instance) throw new Error("NOT_FOUND");
+    const task = instance.tasks.find((candidate) => candidate.id === taskId);
+    if (!task) throw new Error("TASK");
+    if (task.status !== WorkflowTaskStatus.READY && task.status !== WorkflowTaskStatus.IN_PROGRESS) throw new Error("STATE");
+    const now = new Date();
+    await tx.workflowTask.update({ where: { id: taskId }, data: { status: WorkflowTaskStatus.COMPLETED, completedAt: now, result: body.result as Prisma.InputJsonValue | undefined } });
+    const remaining = await tx.workflowTask.findMany({ where: { tenantId: ctx.tenantId, instanceId: id, status: { in: [WorkflowTaskStatus.PENDING, WorkflowTaskStatus.READY, WorkflowTaskStatus.IN_PROGRESS] } }, orderBy: { id: "asc" } });
+    const next = remaining.find((candidate) => candidate.id !== taskId);
+    if (next) await tx.workflowTask.update({ where: { id: next.id }, data: { status: WorkflowTaskStatus.READY, startedAt: next.startedAt ?? now } });
+    else await tx.workflowInstance.update({ where: { id }, data: { status: WorkflowInstanceStatus.COMPLETED, completedAt: now } });
+    await tx.workflowEvent.create({ data: { tenantId: ctx.tenantId, instanceId: id, eventType: next ? "workflow.task-completed" : "workflow.completed", actorId: ctx.actorId, payload: { taskId, nextTaskId: next?.id ?? null } } });
+    await appendAudit(tx, ctx, { action: "workflow.task-completed", resourceType: "WorkflowTask", resourceId: taskId, classification: DataClassification.INTERNAL });
+    return { completedTaskId: taskId, nextTaskId: next?.id ?? null, instanceCompleted: !next };
+  }).catch((error) => error instanceof Error && ["NOT_FOUND", "TASK", "STATE"].includes(error.message) ? error.message : Promise.reject(error));
+  if (data === "NOT_FOUND") return Response.json({ error: "Running workflow instance not found." }, { status: 404 });
+  if (data === "TASK") return Response.json({ error: "Task not found in workflow instance." }, { status: 404 });
+  if (data === "STATE") return Response.json({ error: "Task is not in a completable state." }, { status: 409 });
+  return Response.json({ data });
+}
