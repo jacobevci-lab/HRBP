@@ -26,4 +26,13 @@ jobs:
           fi
       - name: Synchronize staging schema
         run: npx prisma db push
+      - name: Grant runtime role access
+        run: |
+          cat <<'SQL' | npx prisma db execute --stdin --schema ./prisma/schema.prisma
+          GRANT USAGE ON SCHEMA public TO hrbp_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO hrbp_app;
+          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO hrbp_app;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO hrbp_app;
+          ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO hrbp_app;
+          SQL
       - run: npx prisma generate --no-engine
