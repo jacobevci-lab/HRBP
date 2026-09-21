@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Bell, ChevronDown, Command, Menu, Plus, Search, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { navigation } from "@/lib/navigation";
+import { SessionIndicator } from "@/components/session-indicator";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -42,11 +43,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           ))}
         </nav>
-        <div className="sidebar-footer">
-          <div className="user-avatar">YE</div>
-          <div className="user-copy"><strong>Yakup Evci</strong><small>Platform administrator</small></div>
-          <ChevronDown size={15}/>
-        </div>
+        <div className="sidebar-footer"><SessionIndicator/></div>
       </aside>
       {mobileOpen && <button className="sidebar-overlay" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
       <main className="main-area">
@@ -56,7 +53,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="topbar-actions">
             <button className="icon-button"><Bell size={18}/><span className="notification-dot"/></button>
             <button className="ai-button"><Sparkles size={16}/> Ask HRBP</button>
-            <button className="create-button"><Plus size={17}/> Create</button>
+            <Link className="create-button" href="/module/people/new"><Plus size={17}/> Create</Link>
           </div>
         </header>
         <div className="page-content">{children}</div>

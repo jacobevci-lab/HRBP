@@ -1,4 +1,5 @@
 import { PlatformRole } from "@prisma/client";
+import { sessionFromRequest } from "@/lib/auth-session";
 
 export type RequestContext = {
   tenantId: string;
@@ -12,15 +13,27 @@ export type RequestContext = {
 const validRoles = new Set(Object.values(PlatformRole));
 
 /**
- * Legacy header context exists only for local development and automated testing.
- * Production must populate RequestContext from a cryptographically verified
- * identity/session layer rather than trusting caller-supplied role headers.
+ * Caller-supplied role headers are accepted only for explicit local development
+ * and automated testing. Production identity comes from the HMAC-signed HRBP
+ * session created after OIDC validation.
  */
 function insecureHeaderContextAllowed() {
   return process.env.NODE_ENV !== "production" && process.env.HRBP_ALLOW_INSECURE_CONTEXT_HEADERS === "true";
 }
 
 export function getRequestContext(request: Request): RequestContext | null {
+  const session = sessionFromRequest(request);
+  if (session) {
+    return {
+      tenantId: session.tenantId,
+      actorId: session.actorId,
+      role: session.role,
+      employmentId: session.employmentId,
+      purpose: request.headers.get("x-purpose")?.trim() || undefined,
+      ipAddress: request.headers.get("cf-connecting-ip")?.trim() || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined
+    };
+  }
+
   if (!insecureHeaderContextAllowed()) return null;
 
   const tenantId = request.headers.get("x-tenant-id")?.trim();
@@ -36,6 +49,21 @@ export function getRequestContext(request: Request): RequestContext | null {
     purpose: request.headers.get("x-purpose")?.trim() || undefined,
     ipAddress: request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined
   };
+}
+
+/**
+ * SameSite cookies are the primary CSRF boundary. Mutations also enforce the
+ * browser Origin header when one is present so a sibling/untrusted origin
+ * cannot silently reuse an authenticated session.
+ */
+export function mutationOriginAllowed(request: Request) {
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  try {
+    return new URL(origin).origin === new URL(request.url).origin;
+  } catch {
+    return false;
+  }
 }
 
 export function unauthorized() {

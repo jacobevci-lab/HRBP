@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ChevronRight, CircleCheckBig, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { navigation } from "@/lib/navigation";
 import { CoreHRWorkspace, coreWorkspaceSlugs } from "@/components/core-hr-workspace";
@@ -55,11 +56,13 @@ export async function ModuleLanding({ slug, query = "", personId }: { slug: stri
   const admin = platformAdminWorkspaceSlugs.has(slug);
   const off = offboardingWorkspaceSlugs.has(slug);
   const liveContent = liveCore ? await CoreHRLiveWorkspace({ slug, query, personId }) : null;
+  const createHref = slug === "people" ? "/module/people/new" : slug === "positions" ? "/module/positions/new" : null;
+  const createLabel = slug === "people" ? "Add employee" : "New position";
 
   return <>
     <section className="page-heading module-heading">
       <div><div className="eyebrow">HRBP One / {title}</div><h1>{title}</h1><p>{descriptions[slug] ?? `Enterprise ${title.toLowerCase()} workspace connected to the HRBP One people graph.`}</p></div>
-      {liveCore ? <button className="secondary-button" disabled><CircleCheckBig size={16}/> Live PostgreSQL</button> : <button className="create-button"><Plus size={17}/> New record</button>}
+      {liveCore ? <div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> Live PostgreSQL</button>{createHref ? <Link className="create-button" href={createHref}><Plus size={17}/> {createLabel}</Link> : null}</div> : <button className="create-button"><Plus size={17}/> New record</button>}
     </section>
     {liveCore ? liveContent : core ? <CoreHRWorkspace slug={slug}/> : recruit ? <RecruitingWorkspace slug={slug}/> : off ? <OffboardingWorkspace/> : work ? <WorkPayWorkspace slug={slug}/> : growth ? <GrowthWorkspace slug={slug}/> : services ? <EmployeeServicesWorkspace slug={slug}/> : gov ? <GovernancePlanningWorkspace slug={slug}/> : admin ? <PlatformAdminWorkspace slug={slug}/> : <>
       <section className="module-hero card"><div className="module-icon">{Icon && <Icon size={25}/>}</div><div><div className="section-kicker">Connected module</div><h2>{title} is part of the unified employee lifecycle.</h2><p>Records created here inherit tenant isolation, effective dating, classification, retention, workflow and audit controls by default.</p></div><div className="module-health"><CircleCheckBig size={18}/><span>Governance active</span></div></section>

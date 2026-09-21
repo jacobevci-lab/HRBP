@@ -8,5 +8,13 @@ import "./employee-services.css";
 import "./governance-planning.css";
 import "./platform-admin.css";
 import "./offboarding.css";
-export const metadata: Metadata = { title: "HRBP One", description: "Enterprise Human Capital Management & HRBP Operating System" };
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) { return <html lang="en"><body>{children}</body></html>; }
+import "./auth.css";
+
+export const metadata: Metadata = {
+  title: "HRBP One",
+  description: "Enterprise Human Capital Management & HRBP Operating System"
+};
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return <html lang="en"><body>{children}</body></html>;
+}
