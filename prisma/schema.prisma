@@ -11,17 +11,39 @@ enum DataClassification { INTERNAL CONFIDENTIAL RESTRICTED HIGHLY_RESTRICTED }
 enum EmploymentStatus { PREBOARDING ACTIVE LEAVE SUSPENDED TERMINATED }
 enum PositionStatus { PLANNED OPEN FILLED FROZEN CLOSED }
 enum CaseStatus { DRAFT OPEN INVESTIGATING ACTION_REQUIRED RESOLVED CLOSED }
+enum DocumentStatus { ACTIVE SUPERSEDED EXPIRED DELETED }
+enum OrganizationUnitType { LEGAL_ENTITY BUSINESS_UNIT DIVISION DEPARTMENT TEAM COST_CENTER }
+enum PlatformRole { EMPLOYEE MANAGER HRBP HR_OPERATIONS TALENT_ADMIN COMPENSATION_ADMIN ER_INVESTIGATOR LEGAL PRIVACY_OFFICER SECURITY_AUDITOR TENANT_ADMIN }
+enum LifecycleEventType { HIRED TRANSFERRED PROMOTED MANAGER_CHANGED COMPENSATION_CHANGED LEAVE_STARTED LEAVE_ENDED TERMINATED REHIRED }
 
 model Tenant {
-  id        String   @id @default(cuid())
-  name      String
-  region    String
-  createdAt DateTime @default(now())
-  people    Person[]
-  orgUnits  OrganizationUnit[]
-  positions Position[]
-  cases     EmployeeCase[]
-  audit     AuditEvent[]
+  id          String   @id @default(cuid())
+  name        String
+  region      String
+  createdAt   DateTime @default(now())
+  users       UserAccount[]
+  people      Person[]
+  employments Employment[]
+  orgUnits    OrganizationUnit[]
+  positions   Position[]
+  cases       EmployeeCase[]
+  documents   DocumentRecord[]
+  lifecycle   EmployeeLifecycleEvent[]
+  audit       AuditEvent[]
+}
+
+model UserAccount {
+  id          String @id @default(cuid())
+  tenantId    String
+  subject     String
+  displayName String
+  email       String?
+  role        PlatformRole
+  active      Boolean @default(true)
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignments CaseAssignment[]
+  @@unique([tenantId, subject])
+  @@index([tenantId, role])
 }
 
 model Person {
@@ -35,25 +57,43 @@ model Person {
   classification DataClassification @default(CONFIDENTIAL)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  identity       PersonalIdentity?
   employments    Employment[]
+  documents      DocumentRecord[]
+  cases          EmployeeCase[]
+  lifecycle      EmployeeLifecycleEvent[]
   @@unique([tenantId, employeeNumber])
   @@index([tenantId, familyName, givenName])
 }
 
+model PersonalIdentity {
+  id             String @id @default(cuid())
+  personId       String @unique
+  dateOfBirth    DateTime?
+  nationality    String?
+  nationalIdHash String?
+  bankToken      String?
+  classification DataClassification @default(RESTRICTED)
+  person         Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+}
+
 model OrganizationUnit {
-  id        String   @id @default(cuid())
+  id        String @id @default(cuid())
   tenantId  String
   parentId  String?
+  code      String
   name      String
-  type      String
+  type      OrganizationUnitType
   validFrom DateTime
   validTo   DateTime?
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   parent    OrganizationUnit? @relation("OrgHierarchy", fields: [parentId], references: [id])
   children  OrganizationUnit[] @relation("OrgHierarchy")
   positions Position[]
+  @@unique([tenantId, code, validFrom])
   @@index([tenantId, parentId])
+  @@index([tenantId, type, validTo])
 }
 
 model Position {
@@ -62,29 +102,37 @@ model Position {
   orgUnitId      String
   positionCode   String
   title          String
+  jobFamily      String?
+  grade          String?
+  location       String?
   status         PositionStatus @default(OPEN)
   critical       Boolean @default(false)
   validFrom      DateTime
   validTo        DateTime?
-  tenant         Tenant @relation(fields: [tenantId], references: [id])
-  orgUnit        OrganizationUnit @relation(fields: [orgUnitId], references: [id])
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  orgUnit        OrganizationUnit @relation(fields: [orgUnitId], references: [id], onDelete: Restrict)
   employments    Employment[]
-  @@unique([tenantId, positionCode])
+  @@unique([tenantId, positionCode, validFrom])
+  @@index([tenantId, status, validTo])
 }
 
 model Employment {
-  id         String @id @default(cuid())
-  tenantId   String
-  personId   String
-  positionId String?
-  status     EmploymentStatus @default(PREBOARDING)
-  startDate  DateTime
-  endDate    DateTime?
-  managerId  String?
-  person     Person @relation(fields: [personId], references: [id])
-  position   Position? @relation(fields: [positionId], references: [id])
-  compensation CompensationHistory[]
+  id                  String @id @default(cuid())
+  tenantId            String
+  personId            String
+  positionId          String?
+  managerEmploymentId String?
+  status              EmploymentStatus @default(PREBOARDING)
+  startDate           DateTime
+  endDate             DateTime?
+  tenant              Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person              Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  position            Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  manager             Employment? @relation("EmploymentManager", fields: [managerEmploymentId], references: [id], onDelete: SetNull)
+  directReports       Employment[] @relation("EmploymentManager")
+  compensation        CompensationHistory[]
   @@index([tenantId, personId, status])
+  @@index([tenantId, managerEmploymentId])
 }
 
 model CompensationHistory {
@@ -94,13 +142,14 @@ model CompensationHistory {
   annualBase    Decimal @db.Decimal(18,2)
   effectiveFrom DateTime
   effectiveTo   DateTime?
-  employment    Employment @relation(fields: [employmentId], references: [id])
+  employment    Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
   @@index([employmentId, effectiveFrom])
 }
 
 model EmployeeCase {
   id             String @id @default(cuid())
   tenantId       String
+  subjectPersonId String?
   caseNumber     String
   caseType       String
   title          String
@@ -109,9 +158,60 @@ model EmployeeCase {
   ownerUserId    String
   openedAt       DateTime @default(now())
   closedAt       DateTime?
-  tenant         Tenant @relation(fields: [tenantId], references: [id])
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  subject        Person? @relation(fields: [subjectPersonId], references: [id], onDelete: SetNull)
+  assignments    CaseAssignment[]
+  documents      DocumentRecord[]
   @@unique([tenantId, caseNumber])
   @@index([tenantId, ownerUserId, status])
+}
+
+model CaseAssignment {
+  id        String @id @default(cuid())
+  caseId    String
+  userId    String
+  assignedAt DateTime @default(now())
+  case      EmployeeCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  user      UserAccount @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([caseId, userId])
+}
+
+model DocumentRecord {
+  id             String @id @default(cuid())
+  tenantId       String
+  personId       String?
+  caseId         String?
+  fileName       String
+  contentType    String
+  objectKey      String @unique
+  purpose        String
+  classification DataClassification @default(RESTRICTED)
+  status         DocumentStatus @default(ACTIVE)
+  createdById    String
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime?
+  retentionUntil DateTime?
+  legalHold      Boolean @default(false)
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person         Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
+  case           EmployeeCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  @@index([tenantId, personId, status])
+  @@index([tenantId, caseId])
+}
+
+model EmployeeLifecycleEvent {
+  id          String @id @default(cuid())
+  tenantId    String
+  personId    String
+  employmentId String?
+  type        LifecycleEventType
+  effectiveAt DateTime
+  summary     String
+  actorId     String
+  createdAt   DateTime @default(now())
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person      Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  @@index([tenantId, personId, effectiveAt])
 }
 
 model AuditEvent {
@@ -127,7 +227,7 @@ model AuditEvent {
   occurredAt     DateTime @default(now())
   hash           String
   previousHash   String?
-  tenant         Tenant @relation(fields: [tenantId], references: [id])
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   @@index([tenantId, occurredAt])
   @@index([tenantId, resourceType, resourceId])
 }
