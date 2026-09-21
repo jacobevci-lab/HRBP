@@ -16,17 +16,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - run: npm install
       - run: npx prisma validate
+
       - name: Verify staging database secret
+        shell: bash
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "HRBP_STAGING_DATABASE_URL is not configured"
             exit 1
           fi
+          if [[ "$DATABASE_URL" == postgresql://hrbp_app:* || "$DATABASE_URL" == postgres://hrbp_app:* ]]; then
+            echo "Use the Neon owner/admin connection string for schema sync, not the hrbp_app runtime role."
+            exit 1
+          fi
+
       - name: Synchronize staging schema
         run: npx prisma db push
-      - name: Grant runtime role access
+
+      - name: Grant least-privilege runtime access
         run: |
           cat <<'SQL' | npx prisma db execute --stdin --schema ./prisma/schema.prisma
           GRANT USAGE ON SCHEMA public TO hrbp_app;
@@ -35,4 +44,8 @@ jobs:
           ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO hrbp_app;
           ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO hrbp_app;
           SQL
-      - run: npx prisma generate --no-engine
+
+      - name: Verify schema is queryable
+        run: |
+          echo 'SELECT COUNT(*) AS table_count FROM information_schema.tables WHERE table_schema = ''public'';' \
+            | npx prisma db execute --stdin --schema ./prisma/schema.prisma
