@@ -6,11 +6,18 @@ export const revalidate = 0;
 function classify(message: string) {
   const value = message.toLowerCase();
   if (value.includes("enoent") || value.includes("query_compiler") || value.includes("wasm")) return "prisma_wasm_runtime";
-  if (value.includes("engine") || value.includes("prisma") || value.includes("adapter")) return "prisma_runtime";
+  if (value.includes("adapter") || value.includes("prisma") || value.includes("engine")) return "prisma_runtime";
   if (value.includes("password") || value.includes("authentication") || value.includes("sasl")) return "authentication";
   if (value.includes("certificate") || value.includes("ssl") || value.includes("tls")) return "tls";
   if (value.includes("connect") || value.includes("timeout") || value.includes("socket") || value.includes("network")) return "network";
   return "unknown";
+}
+
+function safeDetail(message: string) {
+  return message
+    .replace(/postgres(?:ql)?:\/\/[^\s]+/gi, "[redacted-database-url]")
+    .replace(/password\s*[=:]\s*[^\s,;]+/gi, "password=[redacted]")
+    .slice(0, 320);
 }
 
 export async function GET() {
@@ -26,7 +33,7 @@ export async function GET() {
       database: "postgresql",
       transport: databaseTransport(),
       orm: "prisma",
-      diagnosticVersion: "db-health-v4-workerd-client",
+      diagnosticVersion: "db-health-v5-hyperdrive-adapter",
       latencyMs: Date.now() - startedAt
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
@@ -39,10 +46,11 @@ export async function GET() {
         database: "postgresql",
         transport: databaseTransport(),
         orm: "prisma",
-        diagnosticVersion: "db-health-v4-workerd-client",
+        diagnosticVersion: "db-health-v5-hyperdrive-adapter",
         reason: classify(message),
         errorName: candidate?.name ?? "unknown",
-        errorCode: candidate?.code ?? null
+        errorCode: candidate?.code ?? null,
+        detail: safeDetail(message)
       },
       { status: 503, headers: { "Cache-Control": "no-store" } }
     );
