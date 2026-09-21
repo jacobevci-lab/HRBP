@@ -15,9 +15,10 @@ if (!match) {
   throw new Error("Prisma client generator block not found");
 }
 
-// Cloudflare Hyperdrive's documented Prisma 6 setup uses prisma-client-js
-// with the driverAdapters preview feature and a --no-engine generation.
-// Keep the source schema unchanged and generate from this isolated copy.
+// Prisma 6 driver adapters require a normally generated client when the
+// PrismaClient constructor receives an `adapter`. Keep the source schema
+// unchanged and enable the driverAdapters preview feature only in this
+// isolated Cloudflare/Hyperdrive generation schema.
 const hyperdriveGenerator = `generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["driverAdapters"]
