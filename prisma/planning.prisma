@@ -1,0 +1,211 @@
+enum SurveyStatus {
+  DRAFT
+  SCHEDULED
+  OPEN
+  CLOSED
+  ARCHIVED
+}
+
+enum SurveyQuestionType {
+  SCALE
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  TEXT
+  ENPS
+}
+
+enum WorkforceScenarioStatus {
+  DRAFT
+  REVIEW
+  APPROVED
+  LOCKED
+  ARCHIVED
+}
+
+enum AIInteractionStatus {
+  RECEIVED
+  PROCESSING
+  COMPLETED
+  BLOCKED
+  FAILED
+}
+
+model EngagementSurvey {
+  id          String @id @default(cuid())
+  tenantId    String
+  code        String
+  name        String
+  description String?
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  questions   SurveyQuestion[]
+  campaigns   SurveyCampaign[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, name])
+}
+
+model SurveyQuestion {
+  id          String @id @default(cuid())
+  tenantId    String
+  surveyId    String
+  questionKey String
+  prompt      String
+  type        SurveyQuestionType
+  required    Boolean @default(true)
+  orderIndex  Int
+  options     Json?
+  dimension   String?
+  survey      EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers     SurveyAnswer[]
+
+  @@unique([surveyId, questionKey])
+  @@index([tenantId, surveyId, orderIndex])
+}
+
+model SurveyCampaign {
+  id                 String @id @default(cuid())
+  tenantId           String
+  surveyId           String
+  name               String
+  status             SurveyStatus @default(DRAFT)
+  anonymous          Boolean @default(true)
+  anonymityThreshold Int @default(7)
+  audienceFilter     Json?
+  opensAt            DateTime?
+  closesAt           DateTime?
+  createdById        String
+  createdAt          DateTime @default(now())
+  survey             EngagementSurvey @relation(fields: [surveyId], references: [id], onDelete: Restrict)
+  responses          SurveyResponse[]
+
+  @@index([tenantId, status, opensAt])
+}
+
+model SurveyResponse {
+  id                  String @id @default(cuid())
+  tenantId            String
+  campaignId          String
+  respondentTokenHash String
+  employmentId        String?
+  submittedAt         DateTime @default(now())
+  campaign            SurveyCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  answers             SurveyAnswer[]
+
+  @@unique([campaignId, respondentTokenHash])
+  @@index([tenantId, campaignId, submittedAt])
+}
+
+model SurveyAnswer {
+  id         String @id @default(cuid())
+  tenantId   String
+  responseId String
+  questionId String
+  value      Json
+  response   SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question   SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  @@unique([responseId, questionId])
+  @@index([tenantId, questionId])
+}
+
+model WorkforceScenario {
+  id             String @id @default(cuid())
+  tenantId       String
+  code           String
+  name           String
+  description    String?
+  status         WorkforceScenarioStatus @default(DRAFT)
+  baseDate       DateTime
+  horizonMonths  Int
+  currency       String
+  assumptions    Json?
+  ownerId        String
+  approvedById   String?
+  approvedAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  lines          WorkforcePlanLine[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status, baseDate])
+}
+
+model WorkforcePlanLine {
+  id             String @id @default(cuid())
+  tenantId       String
+  scenarioId     String
+  orgUnitId      String
+  positionId     String?
+  roleLabel      String
+  location       String?
+  currentFte     Decimal @db.Decimal(10,2)
+  plannedFte     Decimal @db.Decimal(10,2)
+  avgAnnualCost  Decimal? @db.Decimal(18,2)
+  demandDriver   String?
+  skillsRequired Json?
+  scenario       WorkforceScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, scenarioId, orgUnitId])
+  @@index([tenantId, positionId])
+}
+
+model MetricDefinition {
+  id                  String @id @default(cuid())
+  tenantId            String
+  key                 String
+  name                String
+  description         String?
+  category            String
+  unit                String
+  aggregation         String
+  minPopulation       Int @default(7)
+  sensitiveDimensions Json?
+  active              Boolean @default(true)
+  createdAt           DateTime @default(now())
+  snapshots           MetricSnapshot[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, category, active])
+}
+
+model MetricSnapshot {
+  id           String @id @default(cuid())
+  tenantId     String
+  metricId     String
+  periodStart  DateTime
+  periodEnd    DateTime
+  value        Json
+  dimensions   Json?
+  population   Int
+  suppressed   Boolean @default(false)
+  generatedAt  DateTime @default(now())
+  metric       MetricDefinition @relation(fields: [metricId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, metricId, periodEnd])
+  @@index([tenantId, suppressed, generatedAt])
+}
+
+model AIInteraction {
+  id                   String @id @default(cuid())
+  tenantId             String
+  actorId              String
+  purpose              String
+  module               String
+  status               AIInteractionStatus @default(RECEIVED)
+  promptHash           String
+  responseHash         String?
+  sourceRefs           Json?
+  classification       DataClassification @default(INTERNAL)
+  restrictedDataAccess Boolean @default(false)
+  decisionSupportOnly  Boolean @default(true)
+  modelProvider        String?
+  modelName            String?
+  blockedReason        String?
+  createdAt            DateTime @default(now())
+  completedAt          DateTime?
+
+  @@index([tenantId, actorId, createdAt])
+  @@index([tenantId, module, status])
+}
