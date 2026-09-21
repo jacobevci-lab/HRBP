@@ -15,10 +15,16 @@ const messages: Record<string, string> = {
   callback: "Sign-in could not be completed. Review the identity provider configuration and Worker logs."
 };
 
+function safeReturnTo(value: unknown) {
+  return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") ? value : "/";
+}
+
 export default async function SignInPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const error = typeof params.error === "string" ? params.error : undefined;
   const signedOut = params.signedOut === "1";
+  const returnTo = safeReturnTo(params.returnTo);
+  const loginHref = `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
 
   return <main className="auth-screen">
     <section className="auth-panel">
@@ -30,7 +36,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
       {error ? <div className="auth-message error"><LockKeyhole size={17}/><span>{messages[error] ?? "Sign-in failed."}</span></div> : null}
       {signedOut ? <div className="auth-message success"><ShieldCheck size={17}/><span>Your HRBP session has been closed.</span></div> : null}
 
-      <Link className="auth-primary" href="/api/auth/login"><Sparkles size={17}/> Continue with enterprise SSO</Link>
+      <Link className="auth-primary" href={loginHref}><Sparkles size={17}/> Continue with enterprise SSO</Link>
       <Link className="auth-secondary" href="/">Back to public staging dashboard</Link>
 
       <div className="auth-footnote">

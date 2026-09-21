@@ -66,7 +66,7 @@ export async function POST(request: Request) {
       });
 
       if (!position) throw new Error("POSITION_NOT_FOUND");
-      if (![PositionStatus.OPEN, PositionStatus.PLANNED].includes(position.status)) throw new Error("POSITION_NOT_AVAILABLE");
+      if (position.status !== PositionStatus.OPEN && position.status !== PositionStatus.PLANNED) throw new Error("POSITION_NOT_AVAILABLE");
       if (position.employments.length) throw new Error("POSITION_OCCUPIED");
 
       const duplicate = await tx.person.findFirst({

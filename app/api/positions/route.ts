@@ -35,7 +35,7 @@ export async function POST(request: Request) {
   if (!positionCode || !title || !orgUnitId) {
     return Response.json({ error: "positionCode, title and orgUnitId are required." }, { status: 400 });
   }
-  if (![PositionStatus.OPEN, PositionStatus.PLANNED].includes(statusValue as PositionStatus)) {
+  if (statusValue !== PositionStatus.OPEN && statusValue !== PositionStatus.PLANNED) {
     return Response.json({ error: "New positions must start as OPEN or PLANNED." }, { status: 400 });
   }
 
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
           jobFamily,
           grade,
           location,
-          status: statusValue as PositionStatus,
+          status: statusValue,
           critical,
           validFrom: new Date()
         }
