@@ -3,6 +3,7 @@ import "./globals.css";
 import "./enterprise.css";
 import "./recruiting.css";
 import "./work-pay.css";
+import "./growth.css";
 
 export const metadata: Metadata = {
   title: "HRBP One",
