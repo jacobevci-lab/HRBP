@@ -1,0 +1,290 @@
+enum BenefitPlanType {
+  HEALTH
+  DENTAL
+  VISION
+  LIFE
+  RETIREMENT
+  MEAL
+  TRANSPORT
+  FLEXIBLE
+  OTHER
+}
+
+enum BenefitEnrollmentStatus {
+  PENDING
+  ACTIVE
+  WAIVED
+  SUSPENDED
+  ENDED
+}
+
+enum GoalStatus {
+  DRAFT
+  ACTIVE
+  AT_RISK
+  COMPLETED
+  CANCELLED
+}
+
+enum ReviewCycleStatus {
+  DRAFT
+  OPEN
+  CALIBRATION
+  FINALIZED
+  CLOSED
+}
+
+enum ReviewStatus {
+  NOT_STARTED
+  SELF_REVIEW
+  MANAGER_REVIEW
+  CALIBRATION
+  FINALIZED
+}
+
+enum PerformanceBand {
+  NEEDS_IMPROVEMENT
+  DEVELOPING
+  MEETS
+  EXCEEDS
+  OUTSTANDING
+}
+
+enum PotentialBand {
+  LIMITED
+  MODERATE
+  HIGH
+}
+
+enum SuccessionReadiness {
+  READY_NOW
+  READY_LT_1_YEAR
+  READY_1_2_YEARS
+  READY_2_PLUS_YEARS
+}
+
+enum SkillProficiency {
+  AWARENESS
+  FOUNDATION
+  PRACTITIONER
+  ADVANCED
+  EXPERT
+}
+
+enum LearningAssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+  WAIVED
+}
+
+model BenefitPlan {
+  id                   String @id @default(cuid())
+  tenantId             String
+  code                 String
+  name                 String
+  type                 BenefitPlanType
+  provider             String?
+  countryCode          String?
+  currency             String?
+  employerContribution Decimal? @db.Decimal(18,2)
+  employeeContribution Decimal? @db.Decimal(18,2)
+  active               Boolean @default(true)
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
+  enrollments          BenefitEnrollment[]
+
+  @@unique([tenantId, code, effectiveFrom])
+  @@index([tenantId, active, type])
+}
+
+model BenefitEnrollment {
+  id                   String @id @default(cuid())
+  tenantId             String
+  employmentId         String
+  benefitPlanId        String
+  status               BenefitEnrollmentStatus @default(PENDING)
+  coverageTier         String?
+  employerContribution Decimal? @db.Decimal(18,2)
+  employeeContribution Decimal? @db.Decimal(18,2)
+  effectiveFrom        DateTime
+  effectiveTo          DateTime?
+  createdAt            DateTime @default(now())
+  benefitPlan          BenefitPlan @relation(fields: [benefitPlanId], references: [id], onDelete: Restrict)
+
+  @@unique([employmentId, benefitPlanId, effectiveFrom])
+  @@index([tenantId, employmentId, status])
+  @@index([tenantId, status, effectiveTo])
+}
+
+model Goal {
+  id           String @id @default(cuid())
+  tenantId     String
+  employmentId String
+  parentGoalId String?
+  title        String
+  description  String?
+  weight       Decimal? @db.Decimal(5,2)
+  progress     Int @default(0)
+  status       GoalStatus @default(DRAFT)
+  startsAt     DateTime
+  dueAt        DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  parentGoal   Goal? @relation("GoalHierarchy", fields: [parentGoalId], references: [id], onDelete: SetNull)
+  childGoals   Goal[] @relation("GoalHierarchy")
+
+  @@index([tenantId, employmentId, status])
+  @@index([tenantId, dueAt, status])
+}
+
+model ReviewCycle {
+  id            String @id @default(cuid())
+  tenantId      String
+  name          String
+  status        ReviewCycleStatus @default(DRAFT)
+  startsAt      DateTime
+  endsAt        DateTime
+  calibrationAt DateTime?
+  finalizedAt   DateTime?
+  createdAt     DateTime @default(now())
+  reviews       PerformanceReview[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId, status, endsAt])
+}
+
+model PerformanceReview {
+  id                  String @id @default(cuid())
+  tenantId            String
+  cycleId             String
+  employmentId        String
+  managerEmploymentId String?
+  status              ReviewStatus @default(NOT_STARTED)
+  selfRating          PerformanceBand?
+  managerRating       PerformanceBand?
+  finalRating         PerformanceBand?
+  summary             String?
+  calibrationNotes    String?
+  classification      DataClassification @default(CONFIDENTIAL)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  cycle               ReviewCycle @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+
+  @@unique([cycleId, employmentId])
+  @@index([tenantId, employmentId, status])
+  @@index([tenantId, status, cycleId])
+}
+
+model TalentAssessment {
+  id             String @id @default(cuid())
+  tenantId       String
+  employmentId   String
+  cycleLabel     String
+  performance    PerformanceBand
+  potential      PotentialBand
+  criticalTalent Boolean @default(false)
+  assessedById   String
+  assessedAt     DateTime @default(now())
+  notes          String?
+  classification DataClassification @default(CONFIDENTIAL)
+
+  @@unique([tenantId, employmentId, cycleLabel])
+  @@index([tenantId, cycleLabel, potential, performance])
+}
+
+model SuccessionPlan {
+  id          String @id @default(cuid())
+  tenantId    String
+  positionId  String
+  name        String?
+  active      Boolean @default(true)
+  ownerId     String?
+  reviewDueAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  candidates  SuccessionCandidate[]
+
+  @@unique([tenantId, positionId])
+  @@index([tenantId, active, reviewDueAt])
+}
+
+model SuccessionCandidate {
+  id             String @id @default(cuid())
+  tenantId       String
+  planId         String
+  employmentId   String
+  readiness      SuccessionReadiness
+  rank           Int?
+  developmentGap String?
+  addedAt        DateTime @default(now())
+  plan           SuccessionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, employmentId])
+  @@index([tenantId, employmentId])
+  @@index([tenantId, readiness])
+}
+
+model Skill {
+  id          String @id @default(cuid())
+  tenantId    String
+  code        String
+  name        String
+  category    String?
+  critical    Boolean @default(false)
+  active      Boolean @default(true)
+  employments EmploymentSkill[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active, category])
+}
+
+model EmploymentSkill {
+  id           String @id @default(cuid())
+  tenantId     String
+  employmentId String
+  skillId      String
+  proficiency  SkillProficiency
+  source       String?
+  assessedAt   DateTime @default(now())
+  skill        Skill @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@unique([employmentId, skillId])
+  @@index([tenantId, employmentId])
+  @@index([tenantId, skillId, proficiency])
+}
+
+model LearningCourse {
+  id             String @id @default(cuid())
+  tenantId       String
+  code           String
+  title          String
+  provider       String?
+  mandatory      Boolean @default(false)
+  validityMonths Int?
+  active         Boolean @default(true)
+  createdAt      DateTime @default(now())
+  assignments    LearningAssignment[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active, mandatory])
+}
+
+model LearningAssignment {
+  id                   String @id @default(cuid())
+  tenantId             String
+  employmentId         String
+  courseId             String
+  status               LearningAssignmentStatus @default(ASSIGNED)
+  assignedAt           DateTime @default(now())
+  dueAt                DateTime?
+  completedAt          DateTime?
+  score                Decimal? @db.Decimal(5,2)
+  certificateReference String?
+  course               LearningCourse @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  @@unique([employmentId, courseId, assignedAt])
+  @@index([tenantId, employmentId])
+  @@index([tenantId, status, dueAt])
+}
