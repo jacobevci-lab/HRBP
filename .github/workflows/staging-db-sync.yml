@@ -45,7 +45,17 @@ jobs:
           ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO hrbp_app;
           SQL
 
-      - name: Verify schema is queryable
+      - name: Verify schema exists
         run: |
-          echo 'SELECT COUNT(*) AS table_count FROM information_schema.tables WHERE table_schema = ''public'';' \
-            | npx prisma db execute --stdin --schema ./prisma/schema.prisma
+          cat <<'SQL' | npx prisma db execute --stdin --schema ./prisma/schema.prisma
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1
+              FROM information_schema.tables
+              WHERE table_schema = 'public'
+            ) THEN
+              RAISE EXCEPTION 'Schema sync produced no public tables';
+            END IF;
+          END $$;
+          SQL
