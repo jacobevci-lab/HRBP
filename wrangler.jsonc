@@ -10,6 +10,13 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "7efb5ecbd523448c9684bc13fb164f75",
+      "localConnectionString": "postgresql://hrbp:hrbp@localhost:5432/hrbp"
+    }
+  ],
   "observability": {
     "enabled": true
   }
