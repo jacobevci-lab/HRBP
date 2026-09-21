@@ -1,35 +1,49 @@
 import { createHash } from "node:crypto";
-import { DataClassification } from "@prisma/client";
-import { db } from "@/lib/db";
+import { DataClassification, Prisma } from "@prisma/client";
 import type { RequestContext } from "@/lib/request-context";
 
-export async function recordAudit(input: {
-  ctx: RequestContext;
+export type AuditInput = {
   action: string;
   resourceType: string;
   resourceId: string;
   classification?: DataClassification;
-}) {
-  const previous = await db.auditEvent.findFirst({
-    where: { tenantId: input.ctx.tenantId },
+  purpose?: string;
+};
+
+export async function appendAudit(tx: Prisma.TransactionClient, ctx: RequestContext, input: AuditInput) {
+  const occurredAt = new Date();
+  const previous = await tx.auditEvent.findFirst({
+    where: { tenantId: ctx.tenantId },
     orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
     select: { hash: true }
   });
-  const occurredAt = new Date();
-  const payload = [input.ctx.tenantId, input.ctx.actorId, input.action, input.resourceType, input.resourceId, input.ctx.purpose ?? "", occurredAt.toISOString(), previous?.hash ?? "GENESIS"].join("|");
-  const hash = createHash("sha256").update(payload).digest("hex");
-
-  return db.auditEvent.create({ data: {
-    tenantId: input.ctx.tenantId,
-    actorId: input.ctx.actorId,
+  const classification = input.classification ?? DataClassification.CONFIDENTIAL;
+  const payload = JSON.stringify({
+    tenantId: ctx.tenantId,
+    actorId: ctx.actorId,
     action: input.action,
     resourceType: input.resourceType,
     resourceId: input.resourceId,
-    purpose: input.ctx.purpose,
-    classification: input.classification ?? DataClassification.INTERNAL,
-    ipAddress: input.ctx.ipAddress,
-    occurredAt,
-    hash,
-    previousHash: previous?.hash
-  }});
+    purpose: input.purpose ?? ctx.purpose ?? null,
+    classification,
+    ipAddress: ctx.ipAddress ?? null,
+    occurredAt: occurredAt.toISOString()
+  });
+  const hash = createHash("sha256").update(`${previous?.hash ?? "GENESIS"}|${payload}`).digest("hex");
+
+  return tx.auditEvent.create({
+    data: {
+      tenantId: ctx.tenantId,
+      actorId: ctx.actorId,
+      action: input.action,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+      purpose: input.purpose ?? ctx.purpose,
+      classification,
+      ipAddress: ctx.ipAddress,
+      occurredAt,
+      hash,
+      previousHash: previous?.hash
+    }
+  });
 }
