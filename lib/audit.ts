@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { DataClassification, Prisma } from "@prisma/client";
+import { db } from "@/lib/db";
 import type { RequestContext } from "@/lib/request-context";
 
 export type AuditInput = {
@@ -46,4 +47,8 @@ export async function appendAudit(tx: Prisma.TransactionClient, ctx: RequestCont
       previousHash: previous?.hash
     }
   });
+}
+
+export async function recordAudit({ ctx, ...input }: { ctx: RequestContext } & AuditInput) {
+  return db.$transaction((tx) => appendAudit(tx, ctx, input));
 }
