@@ -1,6 +1,7 @@
 import { ChevronRight, CircleCheckBig, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { navigation } from "@/lib/navigation";
 import { CoreHRWorkspace, coreWorkspaceSlugs } from "@/components/core-hr-workspace";
+import { CoreHRLiveWorkspace, liveCoreWorkspaceSlugs } from "@/components/core-hr-live-workspace";
 import { RecruitingWorkspace, recruitingWorkspaceSlugs } from "@/components/recruiting-workspace";
 import { WorkPayWorkspace, workPayWorkspaceSlugs } from "@/components/work-pay-workspace";
 import { GrowthWorkspace, growthWorkspaceSlugs } from "@/components/growth-workspace";
@@ -8,5 +9,62 @@ import { EmployeeServicesWorkspace, employeeServicesWorkspaceSlugs } from "@/com
 import { GovernancePlanningWorkspace, governancePlanningWorkspaceSlugs } from "@/components/governance-planning-workspace";
 import { PlatformAdminWorkspace, platformAdminWorkspaceSlugs } from "@/components/platform-admin-workspace";
 import { OffboardingWorkspace, offboardingWorkspaceSlugs } from "@/components/offboarding-workspace";
-const descriptions:Record<string,string>={people:"The employee golden record: identity, employment, position, organization and lifecycle history in one governed workspace.",organization:"Model legal entities, business units, departments, teams, cost centers and effective-dated hierarchy changes.","employee-360":"A policy-aware view of the complete employee relationship without collapsing restricted security boundaries.",positions:"Manage budgeted seats independently from incumbents, with status, grade, location, criticality and history.",recruiting:"Plan position-backed requisitions, govern candidate data, manage selection and convert accepted offers directly into employee records.",onboarding:"Orchestrate the controlled transition from accepted offer to ready employee across HR, IT and the hiring manager.",offboarding:"Control resignations, terminations, retirement and contract exits across HR, manager, IT, security, facilities and payroll before employment is closed.","time-attendance":"Govern schedules, attendance, overtime, exceptions, approvals and payroll-ready locked time from one effective-dated work model.",leave:"Manage leave policy, balances, accrual, approvals, coverage and absence history without disconnecting it from employment.",compensation:"Run effective-dated salary changes, review cycles, budget controls and restricted compensation approvals.",payroll:"Control country packs, payroll periods, validation, calculations, approvals, restricted results and employee payslip data.",benefits:"Manage jurisdiction-aware benefit plans, eligibility, employee elections, contributions and effective-dated coverage.",performance:"Run goals, continuous feedback, review cycles and calibration while keeping final ratings human-owned and auditable.",talent:"Connect performance and potential assessments to development decisions without opaque automated employee scoring.",succession:"Protect business continuity through position-centric succession plans, candidate readiness and development gaps.",learning:"Operate a governed skills taxonomy, skill evidence, mandatory learning, development assignments and certification history.",engagement:"Run privacy-preserving employee listening with anonymous campaigns, cohort thresholds and governed action themes.","employee-relations":"Run highly restricted investigations from allegation and interview through evidence, findings, corrective action, appeal and closure inside a case wall.","hr-service":"Provide a single employee service desk with identity-bound requests, queue routing, SLAs, private HR notes and complete request history.",policies:"Control policy drafting, versions, approvals, publication, acknowledgement evidence, review dates and exceptions in one register.",documents:"Operate a private, versioned HR document vault with classification, malware quarantine, legal hold, controlled access and built-in signature evidence.","workforce-planning":"Model future workforce demand, FTE, roles, skills and cost in governed scenarios before changes reach the live organization.",analytics:"Deliver a shared metric layer with population thresholds, privacy suppression and explainable workforce measures.","ai-assistant":"Provide policy-grounded HR assistance with minimal-retention telemetry, source references and explicit human decision ownership.",privacy:"Operate RoPA, lawful basis, retention, DSRs, DPIAs and cross-border transfer safeguards from the same HR data plane.",audit:"Review immutable security-relevant reads and business mutations across the employee lifecycle.",workflows:"Orchestrate event-driven HR processes with versioned definitions, approvals, tasks, SLAs, failure handling and immutable process history.",settings:"Configure tenant identity, provisioning, integrations, residency and security without storing connector secrets in application records."};
-export function ModuleLanding({slug}:{slug:string}){const item=navigation.flatMap(g=>g.items).find(i=>i.slug===slug);const title=item?.label??slug.split("-").map(v=>v[0]?.toUpperCase()+v.slice(1)).join(" ");const Icon=item?.icon;const core=coreWorkspaceSlugs.has(slug),recruit=recruitingWorkspaceSlugs.has(slug),work=workPayWorkspaceSlugs.has(slug),growth=growthWorkspaceSlugs.has(slug),services=employeeServicesWorkspaceSlugs.has(slug),gov=governancePlanningWorkspaceSlugs.has(slug),admin=platformAdminWorkspaceSlugs.has(slug),off=offboardingWorkspaceSlugs.has(slug);return <><section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {title}</div><h1>{title}</h1><p>{descriptions[slug]??`Enterprise ${title.toLowerCase()} workspace connected to the HRBP One people graph.`}</p></div><button className="create-button"><Plus size={17}/> New record</button></section>{core?<CoreHRWorkspace slug={slug}/>:recruit?<RecruitingWorkspace slug={slug}/>:off?<OffboardingWorkspace/>:work?<WorkPayWorkspace slug={slug}/>:growth?<GrowthWorkspace slug={slug}/>:services?<EmployeeServicesWorkspace slug={slug}/>:gov?<GovernancePlanningWorkspace slug={slug}/>:admin?<PlatformAdminWorkspace slug={slug}/>:<><section className="module-hero card"><div className="module-icon">{Icon&&<Icon size={25}/>}</div><div><div className="section-kicker">Connected module</div><h2>{title} is part of the unified employee lifecycle.</h2><p>Records created here inherit tenant isolation, effective dating, classification, retention, workflow and audit controls by default.</p></div><div className="module-health"><CircleCheckBig size={18}/><span>Governance active</span></div></section><section className="module-toolbar"><div className="module-search"><Search size={16}/><input placeholder={`Search ${title.toLowerCase()}…`}/></div><button className="secondary-button"><SlidersHorizontal size={15}/> Filters</button></section><section className="card module-table"><div className="empty-state"><div className="empty-visual"><span/><span/><span/></div><h3>{title} domain is queued for its vertical slice</h3><p>The remaining module is connected to the same tenant, identity, privacy and audit plane.</p><button className="secondary-button">View architecture <ChevronRight size={15}/></button></div></section></>}</>}
+
+const descriptions: Record<string, string> = {
+  people: "The employee golden record: identity, employment, position, organization and lifecycle history in one governed workspace.",
+  organization: "Model legal entities, business units, departments, teams, cost centers and effective-dated hierarchy changes.",
+  "employee-360": "A policy-aware view of the complete employee relationship without collapsing restricted security boundaries.",
+  positions: "Manage budgeted seats independently from incumbents, with status, grade, location, criticality and history.",
+  recruiting: "Plan position-backed requisitions, govern candidate data, manage selection and convert accepted offers directly into employee records.",
+  onboarding: "Orchestrate the controlled transition from accepted offer to ready employee across HR, IT and the hiring manager.",
+  offboarding: "Control resignations, terminations, retirement and contract exits across HR, manager, IT, security, facilities and payroll before employment is closed.",
+  "time-attendance": "Govern schedules, attendance, overtime, exceptions, approvals and payroll-ready locked time from one effective-dated work model.",
+  leave: "Manage leave policy, balances, accrual, approvals, coverage and absence history without disconnecting it from employment.",
+  compensation: "Run effective-dated salary changes, review cycles, budget controls and restricted compensation approvals.",
+  payroll: "Control country packs, payroll periods, validation, calculations, approvals, restricted results and employee payslip data.",
+  benefits: "Manage jurisdiction-aware benefit plans, eligibility, employee elections, contributions and effective-dated coverage.",
+  performance: "Run goals, continuous feedback, review cycles and calibration while keeping final ratings human-owned and auditable.",
+  talent: "Connect performance and potential assessments to development decisions without opaque automated employee scoring.",
+  succession: "Protect business continuity through position-centric succession plans, candidate readiness and development gaps.",
+  learning: "Operate a governed skills taxonomy, skill evidence, mandatory learning, development assignments and certification history.",
+  engagement: "Run privacy-preserving employee listening with anonymous campaigns, cohort thresholds and governed action themes.",
+  "employee-relations": "Run highly restricted investigations from allegation and interview through evidence, findings, corrective action, appeal and closure inside a case wall.",
+  "hr-service": "Provide a single employee service desk with identity-bound requests, queue routing, SLAs, private HR notes and complete request history.",
+  policies: "Control policy drafting, versions, approvals, publication, acknowledgement evidence, review dates and exceptions in one register.",
+  documents: "Operate a private, versioned HR document vault with classification, malware quarantine, legal hold, controlled access and built-in signature evidence.",
+  "workforce-planning": "Model future workforce demand, FTE, roles, skills and cost in governed scenarios before changes reach the live organization.",
+  analytics: "Deliver a shared metric layer with population thresholds, privacy suppression and explainable workforce measures.",
+  "ai-assistant": "Provide policy-grounded HR assistance with minimal-retention telemetry, source references and explicit human decision ownership.",
+  privacy: "Operate RoPA, lawful basis, retention, DSRs, DPIAs and cross-border transfer safeguards from the same HR data plane.",
+  audit: "Review immutable security-relevant reads and business mutations across the employee lifecycle.",
+  workflows: "Orchestrate event-driven HR processes with versioned definitions, approvals, tasks, SLAs, failure handling and immutable process history.",
+  settings: "Configure tenant identity, provisioning, integrations, residency and security without storing connector secrets in application records."
+};
+
+export async function ModuleLanding({ slug, query = "", personId }: { slug: string; query?: string; personId?: string }) {
+  const item = navigation.flatMap((group) => group.items).find((entry) => entry.slug === slug);
+  const title = item?.label ?? slug.split("-").map((value) => `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`).join(" ");
+  const Icon = item?.icon;
+  const liveCore = liveCoreWorkspaceSlugs.has(slug);
+  const core = coreWorkspaceSlugs.has(slug);
+  const recruit = recruitingWorkspaceSlugs.has(slug);
+  const work = workPayWorkspaceSlugs.has(slug);
+  const growth = growthWorkspaceSlugs.has(slug);
+  const services = employeeServicesWorkspaceSlugs.has(slug);
+  const gov = governancePlanningWorkspaceSlugs.has(slug);
+  const admin = platformAdminWorkspaceSlugs.has(slug);
+  const off = offboardingWorkspaceSlugs.has(slug);
+  const liveContent = liveCore ? await CoreHRLiveWorkspace({ slug, query, personId }) : null;
+
+  return <>
+    <section className="page-heading module-heading">
+      <div><div className="eyebrow">HRBP One / {title}</div><h1>{title}</h1><p>{descriptions[slug] ?? `Enterprise ${title.toLowerCase()} workspace connected to the HRBP One people graph.`}</p></div>
+      {liveCore ? <button className="secondary-button" disabled><CircleCheckBig size={16}/> Live PostgreSQL</button> : <button className="create-button"><Plus size={17}/> New record</button>}
+    </section>
+    {liveCore ? liveContent : core ? <CoreHRWorkspace slug={slug}/> : recruit ? <RecruitingWorkspace slug={slug}/> : off ? <OffboardingWorkspace/> : work ? <WorkPayWorkspace slug={slug}/> : growth ? <GrowthWorkspace slug={slug}/> : services ? <EmployeeServicesWorkspace slug={slug}/> : gov ? <GovernancePlanningWorkspace slug={slug}/> : admin ? <PlatformAdminWorkspace slug={slug}/> : <>
+      <section className="module-hero card"><div className="module-icon">{Icon && <Icon size={25}/>}</div><div><div className="section-kicker">Connected module</div><h2>{title} is part of the unified employee lifecycle.</h2><p>Records created here inherit tenant isolation, effective dating, classification, retention, workflow and audit controls by default.</p></div><div className="module-health"><CircleCheckBig size={18}/><span>Governance active</span></div></section>
+      <section className="module-toolbar"><div className="module-search"><Search size={16}/><input placeholder={`Search ${title.toLowerCase()}…`}/></div><button className="secondary-button"><SlidersHorizontal size={15}/> Filters</button></section>
+      <section className="card module-table"><div className="empty-state"><div className="empty-visual"><span/><span/><span/></div><h3>{title} domain is queued for its vertical slice</h3><p>The remaining module is connected to the same tenant, identity, privacy and audit plane.</p><button className="secondary-button">View architecture <ChevronRight size={15}/></button></div></section>
+    </>}
+  </>;
+}
