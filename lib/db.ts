@@ -1,6 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@/generated/prisma/client";
 
 type HyperdriveBinding = { connectionString: string };
 type RuntimeEnv = {
@@ -65,12 +65,8 @@ function modelDelegate(model: string) {
 /**
  * Compatibility proxy used by the existing API routes.
  *
- * Each operation gets a fresh Prisma client. This is intentional on Cloudflare
- * Workers: Hyperdrive owns the underlying connection pool, while request-level
- * Prisma clients avoid leaking request-bound I/O objects between Worker requests.
- *
- * New code can prefer withDb() when several non-transactional queries need to
- * share one client inside the same request.
+ * Each operation gets a fresh Prisma client. Hyperdrive owns database connection
+ * pooling while the generated Prisma client targets workerd explicitly.
  */
 export const db = new Proxy({} as PrismaClient, {
   get(_target, property) {

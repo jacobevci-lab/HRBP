@@ -2,6 +2,8 @@ node_modules
 .next
 .open-next
 .wrangler
+.prisma-worker
+generated
 .dev.vars
 .dev.vars.*
 out

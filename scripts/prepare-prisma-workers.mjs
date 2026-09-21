@@ -1,8 +1,13 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { cp, readFile, rm, writeFile } from "node:fs/promises";
 
-const schemaPath = "prisma/schema.prisma";
+const sourceDir = "prisma";
+const workerDir = ".prisma-worker";
+const schemaPath = `${workerDir}/schema.prisma`;
+
+await rm(workerDir, { recursive: true, force: true });
+await cp(sourceDir, workerDir, { recursive: true });
+
 const schema = await readFile(schemaPath, "utf8");
-
 const generatorPattern = /generator\s+client\s*\{([\s\S]*?)\}/m;
 const match = schema.match(generatorPattern);
 
@@ -10,20 +15,14 @@ if (!match) {
   throw new Error("Prisma client generator block not found");
 }
 
-if (/engineType\s*=\s*"client"/.test(match[0])) {
-  console.log("Prisma Workers engineType already configured");
-  process.exit(0);
-}
+const workerGenerator = `generator client {
+  provider   = "prisma-client"
+  output     = "../generated/prisma"
+  engineType = "client"
+  runtime    = "workerd"
+  moduleFormat = "esm"
+}`;
 
-const updatedGenerator = match[0].replace(
-  /(provider\s*=\s*"prisma-client-js"\s*)/,
-  '$1\n  engineType = "client"\n'
-);
-
-if (updatedGenerator === match[0]) {
-  throw new Error("Unable to inject engineType into Prisma generator");
-}
-
-const updatedSchema = schema.replace(match[0], updatedGenerator);
+const updatedSchema = schema.replace(match[0], workerGenerator);
 await writeFile(schemaPath, updatedSchema, "utf8");
-console.log('Prepared Prisma Client for Cloudflare Workers with engineType="client"');
+console.log("Prepared isolated Prisma Client schema for Cloudflare Workers (workerd runtime)");

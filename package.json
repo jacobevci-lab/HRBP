@@ -6,18 +6,18 @@
     "schema": "./prisma"
   },
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "npm run prisma:generate:worker && next dev",
+    "build": "npm run prisma:generate:worker && next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "npm run prisma:generate:worker && tsc --noEmit",
     "db:generate": "prisma generate --no-engine",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "cf:prepare-prisma": "node scripts/prepare-prisma-workers.mjs",
-    "cf:build": "npm run cf:prepare-prisma && prisma generate && opennextjs-cloudflare build",
-    "cf:preview": "npm run cf:prepare-prisma && prisma generate && opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "cf:deploy": "npm run cf:prepare-prisma && prisma generate && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "prisma:generate:worker": "node scripts/prepare-prisma-workers.mjs && prisma generate --schema=.prisma-worker",
+    "cf:build": "npm run prisma:generate:worker && opennextjs-cloudflare build",
+    "cf:preview": "npm run prisma:generate:worker && opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "npm run prisma:generate:worker && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
