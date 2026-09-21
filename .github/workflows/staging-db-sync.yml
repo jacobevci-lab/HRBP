@@ -1,0 +1,29 @@
+name: Staging DB Sync
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  schema:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.HRBP_STAGING_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npx prisma validate
+      - name: Verify staging database secret
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "HRBP_STAGING_DATABASE_URL is not configured"
+            exit 1
+          fi
+      - name: Synchronize staging schema
+        run: npx prisma db push
+      - run: npx prisma generate --no-engine
