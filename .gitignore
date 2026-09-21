@@ -1,5 +1,9 @@
 node_modules
 .next
+.open-next
+.wrangler
+.dev.vars
+.dev.vars.*
 out
 .env
 .env.local
@@ -7,3 +11,4 @@ out
 *.log
 .DS_Store
 coverage
+cloudflare-env.d.ts
