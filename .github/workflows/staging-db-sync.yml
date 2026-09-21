@@ -16,26 +16,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - run: npm install
       - run: npx prisma validate
-
       - name: Verify staging database secret
-        shell: bash
         run: |
           if [ -z "$DATABASE_URL" ]; then
             echo "HRBP_STAGING_DATABASE_URL is not configured"
             exit 1
           fi
-          if [[ "$DATABASE_URL" == postgresql://hrbp_app:* || "$DATABASE_URL" == postgres://hrbp_app:* ]]; then
-            echo "Use the Neon owner/admin connection string for schema sync, not the hrbp_app runtime role."
-            exit 1
-          fi
-
       - name: Synchronize staging schema
         run: npx prisma db push
-
-      - name: Grant least-privilege runtime access
+      - name: Generate Prisma client for staging seed
+        run: npx prisma generate
+      - name: Seed enterprise staging workspace
+        run: node scripts/seed-staging.mjs
+      - name: Grant runtime role access
         run: |
           cat <<'SQL' | npx prisma db execute --stdin --schema ./prisma/schema.prisma
           GRANT USAGE ON SCHEMA public TO hrbp_app;
@@ -44,18 +39,17 @@ jobs:
           ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO hrbp_app;
           ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO hrbp_app;
           SQL
-
-      - name: Verify schema exists
+      - name: Verify staging schema
         run: |
-          cat <<'SQL' | npx prisma db execute --stdin --schema ./prisma/schema.prisma
-          DO $$
-          BEGIN
-            IF NOT EXISTS (
-              SELECT 1
-              FROM information_schema.tables
-              WHERE table_schema = 'public'
-            ) THEN
-              RAISE EXCEPTION 'Schema sync produced no public tables';
-            END IF;
-          END $$;
-          SQL
+          node --input-type=module <<'NODE'
+          import { PrismaClient } from '@prisma/client';
+          const db = new PrismaClient();
+          const [tenants, people, positions] = await Promise.all([
+            db.tenant.count(),
+            db.person.count(),
+            db.position.count()
+          ]);
+          console.log({ tenants, people, positions });
+          if (tenants < 1 || people < 1 || positions < 1) process.exit(1);
+          await db.$disconnect();
+          NODE

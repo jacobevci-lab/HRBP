@@ -1,45 +1,66 @@
 import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, CalendarClock, ChevronRight, CircleCheckBig, Clock3, Ellipsis, FileWarning, ShieldCheck, Sparkles, UserPlus, UsersRound } from "lucide-react";
+import { getDashboardData } from "@/lib/dashboard-data";
 
-const bars = [42, 52, 48, 61, 58, 69, 73, 77, 74, 82, 87, 91];
-const departments = [
-  ["Engineering", 184, 36], ["Sales", 128, 25], ["Operations", 86, 17], ["Finance", 48, 9], ["People", 35, 7], ["Security", 29, 6]
-] as const;
+function dayLabel() {
+  return new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "Europe/Istanbul"
+  }).format(new Date());
+}
 
-export function Dashboard() {
+function greeting() {
+  const hour = Number(new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    hour12: false,
+    timeZone: "Europe/Istanbul"
+  }).format(new Date()));
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+export async function Dashboard() {
+  const data = await getDashboardData();
+  const maxPlan = Math.max(...data.headcountSeries.map((item) => item.plan), 1);
+  const yoyTrend = data.yoyChange >= 0 ? "up" : "down";
+  const yoyLabel = `${Math.abs(data.yoyChange).toFixed(1)}% YoY`;
+
   return (
     <>
       <section className="page-heading">
-        <div><div className="eyebrow">Sunday, 21 September</div><h1>Good afternoon, Yakup.</h1><p>Here is what needs attention across your workforce today.</p></div>
+        <div><div className="eyebrow">{dayLabel()}</div><h1>{greeting()}, Yakup.</h1><p>Live workforce signals from {data.tenantName}.</p></div>
         <button className="secondary-button">Customize dashboard</button>
       </section>
 
       <section className="ai-brief">
         <div className="ai-orb"><Sparkles size={20}/></div>
-        <div className="ai-copy"><div className="section-kicker">AI morning brief</div><h2>Three workforce signals deserve your attention.</h2><p>Engineering has 4 probation reviews due this week, two critical positions remain without successors, and 3 employee-relations actions are approaching SLA.</p></div>
+        <div className="ai-copy"><div className="section-kicker">AI morning brief</div><h2>Three workforce signals deserve your attention.</h2><p>{data.upcomingStarters} starters are scheduled in the next 30 days, {data.criticalOpenPositions} critical positions remain open, and {data.openCases} employee-relations cases require active management.</p></div>
         <button>View full brief <ChevronRight size={16}/></button>
       </section>
 
       <section className="metrics-grid">
-        <Metric label="Total workforce" value="510" meta="12 this month" trend="up" icon={<UsersRound size={18}/>} />
-        <Metric label="Open positions" value="24" meta="6 critical roles" icon={<BriefcaseBusiness size={18}/>} />
-        <Metric label="New starters" value="18" meta="Next 30 days" trend="up" icon={<UserPlus size={18}/>} />
-        <Metric label="Open HR cases" value="7" meta="3 need attention" trend="down" icon={<ShieldCheck size={18}/>} />
+        <Metric label="Total workforce" value={String(data.totalWorkforce)} meta={`${data.startedThisMonth} started this month`} trend="up" icon={<UsersRound size={18}/>} />
+        <Metric label="Open positions" value={String(data.openPositions)} meta={`${data.criticalOpenPositions} critical roles`} icon={<BriefcaseBusiness size={18}/>} />
+        <Metric label="New starters" value={String(data.upcomingStarters)} meta="Next 30 days" trend="up" icon={<UserPlus size={18}/>} />
+        <Metric label="Open HR cases" value={String(data.openCases)} meta="Restricted case wall" trend={data.openCases ? "down" : undefined} icon={<ShieldCheck size={18}/>} />
       </section>
 
       <section className="dashboard-grid two-thirds">
         <div className="card workforce-card">
           <CardHeader title="Workforce overview" subtitle="Headcount, last 12 months" action="View analytics" />
-          <div className="workforce-summary"><div><span>Current headcount</span><strong>510</strong><small><ArrowUpRight size={14}/> 8.3% YoY</small></div><div className="legend"><span><i className="legend-current"/>Employees</span><span><i className="legend-open"/>Plan</span></div></div>
-          <div className="bar-chart">{bars.map((height, index) => <div className="bar-col" key={index}><div className="bar-plan" style={{height:`${Math.min(height + 8, 100)}%`}}/><div className="bar-actual" style={{height:`${height}%`}}/><span>{["Oct","Nov","Dec","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep"][index]}</span></div>)}</div>
+          <div className="workforce-summary"><div><span>Current headcount</span><strong>{data.totalWorkforce}</strong><small>{yoyTrend === "up" ? <ArrowUpRight size={14}/> : <ArrowDownRight size={14}/>} {yoyLabel}</small></div><div className="legend"><span><i className="legend-current"/>Employees</span><span><i className="legend-open"/>Plan</span></div></div>
+          <div className="bar-chart">{data.headcountSeries.map((item) => <div className="bar-col" key={item.label}><div className="bar-plan" style={{height:`${Math.max((item.plan / maxPlan) * 100, 8)}%`}}/><div className="bar-actual" style={{height:`${Math.max((item.actual / maxPlan) * 100, item.actual ? 7 : 0)}%`}}/><span>{item.label}</span></div>)}</div>
         </div>
 
         <div className="card action-card">
-          <CardHeader title="Needs attention" subtitle="Prioritized for you" />
+          <CardHeader title="Needs attention" subtitle="Prioritized from live records" />
           <div className="attention-list">
-            <Attention icon={<CalendarClock size={17}/>} tone="amber" title="Probation reviews" detail="4 reviews due within 7 days" tag="Due soon" />
-            <Attention icon={<FileWarning size={17}/>} tone="red" title="Employee relations" detail="3 actions approaching SLA" tag="High" />
-            <Attention icon={<BriefcaseBusiness size={17}/>} tone="purple" title="Succession gaps" detail="2 critical roles uncovered" tag="Review" />
-            <Attention icon={<Clock3 size={17}/>} tone="blue" title="Overdue approvals" detail="6 workflow tasks waiting" tag="6 items" />
+            <Attention icon={<CalendarClock size={17}/>} tone="amber" title="Upcoming starters" detail={`${data.upcomingStarters} people start within 30 days`} tag="Onboarding" />
+            <Attention icon={<FileWarning size={17}/>} tone="red" title="Employee relations" detail={`${data.openCases} active restricted cases`} tag={data.openCases ? "Review" : "Clear"} />
+            <Attention icon={<BriefcaseBusiness size={17}/>} tone="purple" title="Critical vacancies" detail={`${data.criticalOpenPositions} critical positions remain open`} tag="Hiring" />
+            <Attention icon={<Clock3 size={17}/>} tone="blue" title="Onboarding plans" detail={`${data.onboardingInProgress} plans in progress`} tag={`${data.onboardingInProgress} items`} />
           </div>
           <button className="card-footer-button">Open action center <ChevronRight size={15}/></button>
         </div>
@@ -47,18 +68,20 @@ export function Dashboard() {
 
       <section className="dashboard-grid half">
         <div className="card">
-          <CardHeader title="Organization health" subtitle="Workforce distribution" action="Open org chart" />
-          <div className="department-list">{departments.map(([name,count,pct]) => <div className="department-row" key={name}><div className="dept-main"><span>{name}</span><strong>{count}</strong></div><div className="dept-track"><i style={{width:`${pct*2.1}%`}}/></div><small>{pct}%</small></div>)}</div>
+          <CardHeader title="Organization health" subtitle="Active workforce distribution" action="Open org chart" />
+          <div className="department-list">{data.departments.map(({name,count,pct}) => <div className="department-row" key={name}><div className="dept-main"><span>{name}</span><strong>{count}</strong></div><div className="dept-track"><i style={{width:`${Math.min(pct * 2.1, 100)}%`}}/></div><small>{pct}%</small></div>)}</div>
         </div>
         <div className="card">
           <CardHeader title="Lifecycle activity" subtitle="This month" action="View all" />
           <div className="lifecycle-grid">
-            <Lifecycle icon={<UserPlus size={17}/>} value="18" label="Starters" helper="6 onboarding" />
-            <Lifecycle icon={<ArrowUpRight size={17}/>} value="11" label="Promotions" helper="8 completed" />
-            <Lifecycle icon={<BriefcaseBusiness size={17}/>} value="9" label="Transfers" helper="3 pending" />
-            <Lifecycle icon={<ArrowDownRight size={17}/>} value="7" label="Leavers" helper="1 involuntary" />
+            <Lifecycle icon={<UserPlus size={17}/>} value={String(data.lifecycle.starters)} label="Starters" helper={`${data.onboardingInProgress} onboarding`} />
+            <Lifecycle icon={<ArrowUpRight size={17}/>} value={String(data.lifecycle.promotions)} label="Promotions" helper="Effective-dated" />
+            <Lifecycle icon={<BriefcaseBusiness size={17}/>} value={String(data.lifecycle.transfers)} label="Transfers" helper="Effective-dated" />
+            <Lifecycle icon={<ArrowDownRight size={17}/>} value={String(data.lifecycle.leavers)} label="Leavers" helper="This month" />
           </div>
-          <div className="timeline"><div className="timeline-item"><span className="timeline-dot green"/><div><strong>Elena Rossi starts today</strong><small>Product · Senior Product Manager</small></div><time>09:00</time></div><div className="timeline-item"><span className="timeline-dot amber"/><div><strong>3 contracts expire in 30 days</strong><small>Legal review recommended</small></div><time>Today</time></div><div className="timeline-item"><span className="timeline-dot teal"/><div><strong>Payroll input closes</strong><small>September 2026 payroll</small></div><time>2 days</time></div></div>
+          <div className="timeline">
+            {data.recentEvents.slice(0, 3).map((event, index) => <div className="timeline-item" key={event.id}><span className={`timeline-dot ${index === 0 ? "green" : index === 1 ? "amber" : "teal"}`}/><div><strong>{event.name} · {event.event}</strong><small>{event.org}</small></div><time>{event.date}</time></div>)}
+          </div>
         </div>
       </section>
 
@@ -66,16 +89,13 @@ export function Dashboard() {
         <div className="card">
           <CardHeader title="Recent people changes" subtitle="Effective-dated employee events" action="View event ledger" />
           <div className="table-wrap"><table><thead><tr><th>Employee</th><th>Event</th><th>Organization</th><th>Effective</th><th>Status</th></tr></thead><tbody>
-            <EventRow avatar="MR" name="Maya Rao" event="Promotion" org="Engineering" date="1 Oct 2026" status="Approved" />
-            <EventRow avatar="DS" name="David Stein" event="Manager change" org="Sales" date="26 Sep 2026" status="Scheduled" />
-            <EventRow avatar="EA" name="Emma Aydın" event="Compensation" org="Security" date="1 Sep 2026" status="Completed" />
-            <EventRow avatar="LC" name="Lucas Chen" event="Transfer" org="Operations" date="22 Sep 2026" status="Approved" />
+            {data.recentEvents.slice(0, 4).map((event) => <EventRow key={event.id} avatar={event.initials} name={event.name} event={event.event} org={event.org} date={event.date} status={event.status} />)}
           </tbody></table></div>
         </div>
         <div className="card trust-card">
           <CardHeader title="Data & governance" subtitle="Platform trust posture" />
           <div className="trust-score"><div className="score-ring"><span>96</span><small>/100</small></div><div><strong>Healthy</strong><p>Privacy, access and retention controls are operating normally.</p></div></div>
-          <div className="trust-list"><div><CircleCheckBig size={16}/><span>RBAC / ABAC policy engine</span><strong>Healthy</strong></div><div><CircleCheckBig size={16}/><span>Retention jobs</span><strong>Up to date</strong></div><div><CircleCheckBig size={16}/><span>Privileged access reviews</span><strong>98%</strong></div><div><ShieldCheck size={16}/><span>Restricted data vault</span><strong>Protected</strong></div></div>
+          <div className="trust-list"><div><CircleCheckBig size={16}/><span>PostgreSQL / Hyperdrive data path</span><strong>Healthy</strong></div><div><CircleCheckBig size={16}/><span>RBAC / ABAC policy engine</span><strong>Healthy</strong></div><div><CircleCheckBig size={16}/><span>Effective-dated people ledger</span><strong>Active</strong></div><div><ShieldCheck size={16}/><span>Restricted case wall</span><strong>Protected</strong></div></div>
         </div>
       </section>
     </>
