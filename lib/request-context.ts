@@ -11,7 +11,18 @@ export type RequestContext = {
 
 const validRoles = new Set(Object.values(PlatformRole));
 
+/**
+ * Legacy header context exists only for local development and automated testing.
+ * Production must populate RequestContext from a cryptographically verified
+ * identity/session layer rather than trusting caller-supplied role headers.
+ */
+function insecureHeaderContextAllowed() {
+  return process.env.NODE_ENV !== "production" && process.env.HRBP_ALLOW_INSECURE_CONTEXT_HEADERS === "true";
+}
+
 export function getRequestContext(request: Request): RequestContext | null {
+  if (!insecureHeaderContextAllowed()) return null;
+
   const tenantId = request.headers.get("x-tenant-id")?.trim();
   const actorId = request.headers.get("x-user-id")?.trim();
   const roleValue = request.headers.get("x-role")?.trim() as PlatformRole | undefined;
@@ -28,5 +39,5 @@ export function getRequestContext(request: Request): RequestContext | null {
 }
 
 export function unauthorized() {
-  return Response.json({ error: "Missing or invalid trusted identity context." }, { status: 401 });
+  return Response.json({ error: "Authenticated identity context is required." }, { status: 401 });
 }
