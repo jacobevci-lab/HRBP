@@ -61,8 +61,10 @@ enum PlatformRole {
   HRBP
   HR_OPERATIONS
   RECRUITER
+  TIME_ADMIN
   TALENT_ADMIN
   COMPENSATION_ADMIN
+  PAYROLL_ADMIN
   ER_INVESTIGATOR
   LEGAL
   PRIVACY_OFFICER
@@ -127,26 +129,98 @@ enum OnboardingTaskStatus {
   WAIVED
 }
 
+enum TimeEntryStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  LOCKED
+}
+
+enum LeaveRequestStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  TAKEN
+}
+
+enum LeaveUnit {
+  DAYS
+  HOURS
+}
+
+enum CompensationChangeStatus {
+  DRAFT
+  APPROVAL
+  APPROVED
+  REJECTED
+  APPLIED
+  CANCELLED
+}
+
+enum PayrollPeriodStatus {
+  OPEN
+  INPUT_LOCKED
+  CALCULATING
+  REVIEW
+  APPROVED
+  PAID
+  CLOSED
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  VALIDATING
+  CALCULATED
+  EXCEPTION
+  APPROVAL
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+enum PayrollLineType {
+  EARNING
+  DEDUCTION
+  TAX
+  EMPLOYER_COST
+  REIMBURSEMENT
+}
+
 model Tenant {
-  id              String   @id @default(cuid())
-  name            String
-  region          String
-  createdAt       DateTime @default(now())
-  users           UserAccount[]
-  people          Person[]
-  employments     Employment[]
-  orgUnits        OrganizationUnit[]
-  positions       Position[]
-  cases           EmployeeCase[]
-  documents       DocumentRecord[]
-  lifecycle       EmployeeLifecycleEvent[]
-  audit           AuditEvent[]
-  requisitions    Requisition[]
-  candidates      Candidate[]
-  applications    Application[]
-  offers          Offer[]
-  onboardingPlans OnboardingPlan[]
-  onboardingTasks OnboardingTask[]
+  id                  String   @id @default(cuid())
+  name                String
+  region              String
+  createdAt           DateTime @default(now())
+  users               UserAccount[]
+  people              Person[]
+  employments         Employment[]
+  orgUnits            OrganizationUnit[]
+  positions           Position[]
+  cases               EmployeeCase[]
+  documents           DocumentRecord[]
+  lifecycle           EmployeeLifecycleEvent[]
+  audit               AuditEvent[]
+  requisitions        Requisition[]
+  candidates          Candidate[]
+  applications        Application[]
+  offers              Offer[]
+  onboardingPlans     OnboardingPlan[]
+  onboardingTasks     OnboardingTask[]
+  workSchedules       WorkSchedule[]
+  scheduleAssignments WorkScheduleAssignment[]
+  timeEntries         TimeEntry[]
+  leaveTypes          LeaveType[]
+  leaveBalances       LeaveBalance[]
+  leaveRequests       LeaveRequest[]
+  compensationChanges CompensationChange[]
+  payrollCountryPacks PayrollCountryPack[]
+  payrollPeriods      PayrollPeriod[]
+  payrollRuns         PayrollRun[]
+  payrollResults      PayrollResult[]
+  payrollLineItems    PayrollLineItem[]
 }
 
 model UserAccount {
@@ -241,21 +315,27 @@ model Position {
 }
 
 model Employment {
-  id                  String @id @default(cuid())
-  tenantId            String
-  personId            String
-  positionId          String?
-  managerEmploymentId String?
-  status              EmploymentStatus @default(PREBOARDING)
-  startDate           DateTime
-  endDate             DateTime?
-  tenant              Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  person              Person @relation(fields: [personId], references: [id], onDelete: Restrict)
-  position            Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
-  manager             Employment? @relation("EmploymentManager", fields: [managerEmploymentId], references: [id], onDelete: SetNull)
-  directReports       Employment[] @relation("EmploymentManager")
-  compensation        CompensationHistory[]
-  onboardingPlans     OnboardingPlan[]
+  id                      String @id @default(cuid())
+  tenantId                String
+  personId                String
+  positionId              String?
+  managerEmploymentId     String?
+  status                  EmploymentStatus @default(PREBOARDING)
+  startDate               DateTime
+  endDate                 DateTime?
+  tenant                  Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person                  Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  position                Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  manager                 Employment? @relation("EmploymentManager", fields: [managerEmploymentId], references: [id], onDelete: SetNull)
+  directReports           Employment[] @relation("EmploymentManager")
+  compensation            CompensationHistory[]
+  onboardingPlans         OnboardingPlan[]
+  scheduleAssignments     WorkScheduleAssignment[]
+  timeEntries             TimeEntry[]
+  leaveBalances           LeaveBalance[]
+  leaveRequests           LeaveRequest[]
+  compensationChanges     CompensationChange[]
+  payrollResults          PayrollResult[]
 
   @@index([tenantId, personId, status])
   @@index([tenantId, managerEmploymentId])
@@ -381,6 +461,232 @@ model OnboardingTask {
   plan      OnboardingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, planId, status])
+}
+
+model WorkSchedule {
+  id              String @id @default(cuid())
+  tenantId        String
+  code            String
+  name            String
+  timezone        String
+  weeklyMinutes   Int
+  active          Boolean @default(true)
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  assignments     WorkScheduleAssignment[]
+
+  @@unique([tenantId, code, effectiveFrom])
+  @@index([tenantId, active])
+}
+
+model WorkScheduleAssignment {
+  id           String @id @default(cuid())
+  tenantId     String
+  employmentId String
+  scheduleId   String
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employment   Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  schedule     WorkSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+
+  @@unique([employmentId, effectiveFrom])
+  @@index([tenantId, scheduleId, effectiveTo])
+}
+
+model TimeEntry {
+  id           String @id @default(cuid())
+  tenantId     String
+  employmentId String
+  workDate     DateTime
+  startAt      DateTime?
+  endAt        DateTime?
+  minutes      Int
+  overtimeMinutes Int @default(0)
+  status       TimeEntryStatus @default(DRAFT)
+  source       String?
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employment   Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, workDate, status])
+  @@index([tenantId, employmentId, workDate])
+}
+
+model LeaveType {
+  id               String @id @default(cuid())
+  tenantId         String
+  code             String
+  name             String
+  unit             LeaveUnit @default(DAYS)
+  paid             Boolean @default(true)
+  requiresApproval Boolean @default(true)
+  annualAllowance  Decimal? @db.Decimal(8,2)
+  active           Boolean @default(true)
+  tenant           Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  balances         LeaveBalance[]
+  requests         LeaveRequest[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active])
+}
+
+model LeaveBalance {
+  id           String @id @default(cuid())
+  tenantId     String
+  employmentId String
+  leaveTypeId  String
+  periodYear   Int
+  opening      Decimal @default(0) @db.Decimal(8,2)
+  accrued      Decimal @default(0) @db.Decimal(8,2)
+  used         Decimal @default(0) @db.Decimal(8,2)
+  adjustment   Decimal @default(0) @db.Decimal(8,2)
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employment   Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  leaveType    LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([employmentId, leaveTypeId, periodYear])
+  @@index([tenantId, periodYear])
+}
+
+model LeaveRequest {
+  id           String @id @default(cuid())
+  tenantId     String
+  employmentId String
+  leaveTypeId  String
+  startsAt     DateTime
+  endsAt       DateTime
+  units        Decimal @db.Decimal(8,2)
+  status       LeaveRequestStatus @default(PENDING)
+  reason       String?
+  approverId   String?
+  decidedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employment   Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  leaveType    LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, startsAt])
+  @@index([tenantId, employmentId, startsAt])
+}
+
+model CompensationChange {
+  id              String @id @default(cuid())
+  tenantId        String
+  employmentId    String
+  currency        String
+  currentAnnualBase Decimal? @db.Decimal(18,2)
+  proposedAnnualBase Decimal @db.Decimal(18,2)
+  effectiveAt     DateTime
+  status          CompensationChangeStatus @default(DRAFT)
+  reason          String?
+  requestedById   String
+  approvedById    String?
+  approvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employment      Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, effectiveAt])
+  @@index([tenantId, employmentId, effectiveAt])
+}
+
+model PayrollCountryPack {
+  id            String @id @default(cuid())
+  tenantId      String
+  countryCode   String
+  name          String
+  version       String
+  currency      String
+  active        Boolean @default(true)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  periods       PayrollPeriod[]
+
+  @@unique([tenantId, countryCode, version])
+  @@index([tenantId, active])
+}
+
+model PayrollPeriod {
+  id            String @id @default(cuid())
+  tenantId      String
+  countryPackId String
+  code          String
+  startsAt      DateTime
+  endsAt        DateTime
+  payDate       DateTime
+  status        PayrollPeriodStatus @default(OPEN)
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  countryPack   PayrollCountryPack @relation(fields: [countryPackId], references: [id], onDelete: Restrict)
+  runs          PayrollRun[]
+
+  @@unique([tenantId, countryPackId, code])
+  @@index([tenantId, status, payDate])
+}
+
+model PayrollRun {
+  id              String @id @default(cuid())
+  tenantId        String
+  payrollPeriodId String
+  runNumber       Int @default(1)
+  status          PayrollRunStatus @default(DRAFT)
+  startedAt       DateTime @default(now())
+  calculatedAt    DateTime?
+  approvedById    String?
+  approvedAt      DateTime?
+  paidAt          DateTime?
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Restrict)
+  results         PayrollResult[]
+
+  @@unique([payrollPeriodId, runNumber])
+  @@index([tenantId, status, startedAt])
+}
+
+model PayrollResult {
+  id             String @id @default(cuid())
+  tenantId       String
+  payrollRunId   String
+  employmentId   String
+  currency       String
+  grossPay       Decimal @db.Decimal(18,2)
+  taxablePay     Decimal @db.Decimal(18,2)
+  taxAmount      Decimal @db.Decimal(18,2)
+  deductions     Decimal @db.Decimal(18,2)
+  netPay         Decimal @db.Decimal(18,2)
+  employerCost   Decimal? @db.Decimal(18,2)
+  classification DataClassification @default(RESTRICTED)
+  calculatedAt   DateTime @default(now())
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  payrollRun     PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employment     Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  lineItems      PayrollLineItem[]
+
+  @@unique([payrollRunId, employmentId])
+  @@index([tenantId, employmentId, calculatedAt])
+}
+
+model PayrollLineItem {
+  id             String @id @default(cuid())
+  tenantId       String
+  payrollResultId String
+  type           PayrollLineType
+  code           String
+  label          String
+  quantity       Decimal? @db.Decimal(12,4)
+  rate           Decimal? @db.Decimal(18,4)
+  amount         Decimal @db.Decimal(18,2)
+  taxable        Boolean @default(false)
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  payrollResult  PayrollResult @relation(fields: [payrollResultId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, payrollResultId, type])
 }
 
 model EmployeeCase {

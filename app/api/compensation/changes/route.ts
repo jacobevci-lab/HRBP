@@ -1,0 +1,31 @@
+import { CompensationChangeStatus } from "@prisma/client";
+import { db } from "@/lib/db";
+import { can, forbidden } from "@/lib/authorization";
+import { getRequestContext, unauthorized } from "@/lib/request-context";
+
+export async function GET(request: Request) {
+  const ctx = getRequestContext(request);
+  if (!ctx) return unauthorized();
+  if (!can(ctx, "compensation:read")) return forbidden();
+
+  const data = await db.compensationChange.findMany({
+    where: { tenantId: ctx.tenantId },
+    orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
+    include: { employment: { select: { id: true, person: { select: { employeeNumber: true, givenName: true, familyName: true } }, position: { select: { title: true, grade: true } } } } }
+  });
+  return Response.json({ data });
+}
+
+export async function POST(request: Request) {
+  const ctx = getRequestContext(request);
+  if (!ctx) return unauthorized();
+  if (!can(ctx, "compensation:write")) return forbidden();
+
+  const body = await request.json() as { employmentId?: string; currency?: string; proposedAnnualBase?: string | number; effectiveAt?: string; reason?: string; currentAnnualBase?: string | number };
+  if (!body.employmentId || !body.currency || body.proposedAnnualBase === undefined || !body.effectiveAt) return Response.json({ error: "employmentId, currency, proposedAnnualBase and effectiveAt are required." }, { status: 400 });
+  const employment = await db.employment.findFirst({ where: { id: body.employmentId, tenantId: ctx.tenantId }, select: { id: true } });
+  if (!employment) return Response.json({ error: "Employment not found in tenant." }, { status: 404 });
+
+  const data = await db.compensationChange.create({ data: { tenantId: ctx.tenantId, employmentId: body.employmentId, currency: body.currency.toUpperCase(), proposedAnnualBase: body.proposedAnnualBase, currentAnnualBase: body.currentAnnualBase, effectiveAt: new Date(body.effectiveAt), reason: body.reason, requestedById: ctx.actorId, status: CompensationChangeStatus.DRAFT } });
+  return Response.json({ data }, { status: 201 });
+}
