@@ -1,0 +1,157 @@
+enum SeparationType {
+  RESIGNATION
+  TERMINATION
+  REDUNDANCY
+  RETIREMENT
+  END_OF_CONTRACT
+  DEATH
+  OTHER
+}
+
+enum SeparationStatus {
+  DRAFT
+  NOTICE_PERIOD
+  CLEARANCE
+  FINAL_PAY_REVIEW
+  READY_TO_CLOSE
+  CLOSED
+  CANCELLED
+}
+
+enum ExitTaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  WAIVED
+}
+
+enum AssetReturnStatus {
+  PENDING
+  RETURNED
+  DAMAGED
+  LOST
+  WRITTEN_OFF
+}
+
+enum AccessRevocationStatus {
+  PENDING
+  SCHEDULED
+  REVOKED
+  EXCEPTION
+}
+
+model SeparationProcess {
+  id                    String @id @default(cuid())
+  tenantId              String
+  employmentId          String
+  type                  SeparationType
+  status                SeparationStatus @default(DRAFT)
+  noticeDate            DateTime?
+  lastWorkingDate       DateTime
+  reasonCode            String?
+  employeeReason        String?
+  initiatedById         String
+  managerEmploymentId   String?
+  rehireEligible        Boolean?
+  rehireDecisionById    String?
+  rehireDecisionAt      DateTime?
+  finalSettlementStatus String?
+  classification        DataClassification @default(RESTRICTED)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  completedAt           DateTime?
+  tasks                 SeparationTask[]
+  assets                AssetReturn[]
+  accessRevocations     AccessRevocation[]
+  exitInterview         ExitInterview?
+  knowledgeTransfers    KnowledgeTransfer[]
+
+  @@index([tenantId, employmentId, status])
+  @@index([tenantId, lastWorkingDate, status])
+}
+
+model SeparationTask {
+  id                 String @id @default(cuid())
+  tenantId           String
+  processId          String
+  domain             String
+  title              String
+  ownerId            String?
+  dueAt              DateTime?
+  status             ExitTaskStatus @default(NOT_STARTED)
+  blocking           Boolean @default(true)
+  evidenceDocumentId String?
+  completedAt        DateTime?
+  completedById      String?
+  createdAt          DateTime @default(now())
+  process            SeparationProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, processId, status])
+  @@index([tenantId, ownerId, dueAt])
+}
+
+model AssetReturn {
+  id            String @id @default(cuid())
+  tenantId      String
+  processId     String
+  assetTag      String
+  assetType     String
+  serialNumber  String?
+  status        AssetReturnStatus @default(PENDING)
+  returnedAt    DateTime?
+  verifiedById  String?
+  conditionNote String?
+  process       SeparationProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@unique([processId, assetTag])
+  @@index([tenantId, processId, status])
+}
+
+model AccessRevocation {
+  id           String @id @default(cuid())
+  tenantId     String
+  processId    String
+  systemName   String
+  accountId    String?
+  scheduledAt  DateTime?
+  revokedAt    DateTime?
+  status       AccessRevocationStatus @default(PENDING)
+  verifiedById String?
+  exceptionReason String?
+  process      SeparationProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@unique([processId, systemName, accountId])
+  @@index([tenantId, processId, status])
+}
+
+model ExitInterview {
+  id             String @id @default(cuid())
+  tenantId       String
+  processId      String @unique
+  interviewerId  String
+  conductedAt    DateTime
+  reasons        Json?
+  comments       String?
+  wouldRecommend Boolean?
+  classification DataClassification @default(CONFIDENTIAL)
+  createdAt      DateTime @default(now())
+  process        SeparationProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, conductedAt])
+}
+
+model KnowledgeTransfer {
+  id          String @id @default(cuid())
+  tenantId    String
+  processId   String
+  title       String
+  description String?
+  recipientId String?
+  dueAt       DateTime?
+  status      ExitTaskStatus @default(NOT_STARTED)
+  completedAt DateTime?
+  process     SeparationProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, processId, status])
+}
