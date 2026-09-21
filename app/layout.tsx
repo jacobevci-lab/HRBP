@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./enterprise.css";
+import "./recruiting.css";
 
 export const metadata: Metadata = {
   title: "HRBP One",

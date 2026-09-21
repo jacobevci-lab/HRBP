@@ -6,20 +6,23 @@ export type Capability =
   | "organization:read" | "organization:write"
   | "positions:read" | "positions:write"
   | "documents:read" | "documents:write"
+  | "recruiting:read" | "recruiting:write"
+  | "onboarding:read" | "onboarding:write"
   | "audit:read" | "cases:read";
 
 const grants: Record<PlatformRole, Capability[]> = {
-  EMPLOYEE: ["people:read", "documents:read"],
-  MANAGER: ["people:read", "organization:read", "positions:read", "documents:read"],
-  HRBP: ["people:read", "people:write", "organization:read", "positions:read", "documents:read"],
-  HR_OPERATIONS: ["people:read", "people:write", "organization:read", "organization:write", "positions:read", "positions:write", "documents:read", "documents:write"],
+  EMPLOYEE: ["people:read", "documents:read", "onboarding:read"],
+  MANAGER: ["people:read", "organization:read", "positions:read", "documents:read", "recruiting:read", "onboarding:read"],
+  HRBP: ["people:read", "people:write", "organization:read", "positions:read", "documents:read", "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write"],
+  HR_OPERATIONS: ["people:read", "people:write", "organization:read", "organization:write", "positions:read", "positions:write", "documents:read", "documents:write", "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write"],
+  RECRUITER: ["people:read", "organization:read", "positions:read", "recruiting:read", "recruiting:write", "onboarding:read"],
   TALENT_ADMIN: ["people:read", "organization:read", "positions:read"],
   COMPENSATION_ADMIN: ["people:read", "organization:read", "positions:read"],
   ER_INVESTIGATOR: ["people:read", "cases:read", "documents:read", "documents:write"],
   LEGAL: ["people:read", "cases:read", "documents:read", "audit:read"],
   PRIVACY_OFFICER: ["people:read", "documents:read", "audit:read"],
   SECURITY_AUDITOR: ["audit:read"],
-  TENANT_ADMIN: ["people:read", "people:write", "organization:read", "organization:write", "positions:read", "positions:write", "documents:read", "documents:write", "audit:read"]
+  TENANT_ADMIN: ["people:read", "people:write", "organization:read", "organization:write", "positions:read", "positions:write", "documents:read", "documents:write", "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write", "audit:read"]
 };
 
 const highlyRestrictedReaders = new Set<PlatformRole>([

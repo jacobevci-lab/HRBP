@@ -60,6 +60,7 @@ enum PlatformRole {
   MANAGER
   HRBP
   HR_OPERATIONS
+  RECRUITER
   TALENT_ADMIN
   COMPENSATION_ADMIN
   ER_INVESTIGATOR
@@ -81,20 +82,71 @@ enum LifecycleEventType {
   REHIRED
 }
 
+enum RequisitionStatus {
+  DRAFT
+  APPROVAL
+  OPEN
+  ON_HOLD
+  CLOSED
+  CANCELLED
+}
+
+enum ApplicationStage {
+  APPLIED
+  SCREENING
+  INTERVIEW
+  ASSESSMENT
+  OFFER
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
+enum OfferStatus {
+  DRAFT
+  APPROVAL
+  SENT
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  WITHDRAWN
+}
+
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+}
+
+enum OnboardingTaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  WAIVED
+}
+
 model Tenant {
-  id          String   @id @default(cuid())
-  name        String
-  region      String
-  createdAt   DateTime @default(now())
-  users       UserAccount[]
-  people      Person[]
-  employments Employment[]
-  orgUnits    OrganizationUnit[]
-  positions   Position[]
-  cases       EmployeeCase[]
-  documents   DocumentRecord[]
-  lifecycle   EmployeeLifecycleEvent[]
-  audit       AuditEvent[]
+  id              String   @id @default(cuid())
+  name            String
+  region          String
+  createdAt       DateTime @default(now())
+  users           UserAccount[]
+  people          Person[]
+  employments     Employment[]
+  orgUnits        OrganizationUnit[]
+  positions       Position[]
+  cases           EmployeeCase[]
+  documents       DocumentRecord[]
+  lifecycle       EmployeeLifecycleEvent[]
+  audit           AuditEvent[]
+  requisitions    Requisition[]
+  candidates      Candidate[]
+  applications    Application[]
+  offers          Offer[]
+  onboardingPlans OnboardingPlan[]
+  onboardingTasks OnboardingTask[]
 }
 
 model UserAccount {
@@ -113,22 +165,24 @@ model UserAccount {
 }
 
 model Person {
-  id             String   @id @default(cuid())
-  tenantId       String
-  employeeNumber String?
-  givenName      String
-  familyName     String
-  workEmail      String?
-  personalEmail  String?
-  classification DataClassification @default(CONFIDENTIAL)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  identity       PersonalIdentity?
-  employments    Employment[]
-  documents      DocumentRecord[]
-  cases          EmployeeCase[]
-  lifecycle      EmployeeLifecycleEvent[]
+  id              String   @id @default(cuid())
+  tenantId        String
+  employeeNumber  String?
+  givenName       String
+  familyName      String
+  workEmail       String?
+  personalEmail   String?
+  classification  DataClassification @default(CONFIDENTIAL)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  identity        PersonalIdentity?
+  employments     Employment[]
+  documents       DocumentRecord[]
+  cases           EmployeeCase[]
+  lifecycle       EmployeeLifecycleEvent[]
+  candidateOrigin Candidate?
+  onboardingPlans OnboardingPlan[]
 
   @@unique([tenantId, employeeNumber])
   @@index([tenantId, familyName, givenName])
@@ -165,21 +219,22 @@ model OrganizationUnit {
 }
 
 model Position {
-  id             String @id @default(cuid())
-  tenantId       String
-  orgUnitId      String
-  positionCode   String
-  title          String
-  jobFamily      String?
-  grade          String?
-  location       String?
-  status         PositionStatus @default(OPEN)
-  critical       Boolean @default(false)
-  validFrom      DateTime
-  validTo        DateTime?
-  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  orgUnit        OrganizationUnit @relation(fields: [orgUnitId], references: [id], onDelete: Restrict)
-  employments    Employment[]
+  id           String @id @default(cuid())
+  tenantId     String
+  orgUnitId    String
+  positionCode String
+  title        String
+  jobFamily    String?
+  grade        String?
+  location     String?
+  status       PositionStatus @default(OPEN)
+  critical     Boolean @default(false)
+  validFrom    DateTime
+  validTo      DateTime?
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  orgUnit      OrganizationUnit @relation(fields: [orgUnitId], references: [id], onDelete: Restrict)
+  employments  Employment[]
+  requisitions Requisition[]
 
   @@unique([tenantId, positionCode, validFrom])
   @@index([tenantId, status, validTo])
@@ -200,6 +255,7 @@ model Employment {
   manager             Employment? @relation("EmploymentManager", fields: [managerEmploymentId], references: [id], onDelete: SetNull)
   directReports       Employment[] @relation("EmploymentManager")
   compensation        CompensationHistory[]
+  onboardingPlans     OnboardingPlan[]
 
   @@index([tenantId, personId, status])
   @@index([tenantId, managerEmploymentId])
@@ -215,6 +271,116 @@ model CompensationHistory {
   employment    Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
 
   @@index([employmentId, effectiveFrom])
+}
+
+model Requisition {
+  id              String @id @default(cuid())
+  tenantId        String
+  positionId      String?
+  title           String
+  status          RequisitionStatus @default(DRAFT)
+  openings        Int @default(1)
+  hiringManagerId String?
+  recruiterId     String?
+  targetHireDate  DateTime?
+  openedAt        DateTime?
+  createdAt       DateTime @default(now())
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  position        Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  applications    Application[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, positionId])
+}
+
+model Candidate {
+  id                   String @id @default(cuid())
+  tenantId             String
+  givenName            String
+  familyName           String
+  email                String
+  phone                String?
+  source               String?
+  privacyNoticeVersion String?
+  retentionUntil       DateTime?
+  classification       DataClassification @default(RESTRICTED)
+  hiredPersonId        String? @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  tenant               Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  hiredPerson          Person? @relation(fields: [hiredPersonId], references: [id], onDelete: SetNull)
+  applications         Application[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId, retentionUntil])
+}
+
+model Application {
+  id            String @id @default(cuid())
+  tenantId      String
+  candidateId   String
+  requisitionId String
+  stage         ApplicationStage @default(APPLIED)
+  source        String?
+  appliedAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  requisition   Requisition @relation(fields: [requisitionId], references: [id], onDelete: Restrict)
+  offer         Offer?
+
+  @@unique([candidateId, requisitionId])
+  @@index([tenantId, stage, requisitionId])
+}
+
+model Offer {
+  id            String @id @default(cuid())
+  tenantId      String
+  applicationId String @unique
+  status        OfferStatus @default(DRAFT)
+  currency      String
+  annualBase    Decimal @db.Decimal(18,2)
+  startDate     DateTime
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+}
+
+model OnboardingPlan {
+  id              String @id @default(cuid())
+  tenantId        String
+  personId        String
+  employmentId    String?
+  status          OnboardingStatus @default(NOT_STARTED)
+  targetStartDate DateTime
+  ownerId         String?
+  createdAt       DateTime @default(now())
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person          Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  employment      Employment? @relation(fields: [employmentId], references: [id], onDelete: SetNull)
+  tasks           OnboardingTask[]
+
+  @@index([tenantId, status, targetStartDate])
+  @@index([tenantId, personId])
+}
+
+model OnboardingTask {
+  id        String @id @default(cuid())
+  tenantId  String
+  planId    String
+  title     String
+  ownerType String
+  status    OnboardingTaskStatus @default(NOT_STARTED)
+  dueDate   DateTime?
+  sensitive Boolean @default(false)
+  createdAt DateTime @default(now())
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plan      OnboardingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, planId, status])
 }
 
 model EmployeeCase {
