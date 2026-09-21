@@ -1,6 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@/generated/prisma/client";
+import { PrismaClient as RuntimePrismaClient } from "@/generated/prisma/client";
+import type { PrismaClient as AppPrismaClient } from "@prisma/client";
 
 type HyperdriveBinding = { connectionString: string };
 type RuntimeEnv = {
@@ -30,20 +31,31 @@ function connectionString(): string {
   return url;
 }
 
-function createClient(): PrismaClient {
+function createRuntimeClient(): RuntimePrismaClient {
   const adapter = new PrismaPg({ connectionString: connectionString() });
-  return new PrismaClient({
+  return new RuntimePrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"]
   });
 }
 
-export async function withDb<T>(operation: (client: PrismaClient) => Promise<T>): Promise<T> {
-  const client = createClient();
+/**
+ * Application code still uses @prisma/client types for its transaction helpers
+ * and enum imports. The Worker runtime uses the generated workerd Prisma client.
+ * Both clients are generated from the same schema, so we expose the runtime client
+ * through the legacy application type surface while keeping the implementation
+ * Cloudflare-compatible.
+ */
+function asAppClient(client: RuntimePrismaClient): AppPrismaClient {
+  return client as unknown as AppPrismaClient;
+}
+
+export async function withDb<T>(operation: (client: AppPrismaClient) => Promise<T>): Promise<T> {
+  const runtimeClient = createRuntimeClient();
   try {
-    return await operation(client);
+    return await operation(asAppClient(runtimeClient));
   } finally {
-    await client.$disconnect();
+    await runtimeClient.$disconnect();
   }
 }
 
@@ -65,10 +77,11 @@ function modelDelegate(model: string) {
 /**
  * Compatibility proxy used by the existing API routes.
  *
- * Each operation gets a fresh Prisma client. Hyperdrive owns database connection
- * pooling while the generated Prisma client targets workerd explicitly.
+ * The proxy is intentionally typed as the application's @prisma/client instance
+ * so transaction callbacks and helper signatures remain type-compatible. At
+ * runtime every operation is executed by the workerd-generated Prisma client.
  */
-export const db = new Proxy({} as PrismaClient, {
+export const db = new Proxy({} as AppPrismaClient, {
   get(_target, property) {
     if (typeof property !== "string") return undefined;
 
