@@ -19,7 +19,9 @@ export async function POST(request: Request) {
   if (!ctx) return unauthorized();
   if (!can(ctx, "cases:write")) return forbidden();
   const body = await request.json() as { caseType?: string; title?: string; subjectPersonId?: string; reporterPersonId?: string };
-  if (!body.caseType?.trim() || !body.title?.trim()) return Response.json({ error: "caseType and title are required." }, { status: 400 });
+  const caseType = body.caseType?.trim();
+  const title = body.title?.trim();
+  if (!caseType || !title) return Response.json({ error: "caseType and title are required." }, { status: 400 });
 
   const data = await db.$transaction(async (tx) => {
     if (body.subjectPersonId) {
@@ -31,8 +33,8 @@ export async function POST(request: Request) {
         tenantId: ctx.tenantId,
         subjectPersonId: body.subjectPersonId,
         caseNumber: `ER-${new Date().getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`,
-        caseType: body.caseType.trim(),
-        title: body.title.trim(),
+        caseType,
+        title,
         status: CaseStatus.OPEN,
         classification: DataClassification.HIGHLY_RESTRICTED,
         ownerUserId: ctx.actorId
