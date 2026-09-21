@@ -15,14 +15,14 @@ if (!match) {
   throw new Error("Prisma client generator block not found");
 }
 
-const workerGenerator = `generator client {
-  provider   = "prisma-client"
-  output     = "../generated/prisma"
-  engineType = "client"
-  runtime    = "workerd"
-  moduleFormat = "esm"
+// Cloudflare Hyperdrive's documented Prisma 6 setup uses prisma-client-js
+// with the driverAdapters preview feature and a --no-engine generation.
+// Keep the source schema unchanged and generate from this isolated copy.
+const hyperdriveGenerator = `generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }`;
 
-const updatedSchema = schema.replace(match[0], workerGenerator);
+const updatedSchema = schema.replace(match[0], hyperdriveGenerator);
 await writeFile(schemaPath, updatedSchema, "utf8");
-console.log("Prepared isolated Prisma Client schema for Cloudflare Workers (workerd runtime)");
+console.log("Prepared Prisma schema for Cloudflare Hyperdrive driver adapter generation");
