@@ -30,6 +30,8 @@ jobs:
         run: npx prisma generate
       - name: Seed enterprise staging workspace
         run: node scripts/seed-staging.mjs
+      - name: Seed work, leave, compensation and payroll domains
+        run: node scripts/seed-work-pay-staging.mjs
       - name: Seed growth and talent domains
         run: node scripts/seed-growth-staging.mjs
       - name: Seed employee-services domains
@@ -50,10 +52,20 @@ jobs:
           node --input-type=module <<'NODE'
           import { PrismaClient } from '@prisma/client';
           const db = new PrismaClient();
-          const [tenants, people, positions, goals, reviews, serviceRequests, policies, workflows, campaigns, scenarios, metrics, processing, dsrs] = await Promise.all([
+          const [
+            tenants, people, positions,
+            timeEntries, leaveRequests, compChanges, payrollRuns, payrollResults,
+            goals, reviews, serviceRequests, policies, workflows,
+            campaigns, scenarios, metrics, processing, dsrs
+          ] = await Promise.all([
             db.tenant.count(),
             db.person.count(),
             db.position.count(),
+            db.timeEntry.count(),
+            db.leaveRequest.count(),
+            db.compensationChange.count(),
+            db.payrollRun.count(),
+            db.payrollResult.count(),
             db.goal.count(),
             db.performanceReview.count(),
             db.hRServiceRequest.count(),
@@ -65,7 +77,12 @@ jobs:
             db.processingActivity.count(),
             db.dataSubjectRequest.count()
           ]);
-          const counts = { tenants, people, positions, goals, reviews, serviceRequests, policies, workflows, campaigns, scenarios, metrics, processing, dsrs };
+          const counts = {
+            tenants, people, positions,
+            timeEntries, leaveRequests, compChanges, payrollRuns, payrollResults,
+            goals, reviews, serviceRequests, policies, workflows,
+            campaigns, scenarios, metrics, processing, dsrs
+          };
           console.log(counts);
           if (Object.values(counts).some((value) => value < 1)) process.exit(1);
           await db.$disconnect();
