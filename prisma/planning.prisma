@@ -30,6 +30,11 @@ enum AIInteractionStatus {
   FAILED
 }
 
+enum AnalyticsPopulationScope {
+  TENANT
+  EMPLOYMENT_SET
+}
+
 model EngagementSurvey {
   id          String @id @default(cuid())
   tenantId    String
@@ -171,20 +176,23 @@ model MetricDefinition {
 }
 
 model MetricSnapshot {
-  id           String @id @default(cuid())
-  tenantId     String
-  metricId     String
-  periodStart  DateTime
-  periodEnd    DateTime
-  value        Json
-  dimensions   Json?
-  population   Int
-  suppressed   Boolean @default(false)
-  generatedAt  DateTime @default(now())
-  metric       MetricDefinition @relation(fields: [metricId], references: [id], onDelete: Cascade)
+  id               String @id @default(cuid())
+  tenantId         String
+  metricId         String
+  periodStart      DateTime
+  periodEnd        DateTime
+  value            Json
+  dimensions       Json?
+  population       Int
+  suppressed       Boolean @default(false)
+  populationScope  AnalyticsPopulationScope @default(TENANT)
+  scopeFingerprint String?
+  generatedAt      DateTime @default(now())
+  metric           MetricDefinition @relation(fields: [metricId], references: [id], onDelete: Cascade)
 
   @@index([tenantId, metricId, periodEnd])
   @@index([tenantId, suppressed, generatedAt])
+  @@index([tenantId, metricId, populationScope, scopeFingerprint, periodEnd])
 }
 
 model AIInteraction {
