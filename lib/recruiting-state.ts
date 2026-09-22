@@ -1,4 +1,5 @@
 import { ApplicationStage, OfferStatus, RequisitionStatus } from "@prisma/client";
+import { asEnumValue } from "@/lib/input-validation";
 
 const applicationTransitions: Record<ApplicationStage, ApplicationStage[]> = {
   APPLIED: [ApplicationStage.SCREENING, ApplicationStage.REJECTED, ApplicationStage.WITHDRAWN],
@@ -43,16 +44,13 @@ export function canTransitionRequisition(from: RequisitionStatus, to: Requisitio
 }
 
 export function parseApplicationStage(value: unknown): ApplicationStage | null {
-  const candidate = String(value ?? "").trim().toUpperCase() as ApplicationStage;
-  return Object.values(ApplicationStage).includes(candidate) ? candidate : null;
+  return asEnumValue(value, Object.values(ApplicationStage));
 }
 
 export function parseOfferStatus(value: unknown): OfferStatus | null {
-  const candidate = String(value ?? "").trim().toUpperCase() as OfferStatus;
-  return Object.values(OfferStatus).includes(candidate) ? candidate : null;
+  return asEnumValue(value, Object.values(OfferStatus));
 }
 
 export function parseRequisitionStatus(value: unknown): RequisitionStatus | null {
-  const candidate = String(value ?? "").trim().toUpperCase() as RequisitionStatus;
-  return Object.values(RequisitionStatus).includes(candidate) ? candidate : null;
+  return asEnumValue(value, Object.values(RequisitionStatus));
 }

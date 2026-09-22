@@ -1,7 +1,8 @@
 import { DataClassification, PlatformRole } from "@prisma/client";
-import { db } from "@/lib/db";
-import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
+import { can, forbidden } from "@/lib/authorization";
+import { db } from "@/lib/db";
+import { asDate, asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 const scheduleManagers = new Set<PlatformRole>([
@@ -16,15 +17,18 @@ export async function POST(request: Request) {
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "time:write") || !scheduleManagers.has(ctx.role)) return forbidden("Work schedule assignment requires a time-administration role.");
 
-  const body = await request.json() as { employmentId?: string; scheduleId?: string; effectiveFrom?: string; effectiveTo?: string };
-  if (!body.employmentId || !body.scheduleId || !body.effectiveFrom) {
-    return Response.json({ error: "employmentId, scheduleId and effectiveFrom are required." }, { status: 400 });
-  }
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
+  const employmentId = asIdentifier(body.employmentId);
+  const scheduleId = asIdentifier(body.scheduleId);
+  const effectiveFrom = asDate(body.effectiveFrom);
+  const effectiveTo = body.effectiveTo === undefined || body.effectiveTo === null || body.effectiveTo === "" ? undefined : asDate(body.effectiveTo);
 
-  const effectiveFrom = new Date(body.effectiveFrom);
-  const effectiveTo = body.effectiveTo ? new Date(body.effectiveTo) : undefined;
-  if (Number.isNaN(effectiveFrom.getTime()) || (effectiveTo && Number.isNaN(effectiveTo.getTime()))) {
-    return Response.json({ error: "Effective dates must be valid ISO date values." }, { status: 400 });
+  if (!employmentId || !scheduleId || !effectiveFrom) {
+    return Response.json({ error: "employmentId, scheduleId and effectiveFrom must be valid scalar values." }, { status: 400 });
+  }
+  if (body.effectiveTo !== undefined && body.effectiveTo !== null && body.effectiveTo !== "" && !effectiveTo) {
+    return Response.json({ error: "effectiveTo must be a valid ISO date string." }, { status: 400 });
   }
   if (effectiveTo && effectiveTo <= effectiveFrom) {
     return Response.json({ error: "effectiveTo must be after effectiveFrom." }, { status: 400 });
@@ -32,20 +36,27 @@ export async function POST(request: Request) {
 
   const data = await db.$transaction(async (tx) => {
     const [employment, schedule] = await Promise.all([
-      tx.employment.findFirst({ where: { id: body.employmentId, tenantId: ctx.tenantId }, select: { id: true } }),
-      tx.workSchedule.findFirst({ where: { id: body.scheduleId, tenantId: ctx.tenantId, active: true }, select: { id: true } })
+      tx.employment.findFirst({ where: { id: employmentId, tenantId: ctx.tenantId }, select: { id: true } }),
+      tx.workSchedule.findFirst({ where: { id: scheduleId, tenantId: ctx.tenantId, active: true }, select: { id: true } })
     ]);
     if (!employment || !schedule) throw new Error("NOT_FOUND");
 
-    await tx.workScheduleAssignment.updateMany({
-      where: { tenantId: ctx.tenantId, employmentId: body.employmentId, effectiveTo: null, effectiveFrom: { lt: effectiveFrom } },
-      data: { effectiveTo: effectiveFrom }
+    const previousAssignments = await tx.workScheduleAssignment.findMany({
+      where: { tenantId: ctx.tenantId, employmentId, effectiveTo: null, effectiveFrom: { lt: effectiveFrom } },
+      select: { id: true }
     });
+    for (const previous of previousAssignments) {
+      await tx.workScheduleAssignment.update({
+        where: { id: previous.id },
+        data: { effectiveTo: effectiveFrom }
+      });
+    }
+
     const assignment = await tx.workScheduleAssignment.create({
       data: {
         tenantId: ctx.tenantId,
-        employmentId: body.employmentId!,
-        scheduleId: body.scheduleId!,
+        employmentId,
+        scheduleId,
         effectiveFrom,
         effectiveTo
       }

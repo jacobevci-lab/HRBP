@@ -2,6 +2,8 @@ import { DataClassification, RequisitionStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { asIdentifier, readJsonObject } from "@/lib/input-validation";
+import { isPrismaRecordNotFound } from "@/lib/prisma-safety";
 import { canTransitionRequisition, parseRequisitionStatus } from "@/lib/recruiting-state";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -11,8 +13,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "recruiting:write")) return forbidden();
 
-  const { id } = await params;
-  const body = await request.json() as Record<string, unknown>;
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid requisition id is required." }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
   const next = parseRequisitionStatus(body.status);
   if (!next) return Response.json({ error: "A valid requisition status is required." }, { status: 400 });
 
@@ -26,14 +30,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!canTransitionRequisition(current.status, next)) throw new Error("INVALID_TRANSITION");
       if (next === RequisitionStatus.OPEN && !current.positionId) throw new Error("POSITION_REQUIRED");
 
-      const claimed = await tx.requisition.updateMany({
-        where: { id: current.id, tenantId: ctx.tenantId, status: current.status },
-        data: {
-          status: next,
-          openedAt: next === RequisitionStatus.OPEN && !current.openedAt ? new Date() : current.openedAt
-        }
-      });
-      if (claimed.count !== 1) throw new Error("STATE_CONFLICT");
+      try {
+        await tx.requisition.update({
+          where: { id: current.id, tenantId: ctx.tenantId, status: current.status },
+          data: {
+            status: next,
+            openedAt: next === RequisitionStatus.OPEN && !current.openedAt ? new Date() : current.openedAt
+          }
+        });
+      } catch (error) {
+        if (isPrismaRecordNotFound(error)) throw new Error("STATE_CONFLICT");
+        throw error;
+      }
 
       await appendAudit(tx, ctx, {
         action: `REQUISITION_STATUS_${current.status}_TO_${next}`,

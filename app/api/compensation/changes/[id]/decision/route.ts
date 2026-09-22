@@ -3,9 +3,11 @@ import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
 import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
+import { asEnumValue, asIdentifier, readJsonObject } from "@/lib/input-validation";
+import { isPrismaRecordNotFound } from "@/lib/prisma-safety";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
-const decisions = new Set(["APPROVE", "REJECT", "APPLY"]);
+const decisions = ["APPROVE", "REJECT", "APPLY"] as const;
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
@@ -13,10 +15,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "compensation:write")) return forbidden();
 
-  const { id } = await params;
-  const body = await request.json() as Record<string, unknown>;
-  const decision = String(body.decision ?? "").trim().toUpperCase();
-  if (!decisions.has(decision)) return Response.json({ error: "decision must be APPROVE, REJECT or APPLY." }, { status: 400 });
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid compensation change id is required." }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
+  const decision = asEnumValue(body.decision, decisions);
+  if (!decision) return Response.json({ error: "decision must be APPROVE, REJECT or APPLY." }, { status: 400 });
 
   try {
     const result = await withDb((client) => client.$transaction(async (tx) => {
@@ -36,11 +40,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (decision === "APPROVE") {
         if (change.status !== CompensationChangeStatus.APPROVAL) throw new Error("INVALID_STATE");
         const now = new Date();
-        const updated = await tx.compensationChange.updateMany({
-          where: { id: change.id, tenantId: ctx.tenantId, status: CompensationChangeStatus.APPROVAL },
-          data: { status: CompensationChangeStatus.APPROVED, approvedById: ctx.actorId, approvedAt: now }
-        });
-        if (updated.count !== 1) throw new Error("STATE_CONFLICT");
+        try {
+          await tx.compensationChange.update({
+            where: { id: change.id, tenantId: ctx.tenantId, status: CompensationChangeStatus.APPROVAL },
+            data: { status: CompensationChangeStatus.APPROVED, approvedById: ctx.actorId, approvedAt: now }
+          });
+        } catch (error) {
+          if (isPrismaRecordNotFound(error)) throw new Error("STATE_CONFLICT");
+          throw error;
+        }
         await appendAudit(tx, ctx, {
           action: "COMPENSATION_CHANGE_APPROVED",
           resourceType: "CompensationChange",
@@ -53,11 +61,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       if (decision === "REJECT") {
         if (change.status !== CompensationChangeStatus.APPROVAL) throw new Error("INVALID_STATE");
-        const updated = await tx.compensationChange.updateMany({
-          where: { id: change.id, tenantId: ctx.tenantId, status: CompensationChangeStatus.APPROVAL },
-          data: { status: CompensationChangeStatus.REJECTED }
-        });
-        if (updated.count !== 1) throw new Error("STATE_CONFLICT");
+        try {
+          await tx.compensationChange.update({
+            where: { id: change.id, tenantId: ctx.tenantId, status: CompensationChangeStatus.APPROVAL },
+            data: { status: CompensationChangeStatus.REJECTED }
+          });
+        } catch (error) {
+          if (isPrismaRecordNotFound(error)) throw new Error("STATE_CONFLICT");
+          throw error;
+        }
         await appendAudit(tx, ctx, {
           action: "COMPENSATION_CHANGE_REJECTED",
           resourceType: "CompensationChange",
@@ -69,11 +81,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
 
       if (change.status !== CompensationChangeStatus.APPROVED) throw new Error("INVALID_STATE");
-      const claim = await tx.compensationChange.updateMany({
-        where: { id: change.id, tenantId: ctx.tenantId, status: CompensationChangeStatus.APPROVED },
-        data: { status: CompensationChangeStatus.APPLIED }
-      });
-      if (claim.count !== 1) throw new Error("STATE_CONFLICT");
+      try {
+        await tx.compensationChange.update({
+          where: { id: change.id, tenantId: ctx.tenantId, status: CompensationChangeStatus.APPROVED },
+          data: { status: CompensationChangeStatus.APPLIED }
+        });
+      } catch (error) {
+        if (isPrismaRecordNotFound(error)) throw new Error("STATE_CONFLICT");
+        throw error;
+      }
 
       const duplicateEffectiveDate = await tx.compensationHistory.findFirst({
         where: { employmentId: change.employmentId, effectiveFrom: change.effectiveAt },

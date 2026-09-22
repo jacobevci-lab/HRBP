@@ -2,6 +2,7 @@ import { DataClassification } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { asIdentifier } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -10,7 +11,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "settings:write")) return forbidden();
 
-  const { id } = await params;
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid access grant id is required." }, { status: 400 });
+
   const result = await db.$transaction(async (tx) => {
     const grant = await tx.employmentAccessGrant.findFirst({ where: { id, tenantId: ctx.tenantId } });
     if (!grant) throw new Error("NOT_FOUND");

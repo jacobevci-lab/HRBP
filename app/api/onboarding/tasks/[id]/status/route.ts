@@ -2,6 +2,8 @@ import { DataClassification, OnboardingStatus, OnboardingTaskStatus } from "@pri
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { asEnumValue, asIdentifier, readJsonObject } from "@/lib/input-validation";
+import { isPrismaRecordNotFound } from "@/lib/prisma-safety";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 const transitions: Record<OnboardingTaskStatus, OnboardingTaskStatus[]> = {
@@ -13,8 +15,7 @@ const transitions: Record<OnboardingTaskStatus, OnboardingTaskStatus[]> = {
 };
 
 function parseStatus(value: unknown): OnboardingTaskStatus | null {
-  const candidate = String(value ?? "").trim().toUpperCase() as OnboardingTaskStatus;
-  return Object.values(OnboardingTaskStatus).includes(candidate) ? candidate : null;
+  return asEnumValue(value, Object.values(OnboardingTaskStatus));
 }
 
 function derivePlanStatus(statuses: OnboardingTaskStatus[]): OnboardingStatus {
@@ -30,8 +31,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "onboarding:write")) return forbidden();
 
-  const { id } = await params;
-  const body = await request.json() as Record<string, unknown>;
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid onboarding task id is required." }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
   const next = parseStatus(body.status);
   if (!next) return Response.json({ error: "A valid onboarding task status is required." }, { status: 400 });
 
@@ -44,18 +47,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!task) throw new Error("TASK_NOT_FOUND");
       if (!transitions[task.status].includes(next)) throw new Error("INVALID_TRANSITION");
 
-      const claimed = await tx.onboardingTask.updateMany({
-        where: { id: task.id, tenantId: ctx.tenantId, status: task.status },
-        data: { status: next }
-      });
-      if (claimed.count !== 1) throw new Error("STATE_CONFLICT");
+      try {
+        await tx.onboardingTask.update({
+          where: { id: task.id, tenantId: ctx.tenantId, status: task.status },
+          data: { status: next }
+        });
+      } catch (error) {
+        if (isPrismaRecordNotFound(error)) throw new Error("STATE_CONFLICT");
+        throw error;
+      }
 
       const planTasks = await tx.onboardingTask.findMany({
         where: { planId: task.planId, tenantId: ctx.tenantId },
         select: { status: true }
       });
       const planStatus = derivePlanStatus(planTasks.map((item) => item.status));
-      await tx.onboardingPlan.update({ where: { id: task.planId }, data: { status: planStatus } });
+      await tx.onboardingPlan.update({ where: { id: task.planId, tenantId: ctx.tenantId }, data: { status: planStatus } });
 
       await appendAudit(tx, ctx, {
         action: `ONBOARDING_TASK_${task.status}_TO_${next}`,

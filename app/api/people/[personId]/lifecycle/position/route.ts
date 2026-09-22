@@ -2,6 +2,8 @@ import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatu
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { asEnumValue, asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
+import { isPrismaRecordNotFound } from "@/lib/prisma-safety";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 const ACTIVE_EMPLOYMENT_STATUSES: EmploymentStatus[] = [
@@ -11,10 +13,7 @@ const ACTIVE_EMPLOYMENT_STATUSES: EmploymentStatus[] = [
   EmploymentStatus.SUSPENDED
 ];
 
-const allowedEvents = new Set<LifecycleEventType>([
-  LifecycleEventType.TRANSFERRED,
-  LifecycleEventType.PROMOTED
-]);
+const allowedEvents = [LifecycleEventType.TRANSFERRED, LifecycleEventType.PROMOTED] as const;
 
 export async function POST(request: Request, { params }: { params: Promise<{ personId: string }> }) {
   const ctx = getRequestContext(request);
@@ -24,16 +23,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
     return forbidden("Position lifecycle changes require people:write and positions:write permissions.");
   }
 
-  const { personId } = await params;
-  const body = await request.json() as Record<string, unknown>;
-  const targetPositionId = String(body.targetPositionId ?? "").trim();
-  const eventType = String(body.eventType ?? "").trim().toUpperCase() as LifecycleEventType;
-  const reason = String(body.reason ?? "").trim();
-  const effectiveAt = body.effectiveAt ? new Date(String(body.effectiveAt)) : new Date();
+  const personId = asIdentifier((await params).personId);
+  if (!personId) return Response.json({ error: "A valid person id is required." }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
 
-  if (!targetPositionId) return Response.json({ error: "targetPositionId is required." }, { status: 400 });
-  if (!allowedEvents.has(eventType)) return Response.json({ error: "eventType must be TRANSFERRED or PROMOTED." }, { status: 400 });
-  if (Number.isNaN(effectiveAt.getTime())) return Response.json({ error: "effectiveAt must be a valid date." }, { status: 400 });
+  const targetPositionId = asIdentifier(body.targetPositionId);
+  const eventType = asEnumValue(body.eventType, allowedEvents);
+  const reasonValue = asOptionalText(body.reason, 500);
+  if (reasonValue === null) return Response.json({ error: "reason must be a string up to 500 characters." }, { status: 400 });
+  const reason = reasonValue ?? "";
+  const effectiveAt = body.effectiveAt === undefined ? new Date() : typeof body.effectiveAt === "string" ? new Date(body.effectiveAt) : null;
+
+  if (!targetPositionId) return Response.json({ error: "targetPositionId is required and must be a string." }, { status: 400 });
+  if (!eventType) return Response.json({ error: "eventType must be TRANSFERRED or PROMOTED." }, { status: 400 });
+  if (!effectiveAt || Number.isNaN(effectiveAt.getTime())) return Response.json({ error: "effectiveAt must be a valid date string." }, { status: 400 });
 
   const tomorrow = new Date();
   tomorrow.setHours(23, 59, 59, 999);
@@ -73,19 +77,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
       });
       if (incumbent) throw new Error("TARGET_OCCUPIED");
 
-      const claimed = await tx.employment.updateMany({
-        where: { id: employment.id, tenantId: ctx.tenantId, positionId: employment.positionId },
-        data: { positionId: target.id }
-      });
-      if (claimed.count !== 1) throw new Error("STATE_CONFLICT");
+      try {
+        await tx.employment.update({
+          where: { id: employment.id, tenantId: ctx.tenantId, positionId: employment.positionId },
+          data: { positionId: target.id }
+        });
+      } catch (error) {
+        if (isPrismaRecordNotFound(error)) throw new Error("STATE_CONFLICT");
+        throw error;
+      }
 
       if (employment.positionId) {
-        await tx.position.updateMany({
-          where: { id: employment.positionId, tenantId: ctx.tenantId, validTo: null },
+        await tx.position.update({
+          where: { id: employment.positionId, tenantId: ctx.tenantId },
           data: { status: PositionStatus.OPEN }
         });
       }
-      await tx.position.update({ where: { id: target.id }, data: { status: PositionStatus.FILLED } });
+      await tx.position.update({ where: { id: target.id, tenantId: ctx.tenantId }, data: { status: PositionStatus.FILLED } });
 
       const fromLabel = employment.position ? `${employment.position.title} (${employment.position.positionCode})` : "Unassigned";
       const toLabel = `${target.title} (${target.positionCode})`;

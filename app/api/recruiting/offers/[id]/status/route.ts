@@ -2,6 +2,8 @@ import { ApplicationStage, DataClassification, OfferStatus } from "@prisma/clien
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { asIdentifier, readJsonObject } from "@/lib/input-validation";
+import { isPrismaRecordNotFound } from "@/lib/prisma-safety";
 import { canTransitionOffer, parseOfferStatus } from "@/lib/recruiting-state";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -13,8 +15,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "recruiting:write")) return forbidden();
 
-  const { id } = await params;
-  const body = await request.json() as Record<string, unknown>;
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid offer id is required." }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
   const next = parseOfferStatus(body.status);
   if (!next) return Response.json({ error: "A valid offer status is required." }, { status: 400 });
 
@@ -28,11 +32,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!canTransitionOffer(current.status, next)) throw new Error("INVALID_TRANSITION");
       if (next === OfferStatus.SENT && current.expiresAt && current.expiresAt <= new Date()) throw new Error("OFFER_EXPIRED");
 
-      const claimed = await tx.offer.updateMany({
-        where: { id: current.id, tenantId: ctx.tenantId, status: current.status },
-        data: { status: next }
-      });
-      if (claimed.count !== 1) throw new Error("STATE_CONFLICT");
+      try {
+        await tx.offer.update({
+          where: { id: current.id, tenantId: ctx.tenantId, status: current.status },
+          data: { status: next }
+        });
+      } catch (error) {
+        if (isPrismaRecordNotFound(error)) throw new Error("STATE_CONFLICT");
+        throw error;
+      }
 
       if (OFFER_PIPELINE_STATUSES.includes(next)) {
         await tx.application.update({ where: { id: current.applicationId }, data: { stage: ApplicationStage.OFFER } });

@@ -2,6 +2,7 @@ import { DataClassification, EmploymentAccessGrantKind, EmploymentStatus, Platfo
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { asDate, asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
@@ -50,20 +51,23 @@ export async function POST(request: Request) {
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "settings:write")) return forbidden();
 
-  const body = await request.json() as { userId?: string; employmentId?: string; validFrom?: string; validTo?: string };
-  if (!body.userId || !body.employmentId) return Response.json({ error: "userId and employmentId are required." }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
+  const userId = asIdentifier(body.userId);
+  const employmentId = asIdentifier(body.employmentId);
+  if (!userId || !employmentId) return Response.json({ error: "userId and employmentId must be valid scalar identifiers." }, { status: 400 });
 
-  const validFrom = body.validFrom ? new Date(body.validFrom) : new Date();
-  const validTo = body.validTo ? new Date(body.validTo) : null;
-  if (Number.isNaN(validFrom.getTime()) || (validTo && Number.isNaN(validTo.getTime()))) {
+  const validFrom = body.validFrom === undefined || body.validFrom === null || body.validFrom === "" ? new Date() : asDate(body.validFrom);
+  const validTo = body.validTo === undefined || body.validTo === null || body.validTo === "" ? null : asDate(body.validTo);
+  if (!validFrom || (body.validTo !== undefined && body.validTo !== null && body.validTo !== "" && !validTo)) {
     return Response.json({ error: "validFrom or validTo is invalid." }, { status: 400 });
   }
   if (validTo && validTo <= validFrom) return Response.json({ error: "validTo must be later than validFrom." }, { status: 400 });
 
   const result = await db.$transaction(async (tx) => {
     const [user, employment] = await Promise.all([
-      tx.userAccount.findFirst({ where: { id: body.userId, tenantId: ctx.tenantId, role: PlatformRole.HRBP, active: true }, select: { id: true } }),
-      tx.employment.findFirst({ where: { id: body.employmentId, tenantId: ctx.tenantId, status: { not: EmploymentStatus.TERMINATED } }, select: { id: true } })
+      tx.userAccount.findFirst({ where: { id: userId, tenantId: ctx.tenantId, role: PlatformRole.HRBP, active: true }, select: { id: true } }),
+      tx.employment.findFirst({ where: { id: employmentId, tenantId: ctx.tenantId, status: { not: EmploymentStatus.TERMINATED } }, select: { id: true } })
     ]);
     if (!user || !employment) throw new Error("TARGET_NOT_FOUND");
 
@@ -71,16 +75,16 @@ export async function POST(request: Request) {
       where: {
         tenantId_userId_employmentId_kind: {
           tenantId: ctx.tenantId,
-          userId: body.userId!,
-          employmentId: body.employmentId!,
+          userId,
+          employmentId,
           kind: EmploymentAccessGrantKind.HRBP_POPULATION
         }
       },
       update: { validFrom, validTo },
       create: {
         tenantId: ctx.tenantId,
-        userId: body.userId!,
-        employmentId: body.employmentId!,
+        userId,
+        employmentId,
         kind: EmploymentAccessGrantKind.HRBP_POPULATION,
         validFrom,
         validTo,

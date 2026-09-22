@@ -2,6 +2,8 @@ import { ApplicationStage, DataClassification } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { asIdentifier, readJsonObject } from "@/lib/input-validation";
+import { isPrismaRecordNotFound } from "@/lib/prisma-safety";
 import { canTransitionApplication, parseApplicationStage } from "@/lib/recruiting-state";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -11,8 +13,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "recruiting:write")) return forbidden();
 
-  const { id } = await params;
-  const body = await request.json() as Record<string, unknown>;
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid application id is required." }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
   const next = parseApplicationStage(body.stage);
   if (!next) return Response.json({ error: "A valid application stage is required." }, { status: 400 });
   if (next === ApplicationStage.HIRED) return Response.json({ error: "Use the controlled Hire transition after an accepted offer." }, { status: 409 });
@@ -26,11 +30,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!current) throw new Error("APPLICATION_NOT_FOUND");
       if (!canTransitionApplication(current.stage, next)) throw new Error("INVALID_TRANSITION");
 
-      const claimed = await tx.application.updateMany({
-        where: { id: current.id, tenantId: ctx.tenantId, stage: current.stage },
-        data: { stage: next }
-      });
-      if (claimed.count !== 1) throw new Error("STATE_CONFLICT");
+      try {
+        await tx.application.update({
+          where: { id: current.id, tenantId: ctx.tenantId, stage: current.stage },
+          data: { stage: next }
+        });
+      } catch (error) {
+        if (isPrismaRecordNotFound(error)) throw new Error("STATE_CONFLICT");
+        throw error;
+      }
 
       await appendAudit(tx, ctx, {
         action: `APPLICATION_STAGE_${current.stage}_TO_${next}`,

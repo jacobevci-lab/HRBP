@@ -1,8 +1,9 @@
 import { CompensationChangeStatus, DataClassification } from "@prisma/client";
-import { db } from "@/lib/db";
-import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
+import { can, forbidden } from "@/lib/authorization";
+import { db } from "@/lib/db";
 import { canActOnEmployment, employmentIdFilter, resolveEmploymentScope } from "@/lib/employment-scope";
+import { asDate, asDecimalInput, asIdentifier, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
@@ -19,15 +20,42 @@ export async function POST(request: Request) {
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "compensation:write")) return forbidden();
-  const body = await request.json() as { employmentId?: string; currency?: string; proposedAnnualBase?: string | number; effectiveAt?: string; reason?: string; currentAnnualBase?: string | number };
-  if (!body.employmentId || !body.currency || body.proposedAnnualBase === undefined || !body.effectiveAt) return Response.json({ error: "employmentId, currency, proposedAnnualBase and effectiveAt are required." }, { status: 400 });
+
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
+
+  const employmentId = asIdentifier(body.employmentId);
+  const currency = asText(body.currency, 3)?.toUpperCase() ?? null;
+  const proposedAnnualBase = asDecimalInput(body.proposedAnnualBase);
+  const currentAnnualBase = body.currentAnnualBase === undefined || body.currentAnnualBase === null || body.currentAnnualBase === "" ? undefined : asDecimalInput(body.currentAnnualBase);
+  const effectiveAt = asDate(body.effectiveAt);
+  const reasonValue = asOptionalText(body.reason, 500);
+
+  if (!employmentId || !currency || !/^[A-Z]{3}$/.test(currency) || !proposedAnnualBase || !effectiveAt) {
+    return Response.json({ error: "employmentId, three-letter currency, proposedAnnualBase and effectiveAt are required as valid scalar values." }, { status: 400 });
+  }
+  if (Number(proposedAnnualBase) <= 0) return Response.json({ error: "proposedAnnualBase must be greater than zero." }, { status: 400 });
+  if (currentAnnualBase === null) return Response.json({ error: "currentAnnualBase must be a decimal scalar when provided." }, { status: 400 });
+  if (reasonValue === null) return Response.json({ error: "reason must be a string up to 500 characters." }, { status: 400 });
 
   const data = await db.$transaction(async (tx) => {
     const scope = await resolveEmploymentScope(tx, ctx);
-    if (!canActOnEmployment(scope, body.employmentId!)) throw new Error("OUT_OF_SCOPE");
-    const employment = await tx.employment.findFirst({ where: { id: body.employmentId, tenantId: ctx.tenantId }, select: { id: true } });
+    if (!canActOnEmployment(scope, employmentId)) throw new Error("OUT_OF_SCOPE");
+    const employment = await tx.employment.findFirst({ where: { id: employmentId, tenantId: ctx.tenantId }, select: { id: true } });
     if (!employment) throw new Error("NOT_FOUND");
-    const change = await tx.compensationChange.create({ data: { tenantId: ctx.tenantId, employmentId: body.employmentId!, currency: body.currency!.toUpperCase(), proposedAnnualBase: body.proposedAnnualBase!, currentAnnualBase: body.currentAnnualBase, effectiveAt: new Date(body.effectiveAt!), reason: body.reason, requestedById: ctx.actorId, status: CompensationChangeStatus.DRAFT } });
+    const change = await tx.compensationChange.create({
+      data: {
+        tenantId: ctx.tenantId,
+        employmentId,
+        currency,
+        proposedAnnualBase,
+        currentAnnualBase,
+        effectiveAt,
+        reason: reasonValue,
+        requestedById: ctx.actorId,
+        status: CompensationChangeStatus.DRAFT
+      }
+    });
     await appendAudit(tx, ctx, { action: "compensation-change.created", resourceType: "CompensationChange", resourceId: change.id, classification: DataClassification.RESTRICTED });
     return change;
   }).catch((error) => error instanceof Error && ["NOT_FOUND", "OUT_OF_SCOPE"].includes(error.message) ? error.message : Promise.reject(error));
