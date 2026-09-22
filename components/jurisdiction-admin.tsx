@@ -50,10 +50,7 @@ export function JurisdictionAdmin() {
 
   useEffect(() => { load().catch((reason) => setError(reason instanceof Error ? reason.message : c("Jurisdiction data could not be loaded.", "Yetki alanı verisi yüklenemedi."))); }, [load, c]);
 
-  const currentRows = useMemo(() => {
-    const now = Date.now();
-    return payload?.data.filter((row) => new Date(row.effectiveFrom).getTime() <= now && (!row.effectiveTo || new Date(row.effectiveTo).getTime() >= now)).slice(0, 250) ?? [];
-  }, [payload]);
+  const historyRows = useMemo(() => payload?.data.slice(0, 500) ?? [], [payload]);
 
   async function save() {
     if (!payload?.permissions.write || !employmentId || !/^[A-Za-z]{2}$/.test(countryCode) || !effectiveFrom) return;
@@ -73,6 +70,7 @@ export function JurisdictionAdmin() {
   }
 
   const dateLocale = locale === "tr" ? "tr-TR" : "en-GB";
+  const now = Date.now();
   return <section className="card platform-panel">
     <div className="platform-head"><div><span className="section-kicker">{c("Effective-dated jurisdiction", "Tarih-etkin yetki alanı")}</span><h3>{c("Employment country history", "İstihdam ülke geçmişi")}</h3><p className={styles.panelCopy}>{c("Maintain an explicit country jurisdiction history used by country-based HRBP access. New effective records close the prior open period without rewriting history.", "Ülke bazlı HRBP erişiminde kullanılan açık ülke yetki alanı geçmişini yönetin. Yeni tarih-etkin kayıt önceki açık dönemi geçmişi bozmadan kapatır.")}</p></div><Globe2 size={19}/></div>
     {error ? <div className={styles.error}>{error}</div> : null}
@@ -83,6 +81,11 @@ export function JurisdictionAdmin() {
       <label className={styles.field}><span>{c("Effective to", "Bitiş")}</span><input type="date" value={effectiveTo} onChange={(event) => setEffectiveTo(event.target.value)} disabled={busy}/></label>
       <button className={styles.grantButton} type="button" onClick={save} disabled={busy || !employmentId || countryCode.length !== 2 || !effectiveFrom}><MapPinned size={16}/>{busy ? c("Saving…", "Kaydediliyor…") : c("Save jurisdiction", "Yetki alanını kaydet")}</button>
     </div> : <p className={styles.panelCopy}>{c("Read-only view. Jurisdiction changes require settings:write.", "Salt-okunur görünüm. Yetki alanı değişiklikleri settings:write gerektirir.")}</p>}
-    <div className="platform-table-wrap"><table className="platform-table compact"><thead><tr><th>{c("Employee", "Çalışan")}</th><th>{c("Country", "Ülke")}</th><th>{c("Effective from", "Başlangıç")}</th><th>{c("Effective to", "Bitiş")}</th><th>{c("Source", "Kaynak")}</th></tr></thead><tbody>{currentRows.length ? currentRows.map((row) => <tr key={row.id}><td>{row.employment ? employmentLabel(row.employment) : row.employmentId}</td><td><strong>{row.countryCode}</strong></td><td>{new Date(row.effectiveFrom).toLocaleDateString(dateLocale)}</td><td>{row.effectiveTo ? new Date(row.effectiveTo).toLocaleDateString(dateLocale) : c("Open-ended", "Süresiz")}</td><td>{row.source ?? "—"}</td></tr>) : <tr><td className={styles.empty} colSpan={5}>{c("No active employment jurisdiction records.", "Aktif istihdam yetki alanı kaydı yok.")}</td></tr>}</tbody></table></div>
+    <div className="platform-table-wrap"><table className="platform-table compact"><thead><tr><th>{c("Employee", "Çalışan")}</th><th>{c("Country", "Ülke")}</th><th>{c("Effective from", "Başlangıç")}</th><th>{c("Effective to", "Bitiş")}</th><th>{c("State", "Durum")}</th><th>{c("Source", "Kaynak")}</th></tr></thead><tbody>{historyRows.length ? historyRows.map((row) => {
+      const starts = new Date(row.effectiveFrom).getTime();
+      const ends = row.effectiveTo ? new Date(row.effectiveTo).getTime() : Number.POSITIVE_INFINITY;
+      const current = starts <= now && ends >= now;
+      return <tr key={row.id}><td>{row.employment ? employmentLabel(row.employment) : row.employmentId}</td><td><strong>{row.countryCode}</strong></td><td>{new Date(row.effectiveFrom).toLocaleDateString(dateLocale)}</td><td>{row.effectiveTo ? new Date(row.effectiveTo).toLocaleDateString(dateLocale) : c("Open-ended", "Süresiz")}</td><td><em className={`platform-pill ${current ? "active" : "review"}`}>{current ? c("Current", "Güncel") : c("Historical", "Geçmiş")}</em></td><td>{row.source ?? "—"}</td></tr>;
+    }) : <tr><td className={styles.empty} colSpan={6}>{c("No employment jurisdiction history is recorded.", "İstihdam yetki alanı geçmişi kaydedilmemiş.")}</td></tr>}</tbody></table></div>
   </section>;
 }
