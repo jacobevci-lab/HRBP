@@ -31,6 +31,14 @@ function decimalNumber(value: { toNumber(): number } | number | null | undefined
   return typeof value === "number" ? value : value.toNumber();
 }
 
+function isFinalTimeStatus(status: TimeEntryStatus) {
+  return status === TimeEntryStatus.APPROVED || status === TimeEntryStatus.LOCKED;
+}
+
+function isClosedPayrollStatus(status: PayrollRunStatus) {
+  return status === PayrollRunStatus.PAID || status === PayrollRunStatus.CANCELLED;
+}
+
 export async function getTimeAttendanceLiveData(ctx: RequestContext) {
   return withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
@@ -77,7 +85,7 @@ export async function getTimeAttendanceLiveData(ctx: RequestContext) {
 
     const scheduledEmployments = new Set(scheduleAssignments.map((row) => row.employmentId)).size;
     const exceptions = entries.filter((entry) =>
-      ![TimeEntryStatus.APPROVED, TimeEntryStatus.LOCKED].includes(entry.status) || !entry.startAt || !entry.endAt
+      !isFinalTimeStatus(entry.status) || !entry.startAt || !entry.endAt
     ).length;
     const overtimeMinutes = entries.reduce((sum, entry) => sum + entry.overtimeMinutes, 0);
 
@@ -221,7 +229,7 @@ export async function getPayrollLiveData(ctx: RequestContext) {
       };
     });
 
-    const openRuns = runs.filter((run) => ![PayrollRunStatus.PAID, PayrollRunStatus.CANCELLED].includes(run.status)).length;
+    const openRuns = runs.filter((run) => !isClosedPayrollStatus(run.status)).length;
     const employeesInLatestRuns = rows.reduce((sum, row) => sum + row.employees, 0);
 
     return {
