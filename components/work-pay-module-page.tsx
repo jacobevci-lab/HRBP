@@ -13,10 +13,10 @@ type Slug = keyof typeof copy;
 export async function WorkPayModulePage({ slug }: { slug: Slug }) {
   const meta = copy[slug];
   try {
-    const live = slug === "compensation"
-      ? (await import("@/components/compensation-live-workspace")).CompensationLiveWorkspace
-      : (await import("@/components/work-pay-live-workspace")).WorkPayLiveWorkspace;
-    const content = slug === "compensation" ? await live() : await live({ slug: slug as "time-attendance" | "leave" | "payroll" });
+    const content = slug === "compensation"
+      ? await (await import("@/components/compensation-live-workspace")).CompensationLiveWorkspace()
+      : await (await import("@/components/work-pay-live-workspace")).WorkPayLiveWorkspace({ slug });
+
     return <AppShell>
       <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> Governed workspace</button></div></section>
       {content}
