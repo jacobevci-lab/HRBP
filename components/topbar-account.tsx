@@ -1,0 +1,58 @@
+"use client";
+
+import Link from "next/link";
+import { LogIn, LogOut, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+
+type SessionResponse = {
+  authenticated: boolean;
+  oidcConfigured: boolean;
+  user?: {
+    displayName: string;
+    email: string | null;
+    role: string;
+  };
+};
+
+function initials(name: string) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "U";
+}
+
+function roleLabel(role: string) {
+  return role.toLowerCase().split("_").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
+}
+
+export function TopbarAccount() {
+  const [session, setSession] = useState<SessionResponse | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/auth/session", { cache: "no-store", credentials: "same-origin" })
+      .then((response) => response.ok ? response.json() as Promise<SessionResponse> : Promise.reject(new Error("session_unavailable")))
+      .then((value) => { if (active) setSession(value); })
+      .catch(() => { if (active) setSession({ authenticated: false, oidcConfigured: false }); });
+    return () => { active = false; };
+  }, []);
+
+  if (!session) {
+    return <div className="topbar-account topbar-account-loading"><span className="topbar-avatar">…</span><span>Checking session</span></div>;
+  }
+
+  if (!session.authenticated || !session.user) {
+    return (
+      <Link className="topbar-login" href="/auth/sign-in">
+        <LogIn size={15}/>
+        <span>Sign in</span>
+        {session.oidcConfigured ? <ShieldCheck size={13}/> : null}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="topbar-account">
+      <span className="topbar-avatar">{initials(session.user.displayName)}</span>
+      <span className="topbar-account-copy"><strong>{session.user.displayName}</strong><small>{roleLabel(session.user.role)}</small></span>
+      <Link className="topbar-logout" href="/api/auth/logout" title="Sign out" aria-label="Sign out"><LogOut size={15}/></Link>
+    </div>
+  );
+}
