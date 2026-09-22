@@ -58,7 +58,8 @@ jobs:
             tenants, people, positions,
             timeEntries, leaveRequests, compChanges, payrollRuns, payrollResults,
             accessGrants, jurisdictions, goals, reviews, serviceRequests, policies, workflows,
-            campaigns, scenarios, metrics, processing, dsrs
+            campaigns, scenarios, metrics, metricSnapshots, processing, dsrs,
+            invalidMetricScopes
           ] = await Promise.all([
             db.tenant.count(),
             db.person.count(),
@@ -78,16 +79,29 @@ jobs:
             db.surveyCampaign.count(),
             db.workforceScenario.count(),
             db.metricDefinition.count(),
+            db.metricSnapshot.count(),
             db.processingActivity.count(),
-            db.dataSubjectRequest.count()
+            db.dataSubjectRequest.count(),
+            db.metricSnapshot.count({
+              where: {
+                OR: [
+                  { populationScope: 'TENANT', scopeFingerprint: { not: null } },
+                  { populationScope: 'EMPLOYMENT_SET', scopeFingerprint: null }
+                ]
+              }
+            })
           ]);
           const counts = {
             tenants, people, positions,
             timeEntries, leaveRequests, compChanges, payrollRuns, payrollResults,
             accessGrants, jurisdictions, goals, reviews, serviceRequests, policies, workflows,
-            campaigns, scenarios, metrics, processing, dsrs
+            campaigns, scenarios, metrics, metricSnapshots, processing, dsrs
           };
-          console.log(counts);
+          console.log({ ...counts, invalidMetricScopes });
           if (Object.values(counts).some((value) => value < 1)) process.exit(1);
+          if (invalidMetricScopes > 0) {
+            console.error('Analytics snapshot scope integrity check failed.');
+            process.exit(1);
+          }
           await db.$disconnect();
           NODE
