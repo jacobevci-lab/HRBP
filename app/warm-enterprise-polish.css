@@ -1,0 +1,43 @@
+/* Warm Enterprise refinement layer: neutral graphite, warm paper, emerald actions, amber emphasis. */
+::selection{background:#dceae5;color:#1f342e}
+html[data-theme="dark"] ::selection{background:#36584e;color:#f4f0e8}
+
+button,a,input,select,textarea{transition:border-color .16s ease,background-color .16s ease,color .16s ease,box-shadow .16s ease,transform .16s ease}
+input,select,textarea{border-radius:9px!important;background:var(--surface)!important;border:1px solid var(--line-strong)!important;color:var(--text)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.32)}
+input:hover,select:hover,textarea:hover{border-color:#beb8ad!important}
+input:focus,select:focus,textarea:focus{outline:0!important;border-color:#6d9a8d!important;box-shadow:0 0 0 3px rgba(47,117,103,.10)!important}
+input::placeholder,textarea::placeholder{color:#a19d95}
+html[data-theme="dark"] input,html[data-theme="dark"] select,html[data-theme="dark"] textarea{background:#1b1f1b!important;border-color:#41483f!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.015)}
+html[data-theme="dark"] input:hover,html[data-theme="dark"] select:hover,html[data-theme="dark"] textarea:hover{border-color:#566057!important}
+html[data-theme="dark"] input:focus,html[data-theme="dark"] select:focus,html[data-theme="dark"] textarea:focus{border-color:#6aa997!important;box-shadow:0 0 0 3px rgba(99,179,158,.10)!important}
+
+.card,.metric-card,.enterprise-stat,.workpay-metric,.growth-metric,.services-metric,.gov-metric,.off-metric,.platform-metric{border-color:var(--line)!important}
+.card:hover,.metric-card:hover,.enterprise-stat:hover{border-color:#d5cec1}
+html[data-theme="dark"] .card:hover,html[data-theme="dark"] .metric-card:hover,html[data-theme="dark"] .enterprise-stat:hover{border-color:#454c44}
+
+.table-wrap,.enterprise-table-card,.workpay-table-wrap,.growth-table-wrap,.services-table-wrap,.gov-table-wrap,.off-table-wrap,.platform-table-wrap{scrollbar-color:#c9c2b7 transparent;scrollbar-width:thin}
+html[data-theme="dark"] .table-wrap,html[data-theme="dark"] .enterprise-table-card,html[data-theme="dark"] .workpay-table-wrap,html[data-theme="dark"] .growth-table-wrap,html[data-theme="dark"] .services-table-wrap,html[data-theme="dark"] .gov-table-wrap,html[data-theme="dark"] .off-table-wrap,html[data-theme="dark"] .platform-table-wrap{scrollbar-color:#4b534b transparent}
+thead th{font-weight:760;letter-spacing:.035em}
+tbody tr:last-child td{border-bottom-color:transparent}
+
+.pill,.status,.growth-pill,.services-pill,.gov-pill,.off-pill,.platform-pill,.classification{border:1px solid rgba(81,95,86,.10);font-style:normal}
+.pill.active,.status.active,.growth-pill.active,.services-pill.active,.gov-pill.active,.off-pill.active,.platform-pill.active{background:#e7f1ec;color:#286656;border-color:#d2e5dd}
+.pill.review,.status.review,.growth-pill.review,.services-pill.review,.gov-pill.review,.off-pill.review,.platform-pill.review,.pill.pending,.services-pill.pending{background:#f8eee1;color:#8a642f;border-color:#ecdcc3}
+html[data-theme="dark"] .pill.active,html[data-theme="dark"] .status.active,html[data-theme="dark"] .growth-pill.active,html[data-theme="dark"] .services-pill.active,html[data-theme="dark"] .gov-pill.active,html[data-theme="dark"] .off-pill.active,html[data-theme="dark"] .platform-pill.active{background:#263a32;color:#83c9b5;border-color:#365045}
+html[data-theme="dark"] .pill.review,html[data-theme="dark"] .status.review,html[data-theme="dark"] .growth-pill.review,html[data-theme="dark"] .services-pill.review,html[data-theme="dark"] .gov-pill.review,html[data-theme="dark"] .off-pill.review,html[data-theme="dark"] .platform-pill.review,html[data-theme="dark"] .pill.pending,html[data-theme="dark"] .services-pill.pending{background:#382f24;color:#e2b77f;border-color:#4d4030}
+
+.profile-tabs{gap:4px;padding:4px;border:1px solid var(--line);border-radius:11px;background:var(--surface-soft)}
+.profile-tabs a,.profile-tabs button{border-radius:7px;border-bottom:0!important;padding:8px 11px!important}
+.profile-tabs .active{background:var(--surface);color:var(--accent)!important;box-shadow:0 1px 3px rgba(49,44,36,.07)}
+html[data-theme="dark"] .profile-tabs{background:#1a1e1a;border-color:#343a33}
+html[data-theme="dark"] .profile-tabs .active{background:#262b25;box-shadow:none}
+
+.create-button:active,.secondary-button:active,.ai-button:active{transform:translateY(1px)}
+.create-button:focus-visible,.secondary-button:focus-visible,.ai-button:focus-visible,.icon-button:focus-visible,.nav-item:focus-visible,.locale-toggle button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.section-kicker,.eyebrow{letter-spacing:.095em;font-weight:800}
+.page-heading p,.table-title p,.card-header p{max-width:76ch}
+code{border:1px solid #e3ddd3;background:#f5f1e9;color:#52645d;border-radius:5px;padding:1px 4px}
+html[data-theme="dark"] code{border-color:#373e37;background:#191d19;color:#9ccdbf}
+
+@media(max-width:760px){.page-content{padding-left:16px!important;padding-right:16px!important}.page-heading{align-items:flex-start}.profile-tabs{overflow-x:auto;white-space:nowrap}.locale-toggle{flex:0 0 auto}}

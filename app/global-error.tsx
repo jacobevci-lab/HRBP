@@ -1,19 +1,10 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  return (
-    <html lang="en">
-      <body style={{ margin: 0, minHeight: "100vh", background: "#0b100f", color: "#e7efec", fontFamily: "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" }}>
-        <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
-          <section style={{ width: "min(680px, 100%)", padding: 28, borderRadius: 14, border: "1px solid #293632", background: "#111917", boxShadow: "0 18px 50px rgba(0,0,0,.28)" }}>
-            <div style={{ textTransform: "uppercase", letterSpacing: 1.1, fontSize: 10, fontWeight: 800, color: "#6fbdae" }}>HRBP One recovery</div>
-            <h1 style={{ fontSize: 24, margin: "8px 0 10px" }}>The application runtime hit an unexpected error.</h1>
-            <p style={{ margin: 0, color: "#9ba9a5", lineHeight: 1.65, fontSize: 13 }}>The error is isolated at the application boundary. Retry the current version; if the runtime dependency remains unavailable, the diagnostic identifier below can be matched with Cloudflare logs.</p>
-            {error.digest ? <p style={{ margin: "12px 0 0", color: "#70807b", fontSize: 11 }}>Diagnostic digest: {error.digest}</p> : null}
-            <button type="button" onClick={() => reset()} style={{ marginTop: 20, height: 38, padding: "0 16px", borderRadius: 8, border: "1px solid #2d8d7e", background: "#1f6c60", color: "white", fontWeight: 700, cursor: "pointer" }}>Retry application</button>
-          </section>
-        </main>
-      </body>
-    </html>
-  );
+  const [tr, setTr] = useState(false);
+  useEffect(() => { setTr(navigator.language.toLowerCase().startsWith("tr")); }, []);
+  const c = (en: string, trValue: string) => tr ? trValue : en;
+  return <html lang={tr ? "tr" : "en"}><body style={{ margin: 0, minHeight: "100vh", background: "#171a17", color: "#f0eee8", fontFamily: "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" }}><main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}><section style={{ width: "min(680px, 100%)", padding: 28, borderRadius: 14, border: "1px solid #383d36", background: "#20241f", boxShadow: "0 18px 50px rgba(0,0,0,.28)" }}><div style={{ textTransform: "uppercase", letterSpacing: 1.1, fontSize: 10, fontWeight: 800, color: "#7fc0ad" }}>{c("HRBP One recovery","HRBP One kurtarma")}</div><h1 style={{ fontSize: 24, margin: "8px 0 10px" }}>{c("The application runtime hit an unexpected error.","Uygulama çalışma zamanında beklenmeyen bir hata oluştu.")}</h1><p style={{ margin: 0, color: "#aba99f", lineHeight: 1.65, fontSize: 13 }}>{c("The error is isolated at the application boundary. Retry the current version; if the runtime dependency remains unavailable, the diagnostic identifier below can be matched with Cloudflare logs.","Hata uygulama sınırında izole edildi. Mevcut sürümü yeniden deneyin; çalışma zamanı bağımlılığı kullanılamaz durumda kalırsa aşağıdaki tanılama kimliği Cloudflare loglarıyla eşleştirilebilir.")}</p>{error.digest ? <p style={{ margin: "12px 0 0", color: "#7f837b", fontSize: 11 }}>{c("Diagnostic digest","Tanılama özeti")}: {error.digest}</p> : null}<button type="button" onClick={() => reset()} style={{ marginTop: 20, height: 38, padding: "0 16px", borderRadius: 8, border: "1px solid #4f8f7d", background: "#2f7567", color: "white", fontWeight: 700, cursor: "pointer" }}>{c("Retry application","Uygulamayı tekrar dene")}</button></section></main></body></html>;
 }

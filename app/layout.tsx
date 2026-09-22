@@ -14,6 +14,7 @@ import "./auth.css";
 import "./theme.css";
 import "./lifecycle.css";
 import "./warm-enterprise.css";
+import "./warm-enterprise-polish.css";
 
 export const metadata: Metadata = {
   title: "HRBP One",
