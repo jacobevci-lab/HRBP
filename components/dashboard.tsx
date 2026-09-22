@@ -1,8 +1,10 @@
 import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, CalendarClock, ChevronRight, CircleAlert, CircleCheckBig, Clock3, Ellipsis, FileWarning, ShieldCheck, Sparkles, UserPlus, UsersRound } from "lucide-react";
 import { getDashboardDataSafe } from "@/lib/dashboard-safe";
+import { getServerLocale } from "@/lib/i18n-server";
+import { translate, type Locale, type TranslationKey } from "@/lib/i18n";
 
-function dayLabel() {
-  return new Intl.DateTimeFormat("en-GB", {
+function dayLabel(locale: Locale) {
+  return new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-GB", {
     weekday: "long",
     day: "numeric",
     month: "long",
@@ -10,82 +12,99 @@ function dayLabel() {
   }).format(new Date());
 }
 
-function greeting() {
+function greeting(locale: Locale) {
   const hour = Number(new Intl.DateTimeFormat("en-GB", {
     hour: "2-digit",
     hour12: false,
     timeZone: "Europe/Istanbul"
   }).format(new Date()));
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
+  if (hour < 12) return translate(locale, "dashboard.goodMorning");
+  if (hour < 18) return translate(locale, "dashboard.goodAfternoon");
+  return translate(locale, "dashboard.goodEvening");
+}
+
+function localizedStatus(locale: Locale, status: string) {
+  const normalized = status.trim().toUpperCase();
+  if (locale !== "tr") return status;
+  const values: Record<string, string> = {
+    ACTIVE: "Aktif",
+    SCHEDULED: "Planlandı",
+    COMPLETED: "Tamamlandı",
+    APPROVED: "Onaylandı",
+    PENDING: "Bekliyor",
+    OPEN: "Açık",
+    CLOSED: "Kapalı"
+  };
+  return values[normalized] ?? status;
 }
 
 export async function Dashboard() {
+  const locale = await getServerLocale();
+  const t = (key: TranslationKey, vars?: Record<string, string | number>) => translate(locale, key, vars);
   const { data, degraded } = await getDashboardDataSafe();
   const maxPlan = Math.max(...data.headcountSeries.map((item) => item.plan), 1);
   const yoyTrend = data.yoyChange >= 0 ? "up" : "down";
-  const yoyLabel = `${Math.abs(data.yoyChange).toFixed(1)}% YoY`;
+  const yoyLabel = locale === "tr" ? `%${Math.abs(data.yoyChange).toFixed(1)} yıllık` : `${Math.abs(data.yoyChange).toFixed(1)}% YoY`;
 
   return (
     <>
       <section className="page-heading">
-        <div><div className="eyebrow">{dayLabel()}</div><h1>{greeting()}, Yakup.</h1><p>{degraded ? "Safe staging signals while the live data path recovers." : `Live workforce signals from ${data.tenantName}.`}</p></div>
+        <div><div className="eyebrow">{dayLabel(locale)}</div><h1>{greeting(locale)}, Yakup.</h1><p>{degraded ? t("dashboard.safeSignals") : t("dashboard.liveSignals", { tenant: data.tenantName })}</p></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {degraded ? <button className="secondary-button" disabled><CircleAlert size={15}/> Safe fallback</button> : null}
-          <button className="secondary-button">Customize dashboard</button>
+          {degraded ? <button className="secondary-button" disabled><CircleAlert size={15}/> {t("dashboard.safeFallback")}</button> : null}
+          <button className="secondary-button">{t("dashboard.customize")}</button>
         </div>
       </section>
 
       {degraded ? <section className="card" style={{ marginBottom: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
         <CircleAlert size={18} style={{ flex: "0 0 auto", marginTop: 1, color: "var(--orange)" }}/>
-        <div><strong style={{ display: "block", fontSize: 11 }}>Live dashboard data is temporarily unavailable</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5, color: "var(--muted)" }}>HRBP kept the Command Center online using the governed staging snapshot. Live writes remain isolated from this fallback view.</p></div>
+        <div><strong style={{ display: "block", fontSize: 11 }}>{t("dashboard.liveUnavailable")}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5, color: "var(--muted)" }}>{t("dashboard.fallbackDetail")}</p></div>
       </section> : null}
 
       <section className="ai-brief">
         <div className="ai-orb"><Sparkles size={20}/></div>
-        <div className="ai-copy"><div className="section-kicker">AI morning brief</div><h2>Three workforce signals deserve your attention.</h2><p>{data.upcomingStarters} starters are scheduled in the next 30 days, {data.criticalOpenPositions} critical positions remain open, and {data.openCases} employee-relations cases require active management.</p></div>
-        <button>View full brief <ChevronRight size={16}/></button>
+        <div className="ai-copy"><div className="section-kicker">{t("dashboard.aiMorningBrief")}</div><h2>{t("dashboard.aiHeadline")}</h2><p>{t("dashboard.aiDetail", { starters: data.upcomingStarters, positions: data.criticalOpenPositions, cases: data.openCases })}</p></div>
+        <button>{t("dashboard.viewFullBrief")} <ChevronRight size={16}/></button>
       </section>
 
       <section className="metrics-grid">
-        <Metric label="Total workforce" value={String(data.totalWorkforce)} meta={`${data.startedThisMonth} started this month`} trend="up" icon={<UsersRound size={18}/>} />
-        <Metric label="Open positions" value={String(data.openPositions)} meta={`${data.criticalOpenPositions} critical roles`} icon={<BriefcaseBusiness size={18}/>} />
-        <Metric label="New starters" value={String(data.upcomingStarters)} meta="Next 30 days" trend="up" icon={<UserPlus size={18}/>} />
-        <Metric label="Open HR cases" value={String(data.openCases)} meta="Restricted case wall" trend={data.openCases ? "down" : undefined} icon={<ShieldCheck size={18}/>} />
+        <Metric label={t("dashboard.totalWorkforce")} value={String(data.totalWorkforce)} meta={t("dashboard.startedThisMonth", { count: data.startedThisMonth })} trend="up" icon={<UsersRound size={18}/>} />
+        <Metric label={t("dashboard.openPositions")} value={String(data.openPositions)} meta={t("dashboard.criticalRoles", { count: data.criticalOpenPositions })} icon={<BriefcaseBusiness size={18}/>} />
+        <Metric label={t("dashboard.newStarters")} value={String(data.upcomingStarters)} meta={t("dashboard.next30Days")} trend="up" icon={<UserPlus size={18}/>} />
+        <Metric label={t("dashboard.openHrCases")} value={String(data.openCases)} meta={t("dashboard.restrictedCaseWall")} trend={data.openCases ? "down" : undefined} icon={<ShieldCheck size={18}/>} />
       </section>
 
       <section className="dashboard-grid two-thirds">
         <div className="card workforce-card">
-          <CardHeader title="Workforce overview" subtitle="Headcount, last 12 months" action="View analytics" />
-          <div className="workforce-summary"><div><span>Current headcount</span><strong>{data.totalWorkforce}</strong><small>{yoyTrend === "up" ? <ArrowUpRight size={14}/> : <ArrowDownRight size={14}/>} {yoyLabel}</small></div><div className="legend"><span><i className="legend-current"/>Employees</span><span><i className="legend-open"/>Plan</span></div></div>
+          <CardHeader title={t("dashboard.workforceOverview")} subtitle={t("dashboard.headcount12")} action={t("dashboard.viewAnalytics")} />
+          <div className="workforce-summary"><div><span>{t("dashboard.currentHeadcount")}</span><strong>{data.totalWorkforce}</strong><small>{yoyTrend === "up" ? <ArrowUpRight size={14}/> : <ArrowDownRight size={14}/>} {yoyLabel}</small></div><div className="legend"><span><i className="legend-current"/>{t("dashboard.employees")}</span><span><i className="legend-open"/>{t("dashboard.plan")}</span></div></div>
           <div className="bar-chart">{data.headcountSeries.map((item) => <div className="bar-col" key={item.label}><div className="bar-plan" style={{height:`${Math.max((item.plan / maxPlan) * 100, 8)}%`}}/><div className="bar-actual" style={{height:`${Math.max((item.actual / maxPlan) * 100, item.actual ? 7 : 0)}%`}}/><span>{item.label}</span></div>)}</div>
         </div>
 
         <div className="card action-card">
-          <CardHeader title="Needs attention" subtitle={degraded ? "Safe staging priorities" : "Prioritized from live records"} />
+          <CardHeader title={t("dashboard.needsAttention")} subtitle={degraded ? t("dashboard.safePriorities") : t("dashboard.livePriorities")} />
           <div className="attention-list">
-            <Attention icon={<CalendarClock size={17}/>} tone="amber" title="Upcoming starters" detail={`${data.upcomingStarters} people start within 30 days`} tag="Onboarding" />
-            <Attention icon={<FileWarning size={17}/>} tone="red" title="Employee relations" detail={`${data.openCases} active restricted cases`} tag={data.openCases ? "Review" : "Clear"} />
-            <Attention icon={<BriefcaseBusiness size={17}/>} tone="purple" title="Critical vacancies" detail={`${data.criticalOpenPositions} critical positions remain open`} tag="Hiring" />
-            <Attention icon={<Clock3 size={17}/>} tone="blue" title="Onboarding plans" detail={`${data.onboardingInProgress} plans in progress`} tag={`${data.onboardingInProgress} items`} />
+            <Attention icon={<CalendarClock size={17}/>} tone="amber" title={t("dashboard.upcomingStarters")} detail={t("dashboard.peopleStart", { count: data.upcomingStarters })} tag={t("nav.onboarding")} />
+            <Attention icon={<FileWarning size={17}/>} tone="red" title={t("dashboard.employeeRelations")} detail={t("dashboard.activeCases", { count: data.openCases })} tag={data.openCases ? t("dashboard.review") : t("dashboard.clear")} />
+            <Attention icon={<BriefcaseBusiness size={17}/>} tone="purple" title={t("dashboard.criticalVacancies")} detail={t("dashboard.positionsRemainOpen", { count: data.criticalOpenPositions })} tag={t("dashboard.hiring")} />
+            <Attention icon={<Clock3 size={17}/>} tone="sage" title={t("dashboard.onboardingPlans")} detail={t("dashboard.plansInProgress", { count: data.onboardingInProgress })} tag={t("dashboard.items", { count: data.onboardingInProgress })} />
           </div>
-          <button className="card-footer-button">Open action center <ChevronRight size={15}/></button>
+          <button className="card-footer-button">{t("dashboard.openActionCenter")} <ChevronRight size={15}/></button>
         </div>
       </section>
 
       <section className="dashboard-grid half">
         <div className="card">
-          <CardHeader title="Organization health" subtitle="Active workforce distribution" action="Open org chart" />
+          <CardHeader title={t("dashboard.organizationHealth")} subtitle={t("dashboard.activeWorkforceDistribution")} action={t("dashboard.openOrgChart")} />
           <div className="department-list">{data.departments.map(({name,count,pct}) => <div className="department-row" key={name}><div className="dept-main"><span>{name}</span><strong>{count}</strong></div><div className="dept-track"><i style={{width:`${Math.min(pct * 2.1, 100)}%`}}/></div><small>{pct}%</small></div>)}</div>
         </div>
         <div className="card">
-          <CardHeader title="Lifecycle activity" subtitle="This month" action="View all" />
+          <CardHeader title={t("dashboard.lifecycleActivity")} subtitle={t("dashboard.thisMonth")} action={t("dashboard.viewAll")} />
           <div className="lifecycle-grid">
-            <Lifecycle icon={<UserPlus size={17}/>} value={String(data.lifecycle.starters)} label="Starters" helper={`${data.onboardingInProgress} onboarding`} />
-            <Lifecycle icon={<ArrowUpRight size={17}/>} value={String(data.lifecycle.promotions)} label="Promotions" helper="Effective-dated" />
-            <Lifecycle icon={<BriefcaseBusiness size={17}/>} value={String(data.lifecycle.transfers)} label="Transfers" helper="Effective-dated" />
-            <Lifecycle icon={<ArrowDownRight size={17}/>} value={String(data.lifecycle.leavers)} label="Leavers" helper="This month" />
+            <Lifecycle icon={<UserPlus size={17}/>} value={String(data.lifecycle.starters)} label={t("dashboard.starters")} helper={t("dashboard.onboardingCount", { count: data.onboardingInProgress })} />
+            <Lifecycle icon={<ArrowUpRight size={17}/>} value={String(data.lifecycle.promotions)} label={t("dashboard.promotions")} helper={t("dashboard.effectiveDated")} />
+            <Lifecycle icon={<BriefcaseBusiness size={17}/>} value={String(data.lifecycle.transfers)} label={t("dashboard.transfers")} helper={t("dashboard.effectiveDated")} />
+            <Lifecycle icon={<ArrowDownRight size={17}/>} value={String(data.lifecycle.leavers)} label={t("dashboard.leavers")} helper={t("dashboard.thisMonth")} />
           </div>
           <div className="timeline">
             {data.recentEvents.slice(0, 3).map((event, index) => <div className="timeline-item" key={event.id}><span className={`timeline-dot ${index === 0 ? "green" : index === 1 ? "amber" : "teal"}`}/><div><strong>{event.name} · {event.event}</strong><small>{event.org}</small></div><time>{event.date}</time></div>)}
@@ -95,15 +114,15 @@ export async function Dashboard() {
 
       <section className="dashboard-grid two-thirds bottom-grid">
         <div className="card">
-          <CardHeader title="Recent people changes" subtitle="Effective-dated employee events" action="View event ledger" />
-          <div className="table-wrap"><table><thead><tr><th>Employee</th><th>Event</th><th>Organization</th><th>Effective</th><th>Status</th></tr></thead><tbody>
-            {data.recentEvents.slice(0, 4).map((event) => <EventRow key={event.id} avatar={event.initials} name={event.name} event={event.event} org={event.org} date={event.date} status={event.status} />)}
+          <CardHeader title={t("dashboard.recentPeopleChanges")} subtitle={t("dashboard.employeeEvents")} action={t("dashboard.viewEventLedger")} />
+          <div className="table-wrap"><table><thead><tr><th>{t("dashboard.employee")}</th><th>{t("dashboard.event")}</th><th>{t("dashboard.organization")}</th><th>{t("dashboard.effective")}</th><th>{t("dashboard.status")}</th></tr></thead><tbody>
+            {data.recentEvents.slice(0, 4).map((event) => <EventRow key={event.id} avatar={event.initials} name={event.name} event={event.event} org={event.org} date={event.date} status={event.status} displayStatus={localizedStatus(locale, event.status)} />)}
           </tbody></table></div>
         </div>
         <div className="card trust-card">
-          <CardHeader title="Data & governance" subtitle="Platform trust posture" />
-          <div className="trust-score"><div className="score-ring"><span>{degraded ? "82" : "96"}</span><small>/100</small></div><div><strong>{degraded ? "Degraded" : "Healthy"}</strong><p>{degraded ? "The application is serving a safe read-only snapshot while live data recovers." : "Privacy, access and retention controls are operating normally."}</p></div></div>
-          <div className="trust-list"><div>{degraded ? <CircleAlert size={16}/> : <CircleCheckBig size={16}/>}<span>PostgreSQL / Hyperdrive data path</span><strong>{degraded ? "Recovering" : "Healthy"}</strong></div><div><CircleCheckBig size={16}/><span>RBAC / ABAC policy engine</span><strong>Healthy</strong></div><div><CircleCheckBig size={16}/><span>Effective-dated people ledger</span><strong>Active</strong></div><div><ShieldCheck size={16}/><span>Restricted case wall</span><strong>Protected</strong></div></div>
+          <CardHeader title={t("dashboard.dataGovernance")} subtitle={t("dashboard.platformTrust")} />
+          <div className="trust-score"><div className="score-ring"><span>{degraded ? "82" : "96"}</span><small>/100</small></div><div><strong>{degraded ? t("dashboard.degraded") : t("dashboard.healthy")}</strong><p>{degraded ? t("dashboard.degradedDetail") : t("dashboard.healthyDetail")}</p></div></div>
+          <div className="trust-list"><div>{degraded ? <CircleAlert size={16}/> : <CircleCheckBig size={16}/>}<span>{t("dashboard.dataPath")}</span><strong>{degraded ? t("dashboard.recovering") : t("dashboard.healthy")}</strong></div><div><CircleCheckBig size={16}/><span>{t("dashboard.policyEngine")}</span><strong>{t("dashboard.healthy")}</strong></div><div><CircleCheckBig size={16}/><span>{t("dashboard.peopleLedger")}</span><strong>{t("dashboard.active")}</strong></div><div><ShieldCheck size={16}/><span>{t("dashboard.caseWall")}</span><strong>{t("dashboard.protected")}</strong></div></div>
         </div>
       </section>
     </>
@@ -114,4 +133,4 @@ function CardHeader({ title, subtitle, action }: { title: string; subtitle: stri
 function Metric({ label, value, meta, trend, icon }: { label:string; value:string; meta:string; trend?:"up"|"down"; icon:React.ReactNode }) { return <div className="metric-card"><div className="metric-top"><span className="metric-icon">{icon}</span><button><Ellipsis size={17}/></button></div><span className="metric-label">{label}</span><div className="metric-value">{value}</div><div className={`metric-meta ${trend || ""}`}>{trend === "up" && <ArrowUpRight size={14}/>} {trend === "down" && <ArrowDownRight size={14}/>} {meta}</div></div>; }
 function Attention({icon,tone,title,detail,tag}:{icon:React.ReactNode;tone:string;title:string;detail:string;tag:string}) { return <button className="attention-row"><span className={`attention-icon ${tone}`}>{icon}</span><span><strong>{title}</strong><small>{detail}</small></span><em>{tag}</em><ChevronRight size={15}/></button>; }
 function Lifecycle({icon,value,label,helper}:{icon:React.ReactNode;value:string;label:string;helper:string}) { return <div className="lifecycle-item"><span>{icon}</span><strong>{value}</strong><p>{label}</p><small>{helper}</small></div>; }
-function EventRow({avatar,name,event,org,date,status}:{avatar:string;name:string;event:string;org:string;date:string;status:string}) { return <tr><td><div className="person-cell"><span>{avatar}</span><strong>{name}</strong></div></td><td>{event}</td><td>{org}</td><td>{date}</td><td><em className={`status ${status.toLowerCase()}`}>{status}</em></td></tr>; }
+function EventRow({avatar,name,event,org,date,status,displayStatus}:{avatar:string;name:string;event:string;org:string;date:string;status:string;displayStatus:string}) { return <tr><td><div className="person-cell"><span>{avatar}</span><strong>{name}</strong></div></td><td>{event}</td><td>{org}</td><td>{date}</td><td><em className={`status ${status.toLowerCase()}`}>{displayStatus}</em></td></tr>; }

@@ -2,8 +2,10 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ChevronRight, CircleAlert, CircleCheckBig, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { navigation } from "@/lib/navigation";
+import { getServerLocale } from "@/lib/i18n-server";
+import { translate, type Locale } from "@/lib/i18n";
 
-const descriptions: Record<string, string> = {
+const descriptionsEn: Record<string, string> = {
   people: "The employee golden record: identity, employment, position, organization and lifecycle history in one governed workspace.",
   organization: "Model legal entities, business units, departments, teams, cost centers and effective-dated hierarchy changes.",
   "employee-360": "A policy-aware view of the complete employee relationship without collapsing restricted security boundaries.",
@@ -32,6 +34,37 @@ const descriptions: Record<string, string> = {
   audit: "Review immutable security-relevant reads and business mutations across the employee lifecycle.",
   workflows: "Orchestrate event-driven HR processes with versioned definitions, approvals, tasks, SLAs, failure handling and immutable process history.",
   settings: "Configure tenant identity, provisioning, integrations, residency and security without storing connector secrets in application records."
+};
+
+const descriptionsTr: Record<string, string> = {
+  people: "Çalışanın ana kaydını; kimlik, istihdam, pozisyon, organizasyon ve yaşam döngüsü geçmişiyle tek yönetişimli çalışma alanında yönetin.",
+  organization: "Tüzel kişileri, iş birimlerini, departmanları, ekipleri, maliyet merkezlerini ve geçerlilik tarihli hiyerarşi değişikliklerini modelleyin.",
+  "employee-360": "Kısıtlı güvenlik sınırlarını bozmadan çalışan ilişkisinin tamamını politika farkındalığıyla görüntüleyin.",
+  positions: "Bütçelenmiş pozisyonları çalışanlardan bağımsız olarak durum, seviye, lokasyon, kritiklik ve geçmiş bilgileriyle yönetin.",
+  recruiting: "Pozisyona bağlı talepleri planlayın, aday verisini yönetin, seçimi takip edin ve kabul edilen teklifleri doğrudan çalışan kaydına dönüştürün.",
+  onboarding: "Kabul edilmiş tekliften hazır çalışana geçişi İK, IT ve işe alım yöneticisi arasında kontrollü şekilde yönetin.",
+  offboarding: "İstihdam kapanmadan önce istifa, fesih, emeklilik ve sözleşme bitişlerini İK, yönetici, IT, güvenlik, tesis ve bordro ile yönetin.",
+  "time-attendance": "Çalışma planı, devam, fazla mesai, istisna, onay ve bordroya hazır kilitli zamanı geçerlilik tarihli modelde yönetin.",
+  leave: "İzin politikası, bakiye, hak ediş, onay, kapsama ve devamsızlık geçmişini istihdam kaydından koparmadan yönetin.",
+  compensation: "Geçerlilik tarihli ücret değişikliklerini, değerlendirme döngülerini, bütçe kontrollerini ve kısıtlı ücret onaylarını yönetin.",
+  payroll: "Ülke paketleri, bordro dönemleri, doğrulama, hesaplama, onay, kısıtlı sonuçlar ve bordro verisini yönetin.",
+  benefits: "Ülke mevzuatına duyarlı yan hak planlarını, uygunluk, seçim, katkı ve geçerlilik tarihli kapsamla yönetin.",
+  performance: "Hedef, sürekli geri bildirim, değerlendirme ve kalibrasyonu; nihai kararları insanda ve denetlenebilir tutarak yönetin.",
+  talent: "Performans ve potansiyel değerlendirmelerini şeffaf gelişim kararlarına bağlayın; çalışanları opak otomatik skorlamaya tabi tutmayın.",
+  succession: "Pozisyon odaklı yedekleme planları, aday hazırlığı ve gelişim açıklarıyla iş sürekliliğini koruyun.",
+  learning: "Yetkinlik taksonomisi, kanıt, zorunlu eğitim, gelişim atamaları ve sertifika geçmişini yönetişimli şekilde yönetin.",
+  engagement: "Anonim kampanyalar, grup eşikleri ve kontrollü aksiyon temalarıyla gizlilik korumalı çalışan dinleme süreçleri yürütün.",
+  "employee-relations": "İddia ve görüşmeden kanıt, bulgu, düzeltici aksiyon, itiraz ve kapanışa kadar yüksek kısıtlı soruşturmaları vaka duvarında yönetin.",
+  "hr-service": "Kimliğe bağlı talepler, kuyruk yönlendirme, SLA, özel İK notları ve tam işlem geçmişiyle tek çalışan hizmet masası sağlayın.",
+  policies: "Politika taslakları, versiyonlar, onaylar, yayın, okundu kanıtı, gözden geçirme tarihleri ve istisnaları tek kayıtta yönetin.",
+  documents: "Sınıflandırma, zararlı yazılım karantinası, legal hold, kontrollü erişim ve imza kanıtıyla özel ve versiyonlu İK doküman kasası işletin.",
+  "workforce-planning": "Canlı organizasyona yansımadan önce gelecek iş gücü ihtiyacı, FTE, rol, yetkinlik ve maliyeti yönetişimli senaryolarda modelleyin.",
+  analytics: "Nüfus eşikleri, gizlilik bastırma ve açıklanabilir iş gücü metrikleriyle ortak analitik katman sağlayın.",
+  "ai-assistant": "Kaynak referansları, minimum saklama telemetrisi ve açık insan karar sahipliğiyle politika temelli İK desteği sağlayın.",
+  privacy: "RoPA, hukuki dayanak, saklama, veri sahibi talepleri, DPIA ve sınır ötesi aktarım kontrollerini aynı İK veri katmanında yönetin.",
+  audit: "Çalışan yaşam döngüsü boyunca değiştirilemez güvenlik okumalarını ve iş mutasyonlarını inceleyin.",
+  workflows: "Versiyonlu tanımlar, onaylar, görevler, SLA, hata yönetimi ve değiştirilemez süreç geçmişiyle olay güdümlü İK süreçlerini yönetin.",
+  settings: "Bağlantı sırlarını uygulama kayıtlarında tutmadan tenant kimliği, provisioning, entegrasyon, veri yerleşimi ve güvenliği yapılandırın."
 };
 
 const liveCoreWorkspaceSlugs = new Set(["people", "organization", "positions", "employee-360"]);
@@ -161,9 +194,17 @@ async function renderStandardWorkspace(slug: string): Promise<WorkspaceState> {
   return { degraded: false, content: null };
 }
 
+function localizedDescription(locale: Locale, slug: string, title: string) {
+  const collection = locale === "tr" ? descriptionsTr : descriptionsEn;
+  return collection[slug] ?? (locale === "tr"
+    ? `${title} çalışma alanı HRBP One çalışan grafiğine bağlıdır.`
+    : `Enterprise ${title.toLowerCase()} workspace connected to the HRBP One people graph.`);
+}
+
 export async function ModuleLanding({ slug, query = "", personId, tab }: { slug: string; query?: string; personId?: string; tab?: string }) {
+  const locale = await getServerLocale();
   const item = navigation.flatMap((group) => group.items).find((entry) => entry.slug === slug);
-  const title = item?.label ?? slug.split("-").map((value) => `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`).join(" ");
+  const title = item ? translate(locale, item.labelKey) : slug.split("-").map((value) => `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`).join(" ");
   const Icon = item?.icon;
   const liveCore = liveCoreWorkspaceSlugs.has(slug);
   const liveGovernance = liveGovernanceWorkspaceSlugs.has(slug);
@@ -185,29 +226,31 @@ export async function ModuleLanding({ slug, query = "", personId, tab }: { slug:
             : await renderStandardWorkspace(slug);
 
   const createHref = slug === "people" ? "/module/people/new" : slug === "positions" ? "/module/positions/new" : null;
-  const createLabel = slug === "people" ? "Add employee" : "New position";
+  const createLabel = locale === "tr" ? (slug === "people" ? "Çalışan ekle" : "Yeni pozisyon") : (slug === "people" ? "Add employee" : "New position");
   const governedWorkspace = live || recruit;
+  const safeFallback = locale === "tr" ? "Güvenli yedek görünüm" : "Safe fallback";
+  const liveData = locale === "tr" ? "Yönetişimli canlı veri" : "Governed live data";
 
   return <>
     <section className="page-heading module-heading">
-      <div><div className="eyebrow">HRBP One / {title}</div><h1>{title}</h1><p>{descriptions[slug] ?? `Enterprise ${title.toLowerCase()} workspace connected to the HRBP One people graph.`}</p></div>
+      <div><div className="eyebrow">HRBP One / {title}</div><h1>{title}</h1><p>{localizedDescription(locale, slug, title)}</p></div>
       {governedWorkspace ? <div className="module-heading-actions">
         {workspaceState.degraded
-          ? <button className="secondary-button" disabled><CircleAlert size={16}/> Safe fallback</button>
-          : <button className="secondary-button" disabled><CircleCheckBig size={16}/> Governed live data</button>}
+          ? <button className="secondary-button" disabled><CircleAlert size={16}/> {safeFallback}</button>
+          : <button className="secondary-button" disabled><CircleCheckBig size={16}/> {liveData}</button>}
         {createHref ? <Link className="create-button" href={createHref}><Plus size={17}/> {createLabel}</Link> : null}
-      </div> : <button className="create-button"><Plus size={17}/> New record</button>}
+      </div> : <button className="create-button"><Plus size={17}/> {locale === "tr" ? "Yeni kayıt" : "New record"}</button>}
     </section>
 
-    {workspaceState.degraded ? <section className="card" style={{ marginBottom: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10, borderColor: "#efd7aa", background: "#fff8ed" }}>
-      <CircleAlert size={18} style={{ flex: "0 0 auto", marginTop: 1, color: "#9a6438" }}/>
-      <div><strong style={{ display: "block", fontSize: 11, color: "#71481f" }}>Live governed data is temporarily unavailable</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5, color: "#8a663f" }}>The application shell stayed online and switched to a protected fallback. Protected mutations remain disabled while the live path is degraded.</p></div>
+    {workspaceState.degraded ? <section className="card module-degraded-banner" style={{ marginBottom: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
+      <CircleAlert size={18} style={{ flex: "0 0 auto", marginTop: 1, color: "var(--orange)" }}/>
+      <div><strong style={{ display: "block", fontSize: 11 }}>{locale === "tr" ? "Canlı yönetişimli veri geçici olarak kullanılamıyor" : "Live governed data is temporarily unavailable"}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5 }}>{locale === "tr" ? "Uygulama kabuğu erişilebilir kaldı ve korumalı yedek görünüme geçti. Canlı veri hattı kısıtlıyken korumalı değişiklikler devre dışı kalır." : "The application shell stayed online and switched to a protected fallback. Protected mutations remain disabled while the live path is degraded."}</p></div>
     </section> : null}
 
     {workspaceState.content ?? <>
-      <section className="module-hero card"><div className="module-icon">{Icon && <Icon size={25}/>}</div><div><div className="section-kicker">Connected module</div><h2>{title} is part of the unified employee lifecycle.</h2><p>Records created here inherit tenant isolation, effective dating, classification, retention, workflow and audit controls by default.</p></div><div className="module-health"><CircleCheckBig size={18}/><span>Governance active</span></div></section>
-      <section className="module-toolbar"><div className="module-search"><Search size={16}/><input placeholder={`Search ${title.toLowerCase()}…`}/></div><button className="secondary-button"><SlidersHorizontal size={15}/> Filters</button></section>
-      <section className="card module-table"><div className="empty-state"><div className="empty-visual"><span/><span/><span/></div><h3>{title} domain is queued for its vertical slice</h3><p>The remaining module is connected to the same tenant, identity, privacy and audit plane.</p><button className="secondary-button">View architecture <ChevronRight size={15}/></button></div></section>
+      <section className="module-hero card"><div className="module-icon">{Icon && <Icon size={25}/>}</div><div><div className="section-kicker">{locale === "tr" ? "Bağlı modül" : "Connected module"}</div><h2>{locale === "tr" ? `${title}, birleşik çalışan yaşam döngüsünün bir parçasıdır.` : `${title} is part of the unified employee lifecycle.`}</h2><p>{locale === "tr" ? "Burada oluşturulan kayıtlar varsayılan olarak tenant izolasyonu, geçerlilik tarihi, sınıflandırma, saklama, iş akışı ve denetim kontrollerini devralır." : "Records created here inherit tenant isolation, effective dating, classification, retention, workflow and audit controls by default."}</p></div><div className="module-health"><CircleCheckBig size={18}/><span>{locale === "tr" ? "Yönetişim aktif" : "Governance active"}</span></div></section>
+      <section className="module-toolbar"><div className="module-search"><Search size={16}/><input placeholder={locale === "tr" ? `${title} içinde ara…` : `Search ${title.toLowerCase()}…`}/></div><button className="secondary-button"><SlidersHorizontal size={15}/> {locale === "tr" ? "Filtreler" : "Filters"}</button></section>
+      <section className="card module-table"><div className="empty-state"><div className="empty-visual"><span/><span/><span/></div><h3>{locale === "tr" ? `${title} alanı dikey geliştirme sırasına alındı` : `${title} domain is queued for its vertical slice`}</h3><p>{locale === "tr" ? "Kalan modül aynı tenant, kimlik, gizlilik ve denetim katmanına bağlıdır." : "The remaining module is connected to the same tenant, identity, privacy and audit plane."}</p><button className="secondary-button">{locale === "tr" ? "Mimariyi görüntüle" : "View architecture"} <ChevronRight size={15}/></button></div></section>
     </>}
   </>;
 }

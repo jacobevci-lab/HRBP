@@ -13,29 +13,41 @@ import "./offboarding.css";
 import "./auth.css";
 import "./theme.css";
 import "./lifecycle.css";
+import "./warm-enterprise.css";
 
 export const metadata: Metadata = {
   title: "HRBP One",
   description: "Enterprise Human Capital Management & HRBP Operating System"
 };
 
-const themeBootstrap = `
+const uiBootstrap = `
 (function(){
   try {
-    var stored = localStorage.getItem('hrbp-theme');
-    var theme = stored === 'dark' || stored === 'light'
-      ? stored
+    var storedTheme = localStorage.getItem('hrbp-theme');
+    var theme = storedTheme === 'dark' || storedTheme === 'light'
+      ? storedTheme
       : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     document.documentElement.dataset.theme = theme;
+
+    var cookieMatch = document.cookie.match(/(?:^|; )hrbp-locale=([^;]+)/);
+    var cookieLocale = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
+    var storedLocale = localStorage.getItem('hrbp-locale');
+    var locale = storedLocale === 'tr' || storedLocale === 'en'
+      ? storedLocale
+      : (cookieLocale === 'tr' || cookieLocale === 'en' ? cookieLocale : (navigator.language.toLowerCase().indexOf('tr') === 0 ? 'tr' : 'en'));
+    document.documentElement.lang = locale;
+    document.documentElement.dataset.locale = locale;
   } catch (_) {
     document.documentElement.dataset.theme = 'light';
+    document.documentElement.lang = 'en';
+    document.documentElement.dataset.locale = 'en';
   }
 })();`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head><script dangerouslySetInnerHTML={{ __html: themeBootstrap }}/></head>
+      <head><script dangerouslySetInnerHTML={{ __html: uiBootstrap }}/></head>
       <body>{children}</body>
     </html>
   );
