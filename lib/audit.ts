@@ -11,6 +11,33 @@ export type AuditInput = {
   purpose?: string;
 };
 
+export type AuditHashInput = {
+  tenantId: string;
+  actorId: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  purpose: string | null;
+  classification: DataClassification;
+  ipAddress: string | null;
+  occurredAt: Date;
+};
+
+export function computeAuditHash(input: AuditHashInput, previousHash: string | null) {
+  const payload = JSON.stringify({
+    tenantId: input.tenantId,
+    actorId: input.actorId,
+    action: input.action,
+    resourceType: input.resourceType,
+    resourceId: input.resourceId,
+    purpose: input.purpose,
+    classification: input.classification,
+    ipAddress: input.ipAddress,
+    occurredAt: input.occurredAt.toISOString()
+  });
+  return createHash("sha256").update(`${previousHash ?? "GENESIS"}|${payload}`).digest("hex");
+}
+
 export async function appendAudit(tx: Prisma.TransactionClient, ctx: RequestContext, input: AuditInput) {
   const occurredAt = new Date();
   const previous = await tx.auditEvent.findFirst({
@@ -19,18 +46,19 @@ export async function appendAudit(tx: Prisma.TransactionClient, ctx: RequestCont
     select: { hash: true }
   });
   const classification = input.classification ?? DataClassification.CONFIDENTIAL;
-  const payload = JSON.stringify({
+  const purpose = input.purpose ?? ctx.purpose ?? null;
+  const ipAddress = ctx.ipAddress ?? null;
+  const hash = computeAuditHash({
     tenantId: ctx.tenantId,
     actorId: ctx.actorId,
     action: input.action,
     resourceType: input.resourceType,
     resourceId: input.resourceId,
-    purpose: input.purpose ?? ctx.purpose ?? null,
+    purpose,
     classification,
-    ipAddress: ctx.ipAddress ?? null,
-    occurredAt: occurredAt.toISOString()
-  });
-  const hash = createHash("sha256").update(`${previous?.hash ?? "GENESIS"}|${payload}`).digest("hex");
+    ipAddress,
+    occurredAt
+  }, previous?.hash ?? null);
 
   return tx.auditEvent.create({
     data: {
@@ -39,9 +67,9 @@ export async function appendAudit(tx: Prisma.TransactionClient, ctx: RequestCont
       action: input.action,
       resourceType: input.resourceType,
       resourceId: input.resourceId,
-      purpose: input.purpose ?? ctx.purpose,
+      purpose,
       classification,
-      ipAddress: ctx.ipAddress,
+      ipAddress,
       occurredAt,
       hash,
       previousHash: previous?.hash
