@@ -1,5 +1,7 @@
 import { EmploymentStatus, ExitTaskStatus, SeparationStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
+import { employmentIdFilter, employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
+import type { RequestContext } from "@/lib/request-context";
 
 function formatDate(value: Date | null | undefined) {
   if (!value) return "—";
@@ -68,10 +70,11 @@ export type OffboardingWorkspaceData = {
   eligibleEmployments: OffboardingEligibleEmployment[];
 };
 
-export async function getOffboardingWorkspaceData(tenantId: string, includeEligible = false): Promise<OffboardingWorkspaceData> {
+export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEligible = false): Promise<OffboardingWorkspaceData> {
   return withDb(async (db) => {
+    const scope = await resolveEmploymentScope(db, ctx);
     const processes = await db.separationProcess.findMany({
-      where: { tenantId, status: { in: OPEN_STATUSES } },
+      where: { tenantId: ctx.tenantId, status: { in: OPEN_STATUSES }, ...employmentIdFilter(scope) },
       orderBy: [{ lastWorkingDate: "asc" }, { createdAt: "desc" }],
       take: 150,
       select: {
@@ -88,7 +91,7 @@ export async function getOffboardingWorkspaceData(tenantId: string, includeEligi
 
     const employmentIds = [...new Set(processes.map((process) => process.employmentId))];
     const processEmployments = employmentIds.length ? await db.employment.findMany({
-      where: { tenantId, id: { in: employmentIds } },
+      where: { tenantId: ctx.tenantId, id: { in: employmentIds }, ...employmentPrimaryKeyFilter(scope) },
       select: {
         id: true,
         personId: true,
@@ -100,8 +103,9 @@ export async function getOffboardingWorkspaceData(tenantId: string, includeEligi
 
     const eligible = includeEligible ? await db.employment.findMany({
       where: {
-        tenantId,
+        tenantId: ctx.tenantId,
         status: { in: ACTIVE_EMPLOYMENTS },
+        ...employmentPrimaryKeyFilter(scope),
         NOT: { id: { in: employmentIds.length ? employmentIds : ["__none__"] } }
       },
       orderBy: [{ person: { familyName: "asc" } }, { person: { givenName: "asc" } }],
