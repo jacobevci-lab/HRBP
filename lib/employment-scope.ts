@@ -1,12 +1,19 @@
-import { PlatformRole, Prisma, PrismaClient } from "@prisma/client";
+import { EmploymentAccessGrantKind, EmploymentStatus, PlatformRole, Prisma, PrismaClient } from "@prisma/client";
 import type { RequestContext } from "@/lib/request-context";
 
 const workforceWideRoles = new Set<PlatformRole>([
-  PlatformRole.HRBP,
   PlatformRole.HR_OPERATIONS,
   PlatformRole.TIME_ADMIN,
+  PlatformRole.TALENT_ADMIN,
+  PlatformRole.COMPENSATION_ADMIN,
   PlatformRole.PAYROLL_ADMIN,
   PlatformRole.TENANT_ADMIN
+]);
+
+const assignedCaseRoles = new Set<PlatformRole>([
+  PlatformRole.ER_INVESTIGATOR,
+  PlatformRole.LEGAL,
+  PlatformRole.PRIVACY_OFFICER
 ]);
 
 export function hasWorkforceWideAccess(ctx: RequestContext) {
@@ -18,23 +25,64 @@ export async function resolveEmploymentScope(
   ctx: RequestContext
 ): Promise<string[] | null> {
   if (hasWorkforceWideAccess(ctx)) return null;
-  if (!ctx.employmentId) return [];
 
-  if (ctx.role === PlatformRole.MANAGER) {
+  const employmentIds = new Set<string>();
+  if (ctx.employmentId) employmentIds.add(ctx.employmentId);
+
+  if (ctx.role === PlatformRole.MANAGER && ctx.employmentId) {
     const rows = await client.employment.findMany({
       where: {
         tenantId: ctx.tenantId,
-        OR: [
-          { id: ctx.employmentId },
-          { managerEmploymentId: ctx.employmentId }
-        ]
+        managerEmploymentId: ctx.employmentId,
+        status: { not: EmploymentStatus.TERMINATED }
       },
       select: { id: true }
     });
-    return rows.map((row) => row.id);
+    rows.forEach((row) => employmentIds.add(row.id));
   }
 
-  return [ctx.employmentId];
+  if (ctx.role === PlatformRole.HRBP) {
+    const now = new Date();
+    const grants = await client.employmentAccessGrant.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        userId: ctx.actorId,
+        kind: EmploymentAccessGrantKind.HRBP_POPULATION,
+        validFrom: { lte: now },
+        OR: [{ validTo: null }, { validTo: { gte: now } }]
+      },
+      select: { employmentId: true }
+    });
+    grants.forEach((grant) => employmentIds.add(grant.employmentId));
+  }
+
+  if (assignedCaseRoles.has(ctx.role)) {
+    const cases = await client.employeeCase.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        subjectPersonId: { not: null },
+        OR: [
+          { ownerUserId: ctx.actorId },
+          { assignments: { some: { user: { is: { id: ctx.actorId, tenantId: ctx.tenantId, active: true } } } } }
+        ]
+      },
+      select: { subjectPersonId: true }
+    });
+    const personIds = cases.flatMap((item) => item.subjectPersonId ? [item.subjectPersonId] : []);
+    if (personIds.length) {
+      const employments = await client.employment.findMany({
+        where: {
+          tenantId: ctx.tenantId,
+          personId: { in: personIds },
+          status: { not: EmploymentStatus.TERMINATED }
+        },
+        select: { id: true }
+      });
+      employments.forEach((employment) => employmentIds.add(employment.id));
+    }
+  }
+
+  return [...employmentIds];
 }
 
 export function employmentIdFilter(scope: string[] | null) {

@@ -1,5 +1,7 @@
 import { CompensationChangeStatus, EmploymentStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
+import { employmentIdFilter, resolveEmploymentScope } from "@/lib/employment-scope";
+import type { RequestContext } from "@/lib/request-context";
 
 function formatDate(date: Date) {
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "Europe/Istanbul" }).format(date);
@@ -27,20 +29,22 @@ export type CompensationQueueRow = {
   createdAt: string;
 };
 
-export async function getCompensationWorkspaceData(tenantId: string) {
+export async function getCompensationWorkspaceData(ctx: RequestContext) {
   return withDb(async (db) => {
+    const scope = await resolveEmploymentScope(db, ctx);
     const now = new Date();
     const [currentHistory, changes] = await Promise.all([
       db.compensationHistory.findMany({
         where: {
           effectiveFrom: { lte: now },
           OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
-          employment: { tenantId, status: { not: EmploymentStatus.TERMINATED } }
+          employment: { tenantId: ctx.tenantId, status: { not: EmploymentStatus.TERMINATED } },
+          ...employmentIdFilter(scope)
         },
         select: { currency: true, annualBase: true }
       }),
       db.compensationChange.findMany({
-        where: { tenantId },
+        where: { tenantId: ctx.tenantId, ...employmentIdFilter(scope) },
         orderBy: [{ createdAt: "desc" }, { effectiveAt: "desc" }],
         take: 150,
         select: {

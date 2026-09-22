@@ -1,0 +1,20 @@
+enum EmploymentAccessGrantKind {
+  HRBP_POPULATION
+}
+
+model EmploymentAccessGrant {
+  id           String @id @default(cuid())
+  tenantId     String
+  userId       String
+  employmentId String
+  kind         EmploymentAccessGrantKind @default(HRBP_POPULATION)
+  validFrom    DateTime @default(now())
+  validTo      DateTime?
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([tenantId, userId, employmentId, kind])
+  @@index([tenantId, userId, kind, validTo])
+  @@index([tenantId, employmentId, validTo])
+}

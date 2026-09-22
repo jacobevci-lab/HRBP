@@ -2,6 +2,7 @@ import { CompensationChangeStatus, DataClassification, LifecycleEventType } from
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 const decisions = new Set(["APPROVE", "REJECT", "APPLY"]);
@@ -28,6 +29,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         }
       });
       if (!change) throw new Error("CHANGE_NOT_FOUND");
+      const scope = await resolveEmploymentScope(tx, ctx);
+      if (!canActOnEmployment(scope, change.employmentId)) throw new Error("OUT_OF_SCOPE");
       if (change.requestedById === ctx.actorId) throw new Error("FOUR_EYES_REQUIRED");
 
       if (decision === "APPROVE") {
@@ -132,6 +135,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
     if (code === "CHANGE_NOT_FOUND") return Response.json({ error: "Compensation change was not found in this tenant." }, { status: 404 });
+    if (code === "OUT_OF_SCOPE") return forbidden("Compensation change is outside your authorized relationship scope.");
     if (code === "FOUR_EYES_REQUIRED") return Response.json({ error: "Four-eyes control: the requester cannot approve, reject or apply their own compensation change." }, { status: 403 });
     if (code === "INVALID_STATE") return Response.json({ error: "This decision is not valid for the current compensation-change state." }, { status: 409 });
     if (code === "STATE_CONFLICT") return Response.json({ error: "The compensation change was modified by another action. Refresh and try again." }, { status: 409 });

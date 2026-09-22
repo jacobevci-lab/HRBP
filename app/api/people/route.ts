@@ -1,21 +1,35 @@
-import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatus } from "@prisma/client";
+import { DataClassification, EmploymentStatus, LifecycleEventType, PlatformRole, PositionStatus } from "@prisma/client";
 import { withDb, db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
+import { employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { appendAudit } from "@/lib/audit";
+
+const workforceMasterDataWriters = new Set<PlatformRole>([
+  PlatformRole.HR_OPERATIONS,
+  PlatformRole.TENANT_ADMIN
+]);
 
 export async function GET(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "people:read")) return forbidden();
 
+  const scope = await resolveEmploymentScope(db, ctx);
+  const employmentWhere = {
+    status: { not: EmploymentStatus.TERMINATED },
+    ...employmentPrimaryKeyFilter(scope)
+  };
   const people = await db.person.findMany({
-    where: { tenantId: ctx.tenantId },
+    where: {
+      tenantId: ctx.tenantId,
+      ...(scope === null ? {} : { employments: { some: employmentWhere } })
+    },
     orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
     take: 200,
     select: {
       id: true, employeeNumber: true, givenName: true, familyName: true, workEmail: true, classification: true,
-      employments: { where: { status: { not: EmploymentStatus.TERMINATED } }, take: 1, select: {
+      employments: { where: employmentWhere, take: 1, select: {
         id: true, status: true, startDate: true,
         position: { select: { id: true, positionCode: true, title: true, orgUnit: { select: { id: true, name: true } } } }
       }}
@@ -28,7 +42,9 @@ export async function POST(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
-  if (!can(ctx, "people:write")) return forbidden();
+  if (!can(ctx, "people:write") || !workforceMasterDataWriters.has(ctx.role)) {
+    return forbidden("Creating a workforce master record requires an operational tenant-wide role.");
+  }
 
   const body = await request.json() as Record<string, unknown>;
   const givenName = String(body.givenName ?? "").trim();

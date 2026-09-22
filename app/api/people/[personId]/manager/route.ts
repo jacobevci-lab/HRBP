@@ -2,6 +2,7 @@ import { DataClassification, EmploymentStatus, LifecycleEventType } from "@prism
 import { withDb } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
+import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function POST(request: Request, { params }: { params: Promise<{ personId: string }> }) {
@@ -25,6 +26,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
         select: { id: true, managerEmploymentId: true }
       });
       if (!employment) throw new Error("EMPLOYMENT_NOT_FOUND");
+      const scope = await resolveEmploymentScope(tx, ctx);
+      if (!canActOnEmployment(scope, employment.id)) throw new Error("OUT_OF_SCOPE");
       if (managerEmploymentId === employment.id) throw new Error("MANAGER_SELF");
 
       let managerName: string | null = null;
@@ -35,8 +38,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
         });
         if (!manager) throw new Error("MANAGER_NOT_FOUND");
 
-        // Follow the management chain before writing so direct and indirect
-        // reporting loops can never be committed.
         let cursor: string | null = manager.id;
         const visited = new Set<string>();
         for (let depth = 0; cursor && depth < 64; depth += 1) {
@@ -85,6 +86,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
     if (code === "EMPLOYMENT_NOT_FOUND") return Response.json({ error: "Current employment record was not found." }, { status: 404 });
+    if (code === "OUT_OF_SCOPE") return forbidden("Employment is outside your authorized relationship scope.");
     if (code === "MANAGER_NOT_FOUND") return Response.json({ error: "The selected manager is not an active employment in this tenant." }, { status: 404 });
     if (code === "MANAGER_SELF") return Response.json({ error: "An employee cannot be their own manager." }, { status: 409 });
     if (code === "MANAGER_CYCLE") return Response.json({ error: "This assignment would create a reporting-line cycle." }, { status: 409 });

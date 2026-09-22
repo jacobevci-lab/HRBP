@@ -2,6 +2,7 @@ import { CompensationChangeStatus, DataClassification, EmploymentStatus, Prisma 
 import { withDb } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
+import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function POST(request: Request, { params }: { params: Promise<{ personId: string }> }) {
@@ -39,6 +40,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
         select: { id: true }
       });
       if (!employment) throw new Error("EMPLOYMENT_NOT_FOUND");
+      const scope = await resolveEmploymentScope(tx, ctx);
+      if (!canActOnEmployment(scope, employment.id)) throw new Error("OUT_OF_SCOPE");
 
       const pending = await tx.compensationChange.findFirst({
         where: {
@@ -89,6 +92,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
     if (code === "EMPLOYMENT_NOT_FOUND") return Response.json({ error: "Current employment record was not found." }, { status: 404 });
+    if (code === "OUT_OF_SCOPE") return forbidden("Employment is outside your authorized relationship scope.");
     if (code === "PENDING_CHANGE_EXISTS") return Response.json({ error: "A compensation change is already waiting for approval for this employment." }, { status: 409 });
     console.error("Compensation change request failed", error);
     return Response.json({ error: "Compensation change request could not be created." }, { status: 500 });
