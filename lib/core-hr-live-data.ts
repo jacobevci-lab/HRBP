@@ -1,9 +1,12 @@
-import { EmploymentStatus, LifecycleEventType, PositionStatus, Prisma, type PrismaClient } from "@prisma/client";
+import { DocumentStatus, EmploymentStatus, LifecycleEventType, PositionStatus, Prisma, type PrismaClient } from "@prisma/client";
 import { withDb } from "@/lib/db";
 
 const STAGING_TENANT_ID = "tenant-acme-global";
 
-async function resolveTenant(db: PrismaClient) {
+async function resolveTenant(db: PrismaClient, requestedTenantId?: string) {
+  if (requestedTenantId) {
+    return db.tenant.findUnique({ where: { id: requestedTenantId }, select: { id: true, name: true } });
+  }
   return (
     (await db.tenant.findUnique({ where: { id: STAGING_TENANT_ID }, select: { id: true, name: true } })) ??
     (await db.tenant.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true, name: true } }))
@@ -55,9 +58,9 @@ export type PeopleWorkspaceData = {
   people: LivePersonRow[];
 };
 
-export async function getPeopleWorkspaceData(query = ""): Promise<PeopleWorkspaceData> {
+export async function getPeopleWorkspaceData(query = "", tenantId?: string): Promise<PeopleWorkspaceData> {
   return withDb(async (db) => {
-    const tenant = await resolveTenant(db);
+    const tenant = await resolveTenant(db, tenantId);
     if (!tenant) {
       return { tenantName: "Workspace", active: 0, preboarding: 0, onLeave: 0, dataQuality: 100, needsReview: 0, people: [] };
     }
@@ -170,9 +173,9 @@ export type OrganizationWorkspaceData = {
   units: OrganizationRow[];
 };
 
-export async function getOrganizationWorkspaceData(): Promise<OrganizationWorkspaceData> {
+export async function getOrganizationWorkspaceData(tenantId?: string): Promise<OrganizationWorkspaceData> {
   return withDb(async (db) => {
-    const tenant = await resolveTenant(db);
+    const tenant = await resolveTenant(db, tenantId);
     if (!tenant) return { legalEntities: 0, organizationUnits: 0, filledPositions: 0, vacantPositions: 0, units: [] };
 
     const units = await db.organizationUnit.findMany({
@@ -256,9 +259,9 @@ export type PositionsWorkspaceData = {
   rows: LivePositionRow[];
 };
 
-export async function getPositionsWorkspaceData(): Promise<PositionsWorkspaceData> {
+export async function getPositionsWorkspaceData(tenantId?: string): Promise<PositionsWorkspaceData> {
   return withDb(async (db) => {
-    const tenant = await resolveTenant(db);
+    const tenant = await resolveTenant(db, tenantId);
     if (!tenant) return { positions: 0, filled: 0, open: 0, planned: 0, critical: 0, rows: [] };
 
     const positions = await db.position.findMany({
@@ -311,7 +314,10 @@ const employee360Select = {
   givenName: true,
   familyName: true,
   workEmail: true,
+  personalEmail: true,
   classification: true,
+  createdAt: true,
+  updatedAt: true,
   employments: {
     where: { status: { not: EmploymentStatus.TERMINATED } },
     orderBy: { startDate: "desc" },
@@ -320,46 +326,129 @@ const employee360Select = {
       id: true,
       status: true,
       startDate: true,
+      endDate: true,
+      managerEmploymentId: true,
       position: {
         select: {
+          id: true,
           positionCode: true,
           title: true,
+          jobFamily: true,
           grade: true,
           location: true,
-          orgUnit: { select: { name: true } }
+          critical: true,
+          orgUnit: { select: { id: true, name: true, type: true } }
         }
       },
-      manager: { select: { person: { select: { givenName: true, familyName: true } } } }
+      manager: { select: { id: true, person: { select: { givenName: true, familyName: true } }, position: { select: { title: true } } } },
+      scheduleAssignments: {
+        where: { effectiveTo: null },
+        orderBy: { effectiveFrom: "desc" },
+        take: 1,
+        select: { effectiveFrom: true, schedule: { select: { code: true, name: true, timezone: true, weeklyMinutes: true } } }
+      },
+      _count: { select: { directReports: true } }
     }
   },
   lifecycle: {
     orderBy: { effectiveAt: "desc" },
-    take: 10,
+    take: 30,
     select: { id: true, type: true, effectiveAt: true, summary: true }
   }
 } satisfies Prisma.PersonSelect;
 
+export type EmploymentHistoryRow = {
+  id: string;
+  status: string;
+  startDate: string;
+  endDate: string;
+  position: string;
+  positionCode: string;
+  department: string;
+  manager: string;
+};
+
+export type CompensationHistoryRow = {
+  id: string;
+  currency: string;
+  annualBase: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+};
+
+export type CompensationRequestRow = {
+  id: string;
+  currency: string;
+  currentAnnualBase: string | null;
+  proposedAnnualBase: string;
+  effectiveAt: string;
+  status: string;
+  reason: string;
+  createdAt: string;
+};
+
+export type EmployeeDocumentRow = {
+  id: string;
+  fileName: string;
+  contentType: string;
+  purpose: string;
+  classification: string;
+  status: string;
+  createdAt: string;
+  expiresAt: string;
+  retentionUntil: string;
+};
+
+export type ManagerOptionRow = {
+  employmentId: string;
+  name: string;
+  position: string;
+};
+
 export type Employee360Data = {
   id: string;
+  employmentId?: string;
   employeeNumber: string;
   initials: string;
   name: string;
   workEmail: string;
+  personalEmail: string;
   classification: string;
   status: string;
   startDate: string;
+  endDate: string;
   position: string;
   positionCode: string;
+  jobFamily: string;
   department: string;
+  organizationType: string;
   grade: string;
   location: string;
+  criticalPosition: boolean;
   manager: string;
+  currentManagerEmploymentId?: string;
+  directReports: number;
+  workSchedule: { name: string; code: string; timezone: string; weeklyHours: string } | null;
   lifecycle: Array<{ id: string; type: string; date: string; summary: string; scheduled: boolean }>;
+  employmentHistory: EmploymentHistoryRow[];
+  compensationHistory: CompensationHistoryRow[];
+  compensationRequests: CompensationRequestRow[];
+  documents: EmployeeDocumentRow[];
+  managerOptions: ManagerOptionRow[];
+  createdAt: string;
+  updatedAt: string;
 };
 
-export async function getEmployee360Data(personId?: string): Promise<Employee360Data | null> {
+export type Employee360Options = {
+  tenantId?: string;
+  includeCompensation?: boolean;
+  includeDocuments?: boolean;
+  includeManagerOptions?: boolean;
+};
+
+export async function getEmployee360Data(personId?: string, options: Employee360Options = {}): Promise<Employee360Data | null> {
   return withDb(async (db) => {
-    const tenant = await resolveTenant(db);
+    const tenant = await resolveTenant(db, options.tenantId);
     if (!tenant) return null;
 
     const person = personId
@@ -372,28 +461,136 @@ export async function getEmployee360Data(personId?: string): Promise<Employee360
     const manager = employment?.manager?.person;
     const now = new Date();
 
+    const [employmentHistory, compensationHistory, compensationRequests, documents, managerOptions] = await Promise.all([
+      db.employment.findMany({
+        where: { tenantId: tenant.id, personId: person.id },
+        orderBy: { startDate: "desc" },
+        take: 20,
+        select: {
+          id: true,
+          status: true,
+          startDate: true,
+          endDate: true,
+          position: { select: { positionCode: true, title: true, orgUnit: { select: { name: true } } } },
+          manager: { select: { person: { select: { givenName: true, familyName: true } } } }
+        }
+      }),
+      options.includeCompensation && employment
+        ? db.compensationHistory.findMany({ where: { employmentId: employment.id }, orderBy: { effectiveFrom: "desc" }, take: 20 })
+        : Promise.resolve([]),
+      options.includeCompensation && employment
+        ? db.compensationChange.findMany({
+            where: { tenantId: tenant.id, employmentId: employment.id },
+            orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
+            take: 20,
+            select: { id: true, currency: true, currentAnnualBase: true, proposedAnnualBase: true, effectiveAt: true, status: true, reason: true, createdAt: true }
+          })
+        : Promise.resolve([]),
+      options.includeDocuments
+        ? db.documentRecord.findMany({
+            where: { tenantId: tenant.id, personId: person.id, status: { not: DocumentStatus.DELETED } },
+            orderBy: { createdAt: "desc" },
+            take: 50,
+            select: { id: true, fileName: true, contentType: true, purpose: true, classification: true, status: true, createdAt: true, expiresAt: true, retentionUntil: true }
+          })
+        : Promise.resolve([]),
+      options.includeManagerOptions
+        ? db.employment.findMany({
+            where: {
+              tenantId: tenant.id,
+              status: { in: [EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE] },
+              ...(employment ? { id: { not: employment.id } } : {})
+            },
+            orderBy: [{ person: { familyName: "asc" } }, { person: { givenName: "asc" } }],
+            take: 250,
+            select: { id: true, person: { select: { givenName: true, familyName: true } }, position: { select: { title: true } } }
+          })
+        : Promise.resolve([])
+    ]);
+
     return {
       id: person.id,
+      employmentId: employment?.id,
       employeeNumber: person.employeeNumber ?? "—",
       initials: initials(person.givenName, person.familyName),
       name: `${person.givenName} ${person.familyName}`,
       workEmail: person.workEmail ?? "—",
+      personalEmail: person.personalEmail ?? "—",
       classification: enumLabel(person.classification),
       status: employment ? enumLabel(employment.status) : "No employment",
       startDate: employment ? formatDate(employment.startDate) : "—",
+      endDate: employment?.endDate ? formatDate(employment.endDate) : "Open-ended",
       position: position?.title ?? "Unassigned",
       positionCode: position?.positionCode ?? "—",
+      jobFamily: position?.jobFamily ?? "Not configured",
       department: position?.orgUnit.name ?? "Unassigned",
+      organizationType: position?.orgUnit.type ? enumLabel(position.orgUnit.type) : "—",
       grade: position?.grade ?? "—",
       location: position?.location ?? "—",
+      criticalPosition: position?.critical ?? false,
       manager: manager ? `${manager.givenName} ${manager.familyName}` : "Not assigned",
+      currentManagerEmploymentId: employment?.managerEmploymentId ?? undefined,
+      directReports: employment?._count.directReports ?? 0,
+      workSchedule: employment?.scheduleAssignments[0]
+        ? {
+            name: employment.scheduleAssignments[0].schedule.name,
+            code: employment.scheduleAssignments[0].schedule.code,
+            timezone: employment.scheduleAssignments[0].schedule.timezone,
+            weeklyHours: (employment.scheduleAssignments[0].schedule.weeklyMinutes / 60).toFixed(1)
+          }
+        : null,
       lifecycle: person.lifecycle.map((event) => ({
         id: event.id,
         type: enumLabel(event.type as LifecycleEventType),
         date: formatDate(event.effectiveAt),
         summary: event.summary,
         scheduled: event.effectiveAt > now
-      }))
+      })),
+      employmentHistory: employmentHistory.map((row) => ({
+        id: row.id,
+        status: enumLabel(row.status),
+        startDate: formatDate(row.startDate),
+        endDate: row.endDate ? formatDate(row.endDate) : "Current",
+        position: row.position?.title ?? "Unassigned",
+        positionCode: row.position?.positionCode ?? "—",
+        department: row.position?.orgUnit.name ?? "Unassigned",
+        manager: row.manager ? `${row.manager.person.givenName} ${row.manager.person.familyName}` : "Not assigned"
+      })),
+      compensationHistory: compensationHistory.map((row) => ({
+        id: row.id,
+        currency: row.currency,
+        annualBase: row.annualBase.toString(),
+        effectiveFrom: formatDate(row.effectiveFrom),
+        effectiveTo: row.effectiveTo ? formatDate(row.effectiveTo) : "Current"
+      })),
+      compensationRequests: compensationRequests.map((row) => ({
+        id: row.id,
+        currency: row.currency,
+        currentAnnualBase: row.currentAnnualBase?.toString() ?? null,
+        proposedAnnualBase: row.proposedAnnualBase.toString(),
+        effectiveAt: formatDate(row.effectiveAt),
+        status: enumLabel(row.status),
+        reason: row.reason ?? "—",
+        createdAt: formatDate(row.createdAt)
+      })),
+      documents: documents.map((row) => ({
+        id: row.id,
+        fileName: row.fileName,
+        contentType: row.contentType,
+        purpose: row.purpose,
+        classification: enumLabel(row.classification),
+        status: enumLabel(row.status),
+        createdAt: formatDate(row.createdAt),
+        expiresAt: row.expiresAt ? formatDate(row.expiresAt) : "—",
+        retentionUntil: row.retentionUntil ? formatDate(row.retentionUntil) : "Policy managed"
+      })),
+      managerOptions: managerOptions.map((row) => ({
+        employmentId: row.id,
+        name: `${row.person.givenName} ${row.person.familyName}`,
+        position: row.position?.title ?? "Unassigned"
+      })),
+      createdAt: formatDate(person.createdAt),
+      updatedAt: formatDate(person.updatedAt)
     };
   });
 }

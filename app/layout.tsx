@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./enterprise.css";
+import "./employee360.css";
 import "./recruiting.css";
 import "./work-pay.css";
 import "./growth.css";

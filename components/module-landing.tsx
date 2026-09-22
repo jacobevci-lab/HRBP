@@ -42,11 +42,11 @@ const descriptions: Record<string, string> = {
   settings: "Configure tenant identity, provisioning, integrations, residency and security without storing connector secrets in application records."
 };
 
-async function renderLiveWorkspace(slug: string, query: string, personId?: string) {
+async function renderLiveWorkspace(slug: string, query: string, personId?: string, tab?: string) {
   try {
     return {
       degraded: false,
-      content: await CoreHRLiveWorkspace({ slug, query, personId })
+      content: await CoreHRLiveWorkspace({ slug, query, personId, tab })
     };
   } catch (error) {
     console.error(`[HRBP] Live ${slug} workspace failed. Falling back to the safe staging view.`, error);
@@ -57,7 +57,7 @@ async function renderLiveWorkspace(slug: string, query: string, personId?: strin
   }
 }
 
-export async function ModuleLanding({ slug, query = "", personId }: { slug: string; query?: string; personId?: string }) {
+export async function ModuleLanding({ slug, query = "", personId, tab }: { slug: string; query?: string; personId?: string; tab?: string }) {
   const item = navigation.flatMap((group) => group.items).find((entry) => entry.slug === slug);
   const title = item?.label ?? slug.split("-").map((value) => `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`).join(" ");
   const Icon = item?.icon;
@@ -70,7 +70,7 @@ export async function ModuleLanding({ slug, query = "", personId }: { slug: stri
   const gov = governancePlanningWorkspaceSlugs.has(slug);
   const admin = platformAdminWorkspaceSlugs.has(slug);
   const off = offboardingWorkspaceSlugs.has(slug);
-  const liveState = liveCore ? await renderLiveWorkspace(slug, query, personId) : { degraded: false, content: null };
+  const liveState = liveCore ? await renderLiveWorkspace(slug, query, personId, tab) : { degraded: false, content: null };
   const createHref = slug === "people" ? "/module/people/new" : slug === "positions" ? "/module/positions/new" : null;
   const createLabel = slug === "people" ? "Add employee" : "New position";
 

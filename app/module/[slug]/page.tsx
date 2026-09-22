@@ -10,10 +10,11 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const [{ slug }, search] = await Promise.all([params, searchParams]);
   const query = typeof search.q === "string" ? search.q : "";
   const personId = typeof search.person === "string" ? search.person : undefined;
+  const tab = typeof search.tab === "string" ? search.tab : undefined;
 
   return (
     <AppShell>
-      <ModuleLanding slug={slug} query={query} personId={personId} />
+      <ModuleLanding slug={slug} query={query} personId={personId} tab={tab} />
     </AppShell>
   );
 }
