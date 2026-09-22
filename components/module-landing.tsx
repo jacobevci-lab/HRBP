@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight, CircleCheckBig, Plus, Search, SlidersHorizontal } from "lucide-react";
+import { ChevronRight, CircleAlert, CircleCheckBig, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { navigation } from "@/lib/navigation";
 import { CoreHRWorkspace, coreWorkspaceSlugs } from "@/components/core-hr-workspace";
 import { CoreHRLiveWorkspace, liveCoreWorkspaceSlugs } from "@/components/core-hr-live-workspace";
@@ -42,6 +42,21 @@ const descriptions: Record<string, string> = {
   settings: "Configure tenant identity, provisioning, integrations, residency and security without storing connector secrets in application records."
 };
 
+async function renderLiveWorkspace(slug: string, query: string, personId?: string) {
+  try {
+    return {
+      degraded: false,
+      content: await CoreHRLiveWorkspace({ slug, query, personId })
+    };
+  } catch (error) {
+    console.error(`[HRBP] Live ${slug} workspace failed. Falling back to the safe staging view.`, error);
+    return {
+      degraded: true,
+      content: <CoreHRWorkspace slug={slug}/>
+    };
+  }
+}
+
 export async function ModuleLanding({ slug, query = "", personId }: { slug: string; query?: string; personId?: string }) {
   const item = navigation.flatMap((group) => group.items).find((entry) => entry.slug === slug);
   const title = item?.label ?? slug.split("-").map((value) => `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`).join(" ");
@@ -55,16 +70,27 @@ export async function ModuleLanding({ slug, query = "", personId }: { slug: stri
   const gov = governancePlanningWorkspaceSlugs.has(slug);
   const admin = platformAdminWorkspaceSlugs.has(slug);
   const off = offboardingWorkspaceSlugs.has(slug);
-  const liveContent = liveCore ? await CoreHRLiveWorkspace({ slug, query, personId }) : null;
+  const liveState = liveCore ? await renderLiveWorkspace(slug, query, personId) : { degraded: false, content: null };
   const createHref = slug === "people" ? "/module/people/new" : slug === "positions" ? "/module/positions/new" : null;
   const createLabel = slug === "people" ? "Add employee" : "New position";
 
   return <>
     <section className="page-heading module-heading">
       <div><div className="eyebrow">HRBP One / {title}</div><h1>{title}</h1><p>{descriptions[slug] ?? `Enterprise ${title.toLowerCase()} workspace connected to the HRBP One people graph.`}</p></div>
-      {liveCore ? <div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> Live PostgreSQL</button>{createHref ? <Link className="create-button" href={createHref}><Plus size={17}/> {createLabel}</Link> : null}</div> : <button className="create-button"><Plus size={17}/> New record</button>}
+      {liveCore ? <div className="module-heading-actions">
+        {liveState.degraded
+          ? <button className="secondary-button" disabled><CircleAlert size={16}/> Safe fallback</button>
+          : <button className="secondary-button" disabled><CircleCheckBig size={16}/> Live PostgreSQL</button>}
+        {createHref ? <Link className="create-button" href={createHref}><Plus size={17}/> {createLabel}</Link> : null}
+      </div> : <button className="create-button"><Plus size={17}/> New record</button>}
     </section>
-    {liveCore ? liveContent : core ? <CoreHRWorkspace slug={slug}/> : recruit ? <RecruitingWorkspace slug={slug}/> : off ? <OffboardingWorkspace/> : work ? <WorkPayWorkspace slug={slug}/> : growth ? <GrowthWorkspace slug={slug}/> : services ? <EmployeeServicesWorkspace slug={slug}/> : gov ? <GovernancePlanningWorkspace slug={slug}/> : admin ? <PlatformAdminWorkspace slug={slug}/> : <>
+    {liveCore ? <>
+      {liveState.degraded ? <section className="card" style={{ marginBottom: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10, borderColor: "#efd7aa", background: "#fff8ed" }}>
+        <CircleAlert size={18} style={{ flex: "0 0 auto", marginTop: 1, color: "#9a6438" }}/>
+        <div><strong style={{ display: "block", fontSize: 11, color: "#71481f" }}>Live employee data is temporarily unavailable</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5, color: "#8a663f" }}>The page stayed online and switched to the governed staging dataset instead of failing. Mutations remain protected; no write is sent while the live data path is degraded.</p></div>
+      </section> : null}
+      {liveState.content}
+    </> : core ? <CoreHRWorkspace slug={slug}/> : recruit ? <RecruitingWorkspace slug={slug}/> : off ? <OffboardingWorkspace/> : work ? <WorkPayWorkspace slug={slug}/> : growth ? <GrowthWorkspace slug={slug}/> : services ? <EmployeeServicesWorkspace slug={slug}/> : gov ? <GovernancePlanningWorkspace slug={slug}/> : admin ? <PlatformAdminWorkspace slug={slug}/> : <>
       <section className="module-hero card"><div className="module-icon">{Icon && <Icon size={25}/>}</div><div><div className="section-kicker">Connected module</div><h2>{title} is part of the unified employee lifecycle.</h2><p>Records created here inherit tenant isolation, effective dating, classification, retention, workflow and audit controls by default.</p></div><div className="module-health"><CircleCheckBig size={18}/><span>Governance active</span></div></section>
       <section className="module-toolbar"><div className="module-search"><Search size={16}/><input placeholder={`Search ${title.toLowerCase()}…`}/></div><button className="secondary-button"><SlidersHorizontal size={15}/> Filters</button></section>
       <section className="card module-table"><div className="empty-state"><div className="empty-visual"><span/><span/><span/></div><h3>{title} domain is queued for its vertical slice</h3><p>The remaining module is connected to the same tenant, identity, privacy and audit plane.</p><button className="secondary-button">View architecture <ChevronRight size={15}/></button></div></section>
