@@ -3,8 +3,10 @@ import { can } from "@/lib/authorization";
 import { getServerRequestContext } from "@/lib/server-session";
 import { getOnboardingWorkspaceData, getRecruitingWorkspaceData } from "@/lib/recruiting-live-data";
 import { getRecruitingOperationsData } from "@/lib/recruiting-operations-data";
+import { getOnboardingOperationsData } from "@/lib/onboarding-operations-data";
 import { onboardingPeople, onboardingTasks, pipeline, requisitions } from "@/lib/recruiting-demo";
 import { RecruitingOperationsConsole } from "@/components/recruiting-operations-console";
+import { OnboardingOperationsConsole } from "@/components/onboarding-operations-console";
 
 function Metric({ label, value, note, icon: Icon }: { label:string; value:string; note:string; icon:React.ComponentType<{size?:number}> }) {
   return <div className="recruit-metric"><span><Icon size={16}/></span><div><small>{label}</small><strong>{value}</strong><em>{note}</em></div></div>;
@@ -57,9 +59,13 @@ export async function RecruitingWorkspace({ slug }: { slug:string }) {
   if (slug === "onboarding") {
     if (!ctx || !can(ctx, "onboarding:read")) return <DemoOnboarding/>;
     try {
-      const data = await getOnboardingWorkspaceData(ctx.tenantId);
+      const [data, operations] = await Promise.all([
+        getOnboardingWorkspaceData(ctx.tenantId),
+        can(ctx, "onboarding:write") ? getOnboardingOperationsData(ctx.tenantId) : Promise.resolve(null)
+      ]);
       return <>
         <div className="recruit-metrics"><Metric label="Active journeys" value={String(data.preboarding)} note="Open onboarding plans" icon={UserPlus}/><Metric label="Tasks complete" value={`${data.taskCompletion}%`} note="Across active plans" icon={BadgeCheck}/><Metric label="Blockers" value={String(data.blockers)} note="Blocked onboarding tasks" icon={CircleAlert}/><Metric label="Start readiness" value={`${data.readiness}%`} note="Average journey readiness" icon={ShieldCheck}/></div>
+        {operations ? <OnboardingOperationsConsole tasks={operations}/> : null}
         <div className="onboarding-grid"><section className="card"><div className="recruit-title"><div><h3>Onboarding journeys</h3><p>Live hire-to-day-one orchestration across People, IT and managers.</p></div><button className="secondary-button" disabled>Journey templates</button></div><div className="journey-list">{data.journeys.length ? data.journeys.map(p=><article key={p.id}><div className="journey-avatar">{p.initials}</div><div className="journey-person"><strong>{p.name}</strong><small>{p.role} · Starts {p.start}</small></div><div className="journey-owner"><small>Owner</small><strong>{p.owner}</strong></div><div className="journey-progress"><span><i style={{width:`${p.progress}%`}}/></span><small>{p.progress}% ready</small></div><em className={p.blockers ? "journey-blocked" : "journey-healthy"}>{p.blockers ? `${p.blockers} blocker${p.blockers>1?"s":""}` : p.status}</em></article>) : <div style={{ padding:24 }}>No active onboarding journeys.</div>}</div></section><section className="card"><div className="recruit-title"><div><h3>Cross-functional controls</h3><p>Grouped from live onboarding tasks</p></div></div><div className="task-control-list">{data.controls.length ? data.controls.map(t=><div key={t.title}><span className={t.risk === "Healthy" ? "task-ok" : "task-watch"}/><div><strong>{t.title}</strong><small>{t.owner} · Due {t.due}</small></div><b>{t.completion}</b></div>) : <div style={{ padding:20 }}>No task controls configured.</div>}</div><div className="onboarding-policy"><ShieldCheck size={17}/><p>Sensitive identity documents remain in the restricted vault. IT receives provisioning attributes, not identity-document contents.</p></div></section></div>
       </>;
     } catch (error) {
