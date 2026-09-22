@@ -2,7 +2,7 @@ import { DataClassification, EmploymentStatus, ExitTaskStatus, SeparationStatus,
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
-import { getRequestContext, unauthorized } from "@/lib/request-context";
+import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
   const ctx = getRequestContext(request); if (!ctx) return unauthorized(); if (!can(ctx,"offboarding:read")) return forbidden();
@@ -11,7 +11,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx=getRequestContext(request); if(!ctx)return unauthorized(); if(!can(ctx,"offboarding:write"))return forbidden();
+  const ctx=getRequestContext(request); if(!ctx)return unauthorized(); if(!mutationOriginAllowed(request))return forbidden("Cross-origin mutation blocked."); if(!can(ctx,"offboarding:write"))return forbidden();
   const body=await request.json() as {employmentId?:string;type?:SeparationType;noticeDate?:string;lastWorkingDate?:string;reasonCode?:string;employeeReason?:string;managerEmploymentId?:string};
   if(!body.employmentId||!body.type||!Object.values(SeparationType).includes(body.type)||!body.lastWorkingDate)return Response.json({error:"employmentId, valid type and lastWorkingDate are required."},{status:400});
   const lastWorkingDate=new Date(body.lastWorkingDate); if(Number.isNaN(lastWorkingDate.getTime()))return Response.json({error:"lastWorkingDate is invalid."},{status:400});
