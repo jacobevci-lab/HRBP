@@ -1,26 +1,39 @@
 import { EmploymentStatus } from "@prisma/client";
 import { can } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { isLocale, translate, type Locale } from "@/lib/i18n";
 import { navigation } from "@/lib/navigation";
 import { getRequestContext } from "@/lib/request-context";
 
 export const dynamic = "force-dynamic";
+
+function requestLocale(request: Request): Locale {
+  const cookie = request.headers.get("cookie") ?? "";
+  const match = cookie.match(/(?:^|;\s*)hrbp-locale=([^;]+)/);
+  const value = match ? decodeURIComponent(match[1]) : null;
+  return isLocale(value) ? value : "en";
+}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") ?? "").trim();
   if (q.length < 2) return Response.json({ data: [] });
 
-  const normalized = q.toLowerCase();
+  const locale = requestLocale(request);
+  const normalized = q.toLocaleLowerCase(locale === "tr" ? "tr-TR" : "en-US");
   const moduleResults = navigation
     .flatMap((group) => group.items)
-    .filter((item) => item.label.toLowerCase().includes(normalized) || item.slug.toLowerCase().includes(normalized))
+    .filter((item) => {
+      const enLabel = translate("en", item.labelKey).toLocaleLowerCase("en-US");
+      const trLabel = translate("tr", item.labelKey).toLocaleLowerCase("tr-TR");
+      return enLabel.includes(normalized) || trLabel.includes(normalized) || item.slug.toLowerCase().includes(normalized);
+    })
     .slice(0, 8)
     .map((item) => ({
       type: "module" as const,
       id: item.slug,
-      title: item.label,
-      subtitle: "HRBP One workspace",
+      title: translate(locale, item.labelKey),
+      subtitle: locale === "tr" ? "HRBP One çalışma alanı" : "HRBP One workspace",
       href: item.slug === "dashboard" ? "/" : `/module/${item.slug}`
     }));
 
@@ -77,7 +90,7 @@ export async function GET(request: Request) {
           type: "person" as const,
           id: person.id,
           title: `${person.givenName} ${person.familyName}`,
-          subtitle: `${person.employeeNumber ?? "No employee ID"} · ${person.employments[0]?.position?.title ?? "Unassigned"}`,
+          subtitle: `${person.employeeNumber ?? (locale === "tr" ? "Çalışan ID yok" : "No employee ID")} · ${person.employments[0]?.position?.title ?? (locale === "tr" ? "Atanmamış" : "Unassigned")}`,
           href: `/module/employee-360?person=${encodeURIComponent(person.id)}`
         })),
         ...positions.map((position) => ({

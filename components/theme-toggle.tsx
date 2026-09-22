@@ -2,6 +2,7 @@
 
 import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useLocale } from "@/components/locale-provider";
 
 type Theme = "light" | "dark";
 
@@ -19,6 +20,7 @@ function applyTheme(theme: Theme) {
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>("light");
+  const { locale } = useLocale();
 
   useEffect(() => {
     const initial = resolveInitialTheme();
@@ -32,13 +34,17 @@ export function ThemeToggle() {
     applyTheme(next);
   }
 
+  const label = theme === "dark"
+    ? (locale === "tr" ? "Açık temaya geç" : "Switch to light mode")
+    : (locale === "tr" ? "Koyu temaya geç" : "Switch to dark mode");
+
   return (
     <button
       className="icon-button theme-toggle"
       type="button"
       onClick={toggleTheme}
-      aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-      title={theme === "dark" ? "Light mode" : "Dark mode"}
+      aria-label={label}
+      title={label}
     >
       {theme === "dark" ? <Sun size={17}/> : <Moon size={17}/>}
     </button>
