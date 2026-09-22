@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { AnalyticsModulePage } from "@/components/analytics-module-page";
 import { ModuleLanding } from "@/components/module-landing";
 import { PublicCoreLanding } from "@/components/public-core-landing";
 import { getServerRequestContext } from "@/lib/server-session";
@@ -18,9 +19,11 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
 
   return (
     <AppShell>
-      {!ctx && publicCoreSlugs.has(slug)
-        ? <PublicCoreLanding slug={slug as "people" | "organization" | "positions" | "employee-360"}/>
-        : <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/>} 
+      {ctx && slug === "analytics"
+        ? <AnalyticsModulePage/>
+        : !ctx && publicCoreSlugs.has(slug)
+          ? <PublicCoreLanding slug={slug as "people" | "organization" | "positions" | "employee-360"}/>
+          : <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/>} 
     </AppShell>
   );
 }
