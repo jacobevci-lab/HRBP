@@ -1,5 +1,5 @@
-import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, CalendarClock, ChevronRight, CircleCheckBig, Clock3, Ellipsis, FileWarning, ShieldCheck, Sparkles, UserPlus, UsersRound } from "lucide-react";
-import { getDashboardData } from "@/lib/dashboard-data";
+import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, CalendarClock, ChevronRight, CircleAlert, CircleCheckBig, Clock3, Ellipsis, FileWarning, ShieldCheck, Sparkles, UserPlus, UsersRound } from "lucide-react";
+import { getDashboardDataSafe } from "@/lib/dashboard-safe";
 
 function dayLabel() {
   return new Intl.DateTimeFormat("en-GB", {
@@ -22,7 +22,7 @@ function greeting() {
 }
 
 export async function Dashboard() {
-  const data = await getDashboardData();
+  const { data, degraded } = await getDashboardDataSafe();
   const maxPlan = Math.max(...data.headcountSeries.map((item) => item.plan), 1);
   const yoyTrend = data.yoyChange >= 0 ? "up" : "down";
   const yoyLabel = `${Math.abs(data.yoyChange).toFixed(1)}% YoY`;
@@ -30,9 +30,17 @@ export async function Dashboard() {
   return (
     <>
       <section className="page-heading">
-        <div><div className="eyebrow">{dayLabel()}</div><h1>{greeting()}, Yakup.</h1><p>Live workforce signals from {data.tenantName}.</p></div>
-        <button className="secondary-button">Customize dashboard</button>
+        <div><div className="eyebrow">{dayLabel()}</div><h1>{greeting()}, Yakup.</h1><p>{degraded ? "Safe staging signals while the live data path recovers." : `Live workforce signals from ${data.tenantName}.`}</p></div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {degraded ? <button className="secondary-button" disabled><CircleAlert size={15}/> Safe fallback</button> : null}
+          <button className="secondary-button">Customize dashboard</button>
+        </div>
       </section>
+
+      {degraded ? <section className="card" style={{ marginBottom: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <CircleAlert size={18} style={{ flex: "0 0 auto", marginTop: 1, color: "var(--orange)" }}/>
+        <div><strong style={{ display: "block", fontSize: 11 }}>Live dashboard data is temporarily unavailable</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5, color: "var(--muted)" }}>HRBP kept the Command Center online using the governed staging snapshot. Live writes remain isolated from this fallback view.</p></div>
+      </section> : null}
 
       <section className="ai-brief">
         <div className="ai-orb"><Sparkles size={20}/></div>
@@ -55,7 +63,7 @@ export async function Dashboard() {
         </div>
 
         <div className="card action-card">
-          <CardHeader title="Needs attention" subtitle="Prioritized from live records" />
+          <CardHeader title="Needs attention" subtitle={degraded ? "Safe staging priorities" : "Prioritized from live records"} />
           <div className="attention-list">
             <Attention icon={<CalendarClock size={17}/>} tone="amber" title="Upcoming starters" detail={`${data.upcomingStarters} people start within 30 days`} tag="Onboarding" />
             <Attention icon={<FileWarning size={17}/>} tone="red" title="Employee relations" detail={`${data.openCases} active restricted cases`} tag={data.openCases ? "Review" : "Clear"} />
@@ -94,8 +102,8 @@ export async function Dashboard() {
         </div>
         <div className="card trust-card">
           <CardHeader title="Data & governance" subtitle="Platform trust posture" />
-          <div className="trust-score"><div className="score-ring"><span>96</span><small>/100</small></div><div><strong>Healthy</strong><p>Privacy, access and retention controls are operating normally.</p></div></div>
-          <div className="trust-list"><div><CircleCheckBig size={16}/><span>PostgreSQL / Hyperdrive data path</span><strong>Healthy</strong></div><div><CircleCheckBig size={16}/><span>RBAC / ABAC policy engine</span><strong>Healthy</strong></div><div><CircleCheckBig size={16}/><span>Effective-dated people ledger</span><strong>Active</strong></div><div><ShieldCheck size={16}/><span>Restricted case wall</span><strong>Protected</strong></div></div>
+          <div className="trust-score"><div className="score-ring"><span>{degraded ? "82" : "96"}</span><small>/100</small></div><div><strong>{degraded ? "Degraded" : "Healthy"}</strong><p>{degraded ? "The application is serving a safe read-only snapshot while live data recovers." : "Privacy, access and retention controls are operating normally."}</p></div></div>
+          <div className="trust-list"><div>{degraded ? <CircleAlert size={16}/> : <CircleCheckBig size={16}/>}<span>PostgreSQL / Hyperdrive data path</span><strong>{degraded ? "Recovering" : "Healthy"}</strong></div><div><CircleCheckBig size={16}/><span>RBAC / ABAC policy engine</span><strong>Healthy</strong></div><div><CircleCheckBig size={16}/><span>Effective-dated people ledger</span><strong>Active</strong></div><div><ShieldCheck size={16}/><span>Restricted case wall</span><strong>Protected</strong></div></div>
         </div>
       </section>
     </>
