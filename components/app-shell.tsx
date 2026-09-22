@@ -6,6 +6,8 @@ import { Bell, ChevronDown, Command, Menu, Plus, Search, Sparkles, X } from "luc
 import { useState } from "react";
 import { navigation } from "@/lib/navigation";
 import { SessionIndicator } from "@/components/session-indicator";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { TopbarAccount } from "@/components/topbar-account";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -32,7 +34,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="nav-label">{group.label}</div>
               {group.items.map((item) => {
                 const href = item.slug === "dashboard" ? "/" : `/module/${item.slug}`;
-                const active = pathname === href;
+                const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
                 const Icon = item.icon;
                 return (
                   <Link key={item.slug} href={href} className={`nav-item ${active ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
@@ -51,9 +53,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <button className="icon-button mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={20}/></button>
           <div className="global-search"><Search size={17}/><input placeholder="Search people, positions, cases, documents…"/><kbd><Command size={12}/> K</kbd></div>
           <div className="topbar-actions">
-            <button className="icon-button"><Bell size={18}/><span className="notification-dot"/></button>
+            <ThemeToggle/>
+            <button className="icon-button" aria-label="Notifications"><Bell size={18}/><span className="notification-dot"/></button>
             <button className="ai-button"><Sparkles size={16}/> Ask HRBP</button>
             <Link className="create-button" href="/module/people/new"><Plus size={17}/> Create</Link>
+            <TopbarAccount/>
           </div>
         </header>
         <div className="page-content">{children}</div>
