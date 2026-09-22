@@ -64,12 +64,17 @@ export async function resolveEmploymentScopeTarget(
         tenantId,
         countryCode: scopeKey.toUpperCase(),
         effectiveFrom: { lte: at },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }],
-        employment: { is: { tenantId, status: { not: EmploymentStatus.TERMINATED } } }
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: at } }]
       },
       select: { employmentId: true }
     });
-    return [...new Set(rows.map((row) => row.employmentId))];
+    const candidateIds = [...new Set(rows.map((row) => row.employmentId))];
+    if (!candidateIds.length) return [];
+    const employments = await client.employment.findMany({
+      where: { tenantId, id: { in: candidateIds }, status: { not: EmploymentStatus.TERMINATED } },
+      select: { id: true }
+    });
+    return employments.map((employment) => employment.id);
   }
 
   const employments = await client.employment.findMany({
