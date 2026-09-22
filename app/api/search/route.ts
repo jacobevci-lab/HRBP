@@ -1,6 +1,7 @@
 import { EmploymentStatus } from "@prisma/client";
 import { can } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { resolveEmploymentScope } from "@/lib/employment-scope";
 import { isLocale, translate, type Locale } from "@/lib/i18n";
 import { navigation } from "@/lib/navigation";
 import { getRequestContext } from "@/lib/request-context";
@@ -42,10 +43,26 @@ export async function GET(request: Request) {
 
   try {
     const data = await withDb(async (db) => {
+      const canReadPeople = can(ctx, "people:read");
+      const peopleScope = canReadPeople ? await resolveEmploymentScope(db, ctx) : [];
+      const personScopeFilter = peopleScope === null
+        ? {}
+        : {
+            employments: {
+              some: {
+                tenantId: ctx.tenantId,
+                id: { in: peopleScope },
+                status: { not: EmploymentStatus.TERMINATED }
+              }
+            }
+          };
+      const employmentScopeFilter = peopleScope === null ? {} : { id: { in: peopleScope } };
+
       const [people, positions] = await Promise.all([
-        can(ctx, "people:read") ? db.person.findMany({
+        canReadPeople ? db.person.findMany({
           where: {
             tenantId: ctx.tenantId,
+            ...personScopeFilter,
             OR: [
               { givenName: { contains: q, mode: "insensitive" } },
               { familyName: { contains: q, mode: "insensitive" } },
@@ -61,7 +78,11 @@ export async function GET(request: Request) {
             familyName: true,
             employeeNumber: true,
             employments: {
-              where: { status: { not: EmploymentStatus.TERMINATED } },
+              where: {
+                tenantId: ctx.tenantId,
+                status: { not: EmploymentStatus.TERMINATED },
+                ...employmentScopeFilter
+              },
               orderBy: { startDate: "desc" },
               take: 1,
               select: { position: { select: { title: true } } }

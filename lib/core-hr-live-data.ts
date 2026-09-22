@@ -1,5 +1,8 @@
 import { DocumentStatus, EmploymentStatus, LifecycleEventType, PositionStatus, Prisma, type PrismaClient } from "@prisma/client";
+import { can } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
+import { getServerRequestContext } from "@/lib/server-session";
 
 const STAGING_TENANT_ID = "tenant-acme-global";
 
@@ -11,6 +14,13 @@ async function resolveTenant(db: PrismaClient, requestedTenantId?: string) {
     (await db.tenant.findUnique({ where: { id: STAGING_TENANT_ID }, select: { id: true, name: true } })) ??
     (await db.tenant.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true, name: true } }))
   );
+}
+
+async function resolvePeopleScope(db: PrismaClient, tenantId: string) {
+  const ctx = await getServerRequestContext();
+  if (!ctx) return null;
+  if (ctx.tenantId !== tenantId || !can(ctx, "people:read")) return [];
+  return resolveEmploymentScope(db, ctx);
 }
 
 function formatDate(date: Date) {
@@ -65,8 +75,21 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string): Pro
       return { tenantName: "Workspace", active: 0, preboarding: 0, onLeave: 0, dataQuality: 100, needsReview: 0, people: [] };
     }
 
+    const scope = await resolvePeopleScope(db, tenant.id);
+    const employmentScope = employmentPrimaryKeyFilter(scope);
+    const personScope: Prisma.PersonWhereInput = scope === null
+      ? {}
+      : {
+          employments: {
+            some: {
+              tenantId: tenant.id,
+              status: { not: EmploymentStatus.TERMINATED },
+              ...employmentScope
+            }
+          }
+        };
     const normalized = query.trim();
-    const where: Prisma.PersonWhereInput = { tenantId: tenant.id };
+    const where: Prisma.PersonWhereInput = { tenantId: tenant.id, ...personScope };
     if (normalized) {
       where.OR = [
         { givenName: { contains: normalized, mode: "insensitive" } },
@@ -76,6 +99,7 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string): Pro
       ];
     }
 
+    const scopedEmploymentBase = { tenantId: tenant.id, ...employmentScope };
     const [people, active, preboarding, onLeave, qualityRows] = await Promise.all([
       db.person.findMany({
         where,
@@ -88,7 +112,7 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string): Pro
           familyName: true,
           workEmail: true,
           employments: {
-            where: { status: { not: EmploymentStatus.TERMINATED } },
+            where: { status: { not: EmploymentStatus.TERMINATED }, ...scopedEmploymentBase },
             orderBy: { startDate: "desc" },
             take: 1,
             select: {
@@ -106,15 +130,15 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string): Pro
           }
         }
       }),
-      db.employment.count({ where: { tenantId: tenant.id, status: EmploymentStatus.ACTIVE } }),
-      db.employment.count({ where: { tenantId: tenant.id, status: EmploymentStatus.PREBOARDING } }),
-      db.employment.count({ where: { tenantId: tenant.id, status: EmploymentStatus.LEAVE } }),
+      db.employment.count({ where: { ...scopedEmploymentBase, status: EmploymentStatus.ACTIVE } }),
+      db.employment.count({ where: { ...scopedEmploymentBase, status: EmploymentStatus.PREBOARDING } }),
+      db.employment.count({ where: { ...scopedEmploymentBase, status: EmploymentStatus.LEAVE } }),
       db.person.findMany({
-        where: { tenantId: tenant.id },
+        where: { tenantId: tenant.id, ...personScope },
         select: {
           workEmail: true,
           employments: {
-            where: { status: { not: EmploymentStatus.TERMINATED } },
+            where: { status: { not: EmploymentStatus.TERMINATED }, ...scopedEmploymentBase },
             orderBy: { startDate: "desc" },
             take: 1,
             select: { positionId: true }
@@ -263,6 +287,7 @@ export async function getPositionsWorkspaceData(tenantId?: string): Promise<Posi
   return withDb(async (db) => {
     const tenant = await resolveTenant(db, tenantId);
     if (!tenant) return { positions: 0, filled: 0, open: 0, planned: 0, critical: 0, rows: [] };
+    const scope = await resolvePeopleScope(db, tenant.id);
 
     const positions = await db.position.findMany({
       where: { tenantId: tenant.id, validTo: null },
@@ -277,7 +302,7 @@ export async function getPositionsWorkspaceData(tenantId?: string): Promise<Posi
         critical: true,
         orgUnit: { select: { name: true } },
         employments: {
-          where: { status: { not: EmploymentStatus.TERMINATED } },
+          where: { status: { not: EmploymentStatus.TERMINATED }, ...employmentPrimaryKeyFilter(scope) },
           orderBy: { startDate: "desc" },
           take: 1,
           select: { person: { select: { givenName: true, familyName: true } } }
@@ -450,20 +475,46 @@ export async function getEmployee360Data(personId?: string, options: Employee360
   return withDb(async (db) => {
     const tenant = await resolveTenant(db, options.tenantId);
     if (!tenant) return null;
+    const scope = await resolvePeopleScope(db, tenant.id);
+    const scopedEmploymentWhere = {
+      tenantId: tenant.id,
+      status: { not: EmploymentStatus.TERMINATED },
+      ...employmentPrimaryKeyFilter(scope)
+    };
+    const scopedSelect = {
+      ...employee360Select,
+      employments: {
+        ...employee360Select.employments,
+        where: scopedEmploymentWhere
+      }
+    } satisfies Prisma.PersonSelect;
+    const personScope: Prisma.PersonWhereInput = scope === null
+      ? {}
+      : { employments: { some: scopedEmploymentWhere } };
+    const personWhere: Prisma.PersonWhereInput = {
+      tenantId: tenant.id,
+      ...personScope,
+      ...(personId ? { id: personId } : {})
+    };
 
-    const person = personId
-      ? await db.person.findFirst({ where: { id: personId, tenantId: tenant.id }, select: employee360Select })
-      : await db.person.findFirst({ where: { tenantId: tenant.id }, orderBy: { employeeNumber: "asc" }, select: employee360Select });
+    const person = await db.person.findFirst({
+      where: personWhere,
+      ...(personId ? {} : { orderBy: { employeeNumber: "asc" as const } }),
+      select: scopedSelect
+    });
 
     if (!person) return null;
     const employment = person.employments[0];
     const position = employment?.position;
     const manager = employment?.manager?.person;
     const now = new Date();
+    const managerIdFilter = scope === null
+      ? (employment ? { id: { not: employment.id } } : {})
+      : { id: { in: scope, ...(employment ? { not: employment.id } : {}) } };
 
     const [employmentHistory, compensationHistory, compensationRequests, documents, managerOptions] = await Promise.all([
       db.employment.findMany({
-        where: { tenantId: tenant.id, personId: person.id },
+        where: { tenantId: tenant.id, personId: person.id, ...employmentPrimaryKeyFilter(scope) },
         orderBy: { startDate: "desc" },
         take: 20,
         select: {
@@ -499,7 +550,7 @@ export async function getEmployee360Data(personId?: string, options: Employee360
             where: {
               tenantId: tenant.id,
               status: { in: [EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE] },
-              ...(employment ? { id: { not: employment.id } } : {})
+              ...managerIdFilter
             },
             orderBy: [{ person: { familyName: "asc" } }, { person: { givenName: "asc" } }],
             take: 250,
