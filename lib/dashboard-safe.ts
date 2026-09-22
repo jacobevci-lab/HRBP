@@ -1,4 +1,4 @@
-import { getDashboardData, type DashboardData } from "@/lib/dashboard-data";
+import type { DashboardData } from "@/lib/dashboard-data";
 
 function monthLabels() {
   const now = new Date();
@@ -41,6 +41,10 @@ function fallbackDashboard(): DashboardData {
 
 export async function getDashboardDataSafe(): Promise<{ data: DashboardData; degraded: boolean }> {
   try {
+    // Keep the Prisma / pg / Cloudflare DB path out of the initial homepage module
+    // evaluation. If that runtime path cannot initialize, the Command Center can
+    // still render the governed read-only snapshot instead of returning a Worker 500.
+    const { getDashboardData } = await import("@/lib/dashboard-data");
     return { data: await getDashboardData(), degraded: false };
   } catch (error) {
     console.error("[HRBP] Dashboard live data failed; using safe staging snapshot", error);
