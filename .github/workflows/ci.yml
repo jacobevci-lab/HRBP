@@ -24,6 +24,7 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - run: npm run routes:validate
       - run: npx prisma validate
       - run: npm run typecheck
       - run: npm run build
