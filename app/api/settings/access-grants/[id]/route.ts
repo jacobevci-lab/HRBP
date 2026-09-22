@@ -19,11 +19,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     if (!grant) throw new Error("NOT_FOUND");
     await tx.employmentAccessGrant.delete({ where: { id: grant.id } });
     await appendAudit(tx, ctx, {
-      action: "HRBP_POPULATION_GRANT_REVOKED",
+      action: "HRBP_SCOPE_GRANT_REVOKED",
       resourceType: "EmploymentAccessGrant",
       resourceId: grant.id,
       classification: DataClassification.CONFIDENTIAL,
-      purpose: "Relationship-aware workforce authorization"
+      purpose: `Workforce authorization revoked ${grant.effect}:${grant.scopeType}:${grant.scopeKey ?? grant.employmentId ?? "legacy"}`
     });
     return grant.id;
   }).catch((error) => error instanceof Error && error.message === "NOT_FOUND" ? null : Promise.reject(error));
