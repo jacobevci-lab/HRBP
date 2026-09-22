@@ -79,7 +79,7 @@ export async function getRecruitingWorkspaceData(tenantId = workspaceTenantId())
           targetHireDate: true,
           hiringManagerId: true,
           recruiterId: true,
-          position: { select: { location: true, orgUnit: { select: { name: true } } },
+          position: { select: { location: true, orgUnit: { select: { name: true } } } },
           _count: { select: { applications: true } }
         }
       }),
