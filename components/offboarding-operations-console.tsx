@@ -4,106 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BadgeCheck, CircleAlert, ClipboardCheck, LockKeyhole, ShieldCheck, UserMinus } from "lucide-react";
 import type { OffboardingEligibleEmployment, OffboardingProcessRow } from "@/lib/offboarding-live-data";
+import { useLocale } from "@/components/locale-provider";
 
-type Notice = { kind: "ok" | "error"; message: string } | null;
+type Notice={kind:"ok"|"error";message:string}|null;
+const separationTypes=[["RESIGNATION","Resignation"],["TERMINATION","Termination"],["REDUNDANCY","Redundancy"],["RETIREMENT","Retirement"],["END_OF_CONTRACT","End of contract"],["OTHER","Other"]] as const;
 
-const separationTypes = [
-  ["RESIGNATION", "Resignation"],
-  ["TERMINATION", "Termination"],
-  ["REDUNDANCY", "Redundancy"],
-  ["RETIREMENT", "Retirement"],
-  ["END_OF_CONTRACT", "End of contract"],
-  ["OTHER", "Other"]
-] as const;
-
-export function OffboardingOperationsConsole({
-  processes,
-  employments
-}: {
-  processes: OffboardingProcessRow[];
-  employments: OffboardingEligibleEmployment[];
-}) {
-  const router = useRouter();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [notice, setNotice] = useState<Notice>(null);
-  const [employmentId, setEmploymentId] = useState("");
-  const [type, setType] = useState("RESIGNATION");
-  const [noticeDate, setNoticeDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [lastWorkingDate, setLastWorkingDate] = useState("");
-  const [reasonCode, setReasonCode] = useState("");
-
-  async function call(url: string, init: RequestInit, success: string) {
-    setBusy(url);
-    setNotice(null);
-    try {
-      const response = await fetch(url, init);
-      const payload = await response.json() as { error?: string; open?: { tasks?: number; assets?: number; access?: number } };
-      if (!response.ok) {
-        const open = payload.open ? ` Open controls: tasks ${payload.open.tasks ?? 0}, assets ${payload.open.assets ?? 0}, access ${payload.open.access ?? 0}.` : "";
-        throw new Error(`${payload.error || "Operation failed."}${open}`);
-      }
-      setNotice({ kind: "ok", message: success });
-      router.refresh();
-      return true;
-    } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : "Operation failed." });
-      return false;
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function createProcess(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!employmentId || !lastWorkingDate) {
-      setNotice({ kind: "error", message: "Select an employee and last working date." });
-      return;
-    }
-    const ok = await call("/api/offboarding/processes", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ employmentId, type, noticeDate, lastWorkingDate, reasonCode: reasonCode || undefined })
-    }, "Separation process created with cross-functional clearance tasks.");
-    if (ok) {
-      setEmploymentId("");
-      setLastWorkingDate("");
-      setReasonCode("");
-    }
-  }
-
-  async function completeTask(processId: string, taskId: string, waive = false) {
-    await call(`/api/offboarding/processes/${encodeURIComponent(processId)}/tasks/${encodeURIComponent(taskId)}/complete`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ waive })
-    }, waive ? "Task waived with audit evidence." : "Task completed and recorded in the exit evidence trail.");
-  }
-
-  async function closeProcess(processId: string) {
-    await call(`/api/offboarding/processes/${encodeURIComponent(processId)}/close`, { method: "POST" }, "Separation closed. Employment was terminated and the lifecycle event was written.");
-  }
-
-  return <section className="card off-ops-console">
-    <div className="off-ops-head"><div><span className="section-kicker">Controlled transaction layer</span><h3>Offboarding operations</h3><p>Start separations, clear blocking tasks and close employment only after the exit gate is satisfied.</p></div><span><ShieldCheck size={15}/> Restricted workflow</span></div>
-    {notice ? <div className={`off-ops-notice ${notice.kind}`}><CircleAlert size={15}/>{notice.message}</div> : null}
-    <div className="off-ops-grid">
-      <form className="off-create-form" onSubmit={createProcess}>
-        <div className="off-form-title"><UserMinus size={18}/><div><strong>New separation</strong><small>Creates HR, Manager, IT, Facilities and Payroll clearance controls.</small></div></div>
-        <label>Employee<select value={employmentId} onChange={(event) => setEmploymentId(event.target.value)}><option value="">Select active employment</option>{employments.map((employment) => <option value={employment.id} key={employment.id}>{employment.employeeNumber} · {employment.employee} · {employment.position}</option>)}</select></label>
-        <div className="off-form-row"><label>Type<select value={type} onChange={(event) => setType(event.target.value)}>{separationTypes.map(([value, text]) => <option value={value} key={value}>{text}</option>)}</select></label><label>Reason code<input value={reasonCode} onChange={(event) => setReasonCode(event.target.value)} placeholder="e.g. voluntary-resignation"/></label></div>
-        <div className="off-form-row"><label>Notice date<input type="date" value={noticeDate} onChange={(event) => setNoticeDate(event.target.value)}/></label><label>Last working date<input type="date" value={lastWorkingDate} onChange={(event) => setLastWorkingDate(event.target.value)} required/></label></div>
-        <button className="create-button" type="submit" disabled={Boolean(busy) || !employmentId || !lastWorkingDate}><UserMinus size={16}/> {busy === "/api/offboarding/processes" ? "Creating…" : "Start separation"}</button>
-      </form>
-
-      <div className="off-process-stack">
-        <div className="off-form-title"><ClipboardCheck size={18}/><div><strong>Active clearance processes</strong><small>Blocking controls must be completed or explicitly waived before closure.</small></div></div>
-        {processes.length ? processes.map((process) => <article className="off-process-card" key={process.id}>
-          <header><div><strong>{process.employee}</strong><small>{process.employeeNumber} · {process.position} · {process.type}</small></div><em className={`off-pill ${process.status.toLowerCase().replaceAll(" ", "-")}`}>{process.status}</em></header>
-          <div className="off-process-meta"><span>Last day <b>{process.lastWorkingDate}</b></span><span>Tasks <b>{process.completedTasks}/{process.taskCount}</b></span><span>Blocking <b>{process.openBlockingTasks}</b></span><span>Assets <b>{process.assetsOpen}</b></span><span>Access <b>{process.accessOpen}</b></span></div>
-          <div className="off-task-list">{process.tasks.map((task) => <div key={task.id}><span className={task.rawStatus === "COMPLETED" || task.rawStatus === "WAIVED" ? "done" : task.rawStatus === "BLOCKED" ? "blocked" : "pending"}/><div><strong>{task.title}</strong><small>{task.domain} · {task.dueAt} · {task.status}{task.blocking ? " · Blocking" : ""}</small></div>{task.rawStatus === "COMPLETED" || task.rawStatus === "WAIVED" ? <BadgeCheck size={16}/> : <div className="off-task-actions"><button disabled={Boolean(busy)} onClick={() => completeTask(process.id, task.id)}>Complete</button><button disabled={Boolean(busy)} onClick={() => completeTask(process.id, task.id, true)}>Waive</button></div>}</div>)}</div>
-          <footer><div className={process.readyToClose ? "off-ready" : "off-not-ready"}>{process.readyToClose ? <BadgeCheck size={14}/> : <LockKeyhole size={14}/>} {process.readyToClose ? "Closure gate clear" : "Open blocking controls remain"}</div><button className="secondary-button" onClick={() => closeProcess(process.id)} disabled={Boolean(busy) || !process.readyToClose}>Close separation</button></footer>
-        </article>) : <div className="off-empty">No active separation process. Start one when an employee exit is approved.</div>}
-      </div>
-    </div>
-  </section>;
+export function OffboardingOperationsConsole({processes,employments}:{processes:OffboardingProcessRow[];employments:OffboardingEligibleEmployment[]}){
+  const router=useRouter();const {locale}=useLocale();const tr=locale==="tr";const c=(en:string,trValue:string)=>tr?trValue:en;
+  const typeLabel=(value:string)=>tr?({RESIGNATION:"İstifa",TERMINATION:"Fesih",REDUNDANCY:"Pozisyon iptali",RETIREMENT:"Emeklilik",END_OF_CONTRACT:"Sözleşme sonu",OTHER:"Diğer"} as Record<string,string>)[value]??value:value;
+  const statusLabel=(value:string)=>tr?({OPEN:"Açık",IN_PROGRESS:"Devam ediyor",COMPLETED:"Tamamlandı",WAIVED:"Muaf",BLOCKED:"Bloke",CLOSED:"Kapalı"} as Record<string,string>)[value.toUpperCase().replaceAll(" ","_")]??value:value;
+  const [busy,setBusy]=useState<string|null>(null);const [notice,setNotice]=useState<Notice>(null);const [employmentId,setEmploymentId]=useState("");const [type,setType]=useState("RESIGNATION");const [noticeDate,setNoticeDate]=useState(()=>new Date().toISOString().slice(0,10));const [lastWorkingDate,setLastWorkingDate]=useState("");const [reasonCode,setReasonCode]=useState("");
+  async function call(url:string,init:RequestInit,success:string){setBusy(url);setNotice(null);try{const response=await fetch(url,init);const payload=await response.json() as {error?:string;open?:{tasks?:number;assets?:number;access?:number}};if(!response.ok){const open=payload.open?c(` Open controls: tasks ${payload.open.tasks??0}, assets ${payload.open.assets??0}, access ${payload.open.access??0}.`,` Açık kontroller: görev ${payload.open.tasks??0}, varlık ${payload.open.assets??0}, erişim ${payload.open.access??0}.`):"";throw new Error(`${payload.error||c("Operation failed.","İşlem başarısız.")}${open}`)}setNotice({kind:"ok",message:success});router.refresh();return true}catch(error){setNotice({kind:"error",message:error instanceof Error?error.message:c("Operation failed.","İşlem başarısız.")});return false}finally{setBusy(null)}}
+  async function createProcess(event:React.FormEvent<HTMLFormElement>){event.preventDefault();if(!employmentId||!lastWorkingDate){setNotice({kind:"error",message:c("Select an employee and last working date.","Çalışan ve son çalışma tarihini seçin.")});return}const ok=await call("/api/offboarding/processes",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({employmentId,type,noticeDate,lastWorkingDate,reasonCode:reasonCode||undefined})},c("Separation process created with cross-functional clearance tasks.","Ayrılış süreci, fonksiyonlar arası ilişik kesme görevleriyle oluşturuldu."));if(ok){setEmploymentId("");setLastWorkingDate("");setReasonCode("")}}
+  async function completeTask(processId:string,taskId:string,waive=false){await call(`/api/offboarding/processes/${encodeURIComponent(processId)}/tasks/${encodeURIComponent(taskId)}/complete`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({waive})},waive?c("Task waived with audit evidence.","Görev denetim kanıtıyla muaf tutuldu."):c("Task completed and recorded in the exit evidence trail.","Görev tamamlandı ve ayrılış kanıt zincirine kaydedildi."))}
+  async function closeProcess(processId:string){await call(`/api/offboarding/processes/${encodeURIComponent(processId)}/close`,{method:"POST"},c("Separation closed. Employment was terminated and the lifecycle event was written.","Ayrılış kapatıldı. İstihdam sonlandırıldı ve yaşam döngüsü olayı kaydedildi."))}
+  return <section className="card off-ops-console"><div className="off-ops-head"><div><span className="section-kicker">{c("Controlled transaction layer","Kontrollü işlem katmanı")}</span><h3>{c("Offboarding operations","İşten ayrılış operasyonları")}</h3><p>{c("Start separations, clear blocking tasks and close employment only after the exit gate is satisfied.","Ayrılışı başlatın, bloke eden görevleri temizleyin ve istihdamı yalnızca çıkış kontrolü tamamlandıktan sonra kapatın.")}</p></div><span><ShieldCheck size={15}/> {c("Restricted workflow","Kısıtlı iş akışı")}</span></div>{notice?<div className={`off-ops-notice ${notice.kind}`}><CircleAlert size={15}/>{notice.message}</div>:null}<div className="off-ops-grid"><form className="off-create-form" onSubmit={createProcess}><div className="off-form-title"><UserMinus size={18}/><div><strong>{c("New separation","Yeni ayrılış")}</strong><small>{c("Creates HR, Manager, IT, Facilities and Payroll clearance controls.","İK, Yönetici, BT, İdari İşler ve Bordro ilişik kesme kontrollerini oluşturur.")}</small></div></div><label>{c("Employee","Çalışan")}<select value={employmentId} onChange={event=>setEmploymentId(event.target.value)}><option value="">{c("Select active employment","Aktif istihdam seçin")}</option>{employments.map(employment=><option value={employment.id} key={employment.id}>{employment.employeeNumber} · {employment.employee} · {employment.position}</option>)}</select></label><div className="off-form-row"><label>{c("Type","Tür")}<select value={type} onChange={event=>setType(event.target.value)}>{separationTypes.map(([value,text])=><option value={value} key={value}>{tr?typeLabel(value):text}</option>)}</select></label><label>{c("Reason code","Gerekçe kodu")}<input value={reasonCode} onChange={event=>setReasonCode(event.target.value)} placeholder={c("e.g. voluntary-resignation","örn. voluntary-resignation")}/></label></div><div className="off-form-row"><label>{c("Notice date","Bildirim tarihi")}<input type="date" value={noticeDate} onChange={event=>setNoticeDate(event.target.value)}/></label><label>{c("Last working date","Son çalışma tarihi")}<input type="date" value={lastWorkingDate} onChange={event=>setLastWorkingDate(event.target.value)} required/></label></div><button className="create-button" type="submit" disabled={Boolean(busy)||!employmentId||!lastWorkingDate}><UserMinus size={16}/> {busy==="/api/offboarding/processes"?c("Creating…","Oluşturuluyor…"):c("Start separation","Ayrılışı başlat")}</button></form><div className="off-process-stack"><div className="off-form-title"><ClipboardCheck size={18}/><div><strong>{c("Active clearance processes","Aktif ilişik kesme süreçleri")}</strong><small>{c("Blocking controls must be completed or explicitly waived before closure.","Bloke eden kontroller kapanıştan önce tamamlanmalı veya açıkça muaf tutulmalıdır.")}</small></div></div>{processes.length?processes.map(process=><article className="off-process-card" key={process.id}><header><div><strong>{process.employee}</strong><small>{process.employeeNumber} · {process.position} · {typeLabel(process.type)}</small></div><em className={`off-pill ${process.status.toLowerCase().replaceAll(" ","-")}`}>{statusLabel(process.status)}</em></header><div className="off-process-meta"><span>{c("Last day","Son gün")} <b>{process.lastWorkingDate}</b></span><span>{c("Tasks","Görevler")} <b>{process.completedTasks}/{process.taskCount}</b></span><span>{c("Blocking","Bloke")} <b>{process.openBlockingTasks}</b></span><span>{c("Assets","Varlıklar")} <b>{process.assetsOpen}</b></span><span>{c("Access","Erişim")} <b>{process.accessOpen}</b></span></div><div className="off-task-list">{process.tasks.map(task=><div key={task.id}><span className={task.rawStatus==="COMPLETED"||task.rawStatus==="WAIVED"?"done":task.rawStatus==="BLOCKED"?"blocked":"pending"}/><div><strong>{task.title}</strong><small>{task.domain} · {task.dueAt} · {statusLabel(task.status)}{task.blocking?c(" · Blocking"," · Bloke"):""}</small></div>{task.rawStatus==="COMPLETED"||task.rawStatus==="WAIVED"?<BadgeCheck size={16}/>:<div className="off-task-actions"><button disabled={Boolean(busy)} onClick={()=>completeTask(process.id,task.id)}>{c("Complete","Tamamla")}</button><button disabled={Boolean(busy)} onClick={()=>completeTask(process.id,task.id,true)}>{c("Waive","Muaf tut")}</button></div>}</div>)}</div><footer><div className={process.readyToClose?"off-ready":"off-not-ready"}>{process.readyToClose?<BadgeCheck size={14}/>:<LockKeyhole size={14}/>} {process.readyToClose?c("Closure gate clear","Kapanış kontrolü temiz"):c("Open blocking controls remain","Açık bloke kontrolleri var")}</div><button className="secondary-button" onClick={()=>closeProcess(process.id)} disabled={Boolean(busy)||!process.readyToClose}>{c("Close separation","Ayrılışı kapat")}</button></footer></article>):<div className="off-empty">{c("No active separation process. Start one when an employee exit is approved.","Aktif ayrılış süreci yok. Bir çalışan çıkışı onaylandığında yeni süreç başlatın.")}</div>}</div></div></section>
 }
