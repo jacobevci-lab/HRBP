@@ -1,5 +1,6 @@
 import { BadgeCheck, CloudCog, FileLock2, Fingerprint, HardDrive, KeyRound, Link2, LockKeyhole, MoreHorizontal, ScanSearch, ShieldCheck, Signature } from "lucide-react";
 import { AccessScopeAdmin } from "@/components/access-scope-admin";
+import { JurisdictionAdmin } from "@/components/jurisdiction-admin";
 import { getServerLocale } from "@/lib/i18n-server";
 import type { Locale } from "@/lib/i18n";
 
@@ -65,6 +66,7 @@ function Settings({ locale }:{ locale: Locale }) {
       <Metric icon={<CloudCog size={18}/>} label={c(locale,"Data region","Veri bölgesi")} value="EU" meta={c(locale,"Tenant residency policy","Tenant veri yerleşimi politikası")}/>
     </section>
     <AccessScopeAdmin/>
+    <JurisdictionAdmin/>
     <section className="settings-grid">
       <div className="card platform-panel"><div className="platform-head"><div><span className="section-kicker">{c(locale,"Identity & provisioning","Kimlik & provisioning")}</span><h3>{c(locale,"Authentication connections","Kimlik doğrulama bağlantıları")}</h3></div><BadgeCheck size={18}/></div><div className="platform-table-wrap"><table className="platform-table compact"><thead><tr><th>{c(locale,"Name","Ad")}</th><th>{c(locale,"Type","Tür")}</th><th>Provisioning</th><th>{c(locale,"Control","Kontrol")}</th><th>{c(locale,"Validated","Doğrulandı")}</th><th>{c(locale,"Status","Durum")}</th></tr></thead><tbody>{idpRows.map(r=><tr key={r[0]}>{r.slice(0,5).map((v,i)=><td key={i}>{v}</td>)}<td><Pill value={r[5]} label={status(locale,r[5])}/></td></tr>)}</tbody></table></div></div>
       <div className="card platform-panel"><div className="platform-head"><div><span className="section-kicker">{c(locale,"Connected systems","Bağlı sistemler")}</span><h3>{c(locale,"Integration registry","Entegrasyon kaydı")}</h3></div><Link2 size={18}/></div><div className="platform-table-wrap"><table className="platform-table compact"><thead><tr><th>{c(locale,"Connection","Bağlantı")}</th><th>{c(locale,"Purpose","Amaç")}</th><th>{c(locale,"Credential","Kimlik bilgisi")}</th><th>{c(locale,"Sync","Senkronizasyon")}</th><th>{c(locale,"Status","Durum")}</th></tr></thead><tbody>{integrationRows.map(r=><tr key={r[0]}>{r.slice(0,4).map((v,i)=><td key={i}>{v}</td>)}<td><Pill value={r[4]} label={status(locale,r[4])}/></td></tr>)}</tbody></table></div></div>
