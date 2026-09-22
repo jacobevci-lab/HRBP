@@ -1,4 +1,12 @@
-import { CompensationChangeStatus, LeaveRequestStatus, PayrollRunStatus } from "@prisma/client";
+import { CompensationChangeStatus, LeaveRequestStatus, PayrollRunStatus, TimeEntryStatus } from "@prisma/client";
+
+const timeTransitions: Record<TimeEntryStatus, TimeEntryStatus[]> = {
+  DRAFT: [TimeEntryStatus.SUBMITTED],
+  SUBMITTED: [TimeEntryStatus.APPROVED, TimeEntryStatus.REJECTED],
+  APPROVED: [TimeEntryStatus.LOCKED],
+  REJECTED: [TimeEntryStatus.SUBMITTED],
+  LOCKED: []
+};
 
 const payrollTransitions: Record<PayrollRunStatus, PayrollRunStatus[]> = {
   DRAFT: [PayrollRunStatus.VALIDATING, PayrollRunStatus.CANCELLED],
@@ -28,6 +36,10 @@ const leaveTransitions: Record<LeaveRequestStatus, LeaveRequestStatus[]> = {
   CANCELLED: [],
   TAKEN: []
 };
+
+export function canTransitionTime(from: TimeEntryStatus, to: TimeEntryStatus) {
+  return timeTransitions[from].includes(to);
+}
 
 export function canTransitionPayroll(from: PayrollRunStatus, to: PayrollRunStatus) {
   return payrollTransitions[from].includes(to);
