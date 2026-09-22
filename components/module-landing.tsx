@@ -1,17 +1,7 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { ChevronRight, CircleAlert, CircleCheckBig, Plus, Search, SlidersHorizontal } from "lucide-react";
 import { navigation } from "@/lib/navigation";
-import { CoreHRWorkspace, coreWorkspaceSlugs } from "@/components/core-hr-workspace";
-import { CoreHRLiveWorkspace, liveCoreWorkspaceSlugs } from "@/components/core-hr-live-workspace";
-import { GovernanceLiveWorkspace, liveGovernanceWorkspaceSlugs } from "@/components/governance-live-workspace";
-import { CompensationLiveWorkspace } from "@/components/compensation-live-workspace";
-import { RecruitingWorkspace, recruitingWorkspaceSlugs } from "@/components/recruiting-workspace";
-import { WorkPayWorkspace, workPayWorkspaceSlugs } from "@/components/work-pay-workspace";
-import { GrowthWorkspace, growthWorkspaceSlugs } from "@/components/growth-workspace";
-import { EmployeeServicesWorkspace, employeeServicesWorkspaceSlugs } from "@/components/employee-services-workspace";
-import { GovernancePlanningWorkspace, governancePlanningWorkspaceSlugs } from "@/components/governance-planning-workspace";
-import { PlatformAdminWorkspace, platformAdminWorkspaceSlugs } from "@/components/platform-admin-workspace";
-import { OffboardingWorkspace, offboardingWorkspaceSlugs } from "@/components/offboarding-workspace";
 
 const descriptions: Record<string, string> = {
   people: "The employee golden record: identity, employment, position, organization and lifecycle history in one governed workspace.",
@@ -44,31 +34,118 @@ const descriptions: Record<string, string> = {
   settings: "Configure tenant identity, provisioning, integrations, residency and security without storing connector secrets in application records."
 };
 
-async function renderLiveCore(slug: string, query: string, personId?: string, tab?: string) {
+const liveCoreWorkspaceSlugs = new Set(["people", "organization", "positions", "employee-360"]);
+const liveGovernanceWorkspaceSlugs = new Set(["documents", "audit"]);
+const coreWorkspaceSlugs = new Set(["people", "organization", "positions", "employee-360", "documents", "privacy", "audit"]);
+const recruitingWorkspaceSlugs = new Set(["recruiting", "onboarding"]);
+const workPayWorkspaceSlugs = new Set(["time-attendance", "leave", "compensation", "payroll"]);
+const growthWorkspaceSlugs = new Set(["benefits", "performance", "talent", "succession", "learning"]);
+const employeeServicesWorkspaceSlugs = new Set(["employee-relations", "hr-service", "policies", "workflows"]);
+const governancePlanningWorkspaceSlugs = new Set(["engagement", "workforce-planning", "analytics", "ai-assistant", "privacy", "audit"]);
+const platformAdminWorkspaceSlugs = new Set(["documents", "settings"]);
+const offboardingWorkspaceSlugs = new Set(["offboarding"]);
+
+type WorkspaceState = { degraded: boolean; content: ReactNode };
+
+function ProtectedFallback({ slug, message }: { slug: string; message?: string }) {
+  const title = slug.split("-").map((value) => `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`).join(" ");
+  return <section className="card module-table"><div className="empty-state"><div className="empty-visual"><span/><span/><span/></div><h3>{title} is running in protected fallback mode</h3><p>{message ?? "The live data dependency is unavailable. Navigation remains online and protected mutations stay disabled until the data plane recovers."}</p><Link className="secondary-button" href="/">Return to Command Center <ChevronRight size={15}/></Link></div></section>;
+}
+
+async function renderCoreFallback(slug: string): Promise<WorkspaceState> {
   try {
+    const { CoreHRWorkspace } = await import("@/components/core-hr-workspace");
+    return { degraded: true, content: <CoreHRWorkspace slug={slug}/> };
+  } catch (fallbackError) {
+    console.error(`[HRBP] Safe ${slug} staging workspace could not initialize.`, fallbackError);
+    return { degraded: true, content: <ProtectedFallback slug={slug}/> };
+  }
+}
+
+async function renderLiveCore(slug: string, query: string, personId?: string, tab?: string): Promise<WorkspaceState> {
+  try {
+    // Keep Prisma/pg/Cloudflare bindings out of module evaluation. This mirrors
+    // the Command Center isolation pattern and lets a broken data plane degrade
+    // one workspace instead of tripping the route-level error boundary.
+    const { CoreHRLiveWorkspace } = await import("@/components/core-hr-live-workspace");
     return { degraded: false, content: await CoreHRLiveWorkspace({ slug, query, personId, tab }) };
   } catch (error) {
     console.error(`[HRBP] Live ${slug} workspace failed. Falling back to the safe staging view.`, error);
-    return { degraded: true, content: <CoreHRWorkspace slug={slug}/> };
+    return renderCoreFallback(slug);
   }
 }
 
-async function renderLiveGovernance(slug: string, query: string) {
+async function renderLiveGovernance(slug: string, query: string): Promise<WorkspaceState> {
   try {
+    const { GovernanceLiveWorkspace } = await import("@/components/governance-live-workspace");
     return { degraded: false, content: await GovernanceLiveWorkspace({ slug, query }) };
   } catch (error) {
     console.error(`[HRBP] Live governance ${slug} workspace failed. Falling back to the safe staging view.`, error);
-    return { degraded: true, content: <CoreHRWorkspace slug={slug}/> };
+    return renderCoreFallback(slug);
   }
 }
 
-async function renderLiveCompensation() {
+async function renderLiveCompensation(): Promise<WorkspaceState> {
   try {
+    const { CompensationLiveWorkspace } = await import("@/components/compensation-live-workspace");
     return { degraded: false, content: await CompensationLiveWorkspace() };
   } catch (error) {
     console.error("[HRBP] Live compensation workspace failed. Falling back to the safe staging view.", error);
-    return { degraded: true, content: <WorkPayWorkspace slug="compensation"/> };
+    try {
+      const { WorkPayWorkspace } = await import("@/components/work-pay-workspace");
+      return { degraded: true, content: <WorkPayWorkspace slug="compensation"/> };
+    } catch (fallbackError) {
+      console.error("[HRBP] Compensation staging workspace could not initialize.", fallbackError);
+      return { degraded: true, content: <ProtectedFallback slug="compensation"/> };
+    }
   }
+}
+
+async function renderRecruiting(slug: string): Promise<WorkspaceState> {
+  try {
+    const { RecruitingWorkspace } = await import("@/components/recruiting-workspace");
+    return { degraded: false, content: await RecruitingWorkspace({ slug }) };
+  } catch (error) {
+    console.error(`[HRBP] ${slug} workspace could not initialize.`, error);
+    return { degraded: true, content: <ProtectedFallback slug={slug} message="Recruiting data services are unavailable. The shell remains available while candidate and onboarding mutations stay protected."/> };
+  }
+}
+
+async function renderStandardWorkspace(slug: string): Promise<WorkspaceState> {
+  try {
+    if (coreWorkspaceSlugs.has(slug)) {
+      const { CoreHRWorkspace } = await import("@/components/core-hr-workspace");
+      return { degraded: false, content: <CoreHRWorkspace slug={slug}/> };
+    }
+    if (offboardingWorkspaceSlugs.has(slug)) {
+      const { OffboardingWorkspace } = await import("@/components/offboarding-workspace");
+      return { degraded: false, content: <OffboardingWorkspace/> };
+    }
+    if (workPayWorkspaceSlugs.has(slug)) {
+      const { WorkPayWorkspace } = await import("@/components/work-pay-workspace");
+      return { degraded: false, content: <WorkPayWorkspace slug={slug}/> };
+    }
+    if (growthWorkspaceSlugs.has(slug)) {
+      const { GrowthWorkspace } = await import("@/components/growth-workspace");
+      return { degraded: false, content: <GrowthWorkspace slug={slug}/> };
+    }
+    if (employeeServicesWorkspaceSlugs.has(slug)) {
+      const { EmployeeServicesWorkspace } = await import("@/components/employee-services-workspace");
+      return { degraded: false, content: <EmployeeServicesWorkspace slug={slug}/> };
+    }
+    if (governancePlanningWorkspaceSlugs.has(slug)) {
+      const { GovernancePlanningWorkspace } = await import("@/components/governance-planning-workspace");
+      return { degraded: false, content: <GovernancePlanningWorkspace slug={slug}/> };
+    }
+    if (platformAdminWorkspaceSlugs.has(slug)) {
+      const { PlatformAdminWorkspace } = await import("@/components/platform-admin-workspace");
+      return { degraded: false, content: <PlatformAdminWorkspace slug={slug}/> };
+    }
+  } catch (error) {
+    console.error(`[HRBP] Standard ${slug} workspace failed to initialize.`, error);
+    return { degraded: true, content: <ProtectedFallback slug={slug}/> };
+  }
+  return { degraded: false, content: null };
 }
 
 export async function ModuleLanding({ slug, query = "", personId, tab }: { slug: string; query?: string; personId?: string; tab?: string }) {
@@ -79,41 +156,39 @@ export async function ModuleLanding({ slug, query = "", personId, tab }: { slug:
   const liveGovernance = liveGovernanceWorkspaceSlugs.has(slug);
   const liveCompensation = slug === "compensation";
   const live = liveCore || liveGovernance || liveCompensation;
-  const core = coreWorkspaceSlugs.has(slug);
   const recruit = recruitingWorkspaceSlugs.has(slug);
-  const work = workPayWorkspaceSlugs.has(slug);
-  const growth = growthWorkspaceSlugs.has(slug);
-  const services = employeeServicesWorkspaceSlugs.has(slug);
-  const gov = governancePlanningWorkspaceSlugs.has(slug);
-  const admin = platformAdminWorkspaceSlugs.has(slug);
-  const off = offboardingWorkspaceSlugs.has(slug);
-  const liveState = liveCore
+
+  const workspaceState = liveCore
     ? await renderLiveCore(slug, query, personId, tab)
     : liveGovernance
       ? await renderLiveGovernance(slug, query)
       : liveCompensation
         ? await renderLiveCompensation()
-        : { degraded: false, content: null };
+        : recruit
+          ? await renderRecruiting(slug)
+          : await renderStandardWorkspace(slug);
+
   const createHref = slug === "people" ? "/module/people/new" : slug === "positions" ? "/module/positions/new" : null;
   const createLabel = slug === "people" ? "Add employee" : "New position";
+  const governedWorkspace = live || recruit;
 
   return <>
     <section className="page-heading module-heading">
       <div><div className="eyebrow">HRBP One / {title}</div><h1>{title}</h1><p>{descriptions[slug] ?? `Enterprise ${title.toLowerCase()} workspace connected to the HRBP One people graph.`}</p></div>
-      {live ? <div className="module-heading-actions">
-        {liveState.degraded
+      {governedWorkspace ? <div className="module-heading-actions">
+        {workspaceState.degraded
           ? <button className="secondary-button" disabled><CircleAlert size={16}/> Safe fallback</button>
           : <button className="secondary-button" disabled><CircleCheckBig size={16}/> Governed live data</button>}
         {createHref ? <Link className="create-button" href={createHref}><Plus size={17}/> {createLabel}</Link> : null}
       </div> : <button className="create-button"><Plus size={17}/> New record</button>}
     </section>
-    {live ? <>
-      {liveState.degraded ? <section className="card" style={{ marginBottom: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10, borderColor: "#efd7aa", background: "#fff8ed" }}>
-        <CircleAlert size={18} style={{ flex: "0 0 auto", marginTop: 1, color: "#9a6438" }}/>
-        <div><strong style={{ display: "block", fontSize: 11, color: "#71481f" }}>Live governed data is temporarily unavailable</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5, color: "#8a663f" }}>The application shell stayed online and switched to the safe staging view. Protected mutations remain disabled while the live path is degraded.</p></div>
-      </section> : null}
-      {liveState.content}
-    </> : core ? <CoreHRWorkspace slug={slug}/> : recruit ? <RecruitingWorkspace slug={slug}/> : off ? <OffboardingWorkspace/> : work ? <WorkPayWorkspace slug={slug}/> : growth ? <GrowthWorkspace slug={slug}/> : services ? <EmployeeServicesWorkspace slug={slug}/> : gov ? <GovernancePlanningWorkspace slug={slug}/> : admin ? <PlatformAdminWorkspace slug={slug}/> : <>
+
+    {workspaceState.degraded ? <section className="card" style={{ marginBottom: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10, borderColor: "#efd7aa", background: "#fff8ed" }}>
+      <CircleAlert size={18} style={{ flex: "0 0 auto", marginTop: 1, color: "#9a6438" }}/>
+      <div><strong style={{ display: "block", fontSize: 11, color: "#71481f" }}>Live governed data is temporarily unavailable</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5, color: "#8a663f" }}>The application shell stayed online and switched to a protected fallback. Protected mutations remain disabled while the live path is degraded.</p></div>
+    </section> : null}
+
+    {workspaceState.content ?? <>
       <section className="module-hero card"><div className="module-icon">{Icon && <Icon size={25}/>}</div><div><div className="section-kicker">Connected module</div><h2>{title} is part of the unified employee lifecycle.</h2><p>Records created here inherit tenant isolation, effective dating, classification, retention, workflow and audit controls by default.</p></div><div className="module-health"><CircleCheckBig size={18}/><span>Governance active</span></div></section>
       <section className="module-toolbar"><div className="module-search"><Search size={16}/><input placeholder={`Search ${title.toLowerCase()}…`}/></div><button className="secondary-button"><SlidersHorizontal size={15}/> Filters</button></section>
       <section className="card module-table"><div className="empty-state"><div className="empty-visual"><span/><span/><span/></div><h3>{title} domain is queued for its vertical slice</h3><p>The remaining module is connected to the same tenant, identity, privacy and audit plane.</p><button className="secondary-button">View architecture <ChevronRight size={15}/></button></div></section>
