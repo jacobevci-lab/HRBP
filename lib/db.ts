@@ -31,7 +31,13 @@ function connectionString(): string {
 }
 
 function createClient(): PrismaClient {
-  const adapter = new PrismaPg({ connectionString: connectionString() });
+  const adapter = new PrismaPg({
+    connectionString: connectionString(),
+    // Cloudflare Hyperdrive owns the pooled connection lifecycle. Limiting a
+    // request-scoped adapter to one use prevents pg from retaining a connection
+    // object across Worker request boundaries.
+    maxUses: 1
+  });
   return new PrismaClient({
     adapter,
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"]
