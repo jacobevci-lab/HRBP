@@ -2,19 +2,26 @@ import { DataClassification } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
-import { getRequestContext, unauthorized } from "@/lib/request-context";
+import { employmentIdFilter, resolveEmploymentScope } from "@/lib/employment-scope";
+import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "learning:read")) return forbidden();
-  const data = await db.learningCourse.findMany({ where: { tenantId: ctx.tenantId, active: true }, orderBy: [{ mandatory: "desc" }, { title: "asc" }], include: { _count: { select: { assignments: true } } } });
+  const scope = await resolveEmploymentScope(db, ctx);
+  const data = await db.learningCourse.findMany({
+    where: { tenantId: ctx.tenantId, active: true },
+    orderBy: [{ mandatory: "desc" }, { title: "asc" }],
+    include: { _count: { select: { assignments: { where: { ...employmentIdFilter(scope) } } } } }
+  });
   return Response.json({ data });
 }
 
 export async function POST(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
+  if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "learning:write")) return forbidden();
   const body = await request.json() as Record<string, unknown>;
   const code = String(body.code ?? "").trim().toUpperCase();
