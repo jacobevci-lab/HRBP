@@ -14,9 +14,9 @@
     "db:generate": "node scripts/prepare-prisma-workers.mjs && prisma generate --schema=.prisma-worker",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "cf:build": "npm run db:generate && opennextjs-cloudflare build",
-    "cf:preview": "npm run db:generate && opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "cf:deploy": "npm run db:generate && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "cf:build": "npm run typecheck && opennextjs-cloudflare build",
+    "cf:preview": "npm run typecheck && opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "cf:deploy": "npm run typecheck && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts"
   },
   "dependencies": {
