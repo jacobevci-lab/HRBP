@@ -1,7 +1,8 @@
 import { CaseStatus, EmploymentStatus, LifecycleEventType, PositionStatus } from "@prisma/client";
+import { can } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
-
-const STAGING_TENANT_ID = "tenant-acme-global";
+import { employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
+import type { RequestContext } from "@/lib/request-context";
 
 export type DashboardEvent = {
   id: string;
@@ -46,6 +47,24 @@ const eventLabels: Record<LifecycleEventType, string> = {
   REHIRED: "Rehire"
 };
 
+function emptyDashboard(tenantName = "Workspace"): DashboardData {
+  return {
+    tenantName,
+    totalWorkforce: 0,
+    startedThisMonth: 0,
+    openPositions: 0,
+    criticalOpenPositions: 0,
+    upcomingStarters: 0,
+    openCases: 0,
+    onboardingInProgress: 0,
+    yoyChange: 0,
+    headcountSeries: [],
+    departments: [],
+    lifecycle: { starters: 0, promotions: 0, transfers: 0, leavers: 0 },
+    recentEvents: []
+  };
+}
+
 function startOfMonth(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
 }
@@ -73,80 +92,76 @@ function initials(givenName: string, familyName: string) {
   return `${givenName[0] ?? ""}${familyName[0] ?? ""}`.toUpperCase();
 }
 
-export async function getDashboardData(): Promise<DashboardData> {
+export async function getDashboardData(ctx: RequestContext): Promise<DashboardData> {
   return withDb(async (db) => {
-    const tenant =
-      (await db.tenant.findUnique({ where: { id: STAGING_TENANT_ID }, select: { id: true, name: true } })) ??
-      (await db.tenant.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true, name: true } }));
-
-    if (!tenant) {
-      return {
-        tenantName: "Workspace",
-        totalWorkforce: 0,
-        startedThisMonth: 0,
-        openPositions: 0,
-        criticalOpenPositions: 0,
-        upcomingStarters: 0,
-        openCases: 0,
-        onboardingInProgress: 0,
-        yoyChange: 0,
-        headcountSeries: [],
-        departments: [],
-        lifecycle: { starters: 0, promotions: 0, transfers: 0, leavers: 0 },
-        recentEvents: []
-      };
-    }
+    const tenant = await db.tenant.findUnique({ where: { id: ctx.tenantId }, select: { id: true, name: true } });
+    if (!tenant) return emptyDashboard();
 
     const tenantId = tenant.id;
+    const scope = await resolveEmploymentScope(db, ctx);
+    const employmentScope = employmentPrimaryKeyFilter(scope);
+    const employments = await db.employment.findMany({
+      where: { tenantId, ...employmentScope },
+      select: {
+        id: true,
+        personId: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+        person: { select: { givenName: true, familyName: true } },
+        position: { select: { title: true, orgUnit: { select: { name: true } } } }
+      }
+    });
+
+    const personIds = [...new Set(employments.map((employment) => employment.personId))];
     const now = new Date();
     const monthStart = startOfMonth(now);
     const nextMonth = addMonths(monthStart, 1);
     const next30Days = addDays(now, 30);
 
-    const [employments, positions, openCases, onboardingInProgress, lifecycleEvents] = await Promise.all([
-      db.employment.findMany({
-        where: { tenantId },
-        select: {
-          id: true,
-          personId: true,
-          status: true,
-          startDate: true,
-          endDate: true,
-          person: { select: { givenName: true, familyName: true } },
-          position: {
-            select: {
-              title: true,
-              orgUnit: { select: { name: true } }
+    const [positions, openCases, onboardingInProgress, lifecycleEvents] = await Promise.all([
+      can(ctx, "positions:read")
+        ? db.position.findMany({
+            where: { tenantId, validTo: null },
+            select: { status: true, critical: true }
+          })
+        : Promise.resolve([]),
+      can(ctx, "cases:read")
+        ? db.employeeCase.count({
+            where: {
+              tenantId,
+              status: { in: [CaseStatus.OPEN, CaseStatus.INVESTIGATING, CaseStatus.ACTION_REQUIRED] },
+              OR: [
+                { ownerUserId: ctx.actorId },
+                { assignments: { some: { user: { is: { id: ctx.actorId, tenantId, active: true } } } } }
+              ]
             }
-          }
-        }
-      }),
-      db.position.findMany({
-        where: { tenantId, validTo: null },
-        select: { status: true, critical: true }
-      }),
-      db.employeeCase.count({
-        where: {
-          tenantId,
-          status: { in: [CaseStatus.OPEN, CaseStatus.INVESTIGATING, CaseStatus.ACTION_REQUIRED] }
-        }
-      }),
-      db.onboardingPlan.count({
-        where: { tenantId, status: { in: ["NOT_STARTED", "IN_PROGRESS", "BLOCKED"] } }
-      }),
-      db.employeeLifecycleEvent.findMany({
-        where: { tenantId },
-        orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
-        take: 12,
-        select: {
-          id: true,
-          personId: true,
-          type: true,
-          effectiveAt: true,
-          summary: true,
-          person: { select: { givenName: true, familyName: true } }
-        }
-      })
+          })
+        : Promise.resolve(0),
+      can(ctx, "onboarding:read")
+        ? db.onboardingPlan.count({
+            where: {
+              tenantId,
+              status: { in: ["NOT_STARTED", "IN_PROGRESS", "BLOCKED"] },
+              ...(scope === null ? {} : { employmentId: { in: scope } })
+            }
+          })
+        : Promise.resolve(0),
+      personIds.length
+        ? db.employeeLifecycleEvent.findMany({
+            where: { tenantId, personId: { in: personIds } },
+            orderBy: [{ effectiveAt: "desc" }, { createdAt: "desc" }],
+            take: 12,
+            select: {
+              id: true,
+              personId: true,
+              type: true,
+              effectiveAt: true,
+              summary: true,
+              person: { select: { givenName: true, familyName: true } }
+            }
+          })
+        : Promise.resolve([])
     ]);
 
     const activeEmployments = employments.filter((employment) => employment.status === EmploymentStatus.ACTIVE);
@@ -156,7 +171,6 @@ export async function getDashboardData(): Promise<DashboardData> {
         employment.startDate >= now &&
         employment.startDate <= next30Days
     );
-
     const openPositions = positions.filter((position) => position.status === PositionStatus.OPEN);
     const criticalOpenPositions = openPositions.filter((position) => position.critical).length;
 

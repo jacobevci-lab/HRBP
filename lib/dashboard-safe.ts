@@ -1,4 +1,5 @@
 import type { DashboardData } from "@/lib/dashboard-data";
+import { getServerRequestContext } from "@/lib/server-session";
 
 function monthLabels() {
   const now = new Date();
@@ -40,12 +41,18 @@ function fallbackDashboard(): DashboardData {
 }
 
 export async function getDashboardDataSafe(): Promise<{ data: DashboardData; degraded: boolean }> {
+  const ctx = await getServerRequestContext();
+  if (!ctx) {
+    return { data: fallbackDashboard(), degraded: true };
+  }
+
   try {
-    // Keep the Prisma / pg / Cloudflare DB path out of the initial homepage module
-    // evaluation. If that runtime path cannot initialize, the Command Center can
-    // still render the governed read-only snapshot instead of returning a Worker 500.
+    // Only an authenticated, signed session can select live tenant data. If the
+    // live Prisma / pg / Cloudflare path fails, the Command Center remains online
+    // using the read-only synthetic snapshot instead of falling through to any
+    // other tenant.
     const { getDashboardData } = await import("@/lib/dashboard-data");
-    return { data: await getDashboardData(), degraded: false };
+    return { data: await getDashboardData(ctx), degraded: false };
   } catch (error) {
     console.error("[HRBP] Dashboard live data failed; using safe staging snapshot", error);
     return { data: fallbackDashboard(), degraded: true };
