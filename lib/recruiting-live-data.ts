@@ -49,6 +49,10 @@ const ACTIVE_APPLICATION_STAGES: ApplicationStage[] = [
   ApplicationStage.OFFER
 ];
 
+function isActiveOffer(status: OfferStatus) {
+  return status === OfferStatus.APPROVAL || status === OfferStatus.SENT || status === OfferStatus.ACCEPTED;
+}
+
 export async function getRecruitingWorkspaceData(tenantId = workspaceTenantId()): Promise<RecruitingWorkspaceData> {
   return withDb(async (db) => {
     const [applications, requisitions, offers, users] = await Promise.all([
@@ -75,7 +79,7 @@ export async function getRecruitingWorkspaceData(tenantId = workspaceTenantId())
           targetHireDate: true,
           hiringManagerId: true,
           recruiterId: true,
-          position: { select: { location: true, orgUnit: { select: { name: true } } } },
+          position: { select: { location: true, orgUnit: { select: { name: true } } },
           _count: { select: { applications: true } }
         }
       }),
@@ -92,7 +96,7 @@ export async function getRecruitingWorkspaceData(tenantId = workspaceTenantId())
       approvalRequisitions: requisitions.filter((row) => row.status === RequisitionStatus.APPROVAL).length,
       activeCandidates: new Set(activeApplications.map((row) => `${row.candidate.givenName}|${row.candidate.familyName}`)).size,
       interviewPipeline: applications.filter((row) => row.stage === ApplicationStage.INTERVIEW || row.stage === ApplicationStage.ASSESSMENT).length,
-      activeOffers: offers.filter((offer) => [OfferStatus.APPROVAL, OfferStatus.SENT, OfferStatus.ACCEPTED].includes(offer.status)).length,
+      activeOffers: offers.filter((offer) => isActiveOffer(offer.status)).length,
       awaitingSignature: offers.filter((offer) => offer.status === OfferStatus.SENT).length,
       pipeline: stages.map((stage) => {
         const rows = applications.filter((application) => application.stage === stage);
