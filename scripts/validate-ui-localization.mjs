@@ -122,6 +122,9 @@ const localeAwareFiles = new Map([
   ["components/governance-planning-workspace.tsx", ["getServerLocale"]],
   ["components/platform-admin-workspace.tsx", ["getServerLocale"]],
   ["components/offboarding-workspace.tsx", ["getServerLocale"]],
+  ["components/access-scope-admin.tsx", ["useLocale"]],
+  ["components/jurisdiction-admin.tsx", ["useLocale"]],
+  ["components/analytics-module-page.tsx", ["getServerLocale"]],
   ["app/auth/sign-in/page.tsx", ["getServerLocale"]],
   ["components/session-indicator.tsx", ["useLocale"]],
   ["components/topbar-account.tsx", ["useLocale"]]
