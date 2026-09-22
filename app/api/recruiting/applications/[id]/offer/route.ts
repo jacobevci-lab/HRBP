@@ -4,6 +4,8 @@ import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
+const OFFER_CREATION_STAGES: ApplicationStage[] = [ApplicationStage.INTERVIEW, ApplicationStage.ASSESSMENT, ApplicationStage.OFFER];
+
 function validDate(value: unknown) {
   const date = new Date(String(value ?? ""));
   return Number.isNaN(date.getTime()) ? null : date;
@@ -35,7 +37,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
       if (!application) throw new Error("APPLICATION_NOT_FOUND");
       if (application.offer) throw new Error("OFFER_ALREADY_EXISTS");
-      if (![ApplicationStage.INTERVIEW, ApplicationStage.ASSESSMENT, ApplicationStage.OFFER].includes(application.stage)) throw new Error("INVALID_STAGE");
+      if (!OFFER_CREATION_STAGES.includes(application.stage)) throw new Error("INVALID_STAGE");
 
       const offer = await tx.offer.create({
         data: {

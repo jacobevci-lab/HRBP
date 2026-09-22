@@ -5,6 +5,8 @@ import { withDb } from "@/lib/db";
 import { canTransitionOffer, parseOfferStatus } from "@/lib/recruiting-state";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
+const OFFER_PIPELINE_STATUSES: OfferStatus[] = [OfferStatus.APPROVAL, OfferStatus.SENT, OfferStatus.ACCEPTED];
+
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
@@ -32,7 +34,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
       if (claimed.count !== 1) throw new Error("STATE_CONFLICT");
 
-      if ([OfferStatus.APPROVAL, OfferStatus.SENT, OfferStatus.ACCEPTED].includes(next)) {
+      if (OFFER_PIPELINE_STATUSES.includes(next)) {
         await tx.application.update({ where: { id: current.applicationId }, data: { stage: ApplicationStage.OFFER } });
       }
 
