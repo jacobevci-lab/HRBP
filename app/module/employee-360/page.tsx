@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CircleAlert, CircleCheckBig } from "lucide-react";
+import { CircleAlert, CircleCheckBig, Workflow } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 
 export const dynamic = "force-dynamic";
@@ -33,7 +33,11 @@ export default async function Employee360Page({ searchParams }: { searchParams: 
     <AppShell>
       <section className="page-heading module-heading">
         <div><div className="eyebrow">HRBP One / Employee 360</div><h1>Employee 360</h1><p>A policy-aware view of the complete employee relationship without collapsing restricted security boundaries.</p></div>
-        <div className="module-heading-actions">{state.degraded ? <button className="secondary-button" disabled><CircleAlert size={16}/> Protected fallback</button> : <button className="secondary-button" disabled><CircleCheckBig size={16}/> Governed live data</button>}<Link className="secondary-button" href="/module/people">People directory</Link></div>
+        <div className="module-heading-actions">
+          {state.degraded ? <button className="secondary-button" disabled><CircleAlert size={16}/> Protected fallback</button> : <button className="secondary-button" disabled><CircleCheckBig size={16}/> Governed live data</button>}
+          {personId && !state.degraded ? <Link className="create-button" href={`/module/employee-360/lifecycle?person=${encodeURIComponent(personId)}`}><Workflow size={16}/> Lifecycle actions</Link> : null}
+          <Link className="secondary-button" href="/module/people">People directory</Link>
+        </div>
       </section>
       {state.content}
     </AppShell>
