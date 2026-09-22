@@ -1,0 +1,84 @@
+/* Final visual contract. Loaded last so every module resolves to the same Warm Enterprise system. */
+:root{
+  --sage:#718178;
+  --success-bg:#e7f1ec;
+  --success-fg:#286656;
+  --warning-bg:#f8eee1;
+  --warning-fg:#8a642f;
+  --danger-bg:#f7e9e7;
+  --danger-fg:#a24d49;
+  --neutral-bg:#eff1ed;
+  --neutral-fg:#596d62;
+  --elevated:#fffdfa;
+  --focus-ring:rgba(47,117,103,.12);
+}
+html[data-theme="dark"]{
+  --sage:#8b9b91;
+  --success-bg:#263a32;
+  --success-fg:#83c9b5;
+  --warning-bg:#382f24;
+  --warning-fg:#e2b77f;
+  --danger-bg:#3a2826;
+  --danger-fg:#e89a92;
+  --neutral-bg:#29312c;
+  --neutral-fg:#a4b6aa;
+  --elevated:#20231f;
+  --focus-ring:rgba(99,179,158,.13);
+}
+
+/* Shell and universal surfaces */
+body,.main-area,.page-content{background:var(--bg);color:var(--text)}
+.card,.metric-card,.enterprise-stat,.enterprise-toolbar,.module-toolbar,.record-form-card,.form-card,.recruit-metric,.growth-metric,.services-metric,.gov-metric,.off-metric,.platform-metric,.growth-panel,.growth-side,.talent-matrix,.services-panel,.services-side,.gov-panel,.gov-side,.platform-panel,.platform-side,.workpay-panel,.workpay-side,.off-panel,.off-side,.off-ops-console,.ats-console,.onb-console,.employee-action-card,.employee-history-card,.privacy-controls,.org-tree,.org-insight{background:var(--surface)!important;border-color:var(--line)!important;color:var(--text);box-shadow:var(--shadow)}
+.card-header,.table-title,.recruit-title,.growth-panel-head,.services-panel-head,.gov-panel-head,.platform-head,.workpay-panel-head,.off-head,.off-ops-head,.ats-console-head,.ats-panel-title,.onb-console-head,.record-form-header{border-color:var(--line)!important}
+
+/* Remove module-specific light-only islands */
+.decision-side,.restricted-side,.restricted-case,.ai-governance-hero{background:var(--surface)!important}
+.pipeline-board{background:var(--surface-soft)!important}
+.pipeline-column,.pipeline-column article,.org-node,.lifecycle-item,.onb-plan,.off-process-card,.ats-form,.ats-inline-form,.ats-offer-line,.lifecycle-action-panel,.lifecycle-rule-list>div{background:var(--surface-soft)!important;border-color:var(--line)!important;color:var(--text)}
+.pipeline-column article,.org-node,.lifecycle-rule-list>div,.off-process-card>footer,.off-task-actions button,.ats-actions button,.ats-inline-form button{background:var(--surface)!important}
+.pipeline-column header span,.privacy-strip>span{background:var(--surface)!important;border-color:var(--line)!important;color:var(--muted)}
+
+/* Tables, rows and separators */
+th,.enterprise-table th,.growth-table th,.services-table th,.gov-table th,.platform-table th,.workpay-table th,.off-table th{background:var(--surface-soft)!important;color:var(--muted)!important;border-color:var(--line)!important}
+td,.enterprise-table td,.growth-table td,.services-table td,.gov-table td,.platform-table td,.workpay-table td,.off-table td{border-color:var(--line)!important;color:var(--text)}
+tbody tr:hover td,.growth-table tbody tr:hover,.services-table tbody tr:hover,.gov-table tbody tr:hover,.workpay-table tbody tr:hover{background:color-mix(in srgb,var(--accent) 3%,var(--surface))!important}
+.health-list>div,.processing-list>div,.journey-list article,.task-control-list>div,.growth-control-stack>div,.services-control-stack>div,.gov-controls p,.control-stack>div,.security-list div,.skill-list>div,.payroll-step,.mini-rule,.growth-rule,.timeline-item,.profile-card dl>div{border-color:var(--line)!important}
+
+/* Status system: emerald / amber / red / sage only. */
+.status,.pill,.growth-pill,.services-pill,.gov-pill,.off-pill,.platform-pill,.workpay-status,.classification{border-color:color-mix(in srgb,var(--neutral-fg) 14%,transparent)}
+.status.scheduled,.pill.preboarding,.pill.open,.pill.approval,.pill.approved,.services-pill.in-progress{background:var(--neutral-bg)!important;color:var(--neutral-fg)!important;border-color:color-mix(in srgb,var(--neutral-fg) 18%,transparent)!important}
+.pill.active,.pill.filled,.pill.applied,.status.active,.growth-pill.active,.growth-pill.covered,.growth-pill.ready,.services-pill.active,.services-pill.resolved,.services-pill.published,.gov-pill.active,.gov-pill.visible,.gov-pill.verified,.gov-pill.anonymous,.off-pill.ready-to-close,.platform-pill.active,.platform-pill.healthy,.platform-pill.signed,.platform-pill.final,.workpay-status.approved,.workpay-status.ready,.journey-healthy,.audit-verify-ok{background:var(--success-bg)!important;color:var(--success-fg)!important;border-color:color-mix(in srgb,var(--success-fg) 18%,transparent)!important}
+.pill.pending,.pill.review,.pill.probation,.pill.planned,.growth-pill.review,.growth-pill.calibration,.growth-pill.manager-review,.services-pill.open,.services-pill.review,.services-pill.waiting-employee,.services-pill.action-required,.gov-pill.open,.gov-pill.review,.gov-pill.draft,.off-pill.notice-period,.off-pill.clearance,.platform-pill.awaiting-signature,.platform-pill.review,.workpay-status.review,.workpay-status.validation,.workpay-status.pending{background:var(--warning-bg)!important;color:var(--warning-fg)!important;border-color:color-mix(in srgb,var(--warning-fg) 18%,transparent)!important}
+.pill.rejected,.pill.cancelled,.growth-pill.gap,.services-pill.restricted,.gov-pill.suppressed,.gov-pill.blocked,.platform-pill.restricted,.platform-pill.paused,.workpay-status.missing-exit,.workpay-status.exception,.journey-blocked,.audit-verify-error{background:var(--danger-bg)!important;color:var(--danger-fg)!important;border-color:color-mix(in srgb,var(--danger-fg) 18%,transparent)!important}
+.attention-icon.blue,.attention-icon.sage{background:var(--neutral-bg)!important;color:var(--neutral-fg)!important}
+
+/* Controls and forms */
+input,select,textarea,.enterprise-search,.module-search,.global-search{background:var(--surface)!important;border-color:var(--line-strong)!important;color:var(--text)!important}
+input:focus,select:focus,textarea:focus,.global-search:focus-within,.enterprise-search:focus-within,.module-search:focus-within{border-color:var(--accent)!important;box-shadow:0 0 0 3px var(--focus-ring)!important}
+.secondary-button,.mini-action,.topbar-login,.topbar-logout,.auth-secondary{background:var(--surface)!important;border-color:var(--line-strong)!important;color:var(--text)!important}
+.create-button,.auth-primary{background:var(--accent)!important;border-color:var(--accent)!important;color:#fff!important}
+.ai-button{background:var(--accent-soft)!important;border-color:color-mix(in srgb,var(--accent) 20%,var(--line))!important;color:var(--accent)!important}
+
+/* Charts, rings, avatars and support panels */
+.score-ring:before,.control-score:before,.balance-ring:before{background:var(--surface)!important}
+.dept-track,.readiness-list i,.journey-progress span{background:color-mix(in srgb,var(--muted) 14%,var(--surface))!important}
+.enterprise-person>span,.candidate-avatar,.journey-avatar,.payroll-step>span,.metric-icon,.enterprise-stat-icon,.growth-metric-icon,.services-metric-icon,.gov-metric-icon,.platform-metric-icon,.off-icon,.module-icon{background:var(--accent-soft)!important;color:var(--accent)!important}
+.governance-note,.privacy-strip,.onboarding-policy,.compensation-governance-note,.security-status,.lifecycle-target-preview{background:var(--accent-soft)!important;border-color:color-mix(in srgb,var(--accent) 18%,var(--line))!important;color:var(--accent)!important}
+.matrix-note,.table-title>span,.attention-row em,.identity-meta span{background:var(--surface-soft)!important;border-color:var(--line)!important;color:var(--muted)!important}
+.matrix-cell{background:color-mix(in srgb,var(--accent) 8%,var(--surface))!important;border-color:color-mix(in srgb,var(--accent) 14%,var(--line))!important}
+.matrix-cell.m0{background:color-mix(in srgb,var(--orange) 7%,var(--surface))!important;border-color:color-mix(in srgb,var(--orange) 15%,var(--line))!important}
+.matrix-cell.m2{background:color-mix(in srgb,var(--accent) 12%,var(--surface))!important}
+
+/* Authentication and recovery-adjacent surfaces */
+.auth-screen{background:radial-gradient(circle at 22% 12%,color-mix(in srgb,var(--accent) 11%,transparent) 0,transparent 34%),var(--bg)!important}
+.auth-panel{background:var(--surface)!important;border-color:var(--line)!important;color:var(--text)!important;box-shadow:0 24px 80px rgba(42,39,32,.10)!important}
+.record-form-card{background:var(--surface)!important}
+.form-error,.auth-message.error{background:var(--danger-bg)!important;color:var(--danger-fg)!important;border-color:color-mix(in srgb,var(--danger-fg) 20%,transparent)!important}
+.auth-message.success,.employee-action-success{background:var(--success-bg)!important;color:var(--success-fg)!important;border-color:color-mix(in srgb,var(--success-fg) 20%,transparent)!important}
+
+/* Dark mode must not inherit any literal white module island. */
+html[data-theme="dark"] .pipeline-column,html[data-theme="dark"] .pipeline-column article,html[data-theme="dark"] .org-node,html[data-theme="dark"] .lifecycle-item,html[data-theme="dark"] .journey-list article,html[data-theme="dark"] .task-control-list>div,html[data-theme="dark"] .processing-list>div,html[data-theme="dark"] .health-list>div,html[data-theme="dark"] .onb-plan,html[data-theme="dark"] .off-process-card,html[data-theme="dark"] .ats-form,html[data-theme="dark"] .ats-inline-form,html[data-theme="dark"] .ats-offer-line{background:var(--surface-soft)!important;border-color:var(--line)!important;color:var(--text)!important}
+html[data-theme="dark"] .pipeline-column article,html[data-theme="dark"] .off-process-card>footer,html[data-theme="dark"] .off-task-actions button,html[data-theme="dark"] .ats-actions button{background:var(--surface)!important}
+html[data-theme="dark"] .decision-side,html[data-theme="dark"] .restricted-side,html[data-theme="dark"] .restricted-case,html[data-theme="dark"] .ai-governance-hero{background:var(--surface)!important}
+html[data-theme="dark"] .auth-panel{box-shadow:0 24px 80px rgba(0,0,0,.24)!important}
+html[data-theme="dark"] .enterprise-person strong,html[data-theme="dark"] .cell-strong,html[data-theme="dark"] .profile-card dd,html[data-theme="dark"] .growth-control-stack strong,html[data-theme="dark"] .services-control-stack strong,html[data-theme="dark"] .gov-controls strong,html[data-theme="dark"] .control-stack strong,html[data-theme="dark"] .security-list strong{color:var(--text)!important}
