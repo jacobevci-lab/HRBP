@@ -2,7 +2,9 @@ import { BadgeCheck, BriefcaseBusiness, CalendarClock, CircleAlert, FileCheck2, 
 import { can } from "@/lib/authorization";
 import { getServerRequestContext } from "@/lib/server-session";
 import { getOnboardingWorkspaceData, getRecruitingWorkspaceData } from "@/lib/recruiting-live-data";
+import { getRecruitingOperationsData } from "@/lib/recruiting-operations-data";
 import { onboardingPeople, onboardingTasks, pipeline, requisitions } from "@/lib/recruiting-demo";
+import { RecruitingOperationsConsole } from "@/components/recruiting-operations-console";
 
 function Metric({ label, value, note, icon: Icon }: { label:string; value:string; note:string; icon:React.ComponentType<{size?:number}> }) {
   return <div className="recruit-metric"><span><Icon size={16}/></span><div><small>{label}</small><strong>{value}</strong><em>{note}</em></div></div>;
@@ -35,9 +37,13 @@ export async function RecruitingWorkspace({ slug }: { slug:string }) {
   if (slug === "recruiting") {
     if (!ctx || !can(ctx, "recruiting:read")) return <DemoRecruiting/>;
     try {
-      const data = await getRecruitingWorkspaceData(ctx.tenantId);
+      const [data, operations] = await Promise.all([
+        getRecruitingWorkspaceData(ctx.tenantId),
+        can(ctx, "recruiting:write") ? getRecruitingOperationsData(ctx.tenantId) : Promise.resolve(null)
+      ]);
       return <>
         <div className="recruit-metrics"><Metric label="Open requisitions" value={String(data.openRequisitions)} note={`${data.approvalRequisitions} awaiting approval`} icon={BriefcaseBusiness}/><Metric label="Active candidates" value={String(data.activeCandidates)} note="Across active pipeline stages" icon={UsersRound}/><Metric label="Interview pipeline" value={String(data.interviewPipeline)} note="Interview + assessment" icon={CalendarClock}/><Metric label="Offers" value={String(data.activeOffers)} note={`${data.awaitingSignature} awaiting response`} icon={FileCheck2}/></div>
+        {operations ? <RecruitingOperationsConsole positions={operations.positions} users={operations.users} requisitions={operations.requisitions} applications={operations.applications}/> : null}
         <div className="recruit-grid"><section className="card pipeline-card"><div className="recruit-title"><div><h3>Candidate pipeline</h3><p>Restricted candidate records linked to approved requisitions.</p></div><span>Live PostgreSQL</span></div><div className="pipeline-board">{data.pipeline.map((column)=><div className="pipeline-column" key={column.rawStage}><header><strong>{column.stage}</strong><span>{column.count}</span></header>{column.people.length ? column.people.map((person)=><article key={person.id}><div className="candidate-avatar">{person.name.split(" ").map(n=>n[0]).slice(0,2).join("")}</div><div><strong>{person.name}</strong><small>{person.requisition}</small></div><em>{person.appliedAt}</em></article>) : <article><div><strong>No records</strong><small>Stage is currently empty</small></div></article>}<button disabled>{column.count} total records</button></div>)}</div></section>
         <section className="card requisition-card"><div className="recruit-title"><div><h3>Requisitions</h3><p>Live position-backed hiring demand</p></div><button className="secondary-button" disabled>Approval queue</button></div><div className="table-wrap"><table className="enterprise-table"><thead><tr><th>Requisition</th><th>Org / location</th><th>Hiring manager</th><th>Recruiter</th><th>Candidates</th><th>Status</th><th>Target</th></tr></thead><tbody>{data.requisitions.length ? data.requisitions.map(r=><tr key={r.id}><td><strong className="cell-strong">{r.title}</strong><small className="cell-sub">{r.id}</small></td><td><strong className="cell-strong">{r.org}</strong><small className="cell-sub">{r.location}</small></td><td>{r.hiringManager}</td><td>{r.recruiter}</td><td>{r.candidates}</td><td><em className={`pill ${r.status.toLowerCase().replaceAll(" ", "-")}`}>{r.status}</em></td><td>{r.target}</td></tr>) : <tr><td colSpan={7} style={{ textAlign:"center", padding:28 }}>No requisitions created yet.</td></tr>}</tbody></table></div></section></div>
         <div className="privacy-strip"><ShieldCheck size={17}/><div><strong>Recruiting privacy boundary</strong><p>Candidate records remain Restricted and only become employee history through a controlled Hire transition.</p></div><span>Policy enforced</span></div>
