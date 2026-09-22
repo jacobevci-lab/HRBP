@@ -4,6 +4,7 @@ import { navigation } from "@/lib/navigation";
 import { CoreHRWorkspace, coreWorkspaceSlugs } from "@/components/core-hr-workspace";
 import { CoreHRLiveWorkspace, liveCoreWorkspaceSlugs } from "@/components/core-hr-live-workspace";
 import { GovernanceLiveWorkspace, liveGovernanceWorkspaceSlugs } from "@/components/governance-live-workspace";
+import { CompensationLiveWorkspace } from "@/components/compensation-live-workspace";
 import { RecruitingWorkspace, recruitingWorkspaceSlugs } from "@/components/recruiting-workspace";
 import { WorkPayWorkspace, workPayWorkspaceSlugs } from "@/components/work-pay-workspace";
 import { GrowthWorkspace, growthWorkspaceSlugs } from "@/components/growth-workspace";
@@ -61,13 +62,23 @@ async function renderLiveGovernance(slug: string, query: string) {
   }
 }
 
+async function renderLiveCompensation() {
+  try {
+    return { degraded: false, content: await CompensationLiveWorkspace() };
+  } catch (error) {
+    console.error("[HRBP] Live compensation workspace failed. Falling back to the safe staging view.", error);
+    return { degraded: true, content: <WorkPayWorkspace slug="compensation"/> };
+  }
+}
+
 export async function ModuleLanding({ slug, query = "", personId, tab }: { slug: string; query?: string; personId?: string; tab?: string }) {
   const item = navigation.flatMap((group) => group.items).find((entry) => entry.slug === slug);
   const title = item?.label ?? slug.split("-").map((value) => `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`).join(" ");
   const Icon = item?.icon;
   const liveCore = liveCoreWorkspaceSlugs.has(slug);
   const liveGovernance = liveGovernanceWorkspaceSlugs.has(slug);
-  const live = liveCore || liveGovernance;
+  const liveCompensation = slug === "compensation";
+  const live = liveCore || liveGovernance || liveCompensation;
   const core = coreWorkspaceSlugs.has(slug);
   const recruit = recruitingWorkspaceSlugs.has(slug);
   const work = workPayWorkspaceSlugs.has(slug);
@@ -80,7 +91,9 @@ export async function ModuleLanding({ slug, query = "", personId, tab }: { slug:
     ? await renderLiveCore(slug, query, personId, tab)
     : liveGovernance
       ? await renderLiveGovernance(slug, query)
-      : { degraded: false, content: null };
+      : liveCompensation
+        ? await renderLiveCompensation()
+        : { degraded: false, content: null };
   const createHref = slug === "people" ? "/module/people/new" : slug === "positions" ? "/module/positions/new" : null;
   const createLabel = slug === "people" ? "Add employee" : "New position";
 
