@@ -4,12 +4,16 @@ import {
   GoalStatus,
   LearningAssignmentStatus,
   PerformanceBand,
+  PlatformRole,
   PotentialBand,
   ReviewCycleStatus,
   ReviewStatus,
   SuccessionReadiness
 } from "@prisma/client";
 import { withDb } from "@/lib/db";
+import { employmentIdFilter, employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
+import type { RequestContext } from "@/lib/request-context";
+import { getServerRequestContext } from "@/lib/server-session";
 
 function enumLabel(value: string) {
   return value.toLowerCase().split("_").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
@@ -24,11 +28,20 @@ function percent(value: number, total: number) {
   return total ? Math.round((value / total) * 1000) / 10 : 0;
 }
 
-export async function getBenefitsGrowthData(tenantId: string) {
+async function scopedContext(input: string | RequestContext): Promise<RequestContext> {
+  if (typeof input !== "string") return input;
+  const session = await getServerRequestContext();
+  if (session && session.tenantId === input) return session;
+  return { tenantId: input, actorId: "__no_session__", role: PlatformRole.EMPLOYEE };
+}
+
+export async function getBenefitsGrowthData(input: string | RequestContext) {
+  const ctx = await scopedContext(input);
   return withDb(async (db) => {
+    const scope = await resolveEmploymentScope(db, ctx);
     const [plans, activeEmployments] = await Promise.all([
       db.benefitPlan.findMany({
-        where: { tenantId, active: true },
+        where: { tenantId: ctx.tenantId, active: true },
         orderBy: [{ type: "asc" }, { name: "asc" }],
         take: 100,
         select: {
@@ -42,12 +55,12 @@ export async function getBenefitsGrowthData(tenantId: string) {
           employerContribution: true,
           employeeContribution: true,
           enrollments: {
-            where: { status: { in: [BenefitEnrollmentStatus.ACTIVE, BenefitEnrollmentStatus.PENDING] } },
+            where: { status: { in: [BenefitEnrollmentStatus.ACTIVE, BenefitEnrollmentStatus.PENDING] }, ...employmentIdFilter(scope) },
             select: { status: true, employerContribution: true, employeeContribution: true }
           }
         }
       }),
-      db.employment.count({ where: { tenantId, status: { in: [EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE] } } })
+      db.employment.count({ where: { tenantId: ctx.tenantId, status: { in: [EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE] }, ...employmentPrimaryKeyFilter(scope) } })
     ]);
 
     const rows = plans.map((plan) => {
@@ -75,19 +88,21 @@ export async function getBenefitsGrowthData(tenantId: string) {
   });
 }
 
-export async function getPerformanceGrowthData(tenantId: string) {
+export async function getPerformanceGrowthData(input: string | RequestContext) {
+  const ctx = await scopedContext(input);
   return withDb(async (db) => {
+    const scope = await resolveEmploymentScope(db, ctx);
     const [cycles, reviews, goals] = await Promise.all([
-      db.reviewCycle.findMany({ where: { tenantId }, orderBy: { endsAt: "desc" }, take: 20, select: { id: true, name: true, status: true, startsAt: true, endsAt: true } }),
-      db.performanceReview.findMany({ where: { tenantId }, orderBy: { updatedAt: "desc" }, take: 500, select: { id: true, cycleId: true, employmentId: true, status: true, finalRating: true, updatedAt: true } }),
-      db.goal.findMany({ where: { tenantId }, orderBy: { dueAt: "asc" }, take: 500, select: { id: true, employmentId: true, title: true, progress: true, status: true, dueAt: true } })
+      db.reviewCycle.findMany({ where: { tenantId: ctx.tenantId }, orderBy: { endsAt: "desc" }, take: 20, select: { id: true, name: true, status: true, startsAt: true, endsAt: true } }),
+      db.performanceReview.findMany({ where: { tenantId: ctx.tenantId, ...employmentIdFilter(scope) }, orderBy: { updatedAt: "desc" }, take: 500, select: { id: true, cycleId: true, employmentId: true, status: true, finalRating: true, updatedAt: true } }),
+      db.goal.findMany({ where: { tenantId: ctx.tenantId, ...employmentIdFilter(scope) }, orderBy: { dueAt: "asc" }, take: 500, select: { id: true, employmentId: true, title: true, progress: true, status: true, dueAt: true } })
     ]);
 
     const activeCycle = cycles.find((cycle) => cycle.status === ReviewCycleStatus.OPEN || cycle.status === ReviewCycleStatus.CALIBRATION) ?? cycles[0] ?? null;
     const cycleReviews = activeCycle ? reviews.filter((review) => review.cycleId === activeCycle.id) : [];
     const employmentIds = [...new Set([...cycleReviews.map((review) => review.employmentId), ...goals.map((goal) => goal.employmentId)])];
     const employments = employmentIds.length ? await db.employment.findMany({
-      where: { tenantId, id: { in: employmentIds } },
+      where: { tenantId: ctx.tenantId, id: { in: employmentIds } },
       select: { id: true, person: { select: { givenName: true, familyName: true } }, position: { select: { orgUnit: { select: { name: true } } } } }
     }) : [];
     const employmentMap = new Map(employments.map((employment) => [employment.id, employment]));
@@ -128,13 +143,15 @@ export async function getPerformanceGrowthData(tenantId: string) {
   });
 }
 
-export async function getTalentGrowthData(tenantId: string) {
+export async function getTalentGrowthData(input: string | RequestContext) {
+  const ctx = await scopedContext(input);
   return withDb(async (db) => {
-    const assessments = await db.talentAssessment.findMany({ where: { tenantId }, orderBy: { assessedAt: "desc" }, take: 500, select: { id: true, employmentId: true, cycleLabel: true, performance: true, potential: true, criticalTalent: true, assessedAt: true } });
+    const scope = await resolveEmploymentScope(db, ctx);
+    const assessments = await db.talentAssessment.findMany({ where: { tenantId: ctx.tenantId, ...employmentIdFilter(scope) }, orderBy: { assessedAt: "desc" }, take: 500, select: { id: true, employmentId: true, cycleLabel: true, performance: true, potential: true, criticalTalent: true, assessedAt: true } });
     const cycleLabel = assessments[0]?.cycleLabel ?? null;
     const rows = cycleLabel ? assessments.filter((row) => row.cycleLabel === cycleLabel) : [];
     const employmentIds = [...new Set(rows.map((row) => row.employmentId))];
-    const employments = employmentIds.length ? await db.employment.findMany({ where: { tenantId, id: { in: employmentIds } }, select: { id: true, person: { select: { givenName: true, familyName: true } }, position: { select: { title: true, orgUnit: { select: { name: true } } } } } }) : [];
+    const employments = employmentIds.length ? await db.employment.findMany({ where: { tenantId: ctx.tenantId, id: { in: employmentIds } }, select: { id: true, person: { select: { givenName: true, familyName: true } }, position: { select: { title: true, orgUnit: { select: { name: true } } } } } }) : [];
     const employmentMap = new Map(employments.map((employment) => [employment.id, employment]));
     const potentials: PotentialBand[] = [PotentialBand.HIGH, PotentialBand.MODERATE, PotentialBand.LIMITED];
     const performances: PerformanceBand[] = [PerformanceBand.NEEDS_IMPROVEMENT, PerformanceBand.DEVELOPING, PerformanceBand.MEETS, PerformanceBand.EXCEEDS, PerformanceBand.OUTSTANDING];
@@ -152,11 +169,41 @@ export async function getTalentGrowthData(tenantId: string) {
   });
 }
 
-export async function getSuccessionGrowthData(tenantId: string) {
+export async function getSuccessionGrowthData(input: string | RequestContext) {
+  const ctx = await scopedContext(input);
   return withDb(async (db) => {
-    const plans = await db.successionPlan.findMany({ where: { tenantId, active: true }, orderBy: { reviewDueAt: "asc" }, take: 200, select: { id: true, positionId: true, name: true, reviewDueAt: true, candidates: { select: { employmentId: true, readiness: true, rank: true } } } });
+    const scope = await resolveEmploymentScope(db, ctx);
+    const scopedPositionIds = scope === null ? null : [...new Set((await db.employment.findMany({
+      where: { tenantId: ctx.tenantId, status: { not: EmploymentStatus.TERMINATED }, ...employmentPrimaryKeyFilter(scope), positionId: { not: null } },
+      select: { positionId: true }
+    })).flatMap((employment) => employment.positionId ? [employment.positionId] : []))];
+
+    const plans = await db.successionPlan.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        active: true,
+        ...(scope === null ? {} : {
+          OR: [
+            { positionId: { in: scopedPositionIds ?? [] } },
+            { candidates: { some: { employmentId: { in: scope } } } }
+          ]
+        })
+      },
+      orderBy: { reviewDueAt: "asc" },
+      take: 200,
+      select: {
+        id: true,
+        positionId: true,
+        name: true,
+        reviewDueAt: true,
+        candidates: {
+          where: { ...employmentIdFilter(scope) },
+          select: { employmentId: true, readiness: true, rank: true }
+        }
+      }
+    });
     const positionIds = [...new Set(plans.map((plan) => plan.positionId))];
-    const positions = positionIds.length ? await db.position.findMany({ where: { tenantId, id: { in: positionIds } }, select: { id: true, positionCode: true, title: true, critical: true, orgUnit: { select: { name: true } } } }) : [];
+    const positions = positionIds.length ? await db.position.findMany({ where: { tenantId: ctx.tenantId, id: { in: positionIds } }, select: { id: true, positionCode: true, title: true, critical: true, orgUnit: { select: { name: true } } } }) : [];
     const positionMap = new Map(positions.map((position) => [position.id, position]));
     const allCandidates = plans.flatMap((plan) => plan.candidates);
     return {
@@ -174,11 +221,37 @@ export async function getSuccessionGrowthData(tenantId: string) {
   });
 }
 
-export async function getLearningGrowthData(tenantId: string) {
+export async function getLearningGrowthData(input: string | RequestContext) {
+  const ctx = await scopedContext(input);
   return withDb(async (db) => {
+    const scope = await resolveEmploymentScope(db, ctx);
     const [courses, skills] = await Promise.all([
-      db.learningCourse.findMany({ where: { tenantId, active: true }, orderBy: [{ mandatory: "desc" }, { title: "asc" }], take: 200, select: { id: true, code: true, title: true, provider: true, mandatory: true, assignments: { select: { status: true, dueAt: true } } } }),
-      db.skill.findMany({ where: { tenantId, active: true }, orderBy: [{ critical: "desc" }, { name: "asc" }], take: 300, select: { id: true, code: true, name: true, category: true, critical: true, employments: { select: { proficiency: true } } } })
+      db.learningCourse.findMany({
+        where: { tenantId: ctx.tenantId, active: true },
+        orderBy: [{ mandatory: "desc" }, { title: "asc" }],
+        take: 200,
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          provider: true,
+          mandatory: true,
+          assignments: { where: { ...employmentIdFilter(scope) }, select: { status: true, dueAt: true } }
+        }
+      }),
+      db.skill.findMany({
+        where: { tenantId: ctx.tenantId, active: true },
+        orderBy: [{ critical: "desc" }, { name: "asc" }],
+        take: 300,
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          category: true,
+          critical: true,
+          employments: { where: { ...employmentIdFilter(scope) }, select: { proficiency: true } }
+        }
+      })
     ]);
     const today = new Date();
     const due30 = new Date(today); due30.setDate(due30.getDate() + 30);

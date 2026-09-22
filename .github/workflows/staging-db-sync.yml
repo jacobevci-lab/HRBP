@@ -57,7 +57,7 @@ jobs:
           const [
             tenants, people, positions,
             timeEntries, leaveRequests, compChanges, payrollRuns, payrollResults,
-            accessGrants, goals, reviews, serviceRequests, policies, workflows,
+            accessGrants, jurisdictions, goals, reviews, serviceRequests, policies, workflows,
             campaigns, scenarios, metrics, processing, dsrs
           ] = await Promise.all([
             db.tenant.count(),
@@ -69,6 +69,7 @@ jobs:
             db.payrollRun.count(),
             db.payrollResult.count(),
             db.employmentAccessGrant.count(),
+            db.employmentJurisdiction.count(),
             db.goal.count(),
             db.performanceReview.count(),
             db.hRServiceRequest.count(),
@@ -83,7 +84,7 @@ jobs:
           const counts = {
             tenants, people, positions,
             timeEntries, leaveRequests, compChanges, payrollRuns, payrollResults,
-            accessGrants, goals, reviews, serviceRequests, policies, workflows,
+            accessGrants, jurisdictions, goals, reviews, serviceRequests, policies, workflows,
             campaigns, scenarios, metrics, processing, dsrs
           };
           console.log(counts);
