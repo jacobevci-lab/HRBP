@@ -12,6 +12,7 @@ import "./platform-admin.css";
 import "./offboarding.css";
 import "./auth.css";
 import "./theme.css";
+import "./lifecycle.css";
 
 export const metadata: Metadata = {
   title: "HRBP One",
