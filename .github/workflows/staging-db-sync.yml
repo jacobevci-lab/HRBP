@@ -34,6 +34,8 @@ jobs:
         run: node scripts/seed-growth-staging.mjs
       - name: Seed employee-services domains
         run: node scripts/seed-services-staging.mjs
+      - name: Seed governance, planning and privacy domains
+        run: node scripts/seed-governance-planning-staging.mjs
       - name: Grant runtime role access
         run: |
           cat <<'SQL' | npx prisma db execute --stdin --schema ./prisma/schema.prisma
@@ -48,7 +50,7 @@ jobs:
           node --input-type=module <<'NODE'
           import { PrismaClient } from '@prisma/client';
           const db = new PrismaClient();
-          const [tenants, people, positions, goals, reviews, serviceRequests, policies, workflows] = await Promise.all([
+          const [tenants, people, positions, goals, reviews, serviceRequests, policies, workflows, campaigns, scenarios, metrics, processing, dsrs] = await Promise.all([
             db.tenant.count(),
             db.person.count(),
             db.position.count(),
@@ -56,9 +58,15 @@ jobs:
             db.performanceReview.count(),
             db.hRServiceRequest.count(),
             db.policyRecord.count(),
-            db.workflowDefinition.count()
+            db.workflowDefinition.count(),
+            db.surveyCampaign.count(),
+            db.workforceScenario.count(),
+            db.metricDefinition.count(),
+            db.processingActivity.count(),
+            db.dataSubjectRequest.count()
           ]);
-          console.log({ tenants, people, positions, goals, reviews, serviceRequests, policies, workflows });
-          if ([tenants, people, positions, goals, reviews, serviceRequests, policies, workflows].some((value) => value < 1)) process.exit(1);
+          const counts = { tenants, people, positions, goals, reviews, serviceRequests, policies, workflows, campaigns, scenarios, metrics, processing, dsrs };
+          console.log(counts);
+          if (Object.values(counts).some((value) => value < 1)) process.exit(1);
           await db.$disconnect();
           NODE
