@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRightLeft, BadgeCheck, BriefcaseBusiness, CircleAlert, ExternalLink, ShieldCheck, TrendingUp } from "lucide-react";
@@ -109,7 +110,7 @@ export function EmployeeLifecycleConsole({
         <div className="lifecycle-action-panel">
           <div className="lifecycle-action-title"><BadgeCheck size={18}/><div><strong>Separation / offboarding</strong><small>Termination is orchestrated through the governed offboarding process, never as a direct record edit.</small></div></div>
           <div className="lifecycle-rule-list"><div><span>1</span><p>Create separation process and last working date</p></div><div><span>2</span><p>Complete HR, manager, IT, facilities and payroll controls</p></div><div><span>3</span><p>Revoke access, recover assets and close final settlement</p></div><div><span>4</span><p>Finalize employment and write termination lifecycle evidence</p></div></div>
-          {canOffboard ? <a className="secondary-button lifecycle-offboard-link" href="/module/offboarding"><ExternalLink size={15}/> Open governed offboarding</a> : <div className="lifecycle-restricted"><ShieldCheck size={16}/><span>Your role does not include offboarding:write.</span></div>}
+          {canOffboard ? <Link className="secondary-button lifecycle-offboard-link" href="/module/offboarding"><ExternalLink size={15}/> Open governed offboarding</Link> : <div className="lifecycle-restricted"><ShieldCheck size={16}/><span>Your role does not include offboarding:write.</span></div>}
         </div>
       </div>
     </section>
