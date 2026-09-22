@@ -29,7 +29,7 @@ export async function materializeGovernedMetricSnapshot(client: AnalyticsClient,
   const requestedScope = input.scopeEmploymentIds === undefined || input.scopeEmploymentIds === null
     ? null
     : [...new Set(input.scopeEmploymentIds)];
-  let populationScope = AnalyticsPopulationScope.TENANT;
+  let populationScope: AnalyticsPopulationScope = AnalyticsPopulationScope.TENANT;
   let scopeFingerprint: string | null = null;
 
   if (requestedScope !== null) {
