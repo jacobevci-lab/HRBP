@@ -3,8 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  typedRoutes: false,
-  serverExternalPackages: ["@prisma/client", ".prisma/client"]
+  typedRoutes: false
 };
 
 export default nextConfig;
