@@ -28,3 +28,20 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run cf:build
+      - name: Smoke test Cloudflare Worker runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler dev --local --port 8787 > /tmp/hrbp-wrangler.log 2>&1 &
+          WRANGLER_PID=$!
+          trap 'kill $WRANGLER_PID 2>/dev/null || true' EXIT
+          for i in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:8787/api/health/runtime > /tmp/hrbp-health.json; then
+              cat /tmp/hrbp-health.json
+              exit 0
+            fi
+            sleep 1
+          done
+          echo 'Worker runtime smoke test failed'
+          cat /tmp/hrbp-wrangler.log
+          exit 1
