@@ -8,7 +8,7 @@ export async function getCaseWallCase(ctx: RequestContext, caseId: string) {
       tenantId: ctx.tenantId,
       OR: [
         { ownerUserId: ctx.actorId },
-        { assignments: { some: { user: { is: { tenantId: ctx.tenantId, subject: ctx.actorId, active: true } } } } }
+        { assignments: { some: { user: { is: { id: ctx.actorId, tenantId: ctx.tenantId, active: true } } } } }
       ]
     }
   });
@@ -20,7 +20,7 @@ export async function listCaseWallCases(ctx: RequestContext) {
       tenantId: ctx.tenantId,
       OR: [
         { ownerUserId: ctx.actorId },
-        { assignments: { some: { user: { is: { tenantId: ctx.tenantId, subject: ctx.actorId, active: true } } } } }
+        { assignments: { some: { user: { is: { id: ctx.actorId, tenantId: ctx.tenantId, active: true } } } } }
       ]
     },
     orderBy: { openedAt: "desc" },

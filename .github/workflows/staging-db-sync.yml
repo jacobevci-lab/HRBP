@@ -30,6 +30,10 @@ jobs:
         run: npx prisma generate
       - name: Seed enterprise staging workspace
         run: node scripts/seed-staging.mjs
+      - name: Seed growth and talent domains
+        run: node scripts/seed-growth-staging.mjs
+      - name: Seed employee-services domains
+        run: node scripts/seed-services-staging.mjs
       - name: Grant runtime role access
         run: |
           cat <<'SQL' | npx prisma db execute --stdin --schema ./prisma/schema.prisma
@@ -39,17 +43,22 @@ jobs:
           ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO hrbp_app;
           ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO hrbp_app;
           SQL
-      - name: Verify staging schema
+      - name: Verify staging schema and vertical-slice data
         run: |
           node --input-type=module <<'NODE'
           import { PrismaClient } from '@prisma/client';
           const db = new PrismaClient();
-          const [tenants, people, positions] = await Promise.all([
+          const [tenants, people, positions, goals, reviews, serviceRequests, policies, workflows] = await Promise.all([
             db.tenant.count(),
             db.person.count(),
-            db.position.count()
+            db.position.count(),
+            db.goal.count(),
+            db.performanceReview.count(),
+            db.hRServiceRequest.count(),
+            db.policyRecord.count(),
+            db.workflowDefinition.count()
           ]);
-          console.log({ tenants, people, positions });
-          if (tenants < 1 || people < 1 || positions < 1) process.exit(1);
+          console.log({ tenants, people, positions, goals, reviews, serviceRequests, policies, workflows });
+          if ([tenants, people, positions, goals, reviews, serviceRequests, policies, workflows].some((value) => value < 1)) process.exit(1);
           await db.$disconnect();
           NODE

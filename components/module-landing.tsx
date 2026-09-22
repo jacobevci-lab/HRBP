@@ -64,9 +64,6 @@ async function renderCoreFallback(slug: string): Promise<WorkspaceState> {
 
 async function renderLiveCore(slug: string, query: string, personId?: string, tab?: string): Promise<WorkspaceState> {
   try {
-    // Keep Prisma/pg/Cloudflare bindings out of module evaluation. This mirrors
-    // the Command Center isolation pattern and lets a broken data plane degrade
-    // one workspace instead of tripping the route-level error boundary.
     const { CoreHRLiveWorkspace } = await import("@/components/core-hr-live-workspace");
     return { degraded: false, content: await CoreHRLiveWorkspace({ slug, query, personId, tab }) };
   } catch (error) {
@@ -97,6 +94,22 @@ async function renderLiveCompensation(): Promise<WorkspaceState> {
     } catch (fallbackError) {
       console.error("[HRBP] Compensation staging workspace could not initialize.", fallbackError);
       return { degraded: true, content: <ProtectedFallback slug="compensation"/> };
+    }
+  }
+}
+
+async function renderLiveEmployeeServices(slug: string): Promise<WorkspaceState> {
+  try {
+    const { EmployeeServicesLiveWorkspace } = await import("@/components/employee-services-live-workspace");
+    return { degraded: false, content: await EmployeeServicesLiveWorkspace({ slug }) };
+  } catch (error) {
+    console.error(`[HRBP] Live employee-services ${slug} workspace failed. Falling back to the safe staging view.`, error);
+    try {
+      const { EmployeeServicesWorkspace } = await import("@/components/employee-services-workspace");
+      return { degraded: true, content: <EmployeeServicesWorkspace slug={slug}/> };
+    } catch (fallbackError) {
+      console.error(`[HRBP] Employee-services ${slug} fallback could not initialize.`, fallbackError);
+      return { degraded: true, content: <ProtectedFallback slug={slug}/> };
     }
   }
 }
@@ -155,7 +168,8 @@ export async function ModuleLanding({ slug, query = "", personId, tab }: { slug:
   const liveCore = liveCoreWorkspaceSlugs.has(slug);
   const liveGovernance = liveGovernanceWorkspaceSlugs.has(slug);
   const liveCompensation = slug === "compensation";
-  const live = liveCore || liveGovernance || liveCompensation;
+  const liveEmployeeServices = employeeServicesWorkspaceSlugs.has(slug);
+  const live = liveCore || liveGovernance || liveCompensation || liveEmployeeServices;
   const recruit = recruitingWorkspaceSlugs.has(slug);
 
   const workspaceState = liveCore
@@ -164,9 +178,11 @@ export async function ModuleLanding({ slug, query = "", personId, tab }: { slug:
       ? await renderLiveGovernance(slug, query)
       : liveCompensation
         ? await renderLiveCompensation()
-        : recruit
-          ? await renderRecruiting(slug)
-          : await renderStandardWorkspace(slug);
+        : liveEmployeeServices
+          ? await renderLiveEmployeeServices(slug)
+          : recruit
+            ? await renderRecruiting(slug)
+            : await renderStandardWorkspace(slug);
 
   const createHref = slug === "people" ? "/module/people/new" : slug === "positions" ? "/module/positions/new" : null;
   const createLabel = slug === "people" ? "Add employee" : "New position";
