@@ -1,7 +1,9 @@
 import {
   BenefitEnrollmentStatus,
+  EmploymentStatus,
   GoalStatus,
   LearningAssignmentStatus,
+  PerformanceBand,
   PotentialBand,
   ReviewCycleStatus,
   ReviewStatus,
@@ -45,7 +47,7 @@ export async function getBenefitsGrowthData(tenantId: string) {
           }
         }
       }),
-      db.employment.count({ where: { tenantId, status: { in: ["ACTIVE", "LEAVE"] } } })
+      db.employment.count({ where: { tenantId, status: { in: [EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE] } } })
     ]);
 
     const rows = plans.map((plan) => {
@@ -81,7 +83,7 @@ export async function getPerformanceGrowthData(tenantId: string) {
       db.goal.findMany({ where: { tenantId }, orderBy: { dueAt: "asc" }, take: 500, select: { id: true, employmentId: true, title: true, progress: true, status: true, dueAt: true } })
     ]);
 
-    const activeCycle = cycles.find((cycle) => [ReviewCycleStatus.OPEN, ReviewCycleStatus.CALIBRATION].includes(cycle.status)) ?? cycles[0] ?? null;
+    const activeCycle = cycles.find((cycle) => cycle.status === ReviewCycleStatus.OPEN || cycle.status === ReviewCycleStatus.CALIBRATION) ?? cycles[0] ?? null;
     const cycleReviews = activeCycle ? reviews.filter((review) => review.cycleId === activeCycle.id) : [];
     const employmentIds = [...new Set([...cycleReviews.map((review) => review.employmentId), ...goals.map((goal) => goal.employmentId)])];
     const employments = employmentIds.length ? await db.employment.findMany({
@@ -134,8 +136,8 @@ export async function getTalentGrowthData(tenantId: string) {
     const employmentIds = [...new Set(rows.map((row) => row.employmentId))];
     const employments = employmentIds.length ? await db.employment.findMany({ where: { tenantId, id: { in: employmentIds } }, select: { id: true, person: { select: { givenName: true, familyName: true } }, position: { select: { title: true, orgUnit: { select: { name: true } } } } } }) : [];
     const employmentMap = new Map(employments.map((employment) => [employment.id, employment]));
-    const potentials = [PotentialBand.HIGH, PotentialBand.MODERATE, PotentialBand.LIMITED];
-    const performances = ["NEEDS_IMPROVEMENT", "DEVELOPING", "MEETS", "EXCEEDS", "OUTSTANDING"];
+    const potentials: PotentialBand[] = [PotentialBand.HIGH, PotentialBand.MODERATE, PotentialBand.LIMITED];
+    const performances: PerformanceBand[] = [PerformanceBand.NEEDS_IMPROVEMENT, PerformanceBand.DEVELOPING, PerformanceBand.MEETS, PerformanceBand.EXCEEDS, PerformanceBand.OUTSTANDING];
     return {
       cycleLabel,
       reviewed: rows.length,
