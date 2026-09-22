@@ -80,42 +80,47 @@ const offboardingWorkspaceSlugs = new Set(["offboarding"]);
 
 type WorkspaceState = { degraded: boolean; content: ReactNode };
 
-function ProtectedFallback({ slug, message }: { slug: string; message?: string }) {
-  const title = slug.split("-").map((value) => `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`).join(" ");
-  return <section className="card module-table"><div className="empty-state"><div className="empty-visual"><span/><span/><span/></div><h3>{title} is running in protected fallback mode</h3><p>{message ?? "The live data dependency is unavailable. Navigation remains online and protected mutations stay disabled until the data plane recovers."}</p><Link className="secondary-button" href="/">Return to Command Center <ChevronRight size={15}/></Link></div></section>;
+function titleFor(locale: Locale, slug: string) {
+  const item = navigation.flatMap((group) => group.items).find((entry) => entry.slug === slug);
+  return item ? translate(locale, item.labelKey) : slug.split("-").map((value) => `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`).join(" ");
 }
 
-async function renderCoreFallback(slug: string): Promise<WorkspaceState> {
+function ProtectedFallback({ slug, locale, message }: { slug: string; locale: Locale; message?: string }) {
+  const title = titleFor(locale, slug);
+  return <section className="card module-table"><div className="empty-state"><div className="empty-visual"><span/><span/><span/></div><h3>{locale === "tr" ? `${title} korumalı yedek modda çalışıyor` : `${title} is running in protected fallback mode`}</h3><p>{message ?? (locale === "tr" ? "Canlı veri bağımlılığı kullanılamıyor. Navigasyon erişilebilir kalır ve veri hattı toparlanana kadar korumalı değişiklikler devre dışı tutulur." : "The live data dependency is unavailable. Navigation remains online and protected mutations stay disabled until the data plane recovers.")}</p><Link className="secondary-button" href="/">{locale === "tr" ? "Komuta Merkezi'ne dön" : "Return to Command Center"} <ChevronRight size={15}/></Link></div></section>;
+}
+
+async function renderCoreFallback(slug: string, locale: Locale): Promise<WorkspaceState> {
   try {
     const { CoreHRWorkspace } = await import("@/components/core-hr-workspace");
     return { degraded: true, content: <CoreHRWorkspace slug={slug}/> };
   } catch (fallbackError) {
     console.error(`[HRBP] Safe ${slug} staging workspace could not initialize.`, fallbackError);
-    return { degraded: true, content: <ProtectedFallback slug={slug}/> };
+    return { degraded: true, content: <ProtectedFallback slug={slug} locale={locale}/> };
   }
 }
 
-async function renderLiveCore(slug: string, query: string, personId?: string, tab?: string): Promise<WorkspaceState> {
+async function renderLiveCore(slug: string, query: string, locale: Locale, personId?: string, tab?: string): Promise<WorkspaceState> {
   try {
     const { CoreHRLiveWorkspace } = await import("@/components/core-hr-live-workspace");
     return { degraded: false, content: await CoreHRLiveWorkspace({ slug, query, personId, tab }) };
   } catch (error) {
     console.error(`[HRBP] Live ${slug} workspace failed. Falling back to the safe staging view.`, error);
-    return renderCoreFallback(slug);
+    return renderCoreFallback(slug, locale);
   }
 }
 
-async function renderLiveGovernance(slug: string, query: string): Promise<WorkspaceState> {
+async function renderLiveGovernance(slug: string, query: string, locale: Locale): Promise<WorkspaceState> {
   try {
     const { GovernanceLiveWorkspace } = await import("@/components/governance-live-workspace");
     return { degraded: false, content: await GovernanceLiveWorkspace({ slug, query }) };
   } catch (error) {
     console.error(`[HRBP] Live governance ${slug} workspace failed. Falling back to the safe staging view.`, error);
-    return renderCoreFallback(slug);
+    return renderCoreFallback(slug, locale);
   }
 }
 
-async function renderLiveCompensation(): Promise<WorkspaceState> {
+async function renderLiveCompensation(locale: Locale): Promise<WorkspaceState> {
   try {
     const { CompensationLiveWorkspace } = await import("@/components/compensation-live-workspace");
     return { degraded: false, content: await CompensationLiveWorkspace() };
@@ -126,12 +131,12 @@ async function renderLiveCompensation(): Promise<WorkspaceState> {
       return { degraded: true, content: <WorkPayWorkspace slug="compensation"/> };
     } catch (fallbackError) {
       console.error("[HRBP] Compensation staging workspace could not initialize.", fallbackError);
-      return { degraded: true, content: <ProtectedFallback slug="compensation"/> };
+      return { degraded: true, content: <ProtectedFallback slug="compensation" locale={locale}/> };
     }
   }
 }
 
-async function renderLiveEmployeeServices(slug: string): Promise<WorkspaceState> {
+async function renderLiveEmployeeServices(slug: string, locale: Locale): Promise<WorkspaceState> {
   try {
     const { EmployeeServicesLiveWorkspace } = await import("@/components/employee-services-live-workspace");
     return { degraded: false, content: await EmployeeServicesLiveWorkspace({ slug }) };
@@ -142,22 +147,25 @@ async function renderLiveEmployeeServices(slug: string): Promise<WorkspaceState>
       return { degraded: true, content: <EmployeeServicesWorkspace slug={slug}/> };
     } catch (fallbackError) {
       console.error(`[HRBP] Employee-services ${slug} fallback could not initialize.`, fallbackError);
-      return { degraded: true, content: <ProtectedFallback slug={slug}/> };
+      return { degraded: true, content: <ProtectedFallback slug={slug} locale={locale}/> };
     }
   }
 }
 
-async function renderRecruiting(slug: string): Promise<WorkspaceState> {
+async function renderRecruiting(slug: string, locale: Locale): Promise<WorkspaceState> {
   try {
     const { RecruitingWorkspace } = await import("@/components/recruiting-workspace");
     return { degraded: false, content: await RecruitingWorkspace({ slug }) };
   } catch (error) {
     console.error(`[HRBP] ${slug} workspace could not initialize.`, error);
-    return { degraded: true, content: <ProtectedFallback slug={slug} message="Recruiting data services are unavailable. The shell remains available while candidate and onboarding mutations stay protected."/> };
+    const message = locale === "tr"
+      ? "İşe alım veri servisleri kullanılamıyor. Aday ve onboarding değişiklikleri korumalı kalırken uygulama kabuğu erişilebilir durumda."
+      : "Recruiting data services are unavailable. The shell remains available while candidate and onboarding mutations stay protected.";
+    return { degraded: true, content: <ProtectedFallback slug={slug} locale={locale} message={message}/> };
   }
 }
 
-async function renderStandardWorkspace(slug: string): Promise<WorkspaceState> {
+async function renderStandardWorkspace(slug: string, locale: Locale): Promise<WorkspaceState> {
   try {
     if (coreWorkspaceSlugs.has(slug)) {
       const { CoreHRWorkspace } = await import("@/components/core-hr-workspace");
@@ -189,7 +197,7 @@ async function renderStandardWorkspace(slug: string): Promise<WorkspaceState> {
     }
   } catch (error) {
     console.error(`[HRBP] Standard ${slug} workspace failed to initialize.`, error);
-    return { degraded: true, content: <ProtectedFallback slug={slug}/> };
+    return { degraded: true, content: <ProtectedFallback slug={slug} locale={locale}/> };
   }
   return { degraded: false, content: null };
 }
@@ -204,7 +212,7 @@ function localizedDescription(locale: Locale, slug: string, title: string) {
 export async function ModuleLanding({ slug, query = "", personId, tab }: { slug: string; query?: string; personId?: string; tab?: string }) {
   const locale = await getServerLocale();
   const item = navigation.flatMap((group) => group.items).find((entry) => entry.slug === slug);
-  const title = item ? translate(locale, item.labelKey) : slug.split("-").map((value) => `${value[0]?.toUpperCase() ?? ""}${value.slice(1)}`).join(" ");
+  const title = titleFor(locale, slug);
   const Icon = item?.icon;
   const liveCore = liveCoreWorkspaceSlugs.has(slug);
   const liveGovernance = liveGovernanceWorkspaceSlugs.has(slug);
@@ -214,16 +222,16 @@ export async function ModuleLanding({ slug, query = "", personId, tab }: { slug:
   const recruit = recruitingWorkspaceSlugs.has(slug);
 
   const workspaceState = liveCore
-    ? await renderLiveCore(slug, query, personId, tab)
+    ? await renderLiveCore(slug, query, locale, personId, tab)
     : liveGovernance
-      ? await renderLiveGovernance(slug, query)
+      ? await renderLiveGovernance(slug, query, locale)
       : liveCompensation
-        ? await renderLiveCompensation()
+        ? await renderLiveCompensation(locale)
         : liveEmployeeServices
-          ? await renderLiveEmployeeServices(slug)
+          ? await renderLiveEmployeeServices(slug, locale)
           : recruit
-            ? await renderRecruiting(slug)
-            : await renderStandardWorkspace(slug);
+            ? await renderRecruiting(slug, locale)
+            : await renderStandardWorkspace(slug, locale);
 
   const createHref = slug === "people" ? "/module/people/new" : slug === "positions" ? "/module/positions/new" : null;
   const createLabel = locale === "tr" ? (slug === "people" ? "Çalışan ekle" : "Yeni pozisyon") : (slug === "people" ? "Add employee" : "New position");

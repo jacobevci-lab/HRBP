@@ -47,6 +47,6 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
     {signedOut ? <div className="auth-message success"><ShieldCheck size={17}/><span>{c("Your HRBP session has been closed.","HRBP oturumunuz kapatıldı.")}</span></div> : null}
     <Link className="auth-primary" href={loginHref}><Sparkles size={17}/> {c("Continue with enterprise SSO","Kurumsal SSO ile devam et")}</Link>
     <Link className="auth-secondary" href="/">{c("Back to public staging dashboard","Herkese açık staging dashboard'a dön")}</Link>
-    <div className="auth-footnote"><strong>{c("Security model","Güvenlik modeli")}</strong><span>PKCE · state + nonce validation · provider JWT verification · tenant role mapping · HttpOnly signed session · no caller-supplied production role headers</span></div>
+    <div className="auth-footnote"><strong>{c("Security model","Güvenlik modeli")}</strong><span>{c("PKCE · state + nonce validation · provider JWT verification · tenant role mapping · HttpOnly signed session · no caller-supplied production role headers","PKCE · state + nonce doğrulaması · sağlayıcı JWT doğrulaması · tenant rol eşleme · HttpOnly imzalı oturum · istemciden sağlanan production rol header'ı yok")}</span></div>
   </section></main>;
 }
