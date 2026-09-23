@@ -38,6 +38,8 @@ jobs:
         run: node scripts/seed-growth-staging.mjs
       - name: Seed employee-services domains
         run: node scripts/seed-services-staging.mjs
+      - name: Seed service queue and policy governance controls
+        run: node scripts/seed-service-governance-staging.mjs
       - name: Seed governance, planning and privacy domains
         run: node scripts/seed-governance-planning-staging.mjs
       - name: Grant runtime role access
@@ -57,7 +59,8 @@ jobs:
           const [
             tenants, people, positions,
             timeEntries, leaveRequests, compChanges, payrollRuns, payrollResults,
-            accessGrants, jurisdictions, goals, reviews, serviceRequests, policies, workflows,
+            accessGrants, jurisdictions, goals, reviews, serviceRequests, serviceQueues, queueMembers,
+            policies, policyExceptions, workflows,
             campaigns, scenarios, metrics, metricSnapshots, processing, dsrs,
             invalidMetricScopes
           ] = await Promise.all([
@@ -74,7 +77,10 @@ jobs:
             db.goal.count(),
             db.performanceReview.count(),
             db.hRServiceRequest.count(),
+            db.hRServiceQueue.count(),
+            db.hRServiceQueueMembership.count(),
             db.policyRecord.count(),
+            db.policyException.count(),
             db.workflowDefinition.count(),
             db.surveyCampaign.count(),
             db.workforceScenario.count(),
@@ -94,7 +100,8 @@ jobs:
           const counts = {
             tenants, people, positions,
             timeEntries, leaveRequests, compChanges, payrollRuns, payrollResults,
-            accessGrants, jurisdictions, goals, reviews, serviceRequests, policies, workflows,
+            accessGrants, jurisdictions, goals, reviews, serviceRequests, serviceQueues, queueMembers,
+            policies, policyExceptions, workflows,
             campaigns, scenarios, metrics, metricSnapshots, processing, dsrs
           };
           console.log({ ...counts, invalidMetricScopes });

@@ -5,7 +5,7 @@ export type Capability =
   | "people:read" | "people:write"
   | "organization:read" | "organization:write"
   | "positions:read" | "positions:write"
-  | "documents:read" | "documents:write" | "documents:sign"
+  | "documents:read" | "documents:write" | "documents:sign" | "documents:grant" | "documents:govern"
   | "recruiting:read" | "recruiting:write"
   | "onboarding:read" | "onboarding:write"
   | "offboarding:read" | "offboarding:write"
@@ -20,7 +20,7 @@ export type Capability =
   | "learning:read" | "learning:write"
   | "cases:read" | "cases:write"
   | "hr-service:read" | "hr-service:write"
-  | "policies:read" | "policies:write" | "policies:acknowledge"
+  | "policies:read" | "policies:write" | "policies:approve" | "policies:acknowledge"
   | "engagement:read" | "engagement:write"
   | "workforce-plan:read" | "workforce-plan:write"
   | "analytics:read"
@@ -59,12 +59,14 @@ const grants: Record<PlatformRole, Capability[]> = {
   ],
   HR_OPERATIONS: [
     "people:read", "people:write", "organization:read", "organization:write",
-    "positions:read", "positions:write", "documents:read", "documents:write", "documents:sign",
+    "positions:read", "positions:write",
+    "documents:read", "documents:write", "documents:sign", "documents:grant", "documents:govern",
     "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
     "offboarding:read", "offboarding:write", "time:read", "time:write",
     "leave:read", "leave:write", "compensation:read", "benefits:read", "benefits:write",
     "performance:read", "learning:read", "learning:write",
-    "hr-service:read", "hr-service:write", "policies:read", "policies:write",
+    "hr-service:read", "hr-service:write",
+    "policies:read", "policies:write", "policies:approve",
     "engagement:read", "engagement:write", "workforce-plan:read", "workforce-plan:write",
     "analytics:read", "ai:use",
     "workflows:read", "workflows:write", "workflows:run", "settings:read"
@@ -97,8 +99,10 @@ const grants: Record<PlatformRole, Capability[]> = {
     "people:read", "cases:read", "cases:write", "documents:read", "documents:write", "policies:read"
   ],
   LEGAL: [
-    "people:read", "cases:read", "documents:read", "documents:write", "documents:sign",
-    "policies:read", "policies:write", "privacy:read", "audit:read"
+    "people:read", "cases:read",
+    "documents:read", "documents:write", "documents:sign", "documents:grant", "documents:govern",
+    "policies:read", "policies:write", "policies:approve",
+    "privacy:read", "audit:read"
   ],
   PRIVACY_OFFICER: [
     "people:read", "cases:read", "documents:read", "policies:read",

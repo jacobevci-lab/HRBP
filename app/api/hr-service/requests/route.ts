@@ -4,10 +4,11 @@ import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
 import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
-import { hrServiceRequestWhere, isHRServiceSelfServiceRole } from "@/lib/hr-service-access";
+import { canUseHRServiceQueue, hrServiceRequestWhere, isHRServiceSelfServiceRole } from "@/lib/hr-service-access";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 const slaMinutes: Record<ServicePriority, number> = { LOW: 4320, MEDIUM: 1440, HIGH: 480, CRITICAL: 240 };
+function queueKey(value: string | undefined) { return value?.trim().toUpperCase().replace(/\s+/g, "_") || null; }
 
 export async function GET(request: Request) {
   const ctx = getRequestContext(request);
@@ -44,7 +45,13 @@ export async function POST(request: Request) {
         if (!canActOnEmployment(scope, subjectEmploymentId)) throw new Error("OUT_OF_SCOPE");
       }
     }
+
+    const requestedQueue = selfService ? null : queueKey(body.queue);
+    const queue = requestedQueue ? await canUseHRServiceQueue(tx, ctx, requestedQueue) : null;
+    if (requestedQueue && !queue) throw new Error("QUEUE");
+
     const createdAt = new Date();
+    const sla = queue?.defaultSlaMinutes ?? slaMinutes[priority];
     const record = await tx.hRServiceRequest.create({
       data: {
         tenantId: ctx.tenantId,
@@ -56,14 +63,15 @@ export async function POST(request: Request) {
         title: body.title!.trim(),
         description: body.description!.trim(),
         priority,
-        queue: selfService ? undefined : body.queue?.trim() || undefined,
-        slaDueAt: new Date(createdAt.getTime() + slaMinutes[priority] * 60_000)
+        queue: queue?.key,
+        slaDueAt: new Date(createdAt.getTime() + sla * 60_000)
       }
     });
-    await appendAudit(tx, ctx, { action: "hr-service.request-created", resourceType: "HRServiceRequest", resourceId: record.id, classification: DataClassification.CONFIDENTIAL });
+    await appendAudit(tx, ctx, { action: "hr-service.request-created", resourceType: "HRServiceRequest", resourceId: record.id, classification: DataClassification.CONFIDENTIAL, purpose: queue ? `Created in ${queue.key} service queue` : "Employee service request" });
     return record;
-  }).catch((error) => error instanceof Error && ["EMPLOYMENT_NOT_FOUND", "OUT_OF_SCOPE"].includes(error.message) ? error.message : Promise.reject(error));
+  }).catch((error) => error instanceof Error && ["EMPLOYMENT_NOT_FOUND", "OUT_OF_SCOPE", "QUEUE"].includes(error.message) ? error.message : Promise.reject(error));
   if (data === "EMPLOYMENT_NOT_FOUND") return Response.json({ error: "Employment not found in tenant." }, { status: 404 });
   if (data === "OUT_OF_SCOPE") return forbidden("Employment is outside your authorized relationship scope.");
+  if (data === "QUEUE") return forbidden("The requested HR service queue is unavailable or not delegated to you.");
   return Response.json({ data }, { status: 201 });
 }

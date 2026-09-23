@@ -63,6 +63,11 @@ enum ServiceVisibility {
   PRIVATE_NOTE
 }
 
+enum ServiceQueueRole {
+  OWNER
+  AGENT
+}
+
 enum PolicyStatus {
   DRAFT
   REVIEW
@@ -76,6 +81,14 @@ enum PolicyAssignmentStatus {
   ACKNOWLEDGED
   OVERDUE
   WAIVED
+}
+
+enum PolicyExceptionStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  REVOKED
+  EXPIRED
 }
 
 enum WorkflowDefinitionStatus {
@@ -163,7 +176,7 @@ model CaseEvidence {
   source         String?
   checksum       String?
   collectedById String
-  collectedAt    DateTime @default(now())
+  collectedAt   DateTime @default(now())
   classification DataClassification @default(HIGHLY_RESTRICTED)
 
   @@index([tenantId, caseId, collectedAt])
@@ -243,6 +256,7 @@ model HRServiceRequest {
   @@index([tenantId, status, priority])
   @@index([tenantId, requestorId, createdAt])
   @@index([tenantId, assigneeId, slaDueAt])
+  @@index([tenantId, queue, status])
 }
 
 model HRServiceComment {
@@ -258,29 +272,58 @@ model HRServiceComment {
   @@index([tenantId, requestId, createdAt])
 }
 
+model HRServiceQueue {
+  id                String @id @default(cuid())
+  tenantId          String
+  key               String
+  name              String
+  defaultSlaMinutes Int?
+  active            Boolean @default(true)
+  createdById       String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  memberships       HRServiceQueueMembership[]
+
+  @@unique([tenantId, key])
+  @@index([tenantId, active, name])
+}
+
+model HRServiceQueueMembership {
+  id        String @id @default(cuid())
+  tenantId  String
+  queueId   String
+  userId    String
+  role      ServiceQueueRole @default(AGENT)
+  createdAt DateTime @default(now())
+  queue     HRServiceQueue @relation(fields: [queueId], references: [id], onDelete: Cascade)
+
+  @@unique([queueId, userId])
+  @@index([tenantId, userId, role])
+}
+
 model PolicyRecord {
-  id              String @id @default(cuid())
-  tenantId        String
-  code            String
-  title           String
-  version         String
-  status          PolicyStatus @default(DRAFT)
-  jurisdiction    String?
-  audience        String?
-  ownerId         String
-  contentMarkdown String
-  contentHash     String
-  effectiveFrom   DateTime
-  effectiveTo     DateTime?
-  reviewDueAt     DateTime?
-  approvedById    String?
-  approvedAt      DateTime?
-  publishedAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  assignments     PolicyAssignment[]
+  id               String @id @default(cuid())
+  tenantId         String
+  code             String
+  title            String
+  version          String
+  status           PolicyStatus @default(DRAFT)
+  jurisdiction     String?
+  audience         String?
+  ownerId          String
+  contentMarkdown  String
+  contentHash      String
+  effectiveFrom    DateTime
+  effectiveTo      DateTime?
+  reviewDueAt      DateTime?
+  approvedById     String?
+  approvedAt       DateTime?
+  publishedAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  assignments      PolicyAssignment[]
   acknowledgements PolicyAcknowledgement[]
-  exceptions      PolicyException[]
+  exceptions       PolicyException[]
 
   @@unique([tenantId, code, version])
   @@index([tenantId, status, effectiveFrom])
@@ -317,21 +360,25 @@ model PolicyAcknowledgement {
 }
 
 model PolicyException {
-  id           String @id @default(cuid())
-  tenantId     String
-  policyId     String
-  employmentId String?
-  reason       String
+  id                  String @id @default(cuid())
+  tenantId            String
+  policyId            String
+  employmentId        String?
+  reason              String
   compensatingControl String?
-  requestedById String
-  approvedById String?
-  expiresAt    DateTime?
-  active       Boolean @default(true)
-  createdAt    DateTime @default(now())
-  policy       PolicyRecord @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  requestedById       String
+  approvedById        String?
+  status              PolicyExceptionStatus @default(APPROVED)
+  decisionNote        String?
+  decidedAt           DateTime?
+  expiresAt           DateTime?
+  active              Boolean @default(false)
+  createdAt           DateTime @default(now())
+  policy              PolicyRecord @relation(fields: [policyId], references: [id], onDelete: Restrict)
 
-  @@index([tenantId, policyId, active])
+  @@index([tenantId, policyId, status])
   @@index([tenantId, expiresAt, active])
+  @@index([tenantId, requestedById, status])
 }
 
 model WorkflowDefinition {

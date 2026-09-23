@@ -1,8 +1,13 @@
 import { DataClassification, DocumentStatus, PlatformRole, Prisma, PrismaClient } from "@prisma/client";
+import { canReadClassification } from "@/lib/authorization";
 import { resolveEmploymentScope } from "@/lib/employment-scope";
 import type { RequestContext } from "@/lib/request-context";
 
 type ScopeClient = PrismaClient | Prisma.TransactionClient;
+
+type VisibilityOptions = {
+  grantPermissions?: string[];
+};
 
 const documentWideRoles = new Set<PlatformRole>([
   PlatformRole.HR_OPERATIONS,
@@ -11,9 +16,6 @@ const documentWideRoles = new Set<PlatformRole>([
 
 async function resolveDocumentEmploymentScope(client: ScopeClient, ctx: RequestContext): Promise<string[] | null> {
   if (documentWideRoles.has(ctx.role)) return null;
-  // A generic personnel document repository is more sensitive than ordinary
-  // workforce data. Managers can read their own employee documents, but direct
-  // report access must be provided through purpose-specific workflows instead.
   if (ctx.role === PlatformRole.MANAGER) return ctx.employmentId ? [ctx.employmentId] : [];
   return resolveEmploymentScope(client, ctx);
 }
@@ -29,27 +31,67 @@ export async function resolveDocumentPersonScope(client: ScopeClient, ctx: Reque
   return [...new Set(rows.map((row) => row.personId))];
 }
 
-export async function documentVisibilityWhere(client: ScopeClient, ctx: RequestContext): Promise<Prisma.DocumentRecordWhereInput> {
+async function explicitDocumentGrantIds(client: ScopeClient, ctx: RequestContext, permissions: string[]) {
+  if (!permissions.length) return [] as string[];
+  const now = new Date();
+  const principalFilters: Prisma.DocumentAccessGrantWhereInput[] = [
+    { principalType: "USER", principalId: ctx.actorId }
+  ];
+  if (ctx.employmentId) principalFilters.push({ principalType: "EMPLOYMENT", principalId: ctx.employmentId });
+
+  const grants = await client.documentAccessGrant.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      permission: { in: permissions },
+      OR: principalFilters,
+      AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] }]
+    },
+    select: { documentId: true }
+  });
+  return [...new Set(grants.map((grant) => grant.documentId))];
+}
+
+export async function documentVisibilityWhere(
+  client: ScopeClient,
+  ctx: RequestContext,
+  options: VisibilityOptions = {}
+): Promise<Prisma.DocumentRecordWhereInput> {
   const personScope = await resolveDocumentPersonScope(client, ctx);
-  return {
+  const grantedDocumentIds = await explicitDocumentGrantIds(
+    client,
+    ctx,
+    options.grantPermissions ?? ["READ", "DOWNLOAD", "SIGN"]
+  );
+  const classificationFilter = canReadClassification(ctx, DataClassification.HIGHLY_RESTRICTED)
+    ? {}
+    : { classification: { not: DataClassification.HIGHLY_RESTRICTED } };
+
+  const base: Prisma.DocumentRecordWhereInput = {
     tenantId: ctx.tenantId,
     status: { not: DocumentStatus.DELETED },
-    classification: { not: DataClassification.HIGHLY_RESTRICTED },
-    // Case evidence never falls back into the generic document repository even
-    // if a record was accidentally assigned a weaker classification.
     caseId: null,
-    ...(personScope === null ? {} : {
-      OR: [
-        { personId: null },
-        { personId: { in: personScope } }
-      ]
-    })
+    ...classificationFilter
   };
+
+  if (personScope === null) return base;
+
+  const visibility: Prisma.DocumentRecordWhereInput[] = [
+    { personId: null },
+    ...(personScope.length ? [{ personId: { in: personScope } }] : []),
+    ...(grantedDocumentIds.length ? [{ id: { in: grantedDocumentIds } }] : [])
+  ];
+
+  return { ...base, OR: visibility };
 }
 
 export async function getVisibleDocument(client: ScopeClient, ctx: RequestContext, documentId: string) {
   const where = await documentVisibilityWhere(client, ctx);
-  return client.documentRecord.findFirst({ where: { ...where, id: documentId } });
+  return client.documentRecord.findFirst({ where: { AND: [where, { id: documentId }] } });
+}
+
+export async function getDownloadableDocument(client: ScopeClient, ctx: RequestContext, documentId: string) {
+  const where = await documentVisibilityWhere(client, ctx, { grantPermissions: ["DOWNLOAD"] });
+  return client.documentRecord.findFirst({ where: { AND: [where, { id: documentId }] } });
 }
 
 export async function canWriteDocumentForPerson(client: ScopeClient, ctx: RequestContext, personId: string | null) {
