@@ -1,4 +1,5 @@
 import { BarChart3, CheckCircle2, CircleAlert, EyeOff, Fingerprint, ShieldCheck, UsersRound } from "lucide-react";
+import { AnalyticsRefreshButton } from "@/components/analytics-refresh-button";
 import { getGovernedAnalyticsMetrics, type AnalyticsPrivacyState } from "@/lib/analytics-privacy";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
@@ -19,6 +20,18 @@ function displayValue(value: unknown, unit: string, locale: Locale) {
   if (typeof value === "string") return `${value}${suffix}`;
   if (typeof value === "boolean") return value ? c(locale, "Yes", "Evet") : c(locale, "No", "Hayır");
   return JSON.stringify(value);
+}
+
+function metricLabel(locale: Locale, key: string, fallback: string) {
+  if (locale !== "tr") return fallback;
+  const labels: Record<string, string> = {
+    WORKFORCE_HEADCOUNT: "Güncel Çalışan Sayısı",
+    LEAVE_INCIDENCE_30D: "30 Günlük İzin Görülme Oranı",
+    TIME_APPROVAL_RATE_30D: "30 Günlük Zaman Onay Oranı",
+    GOAL_COVERAGE_YTD: "Yıl İçi Hedef Kapsamı",
+    PERFORMANCE_REVIEW_COVERAGE: "Son Değerlendirme Döngüsü Kapsamı"
+  };
+  return labels[key] ?? fallback;
 }
 
 function privacyLabel(locale: Locale, state: AnalyticsPrivacyState) {
@@ -51,7 +64,7 @@ export async function AnalyticsModulePage() {
   return <>
     <section className="page-heading module-heading">
       <div><div className="eyebrow">HRBP One / {c(locale, "Analytics", "Analitik")}</div><h1>{c(locale, "Analytics", "Analitik")}</h1><p>{c(locale, "Privacy-bound workforce metrics use the same authorized population as People, Performance and Talent. Small cohorts and mismatched snapshots fail closed.", "Gizlilik sınırına bağlı iş gücü metrikleri Çalışanlar, Performans ve Yetenek ile aynı yetkili popülasyonu kullanır. Küçük kohortlar ve kapsamı eşleşmeyen snapshot'lar güvenli biçimde kapatılır.")}</p></div>
-      <button className="secondary-button" disabled><ShieldCheck size={16}/>{scoped ? c(locale, "Relationship scoped", "İlişki kapsamlı") : c(locale, "Tenant-wide governed", "Tenant-geneli yönetişimli")}</button>
+      <div className="module-heading-actions"><button className="secondary-button" disabled><ShieldCheck size={16}/>{scoped ? c(locale, "Relationship scoped", "İlişki kapsamlı") : c(locale, "Tenant-wide governed", "Tenant-geneli yönetişimli")}</button><AnalyticsRefreshButton/></div>
     </section>
 
     <div className="gov-shell">
@@ -62,7 +75,7 @@ export async function AnalyticsModulePage() {
         <Metric icon={<EyeOff size={18}/>} label={c(locale, "Privacy held", "Gizlilik nedeniyle tutuldu")} value={String(protectedCount)} meta={c(locale, "Suppressed or awaiting scoped compute", "Bastırıldı veya kapsamlı hesap bekliyor")}/>
       </section>
 
-      {scoped ? <section className="card governance-note" style={{ margin: 0 }}><Fingerprint size={18}/><p><strong>{c(locale, "Population fingerprint enforcement is active.", "Popülasyon parmak izi zorunluluğu aktif.")}</strong> {c(locale, "A tenant-wide snapshot is never substituted for a Manager or HRBP population. A value becomes visible only when the materialized snapshot was generated for the exact authorized employment set.", "Manager veya HRBP popülasyonu için tenant-geneli snapshot hiçbir zaman ikame edilmez. Bir değer yalnızca materialize snapshot tam yetkili istihdam kümesi için üretildiyse görünür olur.")}</p></section> : null}
+      {scoped ? <section className="card governance-note" style={{ margin: 0 }}><Fingerprint size={18}/><p><strong>{c(locale, "Population fingerprint enforcement is active.", "Popülasyon parmak izi zorunluluğu aktif.")}</strong> {c(locale, "A tenant-wide snapshot is never substituted for a Manager or HRBP population. Refresh computes the built-in metrics for the exact current authorization set.", "Manager veya HRBP popülasyonu için tenant-geneli snapshot hiçbir zaman ikame edilmez. Yenileme, yerleşik metrikleri tam güncel yetkilendirme kümesi için hesaplar.")}</p></section> : null}
 
       <section className="gov-split">
         <div className="card gov-panel">
@@ -71,8 +84,8 @@ export async function AnalyticsModulePage() {
             {result.data.length ? result.data.map((metric) => {
               const snapshot = metric.snapshots[0];
               const period = snapshot ? `${new Date(snapshot.periodStart).toLocaleDateString(dateLocale)} → ${new Date(snapshot.periodEnd).toLocaleDateString(dateLocale)}` : "—";
-              return <tr key={metric.id}><td><strong>{metric.name}</strong><small className="cell-sub">{metric.category} · {metric.aggregation}</small></td><td><strong>{snapshot && !snapshot.suppressed ? displayValue(snapshot.value, metric.unit, locale) : "—"}</strong></td><td>{period}</td><td>{snapshot && !snapshot.suppressed && snapshot.population !== null ? snapshot.population : "—"}</td><td>{metric.minPopulation}</td><td><em className={`gov-pill ${privacyClass(metric.privacy.state)}`}>{privacyLabel(locale, metric.privacy.state)}</em></td></tr>;
-            }) : <tr><td colSpan={6} style={{ textAlign: "center", padding: 28, color: "var(--muted)" }}>{c(locale, "No active metric definitions are configured.", "Aktif metrik tanımı yapılandırılmamış.")}</td></tr>}
+              return <tr key={metric.id}><td><strong>{metricLabel(locale, metric.key, metric.name)}</strong><small className="cell-sub">{metric.category} · {metric.aggregation}</small></td><td><strong>{snapshot && !snapshot.suppressed ? displayValue(snapshot.value, metric.unit, locale) : "—"}</strong></td><td>{period}</td><td>{snapshot && !snapshot.suppressed && snapshot.population !== null ? snapshot.population : "—"}</td><td>{metric.minPopulation}</td><td><em className={`gov-pill ${privacyClass(metric.privacy.state)}`}>{privacyLabel(locale, metric.privacy.state)}</em></td></tr>;
+            }) : <tr><td colSpan={6} style={{ textAlign: "center", padding: 28, color: "var(--muted)" }}>{c(locale, "No active metric definitions are configured. Use Refresh governed metrics to provision the built-in catalog.", "Aktif metrik tanımı yapılandırılmamış. Yerleşik kataloğu oluşturmak için Yönetişimli metrikleri yenile seçeneğini kullanın.")}</td></tr>}
           </tbody></table></div>
         </div>
         <aside className="card gov-side"><div className="gov-panel-head"><div><span className="section-kicker">{c(locale, "Privacy contract", "Gizlilik sözleşmesi")}</span><h3>{c(locale, "Distribution controls", "Dağıtım kontrolleri")}</h3></div><EyeOff size={18}/></div><div className="gov-controls">
