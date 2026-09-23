@@ -12,6 +12,7 @@ model NotificationOutbox {
   eventType       String
   channel         String                   @default("IN_APP")
   recipientUserId String?
+  recipientRole   String?
   templateKey     String?
   resourceType    String
   resourceId      String
@@ -31,6 +32,7 @@ model NotificationOutbox {
   @@unique([tenantId, dedupeKey])
   @@index([status, nextAttemptAt, createdAt])
   @@index([tenantId, recipientUserId, channel, status, readAt, createdAt])
+  @@index([tenantId, recipientRole, channel, status, readAt, createdAt])
   @@index([tenantId, eventType, createdAt])
   @@index([tenantId, resourceType, resourceId])
 }
