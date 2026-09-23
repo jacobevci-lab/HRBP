@@ -16,11 +16,19 @@ import { NotificationCenter } from "@/components/notification-center";
 type SessionNavigationResponse = {
   authenticated?: boolean;
   navigationCapabilities?: string[];
+  user?: { tenantName?: string | null };
 };
+
+function initials(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  return `${parts[0]?.[0] ?? "H"}${parts[1]?.[0] ?? parts[0]?.[1] ?? "R"}`.toUpperCase();
+}
 
 function AppShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [tenantName, setTenantName] = useState<string | null>(null);
   const [navigationCapabilities, setNavigationCapabilities] = useState<Set<string> | null>(null);
   const { t } = useLocale();
 
@@ -30,11 +38,21 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       .then(async (response) => response.ok ? response.json() as Promise<SessionNavigationResponse> : null)
       .then((session) => {
         if (!active || !session) return;
-        if (session.authenticated) setNavigationCapabilities(new Set(session.navigationCapabilities ?? []));
-        else setNavigationCapabilities(null);
+        const isAuthenticated = Boolean(session.authenticated);
+        setAuthenticated(isAuthenticated);
+        if (isAuthenticated) {
+          setNavigationCapabilities(new Set(session.navigationCapabilities ?? []));
+          setTenantName(session.user?.tenantName?.trim() || null);
+        } else {
+          setNavigationCapabilities(null);
+          setTenantName(null);
+        }
       })
       .catch(() => {
-        if (active) setNavigationCapabilities(null);
+        if (!active) return;
+        setAuthenticated(false);
+        setNavigationCapabilities(null);
+        setTenantName(null);
       });
     return () => { active = false; };
   }, []);
@@ -45,6 +63,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       items: group.items.filter((item) => !navigationCapabilities || !item.requiredCapability || navigationCapabilities.has(item.requiredCapability))
     }))
     .filter((group) => group.items.length > 0), [navigationCapabilities]);
+  const workspaceName = tenantName ?? "HRBP One";
 
   return (
     <div className="app-shell">
@@ -57,8 +76,8 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <button className="icon-button mobile-close" onClick={() => setMobileOpen(false)} aria-label={t("shell.closeNavigation")}><X size={18}/></button>
         </div>
         <div className="tenant-switcher">
-          <span className="tenant-avatar">AC</span>
-          <span className="tenant-copy"><strong>Acme Global</strong><small>{t("shell.enterpriseWorkspace")}</small></span>
+          <span className="tenant-avatar">{initials(workspaceName)}</span>
+          <span className="tenant-copy"><strong>{workspaceName}</strong><small>{t("shell.enterpriseWorkspace")}</small></span>
           <ChevronDown size={15}/>
         </div>
         <nav className="nav-scroll">
@@ -89,8 +108,8 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
             <LocaleToggle/>
             <ThemeToggle/>
             <NotificationCenter/>
-            {navigationCapabilities === null || navigationCapabilities.has("ai:use") ? <button className="ai-button"><Sparkles size={16}/> {t("shell.ask")}</button> : null}
-            <Link className="create-button" href="/module/people/new"><Plus size={17}/> {t("shell.create")}</Link>
+            {authenticated && navigationCapabilities?.has("ai:use") ? <button className="ai-button"><Sparkles size={16}/> {t("shell.ask")}</button> : null}
+            {authenticated && navigationCapabilities?.has("people:write") ? <Link className="create-button" href="/module/people/new"><Plus size={17}/> {t("shell.create")}</Link> : null}
             <TopbarAccount/>
           </div>
         </header>
