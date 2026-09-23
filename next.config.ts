@@ -4,12 +4,14 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   typedRoutes: false,
-  // Prisma's engine-less client loads its query compiler WASM at runtime.
-  // Next.js output tracing cannot infer that dynamic filesystem read, so force
-  // the generated WASM module into every server route's standalone trace. The
-  // OpenNext Cloudflare build consumes this traced output for the Worker bundle.
+  // OpenNext transforms Next.js standalone output for Cloudflare Workers.
+  // Prisma's engine-less client loads query compiler WASM and related runtime
+  // files dynamically, which static tracing cannot reliably infer. Keep the
+  // complete generated Prisma runtime in the standalone trace so OpenNext can
+  // carry it into the Worker bundle.
+  output: "standalone",
   outputFileTracingIncludes: {
-    "/*": ["./node_modules/.prisma/client/*.wasm"]
+    "*": ["node_modules/.prisma/client/**/*"]
   }
 };
 
