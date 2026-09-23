@@ -175,11 +175,9 @@ async function retirePolicies(now: Date) {
 
 export async function runOperationalMaintenance() {
   const startedAt = new Date();
-  const [service, expiredExceptions, retiredPolicies] = await Promise.all([
-    escalateServiceRequests(startedAt),
-    expirePolicyExceptions(startedAt),
-    retirePolicies(startedAt)
-  ]);
+  const service = await escalateServiceRequests(startedAt);
+  const expiredExceptions = await expirePolicyExceptions(startedAt);
+  const retiredPolicies = await retirePolicies(startedAt);
   return {
     startedAt: startedAt.toISOString(),
     completedAt: new Date().toISOString(),
