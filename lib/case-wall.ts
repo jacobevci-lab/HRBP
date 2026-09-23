@@ -1,8 +1,11 @@
+import { Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { RequestContext } from "@/lib/request-context";
 
-export async function getCaseWallCase(ctx: RequestContext, caseId: string) {
-  return db.employeeCase.findFirst({
+type CaseWallClient = PrismaClient | Prisma.TransactionClient;
+
+export async function getCaseWallCase(ctx: RequestContext, caseId: string, client: CaseWallClient = db) {
+  return client.employeeCase.findFirst({
     where: {
       id: caseId,
       tenantId: ctx.tenantId,
@@ -14,8 +17,8 @@ export async function getCaseWallCase(ctx: RequestContext, caseId: string) {
   });
 }
 
-export async function listCaseWallCases(ctx: RequestContext) {
-  return db.employeeCase.findMany({
+export async function listCaseWallCases(ctx: RequestContext, client: CaseWallClient = db) {
+  return client.employeeCase.findMany({
     where: {
       tenantId: ctx.tenantId,
       OR: [

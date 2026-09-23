@@ -3,6 +3,7 @@ import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
 import { asEnumValue, asIdentifier, readJsonObject } from "@/lib/input-validation";
+import { canAccessOnboardingPlan, resolveOnboardingPopulationScope } from "@/lib/onboarding-access";
 import { isPrismaRecordNotFound } from "@/lib/prisma-safety";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -42,9 +43,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const data = await withDb((db) => db.$transaction(async (tx) => {
       const task = await tx.onboardingTask.findFirst({
         where: { id, tenantId: ctx.tenantId },
-        select: { id: true, planId: true, status: true, title: true, sensitive: true }
+        select: {
+          id: true,
+          planId: true,
+          status: true,
+          title: true,
+          sensitive: true,
+          plan: { select: { employmentId: true, personId: true } }
+        }
       });
       if (!task) throw new Error("TASK_NOT_FOUND");
+      const population = await resolveOnboardingPopulationScope(tx, ctx);
+      if (!canAccessOnboardingPlan(population, task.plan)) throw new Error("OUT_OF_SCOPE");
       if (!transitions[task.status].includes(next)) throw new Error("INVALID_TRANSITION");
 
       try {
@@ -78,6 +88,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
     if (code === "TASK_NOT_FOUND") return Response.json({ error: "Onboarding task was not found in this tenant." }, { status: 404 });
+    if (code === "OUT_OF_SCOPE") return forbidden("Onboarding plan is outside your authorized relationship scope.");
     if (code === "INVALID_TRANSITION") return Response.json({ error: "The requested onboarding task transition is not allowed." }, { status: 409 });
     if (code === "STATE_CONFLICT") return Response.json({ error: "The onboarding task changed concurrently. Refresh and try again." }, { status: 409 });
     console.error("Onboarding task transition failed", error);

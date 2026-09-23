@@ -2,6 +2,7 @@ import { AccessRevocationStatus, AssetReturnStatus, DataClassification, Employme
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { asIdentifier } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -19,6 +20,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       where: { id, tenantId: ctx.tenantId, status: { notIn: [SeparationStatus.CLOSED, SeparationStatus.CANCELLED] } }
     });
     if (!process) throw new Error("NOT_FOUND");
+    const scope = await resolveEmploymentScope(tx, ctx);
+    if (!canActOnEmployment(scope, process.employmentId)) throw new Error("OUT_OF_SCOPE");
 
     const [blockingTasks, assets, access, employment] = await Promise.all([
       tx.separationTask.count({ where: { tenantId: ctx.tenantId, processId: id, blocking: true, status: { notIn: [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED] } } }),
@@ -64,9 +67,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       purpose: "Governed separation closure"
     });
     return { id, status: SeparationStatus.CLOSED, employmentStatus: EmploymentStatus.TERMINATED, endDate: process.lastWorkingDate };
-  }).catch((error) => error instanceof Error && (error.message === "NOT_FOUND" || error.message === "EMPLOYMENT" || error.message.startsWith("BLOCKED:")) ? error.message : Promise.reject(error));
+  }).catch((error) => error instanceof Error && (error.message === "NOT_FOUND" || error.message === "EMPLOYMENT" || error.message === "OUT_OF_SCOPE" || error.message.startsWith("BLOCKED:")) ? error.message : Promise.reject(error));
 
   if (data === "NOT_FOUND") return Response.json({ error: "Open separation process not found." }, { status: 404 });
+  if (data === "OUT_OF_SCOPE") return forbidden("Separation process is outside your authorized relationship scope.");
   if (data === "EMPLOYMENT") return Response.json({ error: "Employment record not found." }, { status: 409 });
   if (typeof data === "string" && data.startsWith("BLOCKED:")) {
     const [, tasks, assets, access] = data.split(":");

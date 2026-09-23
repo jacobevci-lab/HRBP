@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
 import { listCaseWallCases } from "@/lib/case-wall";
-import { getRequestContext, unauthorized } from "@/lib/request-context";
+import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
   const ctx = getRequestContext(request);
@@ -17,6 +17,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
+  if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "cases:write")) return forbidden();
   const body = await request.json() as { caseType?: string; title?: string; subjectPersonId?: string; reporterPersonId?: string };
   const caseType = body.caseType?.trim();
@@ -24,10 +25,12 @@ export async function POST(request: Request) {
   if (!caseType || !title) return Response.json({ error: "caseType and title are required." }, { status: 400 });
 
   const data = await db.$transaction(async (tx) => {
-    if (body.subjectPersonId) {
-      const subject = await tx.person.findFirst({ where: { id: body.subjectPersonId, tenantId: ctx.tenantId }, select: { id: true } });
-      if (!subject) throw new Error("SUBJECT_NOT_FOUND");
+    const personIds = [...new Set([body.subjectPersonId, body.reporterPersonId].filter((value): value is string => Boolean(value)))];
+    if (personIds.length) {
+      const people = await tx.person.findMany({ where: { tenantId: ctx.tenantId, id: { in: personIds } }, select: { id: true } });
+      if (people.length !== personIds.length) throw new Error("PERSON_NOT_FOUND");
     }
+
     const record = await tx.employeeCase.create({
       data: {
         tenantId: ctx.tenantId,
@@ -44,7 +47,8 @@ export async function POST(request: Request) {
     if (body.reporterPersonId) await tx.caseParticipant.create({ data: { tenantId: ctx.tenantId, caseId: record.id, personId: body.reporterPersonId, role: CaseParticipantRole.REPORTER, addedById: ctx.actorId } });
     await appendAudit(tx, ctx, { action: "employee-case.created", resourceType: "EmployeeCase", resourceId: record.id, classification: DataClassification.HIGHLY_RESTRICTED });
     return record;
-  }).catch((error) => error instanceof Error && error.message === "SUBJECT_NOT_FOUND" ? null : Promise.reject(error));
-  if (!data) return Response.json({ error: "Subject person not found in tenant." }, { status: 404 });
+  }).catch((error) => error instanceof Error && error.message === "PERSON_NOT_FOUND" ? null : Promise.reject(error));
+
+  if (!data) return Response.json({ error: "Subject or reporter person was not found in this tenant." }, { status: 404 });
   return Response.json({ data }, { status: 201 });
 }

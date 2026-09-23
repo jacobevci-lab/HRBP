@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
 import { getCaseWallCase } from "@/lib/case-wall";
-import { getRequestContext, unauthorized } from "@/lib/request-context";
+import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
@@ -18,15 +18,29 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
+  if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "cases:write")) return forbidden();
   const { id } = await params;
-  if (!await getCaseWallCase(ctx, id)) return forbidden("Case wall denies access to this matter.");
   const body = await request.json() as { category?: string; description?: string; severity?: string; policyCode?: string };
   if (!body.category?.trim() || !body.description?.trim()) return Response.json({ error: "category and description are required." }, { status: 400 });
+
   const data = await db.$transaction(async (tx) => {
-    const allegation = await tx.caseAllegation.create({ data: { tenantId: ctx.tenantId, caseId: id, category: body.category!.trim(), description: body.description!.trim(), severity: body.severity, policyCode: body.policyCode, status: AllegationStatus.OPEN } });
+    if (!await getCaseWallCase(ctx, id, tx)) throw new Error("CASE_WALL");
+    const allegation = await tx.caseAllegation.create({
+      data: {
+        tenantId: ctx.tenantId,
+        caseId: id,
+        category: body.category!.trim(),
+        description: body.description!.trim(),
+        severity: body.severity?.trim() || undefined,
+        policyCode: body.policyCode?.trim() || undefined,
+        status: AllegationStatus.OPEN
+      }
+    });
     await appendAudit(tx, ctx, { action: "employee-case.allegation-added", resourceType: "CaseAllegation", resourceId: allegation.id, classification: DataClassification.HIGHLY_RESTRICTED });
     return allegation;
-  });
+  }).catch((error) => error instanceof Error && error.message === "CASE_WALL" ? null : Promise.reject(error));
+
+  if (!data) return forbidden("Case wall denies access to this matter.");
   return Response.json({ data }, { status: 201 });
 }

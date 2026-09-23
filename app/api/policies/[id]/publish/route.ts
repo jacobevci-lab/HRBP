@@ -2,11 +2,12 @@ import { DataClassification, PolicyStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
-import { getRequestContext, unauthorized } from "@/lib/request-context";
+import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
+  if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "policies:write")) return forbidden();
   const { id } = await params;
   const data = await db.$transaction(async (tx) => {
@@ -15,7 +16,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const publishable = current.status === PolicyStatus.DRAFT || current.status === PolicyStatus.REVIEW || current.status === PolicyStatus.APPROVED;
     if (!publishable) throw new Error("STATE");
     const now = new Date();
-    const record = await tx.policyRecord.update({ where: { id }, data: { status: PolicyStatus.PUBLISHED, approvedById: current.approvedById ?? ctx.actorId, approvedAt: current.approvedAt ?? now, publishedAt: now } });
+    const record = await tx.policyRecord.update({
+      where: { id },
+      data: {
+        status: PolicyStatus.PUBLISHED,
+        approvedById: current.approvedById ?? ctx.actorId,
+        approvedAt: current.approvedAt ?? now,
+        publishedAt: now
+      }
+    });
     await appendAudit(tx, ctx, { action: "policy.published", resourceType: "PolicyRecord", resourceId: id, classification: DataClassification.INTERNAL });
     return record;
   }).catch((error) => error instanceof Error && ["NOT_FOUND", "STATE"].includes(error.message) ? error.message : Promise.reject(error));
