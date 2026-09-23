@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Globe2, MapPinned } from "lucide-react";
 import styles from "@/components/access-scope-admin.module.css";
 import { useLocale } from "@/components/locale-provider";
+import { countryOptions } from "@/lib/countries";
 
 type Employment = {
   id: string;
@@ -32,6 +33,8 @@ function today() { return new Date().toISOString().slice(0, 10); }
 export function JurisdictionAdmin() {
   const { locale } = useLocale();
   const c = useCallback((en: string, tr: string) => locale === "tr" ? tr : en, [locale]);
+  const countries = useMemo(() => countryOptions(locale), [locale]);
+  const countryByCode = useMemo(() => new Map(countries.map((country) => [country.code, country.label])), [countries]);
   const [payload, setPayload] = useState<Payload | null>(null);
   const [employmentId, setEmploymentId] = useState("");
   const [countryCode, setCountryCode] = useState("TR");
@@ -53,13 +56,13 @@ export function JurisdictionAdmin() {
   const historyRows = useMemo(() => payload?.data.slice(0, 500) ?? [], [payload]);
 
   async function save() {
-    if (!payload?.permissions.write || !employmentId || !/^[A-Za-z]{2}$/.test(countryCode) || !effectiveFrom) return;
+    if (!payload?.permissions.write || !employmentId || !countryCode || !effectiveFrom) return;
     setBusy(true); setError(null);
     try {
       const response = await fetch("/api/settings/jurisdictions", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ employmentId, countryCode: countryCode.toUpperCase(), effectiveFrom, effectiveTo: effectiveTo || null, source: "Platform settings" })
+        body: JSON.stringify({ employmentId, countryCode, effectiveFrom, effectiveTo: effectiveTo || null, source: "Platform settings" })
       });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(body.error || c("Jurisdiction could not be saved.", "Yetki alanı kaydedilemedi."));
@@ -76,16 +79,16 @@ export function JurisdictionAdmin() {
     {error ? <div className={styles.error}>{error}</div> : null}
     {payload?.permissions.write ? <div className={styles.form}>
       <label className={styles.field}><span>{c("Employment", "İstihdam")}</span><select value={employmentId} onChange={(event) => setEmploymentId(event.target.value)} disabled={busy}>{payload.options.employments.map((employment) => <option key={employment.id} value={employment.id}>{employmentLabel(employment)}</option>)}</select></label>
-      <label className={styles.field}><span>{c("Country code", "Ülke kodu")}</span><input maxLength={2} value={countryCode} onChange={(event) => setCountryCode(event.target.value.toUpperCase().replace(/[^A-Z]/g, ""))} disabled={busy}/></label>
+      <label className={styles.field}><span>{c("Country", "Ülke")}</span><select value={countryCode} onChange={(event) => setCountryCode(event.target.value)} disabled={busy}>{countries.map((country) => <option key={country.code} value={country.code}>{country.label} · {country.code}</option>)}</select></label>
       <label className={styles.field}><span>{c("Effective from", "Başlangıç")}</span><input type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} disabled={busy}/></label>
       <label className={styles.field}><span>{c("Effective to", "Bitiş")}</span><input type="date" value={effectiveTo} onChange={(event) => setEffectiveTo(event.target.value)} disabled={busy}/></label>
-      <button className={styles.grantButton} type="button" onClick={save} disabled={busy || !employmentId || countryCode.length !== 2 || !effectiveFrom}><MapPinned size={16}/>{busy ? c("Saving…", "Kaydediliyor…") : c("Save jurisdiction", "Yetki alanını kaydet")}</button>
+      <button className={styles.grantButton} type="button" onClick={save} disabled={busy || !employmentId || !countryCode || !effectiveFrom}><MapPinned size={16}/>{busy ? c("Saving…", "Kaydediliyor…") : c("Save jurisdiction", "Yetki alanını kaydet")}</button>
     </div> : <p className={styles.panelCopy}>{c("Read-only view. Jurisdiction changes require settings:write.", "Salt-okunur görünüm. Yetki alanı değişiklikleri settings:write gerektirir.")}</p>}
     <div className="platform-table-wrap"><table className="platform-table compact"><thead><tr><th>{c("Employee", "Çalışan")}</th><th>{c("Country", "Ülke")}</th><th>{c("Effective from", "Başlangıç")}</th><th>{c("Effective to", "Bitiş")}</th><th>{c("State", "Durum")}</th><th>{c("Source", "Kaynak")}</th></tr></thead><tbody>{historyRows.length ? historyRows.map((row) => {
       const starts = new Date(row.effectiveFrom).getTime();
       const ends = row.effectiveTo ? new Date(row.effectiveTo).getTime() : Number.POSITIVE_INFINITY;
       const current = starts <= now && ends >= now;
-      return <tr key={row.id}><td>{row.employment ? employmentLabel(row.employment) : row.employmentId}</td><td><strong>{row.countryCode}</strong></td><td>{new Date(row.effectiveFrom).toLocaleDateString(dateLocale)}</td><td>{row.effectiveTo ? new Date(row.effectiveTo).toLocaleDateString(dateLocale) : c("Open-ended", "Süresiz")}</td><td><em className={`platform-pill ${current ? "active" : "review"}`}>{current ? c("Current", "Güncel") : c("Historical", "Geçmiş")}</em></td><td>{row.source ?? "—"}</td></tr>;
+      return <tr key={row.id}><td>{row.employment ? employmentLabel(row.employment) : row.employmentId}</td><td><strong>{countryByCode.get(row.countryCode) ?? row.countryCode}</strong><small className="cell-sub">{row.countryCode}</small></td><td>{new Date(row.effectiveFrom).toLocaleDateString(dateLocale)}</td><td>{row.effectiveTo ? new Date(row.effectiveTo).toLocaleDateString(dateLocale) : c("Open-ended", "Süresiz")}</td><td><em className={`platform-pill ${current ? "active" : "review"}`}>{current ? c("Current", "Güncel") : c("Historical", "Geçmiş")}</em></td><td>{row.source ?? "—"}</td></tr>;
     }) : <tr><td className={styles.empty} colSpan={6}>{c("No employment jurisdiction history is recorded.", "İstihdam yetki alanı geçmişi kaydedilmemiş.")}</td></tr>}</tbody></table></div>
   </section>;
 }
