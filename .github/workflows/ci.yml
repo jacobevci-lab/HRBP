@@ -16,8 +16,23 @@ concurrency:
 jobs:
   web:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hrbp
+          POSTGRES_PASSWORD: hrbp
+          POSTGRES_DB: hrbp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hrbp -d hrbp"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql://hrbp:hrbp@localhost:5432/hrbp
+      HRBP_MAINTENANCE_TOKEN: ci-maintenance-token-1234567890
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,49 +46,44 @@ jobs:
       - run: npm run routes:validate
       - run: npm run ui:validate
       - run: npx prisma validate
+      - name: Prepare CI database
+        run: npx prisma db push --skip-generate
       - run: npm run typecheck
       - run: npm run build
-      - name: Verify Prisma query compiler is traced
-        shell: bash
-        run: |
-          set -euo pipefail
-          expected=".next/standalone/node_modules/.prisma/client/query_compiler_bg.wasm"
-          if [ ! -f "$expected" ]; then
-            echo "Prisma query compiler WASM is missing from the Next.js standalone trace: $expected"
-            echo "Generated Prisma WASM files:"
-            find node_modules/.prisma/client -maxdepth 1 -name '*.wasm' -print || true
-            echo "Standalone Prisma files:"
-            find .next/standalone -path '*/node_modules/.prisma/client/*' -print 2>/dev/null || true
-            exit 1
-          fi
-          ls -lh "$expected"
       - run: npm run cf:build
-      - name: Verify Prisma query compiler reaches OpenNext output
+      - name: Smoke test Cloudflare Worker and Prisma runtime
         shell: bash
         run: |
           set -euo pipefail
-          match="$(find .open-next -name 'query_compiler_bg.wasm' -print -quit 2>/dev/null || true)"
-          if [ -z "$match" ]; then
-            echo "Prisma query compiler WASM is missing from .open-next output."
-            find .open-next -path '*/node_modules/.prisma/client/*' -print 2>/dev/null || true
-            exit 1
-          fi
-          echo "Prisma query compiler WASM bundled at: $match"
-          ls -lh "$match"
-      - name: Smoke test Cloudflare Worker runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          npx wrangler dev --local --port 8787 > /tmp/hrbp-wrangler.log 2>&1 &
+          npx wrangler dev --local --port 8787 \
+            --var HRBP_MAINTENANCE_TOKEN:$HRBP_MAINTENANCE_TOKEN \
+            > /tmp/hrbp-wrangler.log 2>&1 &
           WRANGLER_PID=$!
           trap 'kill $WRANGLER_PID 2>/dev/null || true' EXIT
+
+          ready=0
           for i in {1..30}; do
             if curl --fail --silent --show-error http://127.0.0.1:8787/api/health/runtime > /tmp/hrbp-health.json; then
               cat /tmp/hrbp-health.json
-              exit 0
+              ready=1
+              break
             fi
             sleep 1
           done
-          echo 'Worker runtime smoke test failed'
-          cat /tmp/hrbp-wrangler.log
-          exit 1
+
+          if [ "$ready" -ne 1 ]; then
+            echo 'Worker runtime smoke test failed'
+            cat /tmp/hrbp-wrangler.log
+            exit 1
+          fi
+
+          curl --fail --silent --show-error \
+            -X POST http://127.0.0.1:8787/api/internal/maintenance \
+            -H "Authorization: Bearer $HRBP_MAINTENANCE_TOKEN" \
+            -H 'Accept: application/json' \
+            > /tmp/hrbp-maintenance.json || {
+              echo 'Prisma/Hyperdrive maintenance smoke test failed'
+              cat /tmp/hrbp-wrangler.log
+              exit 1
+            }
+          cat /tmp/hrbp-maintenance.json
