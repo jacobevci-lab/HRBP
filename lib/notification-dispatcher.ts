@@ -1,4 +1,4 @@
-import { NotificationOutboxStatus } from "@prisma/client";
+import { DataClassification, NotificationOutboxStatus, PlatformRole, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { runtimeNumber } from "@/lib/runtime-env";
 
@@ -12,6 +12,10 @@ function retryDelayMs(attempt: number) {
 function errorMessage(error: unknown) {
   const value = error instanceof Error ? error.message : String(error);
   return value.replace(/\s+/g, " ").trim().slice(0, 1200) || "Unknown notification delivery error";
+}
+
+function platformRole(value: string): PlatformRole | null {
+  return (Object.values(PlatformRole) as string[]).includes(value) ? value as PlatformRole : null;
 }
 
 async function recoverStaleLocks(now: Date) {
@@ -39,16 +43,19 @@ type InAppCandidate = {
   resourceType: string;
   resourceId: string;
   dedupeKey: string;
-  payload: unknown;
-  classification: "INTERNAL" | "CONFIDENTIAL" | "RESTRICTED" | "HIGHLY_RESTRICTED";
+  payload: Prisma.JsonValue | null;
+  classification: DataClassification;
 };
 
 async function deliverInApp(candidate: InAppCandidate) {
   if (candidate.recipientUserId) return;
   if (!candidate.recipientRole) throw new Error("IN_APP notification has no user or role recipient");
 
+  const role = platformRole(candidate.recipientRole);
+  if (!role) throw new Error(`Unsupported notification role ${candidate.recipientRole}`);
+
   const recipients = await db.userAccount.findMany({
-    where: { tenantId: candidate.tenantId, role: candidate.recipientRole as never, active: true },
+    where: { tenantId: candidate.tenantId, role, active: true },
     select: { id: true },
     take: 1000
   });
@@ -57,13 +64,9 @@ async function deliverInApp(candidate: InAppCandidate) {
   const deliveredAt = new Date();
   await db.$transaction(async (tx) => {
     for (const recipient of recipients) {
+      const dedupeKey = `${candidate.dedupeKey}:user:${recipient.id}`;
       await tx.notificationOutbox.upsert({
-        where: {
-          tenantId_dedupeKey: {
-            tenantId: candidate.tenantId,
-            dedupeKey: `${candidate.dedupeKey}:user:${recipient.id}`
-          }
-        },
+        where: { tenantId_dedupeKey: { tenantId: candidate.tenantId, dedupeKey } },
         update: {},
         create: {
           tenantId: candidate.tenantId,
@@ -73,8 +76,8 @@ async function deliverInApp(candidate: InAppCandidate) {
           templateKey: candidate.templateKey,
           resourceType: candidate.resourceType,
           resourceId: candidate.resourceId,
-          dedupeKey: `${candidate.dedupeKey}:user:${recipient.id}`,
-          payload: candidate.payload as never,
+          dedupeKey,
+          ...(candidate.payload === null ? {} : { payload: candidate.payload as Prisma.InputJsonValue }),
           classification: candidate.classification,
           status: NotificationOutboxStatus.DELIVERED,
           attempts: 1,
@@ -146,7 +149,7 @@ export async function runNotificationDispatcher() {
     const attempt = candidate.attempts + 1;
     try {
       if (candidate.channel === "IN_APP") {
-        await deliverInApp(candidate as InAppCandidate);
+        await deliverInApp(candidate);
       } else {
         throw new Error(`Unsupported notification channel: ${candidate.channel}`);
       }
