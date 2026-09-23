@@ -1,141 +1,36 @@
 # HRBP One
 
-Enterprise Human Capital Management & HRBP Operating System.
+Enterprise HRBP platform reference implementation built with Next.js, PostgreSQL/Prisma and Cloudflare/OpenNext.
 
-HRBP One is designed as the primary HR system of record for the complete employee lifecycle — from candidate to alumni — with privacy, security, workflow, audit and AI governance built into the platform foundation.
+## Product direction
 
-## Current foundation
+HRBP One models the workforce as a governed relationship graph instead of a collection of disconnected forms. Core HR, work/pay, growth, employee services, governance/planning and administration share the same tenant, authorization, audit and effective-dated data plane.
 
-The initial enterprise shell is live in the repository and includes:
+## Security model
 
-- Executive / HRBP Command Center dashboard
-- Responsive enterprise navigation and module shell
-- Core HR, organization, recruiting, onboarding and position domains
-- Time, attendance, leave, payroll, compensation and benefits domains
-- Performance, talent, succession, skills, learning and engagement domains
-- Employee Relations / HR Service / documents / policy domains
-- Workforce planning, people analytics, AI assistant and workflow domains
-- Privacy & Compliance and Audit workspaces
-- PostgreSQL-oriented connected people data model
-- Effective-dated employment, organization, position and compensation concepts
-- Tenant-aware security architecture
-- Restricted Employee Relations data boundary
-- Append-only audit ledger direction
-- Local PostgreSQL, Redis and MinIO development stack
-- GitHub Actions CI for type checking, Next.js production builds and Cloudflare Workers builds
-
-## Product architecture
-
-```text
-Employee | Manager | HRBP | HR Ops | Executive
-                    |
-              Experience Layer
-                    |
-        Identity + Policy Enforcement
-                    |
-Core HR | ATS | Time | Payroll | Talent | ER | Learning
-                    |
-       People Graph + Workflow + Events
-                    |
-PostgreSQL | Object Vault | Redis | Search | Analytics
-                    |
- Privacy | Retention | Audit | Classification | AI Governance
-```
-
-## Product principle
-
-One platform, one employee golden record, one organization model, one workflow engine, one audit trail and one privacy model.
-
-External services may integrate with HRBP One, but employee, employment, recruiting, compensation, payroll, performance, talent, case, document and lifecycle records remain mastered by the platform.
-
-## Technology foundation
-
-- Next.js + React + TypeScript
-- Prisma + PostgreSQL
-- Redis for ephemeral coordination/cache
-- S3-compatible private object storage (MinIO locally)
-- Cloudflare Workers deployment through OpenNext
-- GitHub Actions CI
-- Domain-oriented modular architecture
+- Tenant isolation is enforced in server-side queries.
+- Relationship-aware access limits employee populations for managers and HRBPs.
+- Highly restricted case, privacy, compensation and payroll domains preserve dedicated boundaries.
+- Mutations use origin checks, domain capabilities and append-only audit evidence.
+- Employee documents use classification, explicit grants, legal hold, retention and malware-scan gates.
+- Private document download is proxied server-side from S3-compatible object storage; bucket/object credentials are never returned to the browser.
+- Policy governance follows DRAFT → REVIEW → APPROVED → PUBLISHED and requires independent approval.
+- HR Service combines relationship scope with explicit queue membership and queue ownership.
 
 ## Local development
 
+Copy `.env.example` to `.env.local`, configure PostgreSQL and authentication, then run:
+
 ```bash
-cp .env.example .env
 npm install
-docker compose up -d
-npm run db:generate
+npm run db:push
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+For the private document vault configure `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STORAGE_ACCESS_KEY`, `OBJECT_STORAGE_SECRET_KEY`, `OBJECT_STORAGE_BUCKET` and `OBJECT_STORAGE_REGION`.
 
-## Cloudflare Workers deployment
+## Quality gates
 
-The repository is ready for deployment to Cloudflare Workers. The existing Next.js 15 application uses the Cloudflare OpenNext adapter so the current application can be deployed without a framework-major upgrade.
+The GitHub Actions CI validates route structure, UI localization/theme rules, Prisma schema, TypeScript, Next.js production build, OpenNext/Cloudflare packaging and a local Worker runtime smoke test.
 
-Cloudflare Workers configuration lives in `wrangler.jsonc`; the adapter configuration lives in `open-next.config.ts`.
-
-Useful local commands:
-
-```bash
-npm run cf:build
-npm run cf:preview
-npm run cf:deploy
-```
-
-For automatic deployment from GitHub:
-
-1. Cloudflare Dashboard → **Workers & Pages** → **Create application**.
-2. Choose **Import a repository** and select `jacobevci-lab/HRBP`.
-3. Set **Production branch** to `main`.
-4. Set **Build command** to `npm run cf:build`.
-5. Set **Deploy command** to `npx wrangler deploy`.
-6. Leave the root directory at the repository root.
-7. Add required build/runtime variables and secrets in Cloudflare instead of committing them to Git.
-8. Deploy first to the generated `*.workers.dev` address, then attach the production custom domain.
-
-For the first UI-only staging deployment, a syntactically valid `DATABASE_URL` build variable is sufficient because the current dashboard and module workspaces do not require a live database during static build. Before enabling real API-backed HR records, replace this with the production PostgreSQL connectivity design (recommended: PostgreSQL through Cloudflare Hyperdrive) and configure private object storage bindings.
-
-Recommended custom domain:
-
-```text
-hrbp.fornostsecurity.com
-```
-
-## Quality checks
-
-```bash
-npm run typecheck
-npm run lint
-npm run build
-npm run cf:build
-```
-
-## Documentation
-
-- `docs/PRODUCT.md` — product scope and principles
-- `docs/ARCHITECTURE.md` — platform architecture and deployment profiles
-- `docs/DATA-MODEL.md` — connected people data model
-- `docs/SECURITY.md` — security, privacy, access and AI guardrails
-
-## Delivery direction
-
-The platform will be implemented in vertical slices rather than disconnected screens. Each slice must include domain model, authorization, workflow, audit, retention, UI, API contract and tests before it is considered complete.
-
-Initial build sequence:
-
-1. Tenant / Identity / Authorization foundation
-2. Core HR + Organization + Position Management
-3. Employee 360 + Document Vault
-4. Recruiting → Hire → Onboarding lifecycle
-5. Leave / Attendance / Time
-6. Compensation + Payroll core
-7. Performance + Talent + Succession
-8. Employee Relations + HR Service
-9. Workforce Planning + Analytics
-10. AI Assistant with policy-aware retrieval
-
----
-
-**Status:** enterprise foundation bootstrapped; Next.js production build and Cloudflare Workers adapter build are passing on `main`.
+Staging schema synchronization is intentionally a manually dispatched workflow. It applies Prisma schema changes, seeds each vertical slice and verifies minimum domain counts before granting the runtime database role.
