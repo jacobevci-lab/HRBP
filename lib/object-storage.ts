@@ -85,14 +85,15 @@ export async function fetchPrivateObject(objectKey: string, range?: string | nul
   return { configured: true as const, response };
 }
 
-export async function putPrivateObject(objectKey: string, bytes: Uint8Array, contentType: string) {
+export async function putPrivateObject(objectKey: string, body: ArrayBuffer, contentType: string) {
   const config = getStorageConfig();
-  if (!config) return { configured: false as const, response: null, contentHash: sha256(bytes) };
+  const bytes = new Uint8Array(body);
   const contentHash = sha256(bytes);
+  if (!config) return { configured: false as const, response: null, contentHash };
   const request = signedRequest(config, "PUT", objectKey, contentHash);
   request.headers.set("content-type", contentType);
-  request.headers.set("content-length", String(bytes.byteLength));
-  const response = await fetch(request.target, { method: "PUT", headers: request.headers, body: bytes, redirect: "manual" });
+  request.headers.set("content-length", String(body.byteLength));
+  const response = await fetch(request.target, { method: "PUT", headers: request.headers, body, redirect: "manual" });
   return { configured: true as const, response, contentHash };
 }
 
