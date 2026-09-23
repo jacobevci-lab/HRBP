@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, Command, Menu, Plus, Search, Sparkles, X } from "lucide-react";
+import { ChevronDown, Menu, Plus, Sparkles, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { navigation } from "@/lib/navigation";
+import { GlobalSearch } from "@/components/global-search";
 import { SessionIndicator } from "@/components/session-indicator";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TopbarAccount } from "@/components/topbar-account";
@@ -83,12 +84,12 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       <main className="main-area">
         <header className="topbar">
           <button className="icon-button mobile-menu" onClick={() => setMobileOpen(true)} aria-label={t("shell.openNavigation")}><Menu size={20}/></button>
-          <div className="global-search"><Search size={17}/><input placeholder={t("shell.search")}/><kbd><Command size={12}/> K</kbd></div>
+          <GlobalSearch/>
           <div className="topbar-actions">
             <LocaleToggle/>
             <ThemeToggle/>
             <NotificationCenter/>
-            <button className="ai-button"><Sparkles size={16}/> {t("shell.ask")}</button>
+            {navigationCapabilities === null || navigationCapabilities.has("ai:use") ? <button className="ai-button"><Sparkles size={16}/> {t("shell.ask")}</button> : null}
             <Link className="create-button" href="/module/people/new"><Plus size={17}/> {t("shell.create")}</Link>
             <TopbarAccount/>
           </div>
