@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Bell, CheckCheck } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 import { notificationResourceHref, notificationSummary, notificationTitle } from "@/lib/notification-presentation";
 
@@ -32,7 +32,7 @@ export function NotificationCenter() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     try {
       setLoading(true);
       const response = await fetch("/api/notifications?limit=8", { cache: "no-store" });
@@ -49,17 +49,20 @@ export function NotificationCenter() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function markRead(id: string, read = true) {
+  async function markRead(id: string) {
+    const target = items.find((item) => item.id === id);
+    if (!target || target.readAt) return;
     const response = await fetch("/api/notifications", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id, read })
+      body: JSON.stringify({ id, read: true })
     });
     if (!response.ok) return;
-    setItems((current) => current.map((item) => item.id === id ? { ...item, readAt: read ? new Date().toISOString() : null } : item));
-    setUnreadCount((current) => Math.max(0, current + (read ? -1 : 1)));
+    const now = new Date().toISOString();
+    setItems((current) => current.map((item) => item.id === id ? { ...item, readAt: now } : item));
+    setUnreadCount((current) => Math.max(0, current - 1));
   }
 
   async function markAllRead() {
@@ -78,7 +81,7 @@ export function NotificationCenter() {
     void refresh();
     const interval = window.setInterval(() => void refresh(), 60_000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [refresh]);
 
   useEffect(() => {
     if (!open) return;
