@@ -1,8 +1,10 @@
-import { VaultScanStatus } from "@prisma/client";
+import { DataClassification, Prisma, VaultScanStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
-import { getVisibleDocument } from "@/lib/document-access";
+import { canWriteDocumentForPerson, getVisibleDocument } from "@/lib/document-access";
+import { documentUploadMaxBytes, normalizeDocumentContentType, normalizeSha256 } from "@/lib/document-upload-policy";
+import { asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 function serializeVersion<T extends { sizeBytes: bigint | null }>(value: T) {
@@ -13,7 +15,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "documents:read")) return forbidden();
-  const { id } = await params;
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid document id is required." }, { status: 400 });
   const document = await getVisibleDocument(db, ctx, id);
   if (!document) return Response.json({ error: "Document not found or restricted by policy." }, { status: 404 });
   const rows = await db.documentVersion.findMany({ where: { tenantId: ctx.tenantId, documentId: id }, orderBy: { version: "desc" } });
@@ -25,24 +28,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "documents:write")) return forbidden();
-  const { id } = await params;
-  const body = await request.json() as { contentHash?: string; contentType?: string; sizeBytes?: string | number };
-  const contentHash = body.contentHash?.trim();
-  if (!contentHash || !body.contentType?.trim()) return Response.json({ error: "contentHash and contentType are required." }, { status: 400 });
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid document id is required." }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "JSON body must be an object." }, { status: 400 });
+  const contentHash = normalizeSha256(body.contentHash);
+  const contentType = normalizeDocumentContentType(body.contentType);
+  if (!contentHash || !contentType) return Response.json({ error: "A valid SHA-256 contentHash and supported contentType are required." }, { status: 400 });
 
   let sizeBytes: bigint | undefined;
-  if (body.sizeBytes !== undefined) {
+  if (body.sizeBytes !== undefined && body.sizeBytes !== null && body.sizeBytes !== "") {
+    if (typeof body.sizeBytes !== "string" && typeof body.sizeBytes !== "number") return Response.json({ error: "sizeBytes must be a non-negative integer." }, { status: 400 });
     try {
-      sizeBytes = BigInt(body.sizeBytes);
-      if (sizeBytes < BigInt(0)) throw new Error("NEGATIVE");
+      const normalized = typeof body.sizeBytes === "number" ? String(body.sizeBytes) : body.sizeBytes.trim();
+      if (!/^\d+$/.test(normalized)) throw new Error("INVALID");
+      sizeBytes = BigInt(normalized);
+      if (sizeBytes < BigInt(0) || sizeBytes > BigInt(documentUploadMaxBytes())) throw new Error("INVALID");
     } catch {
-      return Response.json({ error: "sizeBytes must be a non-negative integer." }, { status: 400 });
+      return Response.json({ error: `sizeBytes must be a non-negative integer within the ${documentUploadMaxBytes()} byte upload limit.` }, { status: 400 });
     }
   }
 
-  const data = await db.$transaction(async (tx) => {
-    const document = await getVisibleDocument(tx, ctx, id);
+  const result = await db.$transaction(async (tx) => {
+    const document = await tx.documentRecord.findFirst({ where: { id, tenantId: ctx.tenantId, caseId: null } });
     if (!document) throw new Error("NOT_FOUND");
+    if (!await canWriteDocumentForPerson(tx, ctx, document.personId)) throw new Error("OUT_OF_SCOPE");
     const latest = await tx.documentVersion.findFirst({ where: { tenantId: ctx.tenantId, documentId: id }, orderBy: { version: "desc" }, select: { version: true } });
     const version = (latest?.version ?? 0) + 1;
     const record = await tx.documentVersion.create({
@@ -51,7 +61,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         documentId: id,
         version,
         objectKey: `${document.objectKey}/v${version}`,
-        contentType: body.contentType!.trim(),
+        contentType,
         sizeBytes,
         contentHash,
         classification: document.classification,
@@ -59,10 +69,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         createdById: ctx.actorId
       }
     });
-    await appendAudit(tx, ctx, { action: "document.version-created", resourceType: "DocumentVersion", resourceId: record.id, classification: document.classification });
+    await appendAudit(tx, ctx, { action: "document.version-created", resourceType: "DocumentVersion", resourceId: record.id, classification: document.classification ?? DataClassification.RESTRICTED, purpose: "Immutable vault version reserved for upload" });
     return record;
-  }).catch((error) => error instanceof Error && error.message === "NOT_FOUND" ? null : Promise.reject(error));
+  }).catch((error) => {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return "CONFLICT" as const;
+    if (error instanceof Error && ["NOT_FOUND", "OUT_OF_SCOPE"].includes(error.message)) return error.message;
+    return Promise.reject(error);
+  });
 
-  if (!data) return Response.json({ error: "Document not found or restricted by policy." }, { status: 404 });
-  return Response.json({ data: serializeVersion(data), vaultUpload: { objectKey: data.objectKey, scanRequired: true } }, { status: 201 });
+  if (result === "NOT_FOUND") return Response.json({ error: "Document not found." }, { status: 404 });
+  if (result === "OUT_OF_SCOPE") return forbidden("Document subject is outside your authorized write scope.");
+  if (result === "CONFLICT") return Response.json({ error: "Document version changed concurrently. Refresh and retry." }, { status: 409 });
+  return Response.json({ data: serializeVersion(result), upload: { method: "PUT", endpoint: `/api/documents/${encodeURIComponent(id)}/versions/${encodeURIComponent(result.id)}/upload`, scanRequired: true } }, { status: 201 });
 }
