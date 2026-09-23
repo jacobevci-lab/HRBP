@@ -1,11 +1,13 @@
 import { authConfigurationStatus } from "@/lib/auth-config";
 import { sessionFromRequest } from "@/lib/auth-session";
 import { can, type Capability } from "@/lib/authorization";
+import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-const navigationCapabilityCandidates: Capability[] = [
+const uiCapabilityCandidates: Capability[] = [
   "people:read",
+  "people:write",
   "organization:read",
   "positions:read",
   "documents:read",
@@ -48,18 +50,26 @@ export async function GET(request: Request) {
     role: session.role,
     employmentId: session.employmentId
   };
-  const navigationCapabilities = navigationCapabilityCandidates.filter((capability) => can(authorizationContext, capability));
+  const uiCapabilities = uiCapabilityCandidates.filter((capability) => can(authorizationContext, capability));
+
+  let tenantName: string | null = null;
+  try {
+    tenantName = (await db.tenant.findUnique({ where: { id: session.tenantId }, select: { name: true } }))?.name ?? null;
+  } catch {
+    tenantName = null;
+  }
 
   return Response.json({
     authenticated: true,
     oidcConfigured: configuration.configured,
-    navigationCapabilities,
+    navigationCapabilities: uiCapabilities,
     user: {
       id: session.actorId,
       displayName: session.displayName,
       email: session.email ?? null,
       role: session.role,
       tenantId: session.tenantId,
+      tenantName,
       employmentId: session.employmentId ?? null,
       expiresAt: new Date(session.exp * 1000).toISOString()
     }
