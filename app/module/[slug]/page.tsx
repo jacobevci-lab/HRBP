@@ -4,6 +4,7 @@ import { GovernancePlanningModulePage } from "@/components/governance-planning-m
 import { GrowthModulePage } from "@/components/growth-module-page";
 import { HRServiceEscalationPanel } from "@/components/hr-service-escalation-panel";
 import { ModuleLanding } from "@/components/module-landing";
+import { NotificationsModulePage } from "@/components/notifications-module-page";
 import { PublicCoreLanding } from "@/components/public-core-landing";
 import { WorkPayModulePage } from "@/components/work-pay-module-page";
 import { getServerRequestContext } from "@/lib/server-session";
@@ -28,6 +29,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const tab = typeof search.tab === "string" ? search.tab : undefined;
   const escalation = typeof search.escalation === "string" ? search.escalation : undefined;
 
+  if (ctx && slug === "notifications") return <AppShell><NotificationsModulePage/></AppShell>;
   if (ctx && slug === "analytics") return <AnalyticsModulePage/>;
   if (ctx && growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug}/>;
   if (ctx && workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug}/>;
