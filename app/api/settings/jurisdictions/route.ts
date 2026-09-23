@@ -1,13 +1,14 @@
 import { DataClassification, EmploymentStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
+import { isIsoCountryCode } from "@/lib/countries";
 import { db } from "@/lib/db";
 import { asDate, asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 function countryCode(value: unknown) {
   const code = typeof value === "string" ? value.trim().toUpperCase() : "";
-  return /^[A-Z]{2}$/.test(code) ? code : null;
+  return isIsoCountryCode(code) ? code : null;
 }
 
 export async function GET(request: Request) {
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
   const effectiveFrom = asDate(body.effectiveFrom);
   const effectiveTo = body.effectiveTo === undefined || body.effectiveTo === null || body.effectiveTo === "" ? null : asDate(body.effectiveTo);
   const source = typeof body.source === "string" ? body.source.trim().slice(0, 120) || null : null;
-  if (!employmentId || !country || !effectiveFrom) return Response.json({ error: "employmentId, ISO alpha-2 countryCode and effectiveFrom are required." }, { status: 400 });
+  if (!employmentId || !country || !effectiveFrom) return Response.json({ error: "employmentId, valid ISO 3166-1 alpha-2 countryCode and effectiveFrom are required." }, { status: 400 });
   if (body.effectiveTo && !effectiveTo) return Response.json({ error: "effectiveTo is invalid." }, { status: 400 });
   if (effectiveTo && effectiveTo <= effectiveFrom) return Response.json({ error: "effectiveTo must be later than effectiveFrom." }, { status: 400 });
 
