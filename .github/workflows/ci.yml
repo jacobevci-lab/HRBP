@@ -33,7 +33,33 @@ jobs:
       - run: npx prisma validate
       - run: npm run typecheck
       - run: npm run build
+      - name: Verify Prisma query compiler is traced
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected=".next/standalone/node_modules/.prisma/client/query_compiler_bg.wasm"
+          if [ ! -f "$expected" ]; then
+            echo "Prisma query compiler WASM is missing from the Next.js standalone trace: $expected"
+            echo "Generated Prisma WASM files:"
+            find node_modules/.prisma/client -maxdepth 1 -name '*.wasm' -print || true
+            echo "Standalone Prisma files:"
+            find .next/standalone -path '*/node_modules/.prisma/client/*' -print 2>/dev/null || true
+            exit 1
+          fi
+          ls -lh "$expected"
       - run: npm run cf:build
+      - name: Verify Prisma query compiler reaches OpenNext output
+        shell: bash
+        run: |
+          set -euo pipefail
+          match="$(find .open-next -name 'query_compiler_bg.wasm' -print -quit 2>/dev/null || true)"
+          if [ -z "$match" ]; then
+            echo "Prisma query compiler WASM is missing from .open-next output."
+            find .open-next -path '*/node_modules/.prisma/client/*' -print 2>/dev/null || true
+            exit 1
+          fi
+          echo "Prisma query compiler WASM bundled at: $match"
+          ls -lh "$match"
       - name: Smoke test Cloudflare Worker runtime
         shell: bash
         run: |
