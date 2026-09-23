@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Command, Menu, Plus, Search, Sparkles, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { navigation } from "@/lib/navigation";
 import { SessionIndicator } from "@/components/session-indicator";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -12,10 +12,38 @@ import { LocaleProvider, useLocale } from "@/components/locale-provider";
 import { LocaleToggle } from "@/components/locale-toggle";
 import { NotificationCenter } from "@/components/notification-center";
 
+type SessionNavigationResponse = {
+  authenticated?: boolean;
+  navigationCapabilities?: string[];
+};
+
 function AppShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [navigationCapabilities, setNavigationCapabilities] = useState<Set<string> | null>(null);
   const { t } = useLocale();
+
+  useEffect(() => {
+    let active = true;
+    void fetch("/api/auth/session", { cache: "no-store" })
+      .then(async (response) => response.ok ? response.json() as Promise<SessionNavigationResponse> : null)
+      .then((session) => {
+        if (!active || !session) return;
+        if (session.authenticated) setNavigationCapabilities(new Set(session.navigationCapabilities ?? []));
+        else setNavigationCapabilities(null);
+      })
+      .catch(() => {
+        if (active) setNavigationCapabilities(null);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const visibleNavigation = useMemo(() => navigation
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !navigationCapabilities || !item.requiredCapability || navigationCapabilities.has(item.requiredCapability))
+    }))
+    .filter((group) => group.items.length > 0), [navigationCapabilities]);
 
   return (
     <div className="app-shell">
@@ -33,7 +61,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <ChevronDown size={15}/>
         </div>
         <nav className="nav-scroll">
-          {navigation.map((group) => (
+          {visibleNavigation.map((group) => (
             <div className="nav-group" key={group.labelKey}>
               <div className="nav-label">{t(group.labelKey)}</div>
               {group.items.map((item) => {
