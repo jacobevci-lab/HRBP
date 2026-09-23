@@ -1,0 +1,71 @@
+name: Operational Maintenance
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hrbp-operational-maintenance
+  cancel-in-progress: false
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    env:
+      HRBP_MAINTENANCE_URL: ${{ secrets.HRBP_MAINTENANCE_URL }}
+      HRBP_MAINTENANCE_TOKEN: ${{ secrets.HRBP_MAINTENANCE_TOKEN }}
+    steps:
+      - name: Validate scheduler configuration
+        id: config
+        shell: bash
+        run: |
+          if [ -z "$HRBP_MAINTENANCE_URL" ] || [ -z "$HRBP_MAINTENANCE_TOKEN" ]; then
+            if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+              echo "HRBP_MAINTENANCE_URL and HRBP_MAINTENANCE_TOKEN repository secrets are required."
+              exit 1
+            fi
+            echo "::warning::Operational maintenance scheduler is not configured; scheduled invocation skipped."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          case "$HRBP_MAINTENANCE_URL" in
+            https://*/api/internal/maintenance) ;;
+            *)
+              echo "HRBP_MAINTENANCE_URL must be an HTTPS URL ending in /api/internal/maintenance."
+              exit 1
+              ;;
+          esac
+          if [ "${#HRBP_MAINTENANCE_TOKEN}" -lt 24 ]; then
+            echo "HRBP_MAINTENANCE_TOKEN must contain at least 24 characters."
+            exit 1
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - name: Run operational maintenance
+        if: steps.config.outputs.configured == 'true'
+        shell: bash
+        run: |
+          response_file="$(mktemp)"
+          http_code="$(curl \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-all-errors \
+            --connect-timeout 10 \
+            --max-time 90 \
+            --request POST \
+            --header "Authorization: Bearer $HRBP_MAINTENANCE_TOKEN" \
+            --header "Accept: application/json" \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            "$HRBP_MAINTENANCE_URL")"
+          cat "$response_file"
+          echo
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "Operational maintenance returned HTTP $http_code"
+            exit 1
+          fi

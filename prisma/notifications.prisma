@@ -1,0 +1,35 @@
+enum NotificationOutboxStatus {
+  PENDING
+  PROCESSING
+  DELIVERED
+  FAILED
+  DEAD_LETTER
+}
+
+model NotificationOutbox {
+  id              String                   @id @default(cuid())
+  tenantId        String
+  eventType       String
+  channel         String                   @default("IN_APP")
+  recipientUserId String?
+  templateKey     String?
+  resourceType    String
+  resourceId      String
+  dedupeKey       String
+  payload         Json?
+  classification  DataClassification       @default(CONFIDENTIAL)
+  status          NotificationOutboxStatus @default(PENDING)
+  attempts        Int                      @default(0)
+  nextAttemptAt   DateTime                 @default(now())
+  lockedAt        DateTime?
+  deliveredAt     DateTime?
+  lastError       String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@unique([tenantId, dedupeKey])
+  @@index([status, nextAttemptAt, createdAt])
+  @@index([tenantId, recipientUserId, status, createdAt])
+  @@index([tenantId, eventType, createdAt])
+  @@index([tenantId, resourceType, resourceId])
+}
