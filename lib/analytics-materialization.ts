@@ -2,6 +2,7 @@ import { AnalyticsPopulationScope, EmploymentStatus, Prisma, PrismaClient } from
 import { workforceScopeFingerprint } from "@/lib/analytics-privacy";
 
 type AnalyticsClient = PrismaClient | Prisma.TransactionClient;
+const SNAPSHOT_HISTORY_LIMIT = 24;
 
 export type MetricMaterializationInput = {
   tenantId: string;
@@ -49,7 +50,7 @@ export async function materializeGovernedMetricSnapshot(client: AnalyticsClient,
   }
 
   const suppressed = Boolean(input.sourceSuppressed) || input.population < metric.minPopulation;
-  return client.metricSnapshot.create({
+  const snapshot = await client.metricSnapshot.create({
     data: {
       tenantId: input.tenantId,
       metricId: metric.id,
@@ -64,4 +65,15 @@ export async function materializeGovernedMetricSnapshot(client: AnalyticsClient,
       generatedAt: new Date()
     }
   });
+
+  const stale = await client.metricSnapshot.findMany({
+    where: { tenantId: input.tenantId, metricId: metric.id, populationScope, scopeFingerprint },
+    orderBy: [{ generatedAt: "desc" }, { id: "desc" }],
+    skip: SNAPSHOT_HISTORY_LIMIT,
+    take: 500,
+    select: { id: true }
+  });
+  if (stale.length) await client.metricSnapshot.deleteMany({ where: { id: { in: stale.map((row) => row.id) } } });
+
+  return snapshot;
 }
