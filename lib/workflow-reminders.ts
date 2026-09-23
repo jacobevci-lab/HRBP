@@ -40,8 +40,9 @@ export async function queueWorkflowReminders() {
   let overdue = 0;
 
   for (const task of tasks) {
-    if (!task.dueAt) continue;
-    const isOverdue = task.dueAt < now;
+    const dueAt = task.dueAt;
+    if (!dueAt) continue;
+    const isOverdue = dueAt < now;
     const eventType = isOverdue ? "WORKFLOW_TASK_OVERDUE" : "WORKFLOW_TASK_DUE_SOON";
     const reminderKey = isOverdue ? "overdue" : "due-soon";
     await db.$transaction(async (tx) => {
@@ -61,7 +62,7 @@ export async function queueWorkflowReminders() {
           instanceId: task.instance.id,
           subjectType: task.instance.subjectType,
           subjectId: task.instance.subjectId,
-          dueAt: task.dueAt.toISOString(),
+          dueAt: dueAt.toISOString(),
           warningMinutes
         }
       });
