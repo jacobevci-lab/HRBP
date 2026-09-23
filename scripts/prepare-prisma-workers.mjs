@@ -15,15 +15,18 @@ if (!match) {
   throw new Error("Prisma client generator block not found");
 }
 
-// Prisma 6 driver adapters require a normally generated client when the
-// PrismaClient constructor receives an `adapter`. Keep the source schema
-// unchanged and enable the driverAdapters preview feature only in this
-// isolated Cloudflare/Hyperdrive generation schema.
+// Cloudflare Workers cannot execute Prisma's native Rust query-engine binary.
+// Prisma 6.16+ supports an engine-less JavaScript client through
+// `engineType = "client"`; this pairs with the @prisma/adapter-pg instance
+// created in lib/db.ts and keeps platform-specific OpenSSL binaries out of the
+// Worker bundle. Keep this isolated to the generated Worker schema so normal
+// Prisma CLI/database workflows can continue using the source schema.
 const hyperdriveGenerator = `generator client {
   provider        = "prisma-client-js"
+  engineType      = "client"
   previewFeatures = ["driverAdapters"]
 }`;
 
 const updatedSchema = schema.replace(match[0], hyperdriveGenerator);
 await writeFile(schemaPath, updatedSchema, "utf8");
-console.log("Prepared Prisma schema for Cloudflare Hyperdrive driver adapter generation");
+console.log("Prepared engine-less Prisma schema for Cloudflare Hyperdrive driver adapter generation");
