@@ -14,6 +14,8 @@
     "routes:validate": "node scripts/validate-next-routes.mjs",
     "ui:validate": "node scripts/validate-ui-localization.mjs",
     "typecheck": "npm run db:generate && tsc --noEmit",
+    "security:audit:prod": "npm audit --omit=dev --audit-level=high",
+    "security:audit:full": "npm audit --audit-level=high",
     "db:generate": "node scripts/prepare-prisma-workers.mjs && prisma generate --schema=.prisma-worker",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
