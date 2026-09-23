@@ -1,5 +1,6 @@
 import { EmploymentAccessEffect, EmploymentAccessScopeType, EmploymentStatus, PlatformRole } from "@prisma/client";
 import { can, forbidden } from "@/lib/authorization";
+import { isIsoCountryCode } from "@/lib/countries";
 import { db } from "@/lib/db";
 import { resolveEmploymentScope } from "@/lib/employment-scope";
 import { resolveEmploymentScopeTarget } from "@/lib/employment-scope-preview";
@@ -8,7 +9,7 @@ import { getRequestContext, mutationOriginAllowed, unauthorized, type RequestCon
 
 function countryCode(value: unknown) {
   const code = typeof value === "string" ? value.trim().toUpperCase() : "";
-  return /^[A-Z]{2}$/.test(code) ? code : null;
+  return isIsoCountryCode(code) ? code : null;
 }
 
 export async function POST(request: Request) {
