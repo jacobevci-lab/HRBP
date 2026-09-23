@@ -27,6 +27,13 @@ export async function HRServiceEscalationPanel({ filterValue }: { filterValue?: 
   const data = await getHRServiceEscalationLiveData(ctx, filter);
   if (!data) return null;
 
+  if (!data.schemaReady) {
+    return <section className="card services-panel hr-escalation-shell hr-escalation-schema-warning">
+      <AlertTriangle size={19}/>
+      <div><span className="section-kicker">{c(locale, "Escalation controls unavailable", "Eskalasyon kontrolleri kullanılamıyor")}</span><h3>{c(locale, "Staging database schema sync required", "Staging veritabanı şema senkronizasyonu gerekli")}</h3><p>{c(locale, "The existing HR Service workspace remains available. Run the Staging DB Sync workflow to activate SLA escalation fields and operations reporting.", "Mevcut HR Service çalışma alanı kullanılmaya devam eder. SLA eskalasyon alanlarını ve operasyon raporlamasını etkinleştirmek için Staging DB Sync workflow'unu çalıştırın.")}</p></div>
+    </section>;
+  }
+
   const filters = [
     { key: "all", label: c(locale, "All", "Tümü"), count: data.counts.all },
     { key: "warning", label: c(locale, "Warning", "Uyarı"), count: data.counts.warning },
