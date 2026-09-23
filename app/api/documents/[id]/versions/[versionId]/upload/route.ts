@@ -45,14 +45,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const buffer = await request.arrayBuffer();
   if (buffer.byteLength === 0) return Response.json({ error: "Document object cannot be empty." }, { status: 400 });
   if (buffer.byteLength > maxBytes) return Response.json({ error: `Document object exceeds the ${maxBytes} byte upload limit.` }, { status: 413 });
-  const bytes = new Uint8Array(buffer);
-  const computedHash = createHash("sha256").update(bytes).digest("hex");
+  const computedHash = createHash("sha256").update(new Uint8Array(buffer)).digest("hex");
   const declaredHash = normalizeSha256(request.headers.get("x-content-sha256"));
   if (request.headers.get("x-content-sha256") && !declaredHash) return Response.json({ error: "x-content-sha256 must be a 64-character SHA-256 hex digest." }, { status: 400 });
   if (declaredHash && declaredHash !== computedHash) return Response.json({ error: "Uploaded object does not match the declared SHA-256 digest." }, { status: 409 });
   if (authorization.version.contentHash !== computedHash) return Response.json({ error: "Uploaded object does not match the version content hash." }, { status: 409 });
 
-  const storage = await putPrivateObject(authorization.version.objectKey, bytes, contentType);
+  const storage = await putPrivateObject(authorization.version.objectKey, buffer, contentType);
   if (!storage.configured) return Response.json({ error: "Private object storage is not configured." }, { status: 503 });
   if (!storage.response?.ok) return Response.json({ error: "Private object storage rejected the upload." }, { status: 502 });
 
