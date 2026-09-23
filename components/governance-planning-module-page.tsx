@@ -49,9 +49,14 @@ export async function GovernancePlanningModulePage({ slug }: { slug: GovernanceS
 
   try {
     const { GovernancePlanningLiveWorkspace } = await import("@/components/governance-planning-live-workspace");
+    const live = await GovernancePlanningLiveWorkspace({ slug });
+    const ownedDrafts = slug === "workforce-planning"
+      ? await (await import("@/components/workforce-planning-owned-drafts")).WorkforcePlanningOwnedDrafts()
+      : null;
     return <AppShell>
       <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> {c(locale, "Governed live data", "Yönetişimli canlı veri")}</button></div></section>
-      {await GovernancePlanningLiveWorkspace({ slug })}
+      {live}
+      {ownedDrafts}
     </AppShell>;
   } catch (error) {
     console.error(`[HRBP] Dedicated governance-planning ${slug} workspace failed; protected fallback activated.`, error);
