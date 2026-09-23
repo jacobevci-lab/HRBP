@@ -247,6 +247,9 @@ model HRServiceRequest {
   firstResponseAt     DateTime?
   resolvedAt          DateTime?
   closedAt            DateTime?
+  escalationLevel     Int @default(0)
+  escalatedAt         DateTime?
+  escalationReason    String?
   classification      DataClassification @default(CONFIDENTIAL)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -257,6 +260,7 @@ model HRServiceRequest {
   @@index([tenantId, requestorId, createdAt])
   @@index([tenantId, assigneeId, slaDueAt])
   @@index([tenantId, queue, status])
+  @@index([tenantId, escalationLevel, slaDueAt])
 }
 
 model HRServiceComment {
