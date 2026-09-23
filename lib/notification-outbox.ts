@@ -4,6 +4,7 @@ export type NotificationOutboxEvent = {
   tenantId: string;
   eventType: string;
   recipientUserId?: string | null;
+  recipientRole?: string | null;
   templateKey?: string | null;
   resourceType: string;
   resourceId: string;
@@ -34,6 +35,7 @@ export async function enqueueNotificationOutbox(tx: Prisma.TransactionClient, ev
       eventType: event.eventType,
       channel: event.channel ?? "IN_APP",
       recipientUserId: event.recipientUserId ?? null,
+      recipientRole: event.recipientRole ?? null,
       templateKey: event.templateKey ?? null,
       resourceType: event.resourceType,
       resourceId: event.resourceId,
