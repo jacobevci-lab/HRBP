@@ -15,6 +15,7 @@ import "./theme.css";
 import "./lifecycle.css";
 import "./notifications.css";
 import "./workflows.css";
+import "./global-search.css";
 import "./warm-enterprise.css";
 import "./warm-enterprise-polish.css";
 import "./warm-enterprise-unified.css";
