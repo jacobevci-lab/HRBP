@@ -9,13 +9,14 @@ import {
 } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
+import { isIsoCountryCode } from "@/lib/countries";
 import { db } from "@/lib/db";
 import { asDate, asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 function normalizedCountry(value: unknown) {
   const country = typeof value === "string" ? value.trim().toUpperCase() : "";
-  return /^[A-Z]{2}$/.test(country) ? country : null;
+  return isIsoCountryCode(country) ? country : null;
 }
 
 export async function GET(request: Request) {
@@ -67,7 +68,7 @@ export async function GET(request: Request) {
 
   const userById = new Map(users.map((user) => [user.id, user]));
   const employmentById = new Map(employments.map((employment) => [employment.id, employment]));
-  const countries = [...new Set(jurisdictionRows.map((row) => row.countryCode.toUpperCase()))].map((code) => ({ code }));
+  const countries = [...new Set(jurisdictionRows.map((row) => row.countryCode.toUpperCase()).filter(isIsoCountryCode))].map((code) => ({ code }));
 
   return Response.json({
     data: grants.map((grant) => ({
