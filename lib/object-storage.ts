@@ -24,7 +24,7 @@ function getStorageConfig(): StorageConfig | null {
   };
 }
 
-function sha256(value: string) {
+function sha256(value: string | Uint8Array) {
   return createHash("sha256").update(value).digest("hex");
 }
 
@@ -46,14 +46,7 @@ function amzTimestamp(date: Date) {
   return date.toISOString().replace(/[:-]|\.\d{3}/g, "");
 }
 
-export function objectStorageConfigured() {
-  return Boolean(getStorageConfig());
-}
-
-export async function fetchPrivateObject(objectKey: string, range?: string | null) {
-  const config = getStorageConfig();
-  if (!config) return { configured: false as const, response: null };
-
+function signedRequest(config: StorageConfig, method: "GET" | "PUT", objectKey: string, payloadHash: string) {
   const endpoint = new URL(config.endpoint);
   const canonicalUri = canonicalObjectPath(endpoint.pathname, config.bucket, objectKey);
   const target = new URL(endpoint.toString());
@@ -63,24 +56,11 @@ export async function fetchPrivateObject(objectKey: string, range?: string | nul
   const now = new Date();
   const amzDate = amzTimestamp(now);
   const dateStamp = amzDate.slice(0, 8);
-  const payloadHash = sha256("");
   const canonicalHeaders = `host:${target.host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
   const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
-  const canonicalRequest = [
-    "GET",
-    canonicalUri,
-    "",
-    canonicalHeaders,
-    signedHeaders,
-    payloadHash
-  ].join("\n");
+  const canonicalRequest = [method, canonicalUri, "", canonicalHeaders, signedHeaders, payloadHash].join("\n");
   const scope = `${dateStamp}/${config.region}/s3/aws4_request`;
-  const stringToSign = [
-    "AWS4-HMAC-SHA256",
-    amzDate,
-    scope,
-    sha256(canonicalRequest)
-  ].join("\n");
+  const stringToSign = ["AWS4-HMAC-SHA256", amzDate, scope, sha256(canonicalRequest)].join("\n");
 
   const dateKey = hmac(`AWS4${config.secretKey}`, dateStamp);
   const regionKey = hmac(dateKey, config.region);
@@ -88,16 +68,32 @@ export async function fetchPrivateObject(objectKey: string, range?: string | nul
   const signingKey = hmac(serviceKey, "aws4_request");
   const signature = createHmac("sha256", signingKey).update(stringToSign).digest("hex");
   const authorization = `AWS4-HMAC-SHA256 Credential=${config.accessKey}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  const headers = new Headers({ authorization, "x-amz-content-sha256": payloadHash, "x-amz-date": amzDate });
+  return { target, headers };
+}
 
-  const headers = new Headers({
-    authorization,
-    "x-amz-content-sha256": payloadHash,
-    "x-amz-date": amzDate
-  });
-  if (range?.trim()) headers.set("range", range.trim());
+export function objectStorageConfigured() {
+  return Boolean(getStorageConfig());
+}
 
-  const response = await fetch(target, { method: "GET", headers, redirect: "manual" });
+export async function fetchPrivateObject(objectKey: string, range?: string | null) {
+  const config = getStorageConfig();
+  if (!config) return { configured: false as const, response: null };
+  const request = signedRequest(config, "GET", objectKey, sha256(""));
+  if (range?.trim()) request.headers.set("range", range.trim());
+  const response = await fetch(request.target, { method: "GET", headers: request.headers, redirect: "manual" });
   return { configured: true as const, response };
+}
+
+export async function putPrivateObject(objectKey: string, bytes: Uint8Array, contentType: string) {
+  const config = getStorageConfig();
+  if (!config) return { configured: false as const, response: null, contentHash: sha256(bytes) };
+  const contentHash = sha256(bytes);
+  const request = signedRequest(config, "PUT", objectKey, contentHash);
+  request.headers.set("content-type", contentType);
+  request.headers.set("content-length", String(bytes.byteLength));
+  const response = await fetch(request.target, { method: "PUT", headers: request.headers, body: bytes, redirect: "manual" });
+  return { configured: true as const, response, contentHash };
 }
 
 export function downloadResponseHeaders(source: Headers, fileName: string) {
