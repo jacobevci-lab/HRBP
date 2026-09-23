@@ -182,12 +182,7 @@ export async function getSuccessionGrowthData(input: string | RequestContext) {
       where: {
         tenantId: ctx.tenantId,
         active: true,
-        ...(scope === null ? {} : {
-          OR: [
-            { positionId: { in: scopedPositionIds ?? [] } },
-            { candidates: { some: { employmentId: { in: scope } } } }
-          ]
-        })
+        ...(scope === null ? {} : { positionId: { in: scopedPositionIds ?? [] } })
       },
       orderBy: { reviewDueAt: "asc" },
       take: 200,
