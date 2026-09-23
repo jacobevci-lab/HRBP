@@ -1,11 +1,13 @@
 import {
   AIInteractionStatus,
   DSRStatus,
+  EmploymentStatus,
   PlatformRole,
   SurveyStatus,
   WorkforceScenarioStatus
 } from "@prisma/client";
 import { withDb } from "@/lib/db";
+import { resolveEmploymentScope } from "@/lib/employment-scope";
 import type { RequestContext } from "@/lib/request-context";
 
 function enumLabel(value: string) {
@@ -43,14 +45,75 @@ function displayMetricValue(value: unknown, unit: string) {
   return "—";
 }
 
-function campaignTarget(value: unknown) {
-  if (!value || typeof value !== "object") return null;
-  const target = (value as { targetCount?: unknown }).targetCount;
-  return typeof target === "number" && target > 0 ? target : null;
+function asStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0) : [];
+}
+
+function audienceDefinition(value: unknown) {
+  if (!value || typeof value !== "object") return { targetCount: null, employmentIds: [], orgUnitIds: [], positionIds: [] };
+  const raw = value as { targetCount?: unknown; employmentIds?: unknown; orgUnitIds?: unknown; positionIds?: unknown };
+  return {
+    targetCount: typeof raw.targetCount === "number" && raw.targetCount > 0 ? raw.targetCount : null,
+    employmentIds: asStringArray(raw.employmentIds),
+    orgUnitIds: asStringArray(raw.orgUnitIds),
+    positionIds: asStringArray(raw.positionIds)
+  };
+}
+
+type ScopedEmployment = { id: string; positionId: string | null; orgUnitId: string | null };
+
+async function resolveWorkforceProjection(db: Parameters<Parameters<typeof withDb>[0]>[0], ctx: RequestContext) {
+  const scope = await resolveEmploymentScope(db, ctx);
+  if (scope === null) return {
+    relationshipScoped: false,
+    employmentIds: null as string[] | null,
+    orgUnitIds: null as string[] | null,
+    positionIds: null as string[] | null,
+    employments: null as ScopedEmployment[] | null
+  };
+
+  const rows = scope.length ? await db.employment.findMany({
+    where: { tenantId: ctx.tenantId, id: { in: scope }, status: { not: EmploymentStatus.TERMINATED } },
+    select: { id: true, positionId: true, position: { select: { orgUnitId: true } } }
+  }) : [];
+  const employments = rows.map((row) => ({ id: row.id, positionId: row.positionId, orgUnitId: row.position?.orgUnitId ?? null }));
+  return {
+    relationshipScoped: true,
+    employmentIds: employments.map((row) => row.id),
+    orgUnitIds: [...new Set(employments.flatMap((row) => row.orgUnitId ? [row.orgUnitId] : []))],
+    positionIds: [...new Set(employments.flatMap((row) => row.positionId ? [row.positionId] : []))],
+    employments
+  };
+}
+
+function campaignVisible(audience: ReturnType<typeof audienceDefinition>, projection: Awaited<ReturnType<typeof resolveWorkforceProjection>>) {
+  if (!projection.relationshipScoped) return true;
+  const employmentIds = new Set(projection.employmentIds ?? []);
+  const orgUnitIds = new Set(projection.orgUnitIds ?? []);
+  const positionIds = new Set(projection.positionIds ?? []);
+  const hasExplicitSelectors = audience.employmentIds.length > 0 || audience.orgUnitIds.length > 0 || audience.positionIds.length > 0;
+  if (!hasExplicitSelectors) return employmentIds.size > 0;
+  return audience.employmentIds.some((id) => employmentIds.has(id))
+    || audience.orgUnitIds.some((id) => orgUnitIds.has(id))
+    || audience.positionIds.some((id) => positionIds.has(id));
+}
+
+function scopedCampaignTarget(audience: ReturnType<typeof audienceDefinition>, projection: Awaited<ReturnType<typeof resolveWorkforceProjection>>) {
+  if (!projection.relationshipScoped) return audience.targetCount;
+  const employments = projection.employments ?? [];
+  const hasExplicitSelectors = audience.employmentIds.length > 0 || audience.orgUnitIds.length > 0 || audience.positionIds.length > 0;
+  if (!hasExplicitSelectors) return employments.length;
+  const explicitEmploymentIds = new Set(audience.employmentIds);
+  const explicitOrgUnitIds = new Set(audience.orgUnitIds);
+  const explicitPositionIds = new Set(audience.positionIds);
+  return employments.filter((employment) => explicitEmploymentIds.has(employment.id)
+    || Boolean(employment.orgUnitId && explicitOrgUnitIds.has(employment.orgUnitId))
+    || Boolean(employment.positionId && explicitPositionIds.has(employment.positionId))).length;
 }
 
 export async function getEngagementLiveData(ctx: RequestContext) {
   return withDb(async (db) => {
+    const projection = await resolveWorkforceProjection(db, ctx);
     const campaigns = await db.surveyCampaign.findMany({
       where: { tenantId: ctx.tenantId },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
@@ -64,15 +127,28 @@ export async function getEngagementLiveData(ctx: RequestContext) {
         audienceFilter: true,
         opensAt: true,
         closesAt: true,
-        survey: { select: { code: true, name: true } },
-        _count: { select: { responses: true } }
+        survey: { select: { code: true, name: true } }
       }
     });
 
-    const rows = campaigns.map((campaign) => {
-      const target = campaignTarget(campaign.audienceFilter);
-      const responses = campaign._count.responses;
-      const suppressed = campaign.anonymous && responses < campaign.anonymityThreshold;
+    const visibleCampaigns = campaigns.filter((campaign) => campaignVisible(audienceDefinition(campaign.audienceFilter), projection));
+    const visibleCampaignIds = visibleCampaigns.map((campaign) => campaign.id);
+    const responseGroups = visibleCampaignIds.length ? await db.surveyResponse.groupBy({
+      by: ["campaignId"],
+      where: {
+        tenantId: ctx.tenantId,
+        campaignId: { in: visibleCampaignIds },
+        ...(projection.relationshipScoped ? { employmentId: { in: projection.employmentIds ?? [] } } : {})
+      },
+      _count: { _all: true }
+    }) : [];
+    const responseCountByCampaign = new Map(responseGroups.map((row) => [row.campaignId, row._count._all]));
+
+    const rows = visibleCampaigns.map((campaign) => {
+      const audience = audienceDefinition(campaign.audienceFilter);
+      const target = scopedCampaignTarget(audience, projection);
+      const responses = responseCountByCampaign.get(campaign.id) ?? 0;
+      const suppressed = campaign.anonymous && (responses < campaign.anonymityThreshold || (target !== null && target < campaign.anonymityThreshold));
       return {
         id: campaign.id,
         name: campaign.name,
@@ -81,7 +157,7 @@ export async function getEngagementLiveData(ctx: RequestContext) {
         status: enumLabel(campaign.status),
         responses,
         target,
-        rate: target ? percent(responses, target) : null,
+        rate: !suppressed && target ? percent(responses, target) : null,
         threshold: campaign.anonymityThreshold,
         mode: campaign.anonymous ? "Anonymous" : "Confidential",
         suppressed,
@@ -89,13 +165,15 @@ export async function getEngagementLiveData(ctx: RequestContext) {
         closesAt: formatDate(campaign.closesAt)
       };
     });
-    const rates = rows.filter((row) => row.rate !== null).map((row) => row.rate as number);
+    const visibleRows = rows.filter((row) => !row.suppressed);
+    const rates = visibleRows.filter((row) => row.rate !== null).map((row) => row.rate as number);
     return {
-      activeCampaigns: campaigns.filter((campaign) => campaign.status === SurveyStatus.OPEN || campaign.status === SurveyStatus.SCHEDULED).length,
-      responses: rows.reduce((sum, row) => sum + row.responses, 0),
+      activeCampaigns: visibleCampaigns.filter((campaign) => campaign.status === SurveyStatus.OPEN || campaign.status === SurveyStatus.SCHEDULED).length,
+      responses: visibleRows.reduce((sum, row) => sum + row.responses, 0),
       responseRate: rates.length ? Math.round((rates.reduce((sum, value) => sum + value, 0) / rates.length) * 10) / 10 : 0,
       suppressedCampaigns: rows.filter((row) => row.suppressed).length,
-      anonymousCampaigns: campaigns.filter((campaign) => campaign.anonymous).length,
+      anonymousCampaigns: visibleCampaigns.filter((campaign) => campaign.anonymous).length,
+      relationshipScoped: projection.relationshipScoped,
       rows
     };
   });
@@ -103,9 +181,22 @@ export async function getEngagementLiveData(ctx: RequestContext) {
 
 export async function getWorkforcePlanningLiveData(ctx: RequestContext) {
   return withDb(async (db) => {
+    const projection = await resolveWorkforceProjection(db, ctx);
+    const scopedLineWhere = projection.relationshipScoped
+      ? ((projection.orgUnitIds?.length || projection.positionIds?.length)
+        ? { OR: [
+            ...(projection.orgUnitIds?.length ? [{ orgUnitId: { in: projection.orgUnitIds } }] : []),
+            ...(projection.positionIds?.length ? [{ positionId: { in: projection.positionIds } }] : [])
+          ] }
+        : { id: { in: [] as string[] } })
+      : {};
+
     const [scenarios, activeEmployments] = await Promise.all([
       db.workforceScenario.findMany({
-        where: { tenantId: ctx.tenantId },
+        where: {
+          tenantId: ctx.tenantId,
+          ...(projection.relationshipScoped ? { lines: { some: scopedLineWhere } } : {})
+        },
         orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
         take: 100,
         select: {
@@ -118,10 +209,19 @@ export async function getWorkforcePlanningLiveData(ctx: RequestContext) {
           currency: true,
           ownerId: true,
           approvedAt: true,
-          lines: { select: { currentFte: true, plannedFte: true, avgAnnualCost: true, skillsRequired: true } }
+          lines: {
+            where: scopedLineWhere,
+            select: { currentFte: true, plannedFte: true, avgAnnualCost: true, skillsRequired: true }
+          }
         }
       }),
-      db.employment.count({ where: { tenantId: ctx.tenantId, status: { in: ["ACTIVE", "LEAVE"] } } })
+      db.employment.count({
+        where: {
+          tenantId: ctx.tenantId,
+          status: { in: [EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE] },
+          ...(projection.relationshipScoped ? { id: { in: projection.employmentIds ?? [] } } : {})
+        }
+      })
     ]);
 
     const ownerIds = [...new Set(scenarios.map((scenario) => scenario.ownerId))];
@@ -156,6 +256,7 @@ export async function getWorkforcePlanningLiveData(ctx: RequestContext) {
       scenarioCount: rows.length,
       approvedScenarios: scenarios.filter((scenario) => scenario.status === WorkforceScenarioStatus.APPROVED).length,
       primary,
+      relationshipScoped: projection.relationshipScoped,
       rows
     };
   });
@@ -258,7 +359,17 @@ export async function getAIAssistantLiveData(ctx: RequestContext) {
   });
 }
 
+const privacyOperationalRoles = new Set<PlatformRole>([
+  PlatformRole.LEGAL,
+  PlatformRole.PRIVACY_OFFICER
+]);
+
+export function canAccessPrivacyOperations(ctx: RequestContext) {
+  return privacyOperationalRoles.has(ctx.role);
+}
+
 export async function getPrivacyLiveData(ctx: RequestContext) {
+  if (!canAccessPrivacyOperations(ctx)) throw new Error("PRIVACY_OPERATIONAL_ACCESS_REQUIRED");
   return withDb(async (db) => {
     const [activities, requests, transfers, assessments] = await Promise.all([
       db.processingActivity.findMany({ where: { tenantId: ctx.tenantId, active: true }, orderBy: { updatedAt: "desc" }, take: 150, select: { id: true, code: true, name: true, purpose: true, legalBasis: true, riskRating: true, ownerId: true, specialCategories: true } }),
