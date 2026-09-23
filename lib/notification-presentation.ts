@@ -14,7 +14,9 @@ export function notificationTitle(eventType: string, locale: Locale) {
     POLICY_EXCEPTION_EXPIRED: { en: "Policy exception expired", tr: "Politika istisnasının süresi doldu" },
     POLICY_EXCEPTION_CLOSED_ON_RETIREMENT: { en: "Policy exception closed", tr: "Politika istisnası kapatıldı" },
     POLICY_RETIRED: { en: "Policy retired", tr: "Politika yürürlükten kaldırıldı" },
-    WORKFLOW_TASK_READY: { en: "Workflow task ready", tr: "İş akışı görevi hazır" }
+    WORKFLOW_TASK_READY: { en: "Workflow task ready", tr: "İş akışı görevi hazır" },
+    WORKFLOW_TASK_DUE_SOON: { en: "Workflow task due soon", tr: "İş akışı görevinin süresi yaklaşıyor" },
+    WORKFLOW_TASK_OVERDUE: { en: "Workflow task overdue", tr: "İş akışı görevi gecikti" }
   };
   const known = titles[eventType];
   if (known) return known[locale];
@@ -34,8 +36,11 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const policyTitle = text(data.policyTitle);
   const workflowName = text(data.workflowName);
   const taskName = text(data.taskName);
+  const dueAt = text(data.dueAt);
 
   if (workflowName && taskName) {
+    const deadline = dueAt ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(dueAt)) : null;
+    if (deadline) return locale === "tr" ? `${workflowName}: ${taskName} · SLA ${deadline}` : `${workflowName}: ${taskName} · SLA ${deadline}`;
     return locale === "tr" ? `${workflowName}: ${taskName} aksiyonunu bekliyor.` : `${workflowName}: ${taskName} is waiting for your action.`;
   }
   if (taskName) return locale === "tr" ? `${taskName} aksiyonunu bekliyor.` : `${taskName} is waiting for your action.`;
