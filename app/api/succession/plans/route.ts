@@ -17,7 +17,7 @@ export async function GET(request: Request) {
   const data = await db.successionPlan.findMany({
     where: {
       tenantId: ctx.tenantId,
-      ...(scope === null ? {} : { OR: [{ positionId: { in: scopedPositionIds ?? [] } }, { candidates: { some: { employmentId: { in: scope } } } }] })
+      ...(scope === null ? {} : { positionId: { in: scopedPositionIds ?? [] } })
     },
     orderBy: [{ active: "desc" }, { reviewDueAt: "asc" }],
     include: { candidates: { where: { ...employmentIdFilter(scope) }, orderBy: [{ rank: "asc" }, { addedAt: "asc" }] } }
