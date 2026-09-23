@@ -1,11 +1,12 @@
 "use client";
 
-import { Download, LoaderCircle, LockKeyhole, ShieldCheck, Trash2, UserRoundPlus, X } from "lucide-react";
+import { Download, FileUp, LoaderCircle, LockKeyhole, ShieldCheck, Trash2, UserRoundPlus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
 type Grant = { id: string; principalType: string; principalId: string; permission: string; purpose: string | null; expiresAt: string | null; expired?: boolean };
+type VersionCreateResponse = { error?: string; data?: { id: string }; upload?: { endpoint?: string } };
 
 type Props = {
   documentId: string;
@@ -13,10 +14,15 @@ type Props = {
   legalHold: boolean;
   retentionUntil: string | null;
   activeGrants: number;
+  canWrite: boolean;
   canGrant: boolean;
   canGovern: boolean;
   canSetLegalHold: boolean;
 };
+
+function bytesToHex(bytes: ArrayBuffer) {
+  return Array.from(new Uint8Array(bytes)).map((value) => value.toString(16).padStart(2, "0")).join("");
+}
 
 export function DocumentVaultActions(props: Props) {
   const router = useRouter();
@@ -37,6 +43,33 @@ export function DocumentVaultActions(props: Props) {
   async function json(response: Response) {
     try { return await response.json() as { error?: string; data?: unknown }; }
     catch { return {} as { error?: string; data?: unknown }; }
+  }
+
+  async function uploadVersion(file: File) {
+    setBusy("upload"); setError(null); setMessage(null);
+    try {
+      const bytes = await file.arrayBuffer();
+      const digest = bytesToHex(await crypto.subtle.digest("SHA-256", bytes));
+      const metadataResponse = await fetch(`/api/documents/${encodeURIComponent(props.documentId)}/versions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-purpose": "Governed document version upload" },
+        body: JSON.stringify({ contentHash: digest, contentType: file.type || "application/octet-stream", sizeBytes: file.size })
+      });
+      const metadata = await metadataResponse.json() as VersionCreateResponse;
+      if (!metadataResponse.ok || !metadata.data?.id) throw new Error(metadata.error || c("Document version could not be reserved.", "Doküman sürümü ayrılamadı."));
+      const uploadEndpoint = metadata.upload?.endpoint || `/api/documents/${encodeURIComponent(props.documentId)}/versions/${encodeURIComponent(metadata.data.id)}/upload`;
+      const uploadResponse = await fetch(uploadEndpoint, {
+        method: "PUT",
+        headers: { "content-type": file.type || "application/octet-stream", "x-content-sha256": digest, "x-purpose": "Private vault upload" },
+        body: bytes
+      });
+      const uploadValue = await json(uploadResponse);
+      if (!uploadResponse.ok) throw new Error(uploadValue.error || c("Private vault upload failed.", "Özel kasa yüklemesi başarısız oldu."));
+      setMessage(c("Version uploaded. Malware scan is pending; download remains blocked until CLEAN.", "Sürüm yüklendi. Zararlı yazılım taraması bekleniyor; CLEAN olana kadar indirme kapalıdır."));
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : c("Document upload failed.", "Doküman yüklemesi başarısız oldu."));
+    } finally { setBusy(null); }
   }
 
   async function loadGrants() {
@@ -104,6 +137,7 @@ export function DocumentVaultActions(props: Props) {
   return <div style={{ display: "grid", gap: 7, minWidth: 180 }}>
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
       {props.downloadReady ? <a className="secondary-button" href={`/api/documents/${encodeURIComponent(props.documentId)}/download`}><Download size={13}/> {c("Download", "İndir")}</a> : <span className="matrix-note">{c("Scan required", "Tarama gerekli")}</span>}
+      {props.canWrite ? <label className="secondary-button" style={{ cursor: busy ? "wait" : "pointer" }}><FileUp size={13}/> {busy === "upload" ? c("Uploading…", "Yükleniyor…") : c("New version", "Yeni sürüm")}<input type="file" hidden disabled={!!busy} onChange={(event) => { const file = event.target.files?.[0]; event.currentTarget.value = ""; if (file) void uploadVersion(file); }}/></label> : null}
       {props.canGrant ? <button type="button" className="secondary-button" onClick={() => showAccess ? setShowAccess(false) : void loadGrants()} disabled={busy === "access-load"}>{busy === "access-load" ? <LoaderCircle size={13}/> : <UserRoundPlus size={13}/>} {c("Access", "Erişim")} ({props.activeGrants})</button> : null}
       {props.canSetLegalHold ? <button type="button" className="secondary-button" onClick={() => void governance({ legalHold: !props.legalHold })} disabled={busy === "governance"}><LockKeyhole size={13}/> {props.legalHold ? c("Release hold", "Hold kaldır") : "Legal hold"}</button> : null}
     </div>
