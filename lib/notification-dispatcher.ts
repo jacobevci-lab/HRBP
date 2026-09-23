@@ -29,10 +29,60 @@ async function recoverStaleLocks(now: Date) {
   return result.count;
 }
 
-async function deliverInApp(recipientUserId: string | null, recipientRole: string | null) {
-  if (!recipientUserId && !recipientRole) throw new Error("IN_APP notification has no user or role recipient");
-  // The outbox row itself is the durable in-app notification record. Once it is
-  // marked DELIVERED it becomes visible through the authenticated notification API.
+type InAppCandidate = {
+  id: string;
+  tenantId: string;
+  eventType: string;
+  recipientUserId: string | null;
+  recipientRole: string | null;
+  templateKey: string | null;
+  resourceType: string;
+  resourceId: string;
+  dedupeKey: string;
+  payload: unknown;
+  classification: "INTERNAL" | "CONFIDENTIAL" | "RESTRICTED" | "HIGHLY_RESTRICTED";
+};
+
+async function deliverInApp(candidate: InAppCandidate) {
+  if (candidate.recipientUserId) return;
+  if (!candidate.recipientRole) throw new Error("IN_APP notification has no user or role recipient");
+
+  const recipients = await db.userAccount.findMany({
+    where: { tenantId: candidate.tenantId, role: candidate.recipientRole as never, active: true },
+    select: { id: true },
+    take: 1000
+  });
+  if (recipients.length === 0) throw new Error(`No active users found for notification role ${candidate.recipientRole}`);
+
+  const deliveredAt = new Date();
+  await db.$transaction(async (tx) => {
+    for (const recipient of recipients) {
+      await tx.notificationOutbox.upsert({
+        where: {
+          tenantId_dedupeKey: {
+            tenantId: candidate.tenantId,
+            dedupeKey: `${candidate.dedupeKey}:user:${recipient.id}`
+          }
+        },
+        update: {},
+        create: {
+          tenantId: candidate.tenantId,
+          eventType: candidate.eventType,
+          channel: "IN_APP",
+          recipientUserId: recipient.id,
+          templateKey: candidate.templateKey,
+          resourceType: candidate.resourceType,
+          resourceId: candidate.resourceId,
+          dedupeKey: `${candidate.dedupeKey}:user:${recipient.id}`,
+          payload: candidate.payload as never,
+          classification: candidate.classification,
+          status: NotificationOutboxStatus.DELIVERED,
+          attempts: 1,
+          deliveredAt
+        }
+      });
+    }
+  });
 }
 
 export async function runNotificationDispatcher() {
@@ -52,9 +102,16 @@ export async function runNotificationDispatcher() {
     select: {
       id: true,
       tenantId: true,
+      eventType: true,
       channel: true,
       recipientUserId: true,
       recipientRole: true,
+      templateKey: true,
+      resourceType: true,
+      resourceId: true,
+      dedupeKey: true,
+      payload: true,
+      classification: true,
       status: true,
       attempts: true,
       nextAttemptAt: true
@@ -89,7 +146,7 @@ export async function runNotificationDispatcher() {
     const attempt = candidate.attempts + 1;
     try {
       if (candidate.channel === "IN_APP") {
-        await deliverInApp(candidate.recipientUserId, candidate.recipientRole);
+        await deliverInApp(candidate as InAppCandidate);
       } else {
         throw new Error(`Unsupported notification channel: ${candidate.channel}`);
       }
