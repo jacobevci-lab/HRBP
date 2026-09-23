@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Bell, CheckCheck, Circle, RefreshCw } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 import { notificationResourceHref, notificationSummary, notificationTitle } from "@/lib/notification-presentation";
 
@@ -28,7 +28,7 @@ export function NotificationsModulePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  async function refresh(nextUnreadOnly = unreadOnly) {
+  const refresh = useCallback(async (nextUnreadOnly: boolean) => {
     setLoading(true);
     setError(null);
     try {
@@ -44,9 +44,13 @@ export function NotificationsModulePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [locale]);
 
   async function updateRead(id: string, read: boolean) {
+    const target = items.find((item) => item.id === id);
+    const wasRead = Boolean(target?.readAt);
+    if (wasRead === read) return;
+
     const response = await fetch("/api/notifications", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -75,7 +79,7 @@ export function NotificationsModulePage() {
 
   useEffect(() => {
     void refresh(unreadOnly);
-  }, [unreadOnly]);
+  }, [refresh, unreadOnly]);
 
   function formatDate(item: NotificationItem) {
     return new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", {
@@ -93,7 +97,7 @@ export function NotificationsModulePage() {
           <p>{locale === "tr" ? `${unreadCount} okunmamış bildirim` : `${unreadCount} unread notifications`}</p>
         </div>
         <div className="notifications-actions">
-          <button className="secondary-button" type="button" onClick={() => void refresh()} disabled={loading}>
+          <button className="secondary-button" type="button" onClick={() => void refresh(unreadOnly)} disabled={loading}>
             <RefreshCw size={15}/>{locale === "tr" ? "Yenile" : "Refresh"}
           </button>
           <button className="secondary-button" type="button" onClick={() => void markAllRead()} disabled={unreadCount === 0}>
@@ -134,7 +138,7 @@ export function NotificationsModulePage() {
               </div>
             </div>
             <div className="notification-row-actions">
-              <button type="button" onClick={() => void updateRead(item.id, Boolean(item.readAt))}>
+              <button type="button" onClick={() => void updateRead(item.id, !item.readAt)}>
                 {item.readAt
                   ? (locale === "tr" ? "Okunmadı yap" : "Mark unread")
                   : (locale === "tr" ? "Okundu yap" : "Mark read")}
