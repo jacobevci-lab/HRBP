@@ -42,6 +42,12 @@ async function normalizedAudience(client: PrismaClient | Prisma.TransactionClien
   return { employmentIds: canonicalIds, targetCount: canonicalIds.length };
 }
 
+function audienceTargetCount(audience: Prisma.InputJsonValue) {
+  if (!audience || typeof audience !== "object" || Array.isArray(audience)) return null;
+  const value = (audience as { targetCount?: unknown }).targetCount;
+  return typeof value === "number" ? value : null;
+}
+
 export async function GET(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
@@ -73,7 +79,8 @@ export async function POST(request: Request) {
     if (!survey) throw new Error("NOT_FOUND");
     const audienceFilter = await normalizedAudience(tx, ctx, body.audienceFilter);
     const campaign = await tx.surveyCampaign.create({ data: { tenantId: ctx.tenantId, surveyId: survey.id, name, anonymous: body.anonymous ?? true, anonymityThreshold: threshold, status: SurveyStatus.DRAFT, opensAt: body.opensAt ? new Date(body.opensAt) : undefined, closesAt: body.closesAt ? new Date(body.closesAt) : undefined, audienceFilter, createdById: ctx.actorId } });
-    await appendAudit(tx, ctx, { action: "engagement-campaign.created", resourceType: "SurveyCampaign", resourceId: campaign.id, classification: DataClassification.CONFIDENTIAL, metadata: { audienceTargetCount: (audienceFilter as { targetCount?: number }).targetCount ?? null } });
+    const targetCount = audienceTargetCount(audienceFilter);
+    await appendAudit(tx, ctx, { action: "engagement-campaign.created", resourceType: "SurveyCampaign", resourceId: campaign.id, classification: DataClassification.CONFIDENTIAL, purpose: targetCount === null ? "Governed engagement campaign creation" : `Governed engagement campaign creation; audience=${targetCount}` });
     return campaign;
   }).catch((error) => error instanceof Error && ["NOT_FOUND", "EMPTY_SCOPE", "OUT_OF_SCOPE", "EMPTY_AUDIENCE"].includes(error.message) ? error.message : Promise.reject(error));
   if (data === "NOT_FOUND") return Response.json({ error: "Survey not found in tenant." }, { status: 404 });
