@@ -8,6 +8,7 @@ import { NotificationsModulePage } from "@/components/notifications-module-page"
 import { PublicCoreLanding } from "@/components/public-core-landing";
 import { WorkflowActionCenter } from "@/components/workflow-action-center";
 import { WorkPayModulePage } from "@/components/work-pay-module-page";
+import { can } from "@/lib/authorization";
 import { getServerRequestContext } from "@/lib/server-session";
 
 export const dynamic = "force-dynamic";
@@ -36,13 +37,15 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   if (ctx && workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug}/>;
   if (ctx && governanceSlugs.has(slug as GovernanceSlug)) return <GovernancePlanningModulePage slug={slug as GovernanceSlug}/>;
 
+  const workflowAdminVisible = Boolean(ctx && can(ctx, "workflows:read"));
+
   return (
     <AppShell>
       {!ctx && publicCoreSlugs.has(slug)
         ? <PublicCoreLanding slug={slug as "people" | "organization" | "positions" | "employee-360"}/>
         : <>
             {ctx && slug === "workflows" ? <WorkflowActionCenter/> : null}
-            <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/>
+            {slug !== "workflows" || !ctx || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/> : null}
             {ctx && slug === "hr-service" ? <HRServiceEscalationPanel filterValue={escalation}/> : null}
           </>}
     </AppShell>
