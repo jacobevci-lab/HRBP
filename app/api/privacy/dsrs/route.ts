@@ -3,7 +3,7 @@ import { DSRStatus, DSRType, DataClassification } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
-import { getRequestContext, unauthorized } from "@/lib/request-context";
+import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
   const ctx = getRequestContext(request);
@@ -16,6 +16,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
+  if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "privacy:write")) return forbidden();
   const body = await request.json() as { subjectPersonId?: string; type?: DSRType; channel?: string; dueAt?: string };
   if (!body.subjectPersonId || !body.type || !Object.values(DSRType).includes(body.type)) return Response.json({ error: "subjectPersonId and valid type are required." }, { status: 400 });
