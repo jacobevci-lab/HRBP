@@ -1,18 +1,17 @@
 import type { NextConfig } from "next";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   typedRoutes: false,
-  // OpenNext transforms Next.js standalone output for Cloudflare Workers.
-  // Prisma's engine-less client loads query compiler WASM and related runtime
-  // files dynamically, which static tracing cannot reliably infer. Keep the
-  // complete generated Prisma runtime in the standalone trace so OpenNext can
-  // carry it into the Worker bundle.
-  output: "standalone",
-  outputFileTracingIncludes: {
-    "*": ["node_modules/.prisma/client/**/*"]
-  }
+  // Keep Prisma packages external to Next's server bundling so OpenNext can
+  // resolve and patch their workerd-specific exports for Cloudflare Workers.
+  // This avoids Node filesystem-based WASM loading from .prisma/client.
+  serverExternalPackages: ["@prisma/client", ".prisma/client"]
 };
+
+// Makes Cloudflare bindings available when running `next dev` locally.
+initOpenNextCloudflareForDev();
 
 export default nextConfig;
