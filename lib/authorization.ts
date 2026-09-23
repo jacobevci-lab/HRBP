@@ -55,7 +55,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "hr-service:read", "hr-service:write", "policies:read",
     "engagement:read", "engagement:write",
     "workforce-plan:read", "workforce-plan:write", "analytics:read", "ai:use",
-    "privacy:read", "workflows:read", "workflows:run"
+    "workflows:read", "workflows:run"
   ],
   HR_OPERATIONS: [
     "people:read", "people:write", "organization:read", "organization:write",
@@ -66,7 +66,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "performance:read", "learning:read", "learning:write",
     "hr-service:read", "hr-service:write", "policies:read", "policies:write",
     "engagement:read", "engagement:write", "workforce-plan:read", "workforce-plan:write",
-    "analytics:read", "ai:use", "privacy:read",
+    "analytics:read", "ai:use",
     "workflows:read", "workflows:write", "workflows:run", "settings:read"
   ],
   RECRUITER: [
@@ -112,7 +112,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "offboarding:read", "time:read", "time:write", "leave:read", "leave:write",
     "benefits:read", "performance:read", "talent:read", "succession:read", "learning:read",
     "hr-service:read", "hr-service:write", "policies:read", "engagement:read",
-    "workforce-plan:read", "analytics:read", "ai:use", "privacy:read",
+    "workforce-plan:read", "analytics:read", "ai:use",
     "workflows:read", "workflows:write", "settings:read", "settings:write", "audit:read"
   ]
 };
