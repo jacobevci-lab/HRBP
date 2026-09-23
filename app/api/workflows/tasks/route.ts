@@ -1,4 +1,4 @@
-import { WorkflowInstanceStatus, WorkflowTaskStatus } from "@prisma/client";
+import { Prisma, WorkflowInstanceStatus, WorkflowTaskStatus } from "@prisma/client";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { getRequestContext, unauthorized } from "@/lib/request-context";
@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
 
-  const scopes: Array<Record<string, unknown>> = [
+  const scopes: Prisma.WorkflowTaskWhereInput[] = [
     { assigneeId: ctx.actorId },
     { assigneeId: null, assigneeRole: ctx.role }
   ];
