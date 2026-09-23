@@ -50,8 +50,9 @@ async function escalateServiceRequests(now: Date) {
   let notificationsQueued = 0;
 
   for (const candidate of candidates) {
-    if (!candidate.slaDueAt) continue;
-    const target = escalationTarget(candidate.slaDueAt, now);
+    const slaDueAt = candidate.slaDueAt;
+    if (!slaDueAt) continue;
+    const target = escalationTarget(slaDueAt, now);
     if (target.level <= candidate.escalationLevel) continue;
 
     const changed = await db.$transaction(async (tx) => {
@@ -103,7 +104,7 @@ async function escalateServiceRequests(now: Date) {
           requestNumber: candidate.requestNumber,
           escalationLevel: target.level,
           escalationReason: target.reason,
-          slaDueAt: candidate.slaDueAt.toISOString(),
+          slaDueAt: slaDueAt.toISOString(),
           ...(candidate.queue ? { queue: candidate.queue } : {})
         }
       });
