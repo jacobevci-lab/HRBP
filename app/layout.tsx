@@ -13,6 +13,7 @@ import "./offboarding.css";
 import "./auth.css";
 import "./theme.css";
 import "./lifecycle.css";
+import "./notifications.css";
 import "./warm-enterprise.css";
 import "./warm-enterprise-polish.css";
 import "./warm-enterprise-unified.css";
