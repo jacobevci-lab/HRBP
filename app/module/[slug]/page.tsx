@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { AnalyticsModulePage } from "@/components/analytics-module-page";
 import { GovernancePlanningModulePage } from "@/components/governance-planning-module-page";
 import { GrowthModulePage } from "@/components/growth-module-page";
+import { HRServiceEscalationPanel } from "@/components/hr-service-escalation-panel";
 import { ModuleLanding } from "@/components/module-landing";
 import { PublicCoreLanding } from "@/components/public-core-landing";
 import { WorkPayModulePage } from "@/components/work-pay-module-page";
@@ -25,6 +26,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const query = typeof search.q === "string" ? search.q : "";
   const personId = typeof search.person === "string" ? search.person : undefined;
   const tab = typeof search.tab === "string" ? search.tab : undefined;
+  const escalation = typeof search.escalation === "string" ? search.escalation : undefined;
 
   if (ctx && slug === "analytics") return <AnalyticsModulePage/>;
   if (ctx && growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug}/>;
@@ -35,7 +37,10 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
     <AppShell>
       {!ctx && publicCoreSlugs.has(slug)
         ? <PublicCoreLanding slug={slug as "people" | "organization" | "positions" | "employee-360"}/>
-        : <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/>} 
+        : <>
+            <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/>
+            {ctx && slug === "hr-service" ? <HRServiceEscalationPanel filterValue={escalation}/> : null}
+          </>}
     </AppShell>
   );
 }
