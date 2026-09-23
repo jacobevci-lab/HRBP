@@ -2,7 +2,8 @@ import { DataClassification, Prisma, WorkflowDefinitionStatus, WorkflowInstanceS
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
-import { getRequestContext, unauthorized } from "@/lib/request-context";
+import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
+import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
   const ctx = getRequestContext(request);
@@ -16,18 +17,21 @@ export async function POST(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "workflows:run")) return forbidden();
+  if (!mutationOriginAllowed(request)) return Response.json({ error: "Mutation origin is not allowed." }, { status: 403 });
   const body = await request.json() as { definitionId?: string; subjectType?: string; subjectId?: string; context?: unknown };
   if (!body.definitionId || !body.subjectType?.trim() || !body.subjectId?.trim()) return Response.json({ error: "definitionId, subjectType and subjectId are required." }, { status: 400 });
   const data = await db.$transaction(async (tx) => {
     const definition = await tx.workflowDefinition.findFirst({ where: { id: body.definitionId, tenantId: ctx.tenantId, status: WorkflowDefinitionStatus.ACTIVE }, include: { steps: { orderBy: { orderIndex: "asc" } } } });
     if (!definition) throw new Error("NOT_FOUND");
     const startedAt = new Date();
+    const subjectType = body.subjectType!.trim();
+    const subjectId = body.subjectId!.trim();
     const instance = await tx.workflowInstance.create({
       data: {
         tenantId: ctx.tenantId,
         definitionId: definition.id,
-        subjectType: body.subjectType!.trim(),
-        subjectId: body.subjectId!.trim(),
+        subjectType,
+        subjectId,
         status: WorkflowInstanceStatus.RUNNING,
         startedById: ctx.actorId,
         context: body.context === undefined ? undefined : body.context as Prisma.InputJsonValue,
@@ -36,6 +40,28 @@ export async function POST(request: Request) {
       },
       include: { tasks: true }
     });
+    const firstTask = instance.tasks.find((task) => task.status === WorkflowTaskStatus.READY);
+    if (firstTask && (firstTask.assigneeId || firstTask.assigneeRole)) {
+      await enqueueNotificationOutbox(tx, {
+        tenantId: ctx.tenantId,
+        eventType: "WORKFLOW_TASK_READY",
+        recipientUserId: firstTask.assigneeId,
+        recipientRole: firstTask.assigneeRole,
+        templateKey: "workflow.task-ready",
+        resourceType: "WorkflowTask",
+        resourceId: firstTask.id,
+        dedupeKey: `workflow-task:${firstTask.id}:ready`,
+        classification: DataClassification.INTERNAL,
+        payload: {
+          workflowName: definition.name,
+          taskName: firstTask.name,
+          instanceId: instance.id,
+          subjectType,
+          subjectId,
+          dueAt: firstTask.dueAt?.toISOString() ?? null
+        }
+      });
+    }
     await appendAudit(tx, ctx, { action: "workflow-instance.started", resourceType: "WorkflowInstance", resourceId: instance.id, classification: DataClassification.INTERNAL });
     return instance;
   }).catch((error) => error instanceof Error && error.message === "NOT_FOUND" ? null : Promise.reject(error));
