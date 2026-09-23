@@ -18,10 +18,7 @@ async function recoverStaleLocks(now: Date) {
   const lockMinutes = Math.min(120, Math.max(2, Math.floor(runtimeNumber("HRBP_NOTIFICATION_LOCK_MINUTES", 10))));
   const staleBefore = new Date(now.getTime() - lockMinutes * 60_000);
   const result = await db.notificationOutbox.updateMany({
-    where: {
-      status: NotificationOutboxStatus.PROCESSING,
-      lockedAt: { lte: staleBefore }
-    },
+    where: { status: NotificationOutboxStatus.PROCESSING, lockedAt: { lte: staleBefore } },
     data: {
       status: NotificationOutboxStatus.FAILED,
       lockedAt: null,
@@ -32,11 +29,10 @@ async function recoverStaleLocks(now: Date) {
   return result.count;
 }
 
-async function deliverInApp(recipientUserId: string | null) {
-  if (!recipientUserId) throw new Error("IN_APP notification has no recipientUserId");
+async function deliverInApp(recipientUserId: string | null, recipientRole: string | null) {
+  if (!recipientUserId && !recipientRole) throw new Error("IN_APP notification has no user or role recipient");
   // The outbox row itself is the durable in-app notification record. Once it is
-  // marked DELIVERED it becomes visible through the authenticated notification
-  // API. External providers can be added behind the same dispatcher contract.
+  // marked DELIVERED it becomes visible through the authenticated notification API.
 }
 
 export async function runNotificationDispatcher() {
@@ -58,6 +54,7 @@ export async function runNotificationDispatcher() {
       tenantId: true,
       channel: true,
       recipientUserId: true,
+      recipientRole: true,
       status: true,
       attempts: true,
       nextAttemptAt: true
@@ -92,36 +89,21 @@ export async function runNotificationDispatcher() {
     const attempt = candidate.attempts + 1;
     try {
       if (candidate.channel === "IN_APP") {
-        await deliverInApp(candidate.recipientUserId);
+        await deliverInApp(candidate.recipientUserId, candidate.recipientRole);
       } else {
         throw new Error(`Unsupported notification channel: ${candidate.channel}`);
       }
 
       const completion = await db.notificationOutbox.updateMany({
-        where: {
-          id: candidate.id,
-          tenantId: candidate.tenantId,
-          status: NotificationOutboxStatus.PROCESSING,
-          attempts: attempt
-        },
-        data: {
-          status: NotificationOutboxStatus.DELIVERED,
-          deliveredAt: new Date(),
-          lockedAt: null,
-          lastError: null
-        }
+        where: { id: candidate.id, tenantId: candidate.tenantId, status: NotificationOutboxStatus.PROCESSING, attempts: attempt },
+        data: { status: NotificationOutboxStatus.DELIVERED, deliveredAt: new Date(), lockedAt: null, lastError: null }
       });
       if (completion.count === 1) delivered += 1;
     } catch (error) {
       const deadLetter = attempt >= maxAttempts;
       const now = new Date();
       const completion = await db.notificationOutbox.updateMany({
-        where: {
-          id: candidate.id,
-          tenantId: candidate.tenantId,
-          status: NotificationOutboxStatus.PROCESSING,
-          attempts: attempt
-        },
+        where: { id: candidate.id, tenantId: candidate.tenantId, status: NotificationOutboxStatus.PROCESSING, attempts: attempt },
         data: {
           status: deadLetter ? NotificationOutboxStatus.DEAD_LETTER : NotificationOutboxStatus.FAILED,
           lockedAt: null,
