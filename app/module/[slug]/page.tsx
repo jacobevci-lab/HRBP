@@ -6,6 +6,7 @@ import { HRServiceEscalationPanel } from "@/components/hr-service-escalation-pan
 import { ModuleLanding } from "@/components/module-landing";
 import { NotificationsModulePage } from "@/components/notifications-module-page";
 import { PublicCoreLanding } from "@/components/public-core-landing";
+import { WorkflowActionCenter } from "@/components/workflow-action-center";
 import { WorkPayModulePage } from "@/components/work-pay-module-page";
 import { getServerRequestContext } from "@/lib/server-session";
 
@@ -40,6 +41,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
       {!ctx && publicCoreSlugs.has(slug)
         ? <PublicCoreLanding slug={slug as "people" | "organization" | "positions" | "employee-360"}/>
         : <>
+            {ctx && slug === "workflows" ? <WorkflowActionCenter/> : null}
             <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/>
             {ctx && slug === "hr-service" ? <HRServiceEscalationPanel filterValue={escalation}/> : null}
           </>}
