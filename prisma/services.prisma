@@ -372,7 +372,7 @@ model PolicyException {
   compensatingControl String?
   requestedById       String
   approvedById        String?
-  status              PolicyExceptionStatus @default(APPROVED)
+  status              PolicyExceptionStatus @default(REQUESTED)
   decisionNote        String?
   decidedAt           DateTime?
   expiresAt           DateTime?
