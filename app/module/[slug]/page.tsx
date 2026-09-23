@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { AnalyticsModulePage } from "@/components/analytics-module-page";
+import { GrowthModulePage } from "@/components/growth-module-page";
 import { ModuleLanding } from "@/components/module-landing";
 import { PublicCoreLanding } from "@/components/public-core-landing";
 import { getServerRequestContext } from "@/lib/server-session";
@@ -8,14 +9,18 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+type GrowthSlug = "benefits" | "performance" | "talent" | "succession" | "learning";
 
 const publicCoreSlugs = new Set(["people", "organization", "positions", "employee-360"]);
+const growthSlugs = new Set<GrowthSlug>(["benefits", "performance", "talent", "succession", "learning"]);
 
 export default async function ModulePage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: SearchParams }) {
   const [{ slug }, search, ctx] = await Promise.all([params, searchParams, getServerRequestContext()]);
   const query = typeof search.q === "string" ? search.q : "";
   const personId = typeof search.person === "string" ? search.person : undefined;
   const tab = typeof search.tab === "string" ? search.tab : undefined;
+
+  if (ctx && growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug}/>;
 
   return (
     <AppShell>
