@@ -1,6 +1,7 @@
 import { DataClassification, PlatformRole, PolicyExceptionStatus, PolicyStatus, ServiceQueueRole, ServiceRequestStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
+import { runNotificationDispatcher } from "@/lib/notification-dispatcher";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { runtimeNumber } from "@/lib/runtime-env";
 import type { RequestContext } from "@/lib/request-context";
@@ -263,6 +264,7 @@ export async function runOperationalMaintenance() {
   const service = await escalateServiceRequests(startedAt);
   const expiredExceptions = await expirePolicyExceptions(startedAt);
   const retiredPolicies = await retirePolicies(startedAt);
+  const notifications = await runNotificationDispatcher();
   return {
     startedAt: startedAt.toISOString(),
     completedAt: new Date().toISOString(),
@@ -273,6 +275,7 @@ export async function runOperationalMaintenance() {
       retiredPolicies: retiredPolicies.retired,
       retirementExceptionClosures: retiredPolicies.exceptionClosures,
       retirementNotificationsQueued: retiredPolicies.notificationsQueued
-    }
+    },
+    notifications
   };
 }
