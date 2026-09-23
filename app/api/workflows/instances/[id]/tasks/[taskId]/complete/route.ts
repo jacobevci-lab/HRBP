@@ -15,7 +15,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const data = await db.$transaction(async (tx) => {
     const instance = await tx.workflowInstance.findFirst({
       where: { id, tenantId: ctx.tenantId, status: { in: [WorkflowInstanceStatus.RUNNING, WorkflowInstanceStatus.WAITING] } },
-      include: { definition: { select: { name: true } }, tasks: { orderBy: { id: "asc" } } }
+      include: {
+        definition: {
+          select: {
+            name: true,
+            steps: { orderBy: { orderIndex: "asc" }, select: { stepKey: true, orderIndex: true } }
+          }
+        },
+        tasks: true
+      }
     });
     if (!instance) throw new Error("NOT_FOUND");
     const task = instance.tasks.find((candidate) => candidate.id === taskId);
@@ -30,10 +38,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       data: { status: WorkflowTaskStatus.COMPLETED, completedAt: now, result: body.result as Prisma.InputJsonValue | undefined }
     });
     const remaining = await tx.workflowTask.findMany({
-      where: { tenantId: ctx.tenantId, instanceId: id, status: { in: [WorkflowTaskStatus.PENDING, WorkflowTaskStatus.READY, WorkflowTaskStatus.IN_PROGRESS] } },
-      orderBy: { id: "asc" }
+      where: { tenantId: ctx.tenantId, instanceId: id, status: { in: [WorkflowTaskStatus.PENDING, WorkflowTaskStatus.READY, WorkflowTaskStatus.IN_PROGRESS] } }
     });
-    const next = remaining.find((candidate) => candidate.id !== taskId);
+    const orderByStep = new Map(instance.definition.steps.map((step) => [step.stepKey, step.orderIndex]));
+    remaining.sort((left, right) => (orderByStep.get(left.stepKey) ?? Number.MAX_SAFE_INTEGER) - (orderByStep.get(right.stepKey) ?? Number.MAX_SAFE_INTEGER));
+    const next = remaining[0];
     if (next) {
       const activated = await tx.workflowTask.update({
         where: { id: next.id },
