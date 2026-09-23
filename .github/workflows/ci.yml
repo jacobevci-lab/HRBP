@@ -26,9 +26,8 @@ jobs:
       - run: npm install
       - name: Production dependency audit
         run: npm run security:audit:prod
-      - name: Full dependency audit report
-        shell: bash
-        run: npm run security:audit:full || true
+      - name: Full dependency audit
+        run: npm run security:audit:full
       - run: npm run routes:validate
       - run: npm run ui:validate
       - run: npx prisma validate
