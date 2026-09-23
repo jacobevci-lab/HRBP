@@ -25,12 +25,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { id } = await params;
   const body = await request.json() as { status?: ServiceRequestStatus; assigneeId?: string; queue?: string };
   if (!body.status || !Object.values(ServiceRequestStatus).includes(body.status)) return Response.json({ error: "valid status is required." }, { status: 400 });
+  const nextStatus: ServiceRequestStatus = body.status;
 
   const data = await db.$transaction(async (tx) => {
     const access = await hrServiceRequestWhere(tx, ctx);
     const current = await tx.hRServiceRequest.findFirst({ where: { ...access, id } });
     if (!current) throw new Error("NOT_FOUND");
-    if (body.status !== current.status && !transitions[current.status].includes(body.status)) throw new Error("INVALID_TRANSITION");
+    if (nextStatus !== current.status && !transitions[current.status].includes(nextStatus)) throw new Error("INVALID_TRANSITION");
 
     if (body.assigneeId) {
       const assignee = await tx.userAccount.findFirst({
@@ -44,17 +45,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const record = await tx.hRServiceRequest.update({
       where: { id: current.id },
       data: {
-        status: body.status,
+        status: nextStatus,
         assigneeId: body.assigneeId ?? current.assigneeId,
         queue: body.queue?.trim() || current.queue,
         firstResponseAt: current.firstResponseAt ?? now,
-        resolvedAt: body.status === ServiceRequestStatus.RESOLVED
+        resolvedAt: nextStatus === ServiceRequestStatus.RESOLVED
           ? now
-          : (current.status === ServiceRequestStatus.RESOLVED && body.status === ServiceRequestStatus.IN_PROGRESS ? null : current.resolvedAt),
-        closedAt: body.status === ServiceRequestStatus.CLOSED ? now : current.closedAt
+          : (current.status === ServiceRequestStatus.RESOLVED && nextStatus === ServiceRequestStatus.IN_PROGRESS ? null : current.resolvedAt),
+        closedAt: nextStatus === ServiceRequestStatus.CLOSED ? now : current.closedAt
       }
     });
-    await appendAudit(tx, ctx, { action: `hr-service.${body.status.toLowerCase()}`, resourceType: "HRServiceRequest", resourceId: id, classification: DataClassification.CONFIDENTIAL });
+    await appendAudit(tx, ctx, { action: `hr-service.${nextStatus.toLowerCase()}`, resourceType: "HRServiceRequest", resourceId: id, classification: DataClassification.CONFIDENTIAL });
     return record;
   }).catch((error) => error instanceof Error && ["NOT_FOUND", "INVALID_TRANSITION", "ASSIGNEE"].includes(error.message) ? error.message : Promise.reject(error));
 

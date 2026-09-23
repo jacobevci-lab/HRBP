@@ -34,7 +34,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (body.sizeBytes !== undefined) {
     try {
       sizeBytes = BigInt(body.sizeBytes);
-      if (sizeBytes < 0n) throw new Error("NEGATIVE");
+      if (sizeBytes < BigInt(0)) throw new Error("NEGATIVE");
     } catch {
       return Response.json({ error: "sizeBytes must be a non-negative integer." }, { status: 400 });
     }
