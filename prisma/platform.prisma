@@ -38,22 +38,28 @@ enum ConnectionStatus {
 }
 
 model DocumentVersion {
-  id             String @id @default(cuid())
-  tenantId       String
-  documentId     String
-  version        Int
-  objectKey      String @unique
-  contentType    String
-  sizeBytes      BigInt?
-  contentHash    String
-  classification DataClassification @default(RESTRICTED)
-  scanStatus     VaultScanStatus @default(PENDING)
-  createdById    String
-  createdAt      DateTime @default(now())
+  id              String @id @default(cuid())
+  tenantId        String
+  documentId      String
+  version         Int
+  objectKey       String @unique
+  contentType     String
+  sizeBytes       BigInt?
+  contentHash     String
+  classification  DataClassification @default(RESTRICTED)
+  scanStatus      VaultScanStatus @default(PENDING)
+  uploadedAt      DateTime?
+  scanCompletedAt DateTime?
+  scanEngine      String?
+  scanReference   String?
+  scanMessage     String?
+  createdById     String
+  createdAt       DateTime @default(now())
 
   @@unique([documentId, version])
   @@index([tenantId, documentId, createdAt])
   @@index([tenantId, scanStatus])
+  @@index([tenantId, uploadedAt, scanStatus])
 }
 
 model DocumentAccessGrant {
