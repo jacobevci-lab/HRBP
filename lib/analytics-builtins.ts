@@ -169,7 +169,14 @@ export async function materializeBuiltInAnalyticsForContext(client: AnalyticsCli
   const goalEmployees = new Set(goalRows.map((row) => row.employmentId));
   const reviewEmployees = new Set(reviewRows.map((row) => row.employmentId));
 
-  const inputs = [
+  const inputs: Array<{
+    metricKey: string;
+    periodStart: Date;
+    periodEnd: Date;
+    value: Prisma.InputJsonValue;
+    population: number;
+    dimensions: Prisma.InputJsonValue;
+  }> = [
     {
       metricKey: "WORKFORCE_HEADCOUNT",
       periodStart: at,
@@ -201,25 +208,19 @@ export async function materializeBuiltInAnalyticsForContext(client: AnalyticsCli
       value: roundPercent(goalEmployees.size, workforcePopulation),
       population: workforcePopulation,
       dimensions: { numerator: goalEmployees.size, denominator: workforcePopulation }
-    },
-    {
+    }
+  ];
+
+  if (latestCycle) {
+    inputs.push({
       metricKey: "PERFORMANCE_REVIEW_COVERAGE",
-      periodStart: latestCycle?.startsAt ?? yearStart,
-      periodEnd: latestCycle?.endsAt ?? at,
+      periodStart: latestCycle.startsAt,
+      periodEnd: latestCycle.endsAt < at ? latestCycle.endsAt : at,
       value: roundPercent(reviewEmployees.size, workforcePopulation),
       population: workforcePopulation,
-      dimensions: latestCycle
-        ? { numerator: reviewEmployees.size, denominator: workforcePopulation, cycle: latestCycle.name, cycleStatus: latestCycle.status }
-        : { numerator: 0, denominator: workforcePopulation, cycle: null }
-    }
-  ] satisfies Array<{
-    metricKey: string;
-    periodStart: Date;
-    periodEnd: Date;
-    value: Prisma.InputJsonValue;
-    population: number;
-    dimensions: Prisma.InputJsonValue;
-  }>;
+      dimensions: { numerator: reviewEmployees.size, denominator: workforcePopulation, cycle: latestCycle.name, cycleStatus: latestCycle.status }
+    });
+  }
 
   const snapshots = [];
   for (const input of inputs) {
