@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
 import { canUseHRServiceQueue, hrServiceRequestWhere } from "@/lib/hr-service-access";
+import { asEnumValue, asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 const staffOnly = new Set<PlatformRole>([PlatformRole.HRBP, PlatformRole.HR_OPERATIONS, PlatformRole.TENANT_ADMIN]);
@@ -13,20 +14,32 @@ const transitions: Record<ServiceRequestStatus, ServiceRequestStatus[]> = {
   WAITING_EMPLOYEE: [ServiceRequestStatus.IN_PROGRESS, ServiceRequestStatus.RESOLVED, ServiceRequestStatus.CANCELLED],
   WAITING_THIRD_PARTY: [ServiceRequestStatus.IN_PROGRESS, ServiceRequestStatus.RESOLVED, ServiceRequestStatus.CANCELLED],
   RESOLVED: [ServiceRequestStatus.IN_PROGRESS, ServiceRequestStatus.CLOSED],
-  CLOSED: [],
-  CANCELLED: []
+  CLOSED: [], CANCELLED: []
 };
-function queueKey(value: string) { return value.trim().toUpperCase().replace(/\s+/g, "_"); }
+
+function normalizeQueue(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === "") return null;
+  if (typeof value !== "string") return undefined;
+  const key = value.trim().toUpperCase().replace(/\s+/g, "_");
+  return /^[A-Z0-9_-]{2,40}$/.test(key) ? key : undefined;
+}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "hr-service:write") || !staffOnly.has(ctx.role)) return forbidden();
-  const { id } = await params;
-  const body = await request.json() as { status?: ServiceRequestStatus; assigneeId?: string | null; queue?: string | null };
-  if (!body.status || !Object.values(ServiceRequestStatus).includes(body.status)) return Response.json({ error: "valid status is required." }, { status: 400 });
-  const nextStatus: ServiceRequestStatus = body.status;
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid request id is required." }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "JSON body must be an object." }, { status: 400 });
+  const nextStatus = asEnumValue(body.status, Object.values(ServiceRequestStatus));
+  if (!nextStatus) return Response.json({ error: "valid status is required." }, { status: 400 });
+  const queueInput = normalizeQueue(body.queue);
+  if (body.queue !== undefined && queueInput === undefined) return Response.json({ error: "queue must be null or a valid queue key." }, { status: 400 });
+  const assigneeInput = body.assigneeId === undefined ? undefined : body.assigneeId === null || body.assigneeId === "" ? null : asIdentifier(body.assigneeId);
+  if (body.assigneeId !== undefined && body.assigneeId !== null && body.assigneeId !== "" && !assigneeInput) return Response.json({ error: "assigneeId must be null or a valid identifier." }, { status: 400 });
 
   const data = await db.$transaction(async (tx) => {
     const access = await hrServiceRequestWhere(tx, ctx);
@@ -34,22 +47,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!current) throw new Error("NOT_FOUND");
     if (nextStatus !== current.status && !transitions[current.status].includes(nextStatus)) throw new Error("INVALID_TRANSITION");
 
-    const desiredQueueKey = body.queue === null ? null : body.queue !== undefined ? queueKey(body.queue) : current.queue;
+    const desiredQueueKey = queueInput === undefined ? current.queue : queueInput;
     const queue = desiredQueueKey ? await canUseHRServiceQueue(tx, ctx, desiredQueueKey) : null;
     if (desiredQueueKey && !queue) throw new Error("QUEUE");
+    const desiredAssigneeId = assigneeInput === undefined ? current.assigneeId : assigneeInput;
 
-    const desiredAssigneeId = body.assigneeId === null ? null : body.assigneeId ?? current.assigneeId;
     if (desiredAssigneeId) {
-      const assignee = await tx.userAccount.findFirst({
-        where: { id: desiredAssigneeId, tenantId: ctx.tenantId, active: true, role: { in: [...staffOnly] } },
-        select: { id: true }
-      });
+      const assignee = await tx.userAccount.findFirst({ where: { id: desiredAssigneeId, tenantId: ctx.tenantId, active: true, role: { in: [...staffOnly] } }, select: { id: true } });
       if (!assignee) throw new Error("ASSIGNEE");
       if (queue) {
-        const membership = await tx.hRServiceQueueMembership.findFirst({
-          where: { tenantId: ctx.tenantId, queueId: queue.id, userId: desiredAssigneeId },
-          select: { id: true }
-        });
+        const membership = await tx.hRServiceQueueMembership.findFirst({ where: { tenantId: ctx.tenantId, queueId: queue.id, userId: desiredAssigneeId }, select: { id: true } });
         if (!membership) throw new Error("ASSIGNEE_QUEUE");
       }
     }
@@ -62,9 +69,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         assigneeId: desiredAssigneeId,
         queue: queue?.key ?? null,
         firstResponseAt: current.firstResponseAt ?? now,
-        resolvedAt: nextStatus === ServiceRequestStatus.RESOLVED
-          ? now
-          : (current.status === ServiceRequestStatus.RESOLVED && nextStatus === ServiceRequestStatus.IN_PROGRESS ? null : current.resolvedAt),
+        resolvedAt: nextStatus === ServiceRequestStatus.RESOLVED ? now : (current.status === ServiceRequestStatus.RESOLVED && nextStatus === ServiceRequestStatus.IN_PROGRESS ? null : current.resolvedAt),
         closedAt: nextStatus === ServiceRequestStatus.CLOSED ? now : current.closedAt
       }
     });

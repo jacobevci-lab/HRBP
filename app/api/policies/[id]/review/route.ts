@@ -1,61 +1,56 @@
-import { DataClassification, PolicyStatus } from "@prisma/client";
+import { DataClassification, PolicyStatus, Prisma } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { asEnumValue, asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 type ReviewAction = "SUBMIT" | "APPROVE" | "REQUEST_CHANGES";
+const actions: ReviewAction[] = ["SUBMIT", "APPROVE", "REQUEST_CHANGES"];
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
-  const { id } = await params;
-  const body = await request.json() as { action?: ReviewAction };
-  if (!body.action || !["SUBMIT", "APPROVE", "REQUEST_CHANGES"].includes(body.action)) {
-    return Response.json({ error: "action must be SUBMIT, APPROVE or REQUEST_CHANGES." }, { status: 400 });
-  }
-
-  if (body.action === "SUBMIT" && !can(ctx, "policies:write")) return forbidden();
-  if ((body.action === "APPROVE" || body.action === "REQUEST_CHANGES") && !can(ctx, "policies:approve")) return forbidden();
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid policy id is required." }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "JSON body must be an object." }, { status: 400 });
+  const action = asEnumValue(body.action, actions);
+  if (!action) return Response.json({ error: "action must be SUBMIT, APPROVE or REQUEST_CHANGES." }, { status: 400 });
+  if (action === "SUBMIT" && !can(ctx, "policies:write")) return forbidden();
+  if ((action === "APPROVE" || action === "REQUEST_CHANGES") && !can(ctx, "policies:approve")) return forbidden();
 
   const result = await db.$transaction(async (tx) => {
     const current = await tx.policyRecord.findFirst({ where: { id, tenantId: ctx.tenantId } });
     if (!current) throw new Error("NOT_FOUND");
     const now = new Date();
-
-    if (body.action === "SUBMIT") {
+    if (action === "SUBMIT") {
       if (current.status !== PolicyStatus.DRAFT) throw new Error("STATE");
-      const updated = await tx.policyRecord.update({
-        where: { id: current.id },
-        data: { status: PolicyStatus.REVIEW, approvedById: null, approvedAt: null }
-      });
+      const updated = await tx.policyRecord.update({ where: { id: current.id, tenantId: ctx.tenantId, status: PolicyStatus.DRAFT }, data: { status: PolicyStatus.REVIEW, approvedById: null, approvedAt: null } });
       await appendAudit(tx, ctx, { action: "policy.review-submitted", resourceType: "PolicyRecord", resourceId: id, classification: DataClassification.INTERNAL, purpose: "Policy four-eyes review" });
       return updated;
     }
-
-    if (body.action === "APPROVE") {
+    if (action === "APPROVE") {
       if (current.status !== PolicyStatus.REVIEW) throw new Error("STATE");
       if (current.ownerId === ctx.actorId) throw new Error("FOUR_EYES");
-      const updated = await tx.policyRecord.update({
-        where: { id: current.id },
-        data: { status: PolicyStatus.APPROVED, approvedById: ctx.actorId, approvedAt: now }
-      });
+      const updated = await tx.policyRecord.update({ where: { id: current.id, tenantId: ctx.tenantId, status: PolicyStatus.REVIEW }, data: { status: PolicyStatus.APPROVED, approvedById: ctx.actorId, approvedAt: now } });
       await appendAudit(tx, ctx, { action: "policy.approved", resourceType: "PolicyRecord", resourceId: id, classification: DataClassification.INTERNAL, purpose: "Independent policy approval" });
       return updated;
     }
-
     if (current.status !== PolicyStatus.REVIEW && current.status !== PolicyStatus.APPROVED) throw new Error("STATE");
-    const updated = await tx.policyRecord.update({
-      where: { id: current.id },
-      data: { status: PolicyStatus.DRAFT, approvedById: null, approvedAt: null }
-    });
+    const updated = await tx.policyRecord.update({ where: { id: current.id, tenantId: ctx.tenantId, status: current.status }, data: { status: PolicyStatus.DRAFT, approvedById: null, approvedAt: null } });
     await appendAudit(tx, ctx, { action: "policy.changes-requested", resourceType: "PolicyRecord", resourceId: id, classification: DataClassification.INTERNAL, purpose: "Policy returned for controlled revision" });
     return updated;
-  }).catch((error) => error instanceof Error && ["NOT_FOUND", "STATE", "FOUR_EYES"].includes(error.message) ? error.message : Promise.reject(error));
+  }).catch((error) => {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") return "CONFLICT" as const;
+    if (error instanceof Error && ["NOT_FOUND", "STATE", "FOUR_EYES"].includes(error.message)) return error.message;
+    return Promise.reject(error);
+  });
 
   if (result === "NOT_FOUND") return Response.json({ error: "Policy not found." }, { status: 404 });
   if (result === "STATE") return Response.json({ error: "The requested policy review transition is not allowed from the current state." }, { status: 409 });
   if (result === "FOUR_EYES") return forbidden("Policy owners cannot approve their own policy version.");
+  if (result === "CONFLICT") return Response.json({ error: "Policy state changed concurrently. Refresh and retry." }, { status: 409 });
   return Response.json({ data: result });
 }

@@ -1,19 +1,18 @@
 import Link from "next/link";
-import { Archive, BadgeCheck, Download, FileText, History, KeyRound, LockKeyhole, Search, ShieldCheck } from "lucide-react";
+import { Archive, BadgeCheck, FileText, History, KeyRound, LockKeyhole, Search, ShieldCheck } from "lucide-react";
+import { PlatformRole } from "@prisma/client";
 import { can } from "@/lib/authorization";
 import { getServerRequestContext } from "@/lib/server-session";
 import { getServerLocale } from "@/lib/i18n-server";
 import type { Locale } from "@/lib/i18n";
 import { getAuditWorkspaceData, getDocumentWorkspaceData } from "@/lib/governance-live-data";
 import { AuditChainButton } from "@/components/audit-chain-button";
+import { DocumentVaultActions } from "@/components/document-vault-actions";
 
 function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
 function localClass(locale: Locale, value: string) {
   if (locale !== "tr") return value;
-  const map: Record<string,string> = {
-    CONFIDENTIAL:"Gizli", RESTRICTED:"Kısıtlı", HIGHLY_RESTRICTED:"Yüksek kısıtlı", INTERNAL:"İç kullanım",
-    ACTIVE:"Aktif", CLEAN:"Temiz", QUARANTINED:"Karantinada", PENDING:"Bekliyor", FAILED:"Başarısız", "NO VERSION":"Sürüm yok"
-  };
+  const map: Record<string,string> = { CONFIDENTIAL:"Gizli", RESTRICTED:"Kısıtlı", HIGHLY_RESTRICTED:"Yüksek kısıtlı", INTERNAL:"İç kullanım", ACTIVE:"Aktif", CLEAN:"Temiz", QUARANTINED:"Karantinada", PENDING:"Bekliyor", FAILED:"Başarısız", "NO OBJECT":"Nesne yok" };
   return map[value.toUpperCase().replaceAll(" ","_")] ?? value;
 }
 function Stat({ label, value, meta, icon: Icon }: { label: string; value: string; meta: string; icon: React.ComponentType<{ size?: number }> }) { return <div className="enterprise-stat"><div className="enterprise-stat-icon"><Icon size={17}/></div><div><span>{label}</span><strong>{value}</strong><small>{meta}</small></div></div>; }
@@ -27,25 +26,30 @@ export async function GovernanceLiveWorkspace({ slug, query = "" }: { slug: stri
     if (!ctx) return <Restricted locale={locale} title={c(locale,"Employee document vault requires authentication","Çalışan doküman kasası kimlik doğrulama gerektirir")} detail={c(locale,"Document metadata and object access are never exposed through the public staging surface.","Doküman metadatası ve nesne erişimi herkese açık staging yüzeyinde gösterilmez.")} returnTo="/module/documents"/>;
     if (!can(ctx, "documents:read")) return <Restricted locale={locale} title={c(locale,"Document vault restricted","Doküman kasası kısıtlı")} detail={c(locale,"Your current role does not include documents:read permission.","Mevcut rolünüz documents:read yetkisini içermiyor.")} returnTo="/module/documents"/>;
     const data = await getDocumentWorkspaceData(ctx, query);
+    const canGrant = can(ctx, "documents:grant");
+    const canGovern = can(ctx, "documents:govern");
+    const canSetLegalHold = canGovern && ctx.role === PlatformRole.LEGAL;
     return <>
       <div className="enterprise-stats">
-        <Stat label={c(locale,"Vault objects","Kasa nesneleri")} value={String(data.total)} meta={c(locale,"Relationship + explicit-grant scoped","İlişki + açık yetki kapsamında")} icon={FileText}/>
+        <Stat label={c(locale,"Vault objects","Kasa nesneleri")} value={String(data.total)} meta={c(locale,"Relationship + explicit-grant scope","İlişki + açık yetki kapsamı")} icon={FileText}/>
         <Stat label={c(locale,"Restricted","Kısıtlı")} value={String(data.restricted)} meta={c(locale,"Classification policy enforced","Sınıflandırma politikası uygulanıyor")} icon={LockKeyhole}/>
         <Stat label={c(locale,"Expiring soon","Yakında süresi dolacak")} value={String(data.expiring)} meta={c(locale,"Next 30 days","Önümüzdeki 30 gün")} icon={History}/>
         <Stat label={c(locale,"Legal hold","Hukuki saklama")} value={String(data.legalHold)} meta={c(locale,"Deletion blocked","Silme engelli")} icon={Archive}/>
       </div>
       <SearchBar locale={locale} action="/module/documents" query={query} placeholder={c(locale,"Search document name, purpose or employee…","Doküman adı, amaç veya çalışanda ara…")}/>
       <div className="card enterprise-table-card">
-        <div className="table-title"><div><h3>{c(locale,"Employee document vault","Çalışan doküman kasası")}</h3><p>{c(locale,"Live scope uses the same relationship, classification and explicit-grant policy as the API. Downloads are proxied through the private vault boundary.","Canlı kapsam API ile aynı ilişki, sınıflandırma ve açık yetki politikasını kullanır. İndirmeler özel kasa sınırı üzerinden proxy edilir.")}</p></div><span>{c(locale,`${data.rows.length} shown`,`${data.rows.length} kayıt gösteriliyor`)}</span></div>
-        <div className="table-wrap"><table className="enterprise-table"><thead><tr><th>{c(locale,"Document","Doküman")}</th><th>{c(locale,"Owner","Sahip")}</th><th>{c(locale,"Purpose","Amaç")}</th><th>{c(locale,"Class","Sınıf")}</th><th>{c(locale,"Version / scan","Sürüm / tarama")}</th><th>{c(locale,"Access","Erişim")}</th><th>{c(locale,"Retention","Saklama")}</th><th>{c(locale,"Action","Aksiyon")}</th></tr></thead><tbody>{data.rows.length ? data.rows.map(row => <tr key={row.id}>
+        <div className="table-title"><div><h3>{c(locale,"Employee document vault","Çalışan doküman kasası")}</h3><p>{c(locale,"Private object access is authorized separately, malware-gated and audited. Case evidence remains outside this generic repository.","Özel nesne erişimi ayrı yetkilendirilir, zararlı yazılım kontrolünden geçer ve denetlenir. Vaka kanıtı bu genel kasanın dışında kalır.")}</p></div><span>{c(locale,`${data.rows.length} shown`,`${data.rows.length} kayıt gösteriliyor`)}</span></div>
+        <div className="table-wrap"><table className="enterprise-table"><thead><tr><th>{c(locale,"Document","Doküman")}</th><th>{c(locale,"Owner","Sahip")}</th><th>{c(locale,"Purpose","Amaç")}</th><th>{c(locale,"Classification","Sınıflandırma")}</th><th>{c(locale,"Object","Nesne")}</th><th>{c(locale,"Retention","Saklama")}</th><th>{c(locale,"Access","Erişim")}</th><th>{c(locale,"Created","Oluşturma")}</th><th>{c(locale,"Actions","Aksiyonlar")}</th></tr></thead><tbody>{data.rows.length ? data.rows.map(row => <tr key={row.id}>
           <td><span className="document-name"><FileText size={15}/><strong>{row.fileName}</strong></span>{row.legalHold ? <small className="cell-sub">{c(locale,"Legal hold active","Hukuki saklama aktif")}</small> : null}</td>
-          <td>{row.owner}</td><td>{row.purpose}</td>
+          <td>{row.owner}</td>
+          <td>{row.purpose}</td>
           <td><em className={`classification ${row.classification.toLowerCase().replaceAll(" ", "-")}`}>{localClass(locale,row.classification)}</em></td>
-          <td><strong>{row.version}</strong><small className="cell-sub">{localClass(locale,row.scanStatus)}</small></td>
-          <td>{row.grantCount ? c(locale,`${row.grantCount} delegated`,`${row.grantCount} delege`) : c(locale,"Relationship policy","İlişki politikası")}</td>
+          <td><strong>{row.latestVersion ? `v${row.latestVersion}` : "—"}</strong><small className="cell-sub">{localClass(locale,row.scanStatus)}</small></td>
           <td>{row.retention}<small className="cell-sub">{c(locale,"Expires","Son kullanma")}: {row.expires}</small></td>
-          <td>{row.downloadReady ? <a className="mini-action apply" href={`/api/documents/${encodeURIComponent(row.id)}/download`}><Download size={13}/> {c(locale,"Download","İndir")}</a> : <span className="matrix-note">{c(locale,"Scan required","Tarama gerekli")}</span>}</td>
-        </tr>) : <tr><td colSpan={8} style={{ textAlign: "center", padding: 28 }}>{c(locale,"No documents match this policy scope.","Bu politika kapsamıyla eşleşen doküman bulunmuyor.")}</td></tr>}</tbody></table></div>
+          <td>{row.activeGrants}<small className="cell-sub">{c(locale,"active explicit grants","aktif açık yetki")}</small></td>
+          <td>{row.created}</td>
+          <td><DocumentVaultActions documentId={row.id} downloadReady={row.downloadReady} legalHold={row.legalHold} retentionUntil={row.retentionUntil} activeGrants={row.activeGrants} canGrant={canGrant} canGovern={canGovern} canSetLegalHold={canSetLegalHold}/></td>
+        </tr>) : <tr><td colSpan={9} style={{ textAlign: "center", padding: 28 }}>{c(locale,"No documents match this governed scope.","Bu yönetişim kapsamıyla eşleşen doküman bulunmuyor.")}</td></tr>}</tbody></table></div>
       </div>
     </>;
   }
@@ -54,11 +58,7 @@ export async function GovernanceLiveWorkspace({ slug, query = "" }: { slug: stri
     if (!ctx) return <Restricted locale={locale} title={c(locale,"Audit ledger requires authentication","Denetim kaydı kimlik doğrulama gerektirir")} detail={c(locale,"Security-relevant audit events are not exposed on the public staging surface.","Güvenlikle ilgili denetim olayları herkese açık staging yüzeyinde gösterilmez.")} returnTo="/module/audit"/>;
     if (!can(ctx, "audit:read")) return <Restricted locale={locale} title={c(locale,"Audit ledger restricted","Denetim kaydı kısıtlı")} detail={c(locale,"Your current role does not include audit:read permission.","Mevcut rolünüz audit:read yetkisini içermiyor.")} returnTo="/module/audit"/>;
     const data = await getAuditWorkspaceData(ctx.tenantId, query);
-    return <>
-      <div className="enterprise-stats"><Stat label={c(locale,"Events today","Bugünkü olaylar")} value={String(data.today)} meta={c(locale,"Append-only business/security events","Sadece eklenen iş/güvenlik olayları")} icon={History}/><Stat label={c(locale,"Privileged reads","Ayrıcalıklı okumalar")} value={String(data.privilegedReads)} meta={c(locale,"Restricted views today","Bugünkü kısıtlı görüntülemeler")} icon={KeyRound}/><Stat label={c(locale,"Ledger events","Kayıt olayları")} value={String(data.total)} meta={c(locale,"Tenant hash chain","Tenant hash zinciri")} icon={ShieldCheck}/><Stat label={c(locale,"Integrity","Bütünlük")} value={c(locale,"Verifiable","Doğrulanabilir")} meta={c(locale,"SHA-256 chained evidence","SHA-256 zincirli kanıt")} icon={BadgeCheck}/></div>
-      <SearchBar locale={locale} action="/module/audit" query={query} placeholder={c(locale,"Search actor, action, resource or purpose…","Aktör, aksiyon, kaynak veya amaçta ara…")}/>
-      <div className="card enterprise-table-card"><div className="table-title"><div><h3>{c(locale,"Audit ledger","Denetim kaydı")}</h3><p>{c(locale,"Live tenant-scoped security and business mutation evidence.","Canlı tenant kapsamlı güvenlik ve iş değişikliği kanıtları.")}</p></div><AuditChainButton/></div><div className="table-wrap"><table className="enterprise-table"><thead><tr><th>{c(locale,"Actor","Aktör")}</th><th>{c(locale,"Action","Aksiyon")}</th><th>{c(locale,"Resource","Kaynak")}</th><th>{c(locale,"Declared purpose","Beyan edilen amaç")}</th><th>{c(locale,"Classification","Sınıflandırma")}</th><th>IP</th><th>{c(locale,"Time","Zaman")}</th></tr></thead><tbody>{data.rows.length ? data.rows.map(row => <tr key={row.id}><td><strong className="cell-strong">{row.actorId}</strong></td><td>{row.action}</td><td><code>{row.resourceType}:{row.resourceId}</code></td><td>{row.purpose}</td><td><em className={`classification ${row.classification.toLowerCase().replaceAll(" ", "-")}`}>{localClass(locale,row.classification)}</em></td><td>{row.ipAddress}</td><td>{row.occurredAt}</td></tr>) : <tr><td colSpan={7} style={{ textAlign: "center", padding: 28 }}>{c(locale,"No audit events match this search.","Bu aramayla eşleşen denetim olayı bulunmuyor.")}</td></tr>}</tbody></table></div></div>
-    </>;
+    return <><div className="enterprise-stats"><Stat label={c(locale,"Events today","Bugünkü olaylar")} value={String(data.today)} meta={c(locale,"Append-only business/security events","Sadece eklenen iş/güvenlik olayları")} icon={History}/><Stat label={c(locale,"Privileged reads","Ayrıcalıklı okumalar")} value={String(data.privilegedReads)} meta={c(locale,"Restricted views today","Bugünkü kısıtlı görüntülemeler")} icon={KeyRound}/><Stat label={c(locale,"Ledger events","Kayıt olayları")} value={String(data.total)} meta={c(locale,"Tenant hash chain","Tenant hash zinciri")} icon={ShieldCheck}/><Stat label={c(locale,"Integrity","Bütünlük")} value={c(locale,"Verifiable","Doğrulanabilir")} meta={c(locale,"SHA-256 chained evidence","SHA-256 zincirli kanıt")} icon={BadgeCheck}/></div><SearchBar locale={locale} action="/module/audit" query={query} placeholder={c(locale,"Search actor, action, resource or purpose…","Aktör, aksiyon, kaynak veya amaçta ara…")}/><div className="card enterprise-table-card"><div className="table-title"><div><h3>{c(locale,"Audit ledger","Denetim kaydı")}</h3><p>{c(locale,"Live tenant-scoped security and business mutation evidence.","Canlı tenant kapsamlı güvenlik ve iş değişikliği kanıtları.")}</p></div><AuditChainButton/></div><div className="table-wrap"><table className="enterprise-table"><thead><tr><th>{c(locale,"Actor","Aktör")}</th><th>{c(locale,"Action","Aksiyon")}</th><th>{c(locale,"Resource","Kaynak")}</th><th>{c(locale,"Declared purpose","Beyan edilen amaç")}</th><th>{c(locale,"Classification","Sınıflandırma")}</th><th>IP</th><th>{c(locale,"Time","Zaman")}</th></tr></thead><tbody>{data.rows.length ? data.rows.map(row => <tr key={row.id}><td><strong className="cell-strong">{row.actorId}</strong></td><td>{row.action}</td><td><code>{row.resourceType}:{row.resourceId}</code></td><td>{row.purpose}</td><td><em className={`classification ${row.classification.toLowerCase().replaceAll(" ", "-")}`}>{localClass(locale,row.classification)}</em></td><td>{row.ipAddress}</td><td>{row.occurredAt}</td></tr>) : <tr><td colSpan={7} style={{ textAlign: "center", padding: 28 }}>{c(locale,"No audit events match this search.","Bu aramayla eşleşen denetim olayı bulunmuyor.")}</td></tr>}</tbody></table></div></div></>;
   }
   return null;
 }
