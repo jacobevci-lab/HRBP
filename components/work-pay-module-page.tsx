@@ -1,34 +1,66 @@
-import { CircleAlert, CircleCheckBig } from "lucide-react";
+import { CircleAlert, CircleCheckBig, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { can, type Capability } from "@/lib/authorization";
+import { getServerLocale } from "@/lib/i18n-server";
+import type { Locale } from "@/lib/i18n";
+import { getServerRequestContext } from "@/lib/server-session";
 
-const copy = {
-  "time-attendance": { title: "Time & Attendance", description: "Operate governed schedules, attendance, overtime, exceptions and payroll-ready time from relationship-scoped employment data." },
-  leave: { title: "Leave", description: "Manage leave requests, balances and approvals without disconnecting policy, employment scope or audit evidence." },
-  compensation: { title: "Compensation", description: "Run restricted effective-dated compensation changes with approval separation and immutable salary history." },
-  payroll: { title: "Payroll", description: "Operate restricted country-pack payroll periods, controlled run states and auditable results from the HR system of record." }
-} as const;
+type Slug = "time-attendance" | "leave" | "compensation" | "payroll";
 
-type Slug = keyof typeof copy;
+const copy: Record<Slug, { en: { title: string; description: string }; tr: { title: string; description: string } }> = {
+  "time-attendance": {
+    en: { title: "Time & Attendance", description: "Operate governed schedules, attendance, overtime, exceptions and payroll-ready time from relationship-scoped employment data." },
+    tr: { title: "Zaman & Devam", description: "İlişki kapsamlı istihdam verisiyle çalışma planı, devam, fazla mesai, istisna ve bordroya hazır zamanı yönetin." }
+  },
+  leave: {
+    en: { title: "Leave", description: "Manage leave requests, balances and approvals without disconnecting policy, employment scope or audit evidence." },
+    tr: { title: "İzin", description: "Politika, istihdam kapsamı ve denetim kanıtından kopmadan izin taleplerini, bakiyeleri ve onayları yönetin." }
+  },
+  compensation: {
+    en: { title: "Compensation", description: "Run restricted effective-dated compensation changes with approval separation and immutable salary history." },
+    tr: { title: "Ücretlendirme", description: "Onay ayrımı ve değiştirilemez ücret geçmişiyle kısıtlı, tarih-etkin ücret değişikliklerini yönetin." }
+  },
+  payroll: {
+    en: { title: "Payroll", description: "Operate restricted country-pack payroll periods, controlled run states and auditable results from the HR system of record." },
+    tr: { title: "Bordro", description: "İK kayıt sisteminden kısıtlı ülke paketi bordro dönemlerini, kontrollü run durumlarını ve denetlenebilir sonuçları yönetin." }
+  }
+};
+
+function capabilityFor(slug: Slug): Capability {
+  if (slug === "time-attendance") return "time:read";
+  if (slug === "leave") return "leave:read";
+  if (slug === "compensation") return "compensation:read";
+  return "payroll:read";
+}
+
+function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
 
 export async function WorkPayModulePage({ slug }: { slug: Slug }) {
-  const meta = copy[slug];
+  const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
+  const meta = copy[slug][locale];
+  const capability = capabilityFor(slug);
+
+  if (!ctx || !can(ctx, capability)) {
+    return <AppShell>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div></section>
+      <section className="card module-table"><div className="empty-state"><ShieldCheck size={24}/><h3>{c(locale, "Access is restricted", "Erişim kısıtlı")}</h3><p>{c(locale, `Your signed role does not include ${capability}.`, `İmzalı rolünüz ${capability} yetkisini içermiyor.`)}</p></div></section>
+    </AppShell>;
+  }
+
   try {
     const content = slug === "compensation"
       ? await (await import("@/components/compensation-live-workspace")).CompensationLiveWorkspace()
       : await (await import("@/components/work-pay-live-workspace")).WorkPayLiveWorkspace({ slug });
 
     return <AppShell>
-      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> Governed workspace</button></div></section>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> {c(locale, "Governed live data", "Yönetişimli canlı veri")}</button></div></section>
       {content}
     </AppShell>;
   } catch (error) {
-    console.error(`[HRBP] Dedicated ${slug} workspace failed; using protected fallback.`, error);
-    try {
-      const { WorkPayWorkspace } = await import("@/components/work-pay-workspace");
-      return <AppShell><section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleAlert size={16}/> Protected fallback</button></div></section><WorkPayWorkspace slug={slug}/></AppShell>;
-    } catch (fallbackError) {
-      console.error(`[HRBP] ${slug} fallback also failed.`, fallbackError);
-      return <AppShell><section className="page-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div></section><section className="card module-table"><div className="empty-state"><CircleAlert size={24}/><h3>{meta.title} is temporarily unavailable</h3><p>The governed data plane could not initialize. No mutation was attempted.</p></div></section></AppShell>;
-    }
+    console.error(`[HRBP] Dedicated ${slug} workspace failed; protected fallback activated.`, error);
+    return <AppShell>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleAlert size={16}/> {c(locale, "Protected fallback", "Korumalı yedek mod")}</button></div></section>
+      <section className="card module-table"><div className="empty-state"><CircleAlert size={24}/><h3>{c(locale, `${meta.title} is temporarily unavailable`, `${meta.title} geçici olarak kullanılamıyor`)}</h3><p>{c(locale, "The governed data plane could not initialize. No demo values are substituted and no protected mutation was attempted.", "Yönetişimli veri katmanı başlatılamadı. Yerine demo değer konulmadı ve hiçbir korumalı değişiklik işlemi denenmedi.")}</p></div></section>
+    </AppShell>;
   }
 }
