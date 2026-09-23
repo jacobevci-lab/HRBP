@@ -26,6 +26,7 @@ export async function GovernanceLiveWorkspace({ slug, query = "" }: { slug: stri
     if (!ctx) return <Restricted locale={locale} title={c(locale,"Employee document vault requires authentication","Çalışan doküman kasası kimlik doğrulama gerektirir")} detail={c(locale,"Document metadata and object access are never exposed through the public staging surface.","Doküman metadatası ve nesne erişimi herkese açık staging yüzeyinde gösterilmez.")} returnTo="/module/documents"/>;
     if (!can(ctx, "documents:read")) return <Restricted locale={locale} title={c(locale,"Document vault restricted","Doküman kasası kısıtlı")} detail={c(locale,"Your current role does not include documents:read permission.","Mevcut rolünüz documents:read yetkisini içermiyor.")} returnTo="/module/documents"/>;
     const data = await getDocumentWorkspaceData(ctx, query);
+    const canWrite = can(ctx, "documents:write");
     const canGrant = can(ctx, "documents:grant");
     const canGovern = can(ctx, "documents:govern");
     const canSetLegalHold = canGovern && ctx.role === PlatformRole.LEGAL;
@@ -48,7 +49,7 @@ export async function GovernanceLiveWorkspace({ slug, query = "" }: { slug: stri
           <td>{row.retention}<small className="cell-sub">{c(locale,"Expires","Son kullanma")}: {row.expires}</small></td>
           <td>{row.activeGrants}<small className="cell-sub">{c(locale,"active explicit grants","aktif açık yetki")}</small></td>
           <td>{row.created}</td>
-          <td><DocumentVaultActions documentId={row.id} downloadReady={row.downloadReady} legalHold={row.legalHold} retentionUntil={row.retentionUntil} activeGrants={row.activeGrants} canGrant={canGrant} canGovern={canGovern} canSetLegalHold={canSetLegalHold}/></td>
+          <td><DocumentVaultActions documentId={row.id} downloadReady={row.downloadReady} legalHold={row.legalHold} retentionUntil={row.retentionUntil} activeGrants={row.activeGrants} canWrite={canWrite} canGrant={canGrant} canGovern={canGovern} canSetLegalHold={canSetLegalHold}/></td>
         </tr>) : <tr><td colSpan={9} style={{ textAlign: "center", padding: 28 }}>{c(locale,"No documents match this governed scope.","Bu yönetişim kapsamıyla eşleşen doküman bulunmuyor.")}</td></tr>}</tbody></table></div>
       </div>
     </>;
