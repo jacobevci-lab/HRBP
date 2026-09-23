@@ -23,13 +23,14 @@ model NotificationOutbox {
   nextAttemptAt   DateTime                 @default(now())
   lockedAt        DateTime?
   deliveredAt     DateTime?
+  readAt          DateTime?
   lastError       String?
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
 
   @@unique([tenantId, dedupeKey])
   @@index([status, nextAttemptAt, createdAt])
-  @@index([tenantId, recipientUserId, status, createdAt])
+  @@index([tenantId, recipientUserId, channel, status, readAt, createdAt])
   @@index([tenantId, eventType, createdAt])
   @@index([tenantId, resourceType, resourceId])
 }
