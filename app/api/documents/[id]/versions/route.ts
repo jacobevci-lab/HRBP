@@ -71,14 +71,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
     await appendAudit(tx, ctx, { action: "document.version-created", resourceType: "DocumentVersion", resourceId: record.id, classification: document.classification ?? DataClassification.RESTRICTED, purpose: "Immutable vault version reserved for upload" });
     return record;
-  }).catch((error) => {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return "CONFLICT" as const;
-    if (error instanceof Error && ["NOT_FOUND", "OUT_OF_SCOPE"].includes(error.message)) return error.message;
+  }).catch((error): "CONFLICT" | "NOT_FOUND" | "OUT_OF_SCOPE" | Promise<never> => {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return "CONFLICT";
+    if (error instanceof Error && error.message === "NOT_FOUND") return "NOT_FOUND";
+    if (error instanceof Error && error.message === "OUT_OF_SCOPE") return "OUT_OF_SCOPE";
     return Promise.reject(error);
   });
 
-  if (result === "NOT_FOUND") return Response.json({ error: "Document not found." }, { status: 404 });
-  if (result === "OUT_OF_SCOPE") return forbidden("Document subject is outside your authorized write scope.");
-  if (result === "CONFLICT") return Response.json({ error: "Document version changed concurrently. Refresh and retry." }, { status: 409 });
+  if (typeof result === "string") {
+    if (result === "NOT_FOUND") return Response.json({ error: "Document not found." }, { status: 404 });
+    if (result === "OUT_OF_SCOPE") return forbidden("Document subject is outside your authorized write scope.");
+    return Response.json({ error: "Document version changed concurrently. Refresh and retry." }, { status: 409 });
+  }
   return Response.json({ data: serializeVersion(result), upload: { method: "PUT", endpoint: `/api/documents/${encodeURIComponent(id)}/versions/${encodeURIComponent(result.id)}/upload`, scanRequired: true } }, { status: 201 });
 }
