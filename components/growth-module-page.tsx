@@ -1,30 +1,67 @@
-import { CircleAlert, CircleCheckBig } from "lucide-react";
+import { CircleAlert, CircleCheckBig, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { can, type Capability } from "@/lib/authorization";
+import { getServerLocale } from "@/lib/i18n-server";
+import type { Locale } from "@/lib/i18n";
+import { getServerRequestContext } from "@/lib/server-session";
 
-const copy: Record<string, { title: string; description: string }> = {
-  benefits: { title: "Benefits", description: "Administer effective-dated plans and employee coverage without losing payroll or historical traceability." },
-  performance: { title: "Performance", description: "Run goals, reviews and calibration with human-owned ratings and auditable decision evidence." },
-  talent: { title: "Talent", description: "Review performance and potential using explicit human assessments instead of opaque employee scoring." },
-  succession: { title: "Succession", description: "Protect critical-role continuity with successor readiness, coverage gaps and review ownership." },
-  learning: { title: "Skills & Learning", description: "Manage learning compliance, critical skills and development signals on the same employment graph." }
+type GrowthSlug = "benefits" | "performance" | "talent" | "succession" | "learning";
+
+const copy: Record<GrowthSlug, { en: { title: string; description: string }; tr: { title: string; description: string } }> = {
+  benefits: {
+    en: { title: "Benefits", description: "Administer effective-dated plans and employee coverage without losing payroll or historical traceability." },
+    tr: { title: "Yan Haklar", description: "Bordro ve tarihsel izlenebilirliği kaybetmeden tarih-etkin planları ve çalışan kapsamını yönetin." }
+  },
+  performance: {
+    en: { title: "Performance", description: "Run goals, reviews and calibration with human-owned ratings and auditable decision evidence." },
+    tr: { title: "Performans", description: "Hedef, değerlendirme ve kalibrasyonu insan sahipliğinde puanlar ve denetlenebilir karar kanıtıyla yönetin." }
+  },
+  talent: {
+    en: { title: "Talent", description: "Review performance and potential using explicit human assessments instead of opaque employee scoring." },
+    tr: { title: "Yetenek", description: "Opak çalışan skorları yerine açık insan değerlendirmeleriyle performans ve potansiyeli yönetin." }
+  },
+  succession: {
+    en: { title: "Succession", description: "Protect critical-role continuity with successor readiness, coverage gaps and review ownership." },
+    tr: { title: "Yedekleme", description: "Aday hazırlığı, kapsama açıkları ve inceleme sahipliğiyle kritik rol sürekliliğini koruyun." }
+  },
+  learning: {
+    en: { title: "Skills & Learning", description: "Manage learning compliance, critical skills and development signals on the same employment graph." },
+    tr: { title: "Yetkinlikler & Öğrenme", description: "Eğitim uyumu, kritik yetkinlikler ve gelişim sinyallerini aynı istihdam grafiğinde yönetin." }
+  }
 };
 
-export async function GrowthModulePage({ slug }: { slug: "benefits" | "performance" | "talent" | "succession" | "learning" }) {
-  const meta = copy[slug];
+function accessFor(slug: GrowthSlug): Capability {
+  if (slug === "benefits") return "benefits:read";
+  if (slug === "performance") return "performance:read";
+  if (slug === "talent") return "talent:read";
+  if (slug === "succession") return "succession:read";
+  return "learning:read";
+}
+
+function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
+
+export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
+  const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
+  const meta = copy[slug][locale];
+
+  if (!ctx || !can(ctx, accessFor(slug))) {
+    return <AppShell>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div></section>
+      <section className="card module-table"><div className="empty-state"><ShieldCheck size={24}/><h3>{c(locale, "Access is restricted", "Erişim kısıtlı")}</h3><p>{c(locale, "Your signed role does not include access to this governed growth domain.", "İmzalı rolünüz bu yönetişimli gelişim alanına erişim yetkisi içermiyor.")}</p></div></section>
+    </AppShell>;
+  }
+
   try {
     const { GrowthLiveWorkspace } = await import("@/components/growth-live-workspace");
     return <AppShell>
-      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> Governed workspace</button></div></section>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> {c(locale, "Governed live data", "Yönetişimli canlı veri")}</button></div></section>
       {await GrowthLiveWorkspace({ slug })}
     </AppShell>;
   } catch (error) {
-    console.error(`[HRBP] Dedicated ${slug} workspace failed; using protected fallback.`, error);
-    try {
-      const { GrowthWorkspace } = await import("@/components/growth-workspace");
-      return <AppShell><section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleAlert size={16}/> Protected fallback</button></div></section><GrowthWorkspace slug={slug}/></AppShell>;
-    } catch (fallbackError) {
-      console.error(`[HRBP] ${slug} fallback also failed.`, fallbackError);
-      return <AppShell><section className="page-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div></section><section className="card module-table"><div className="empty-state"><CircleAlert size={24}/><h3>{meta.title} is temporarily unavailable</h3><p>The governed data plane could not initialize. No mutation was attempted.</p></div></section></AppShell>;
-    }
+    console.error(`[HRBP] Dedicated ${slug} workspace failed; protected fallback activated.`, error);
+    return <AppShell>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleAlert size={16}/> {c(locale, "Protected fallback", "Korumalı yedek mod")}</button></div></section>
+      <section className="card module-table"><div className="empty-state"><CircleAlert size={24}/><h3>{c(locale, `${meta.title} is temporarily unavailable`, `${meta.title} geçici olarak kullanılamıyor`)}</h3><p>{c(locale, "The governed data plane could not initialize. No demo values are substituted and no mutation was attempted.", "Yönetişimli veri katmanı başlatılamadı. Yerine demo değer konulmadı ve hiçbir değişiklik işlemi denenmedi.")}</p></div></section>
+    </AppShell>;
   }
 }
