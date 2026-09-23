@@ -34,7 +34,7 @@ export function JurisdictionAdmin() {
   const { locale } = useLocale();
   const c = useCallback((en: string, tr: string) => locale === "tr" ? tr : en, [locale]);
   const countries = useMemo(() => countryOptions(locale), [locale]);
-  const countryByCode = useMemo(() => new Map(countries.map((country) => [country.code, country.label])), [countries]);
+  const countryByCode = useMemo(() => new Map<string, string>(countries.map((country) => [country.code, country.label])), [countries]);
   const [payload, setPayload] = useState<Payload | null>(null);
   const [employmentId, setEmploymentId] = useState("");
   const [countryCode, setCountryCode] = useState("TR");
