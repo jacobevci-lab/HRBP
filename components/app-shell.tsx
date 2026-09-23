@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ChevronDown, Command, Menu, Plus, Search, Sparkles, X } from "lucide-react";
+import { ChevronDown, Command, Menu, Plus, Search, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { navigation } from "@/lib/navigation";
 import { SessionIndicator } from "@/components/session-indicator";
@@ -10,6 +10,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { TopbarAccount } from "@/components/topbar-account";
 import { LocaleProvider, useLocale } from "@/components/locale-provider";
 import { LocaleToggle } from "@/components/locale-toggle";
+import { NotificationCenter } from "@/components/notification-center";
 
 function AppShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -58,7 +59,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <div className="topbar-actions">
             <LocaleToggle/>
             <ThemeToggle/>
-            <button className="icon-button" aria-label={t("shell.notifications")}><Bell size={18}/><span className="notification-dot"/></button>
+            <NotificationCenter/>
             <button className="ai-button"><Sparkles size={16}/> {t("shell.ask")}</button>
             <Link className="create-button" href="/module/people/new"><Plus size={17}/> {t("shell.create")}</Link>
             <TopbarAccount/>
