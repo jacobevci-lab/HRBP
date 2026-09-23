@@ -13,7 +13,8 @@ export function notificationTitle(eventType: string, locale: Locale) {
     HR_SERVICE_ESCALATED: { en: "HR service request escalated", tr: "İK hizmet talebi eskale edildi" },
     POLICY_EXCEPTION_EXPIRED: { en: "Policy exception expired", tr: "Politika istisnasının süresi doldu" },
     POLICY_EXCEPTION_CLOSED_ON_RETIREMENT: { en: "Policy exception closed", tr: "Politika istisnası kapatıldı" },
-    POLICY_RETIRED: { en: "Policy retired", tr: "Politika yürürlükten kaldırıldı" }
+    POLICY_RETIRED: { en: "Policy retired", tr: "Politika yürürlükten kaldırıldı" },
+    WORKFLOW_TASK_READY: { en: "Workflow task ready", tr: "İş akışı görevi hazır" }
   };
   const known = titles[eventType];
   if (known) return known[locale];
@@ -31,10 +32,14 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const reason = text(data.escalationReason);
   const policyCode = text(data.policyCode);
   const policyTitle = text(data.policyTitle);
+  const workflowName = text(data.workflowName);
+  const taskName = text(data.taskName);
 
-  if (requestNumber && reason) {
-    return locale === "tr" ? `${requestNumber}: ${reason}` : `${requestNumber}: ${reason}`;
+  if (workflowName && taskName) {
+    return locale === "tr" ? `${workflowName}: ${taskName} aksiyonunu bekliyor.` : `${workflowName}: ${taskName} is waiting for your action.`;
   }
+  if (taskName) return locale === "tr" ? `${taskName} aksiyonunu bekliyor.` : `${taskName} is waiting for your action.`;
+  if (requestNumber && reason) return `${requestNumber}: ${reason}`;
   if (requestNumber) {
     return locale === "tr" ? `${requestNumber} numaralı talep için aksiyon gerekiyor.` : `Action is required for request ${requestNumber}.`;
   }
@@ -47,5 +52,6 @@ export function notificationSummary(payload: unknown, locale: Locale) {
 export function notificationResourceHref(resourceType: string) {
   if (resourceType === "HRServiceRequest") return "/module/hr-service";
   if (resourceType === "PolicyException" || resourceType === "PolicyRecord") return "/module/policies";
+  if (resourceType === "WorkflowTask" || resourceType === "WorkflowInstance") return "/module/workflows";
   return "/";
 }
