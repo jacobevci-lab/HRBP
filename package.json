@@ -46,5 +46,13 @@
     "prisma": "6.19.3",
     "typescript": "^5.7.2",
     "wrangler": "4.129.1"
+  },
+  "overrides": {
+    "postcss": "^8.5.23",
+    "deepmerge-ts": "^8.0.1"
+  },
+  "overridesRationale": {
+    "postcss": "Security override for GHSA-qx2v-qp2m-jg93, GHSA-6g55-p6wh-862q, GHSA-fxqj-rqcc-2cmp and GHSA-r28c-9q8g-f849 while remaining on the validated Next.js 15 line.",
+    "deepmerge-ts": "Security override for GHSA-ggr8-5vv4-36mx in Prisma config; Prisma config uses the plain deepmerge API and upstream tracks the same >=8.0.0 remediation."
   }
 }
