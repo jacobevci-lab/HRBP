@@ -1,4 +1,4 @@
-import { ServiceRequestStatus } from "@prisma/client";
+import { Prisma, ServiceRequestStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
 import { hrServiceRequestWhere, isHRServiceSelfServiceRole } from "@/lib/hr-service-access";
 import type { RequestContext } from "@/lib/request-context";
@@ -47,67 +47,80 @@ function dateTimeLabel(value: Date | null) {
 export async function getHRServiceEscalationLiveData(ctx: RequestContext, filter: HRServiceEscalationFilter) {
   if (isHRServiceSelfServiceRole(ctx.role)) return null;
 
-  return withDb(async (db) => {
-    const scope = await hrServiceRequestWhere(db, ctx);
-    const requests = await db.hRServiceRequest.findMany({
-      where: {
-        AND: [
-          scope,
-          { status: { notIn: terminalStatuses } },
-          { escalationLevel: { gte: 1 } }
-        ]
-      },
-      orderBy: [{ escalationLevel: "desc" }, { slaDueAt: "asc" }, { createdAt: "asc" }],
-      take: 250,
-      select: {
-        id: true,
-        requestNumber: true,
-        category: true,
-        title: true,
-        priority: true,
-        status: true,
-        queue: true,
-        assigneeId: true,
-        slaDueAt: true,
-        escalationLevel: true,
-        escalatedAt: true,
-        escalationReason: true
-      }
+  try {
+    return await withDb(async (db) => {
+      const scope = await hrServiceRequestWhere(db, ctx);
+      const requests = await db.hRServiceRequest.findMany({
+        where: {
+          AND: [
+            scope,
+            { status: { notIn: terminalStatuses } },
+            { escalationLevel: { gte: 1 } }
+          ]
+        },
+        orderBy: [{ escalationLevel: "desc" }, { slaDueAt: "asc" }, { createdAt: "asc" }],
+        take: 250,
+        select: {
+          id: true,
+          requestNumber: true,
+          category: true,
+          title: true,
+          priority: true,
+          status: true,
+          queue: true,
+          assigneeId: true,
+          slaDueAt: true,
+          escalationLevel: true,
+          escalatedAt: true,
+          escalationReason: true
+        }
+      });
+
+      const now = new Date();
+      const counts = {
+        all: requests.length,
+        warning: requests.filter((request) => request.escalationLevel === 1).length,
+        breached: requests.filter((request) => request.escalationLevel >= 2).length,
+        severe: requests.filter((request) => request.escalationLevel >= 3).length
+      };
+
+      const filtered = requests.filter((request) => {
+        if (filter === "warning") return request.escalationLevel === 1;
+        if (filter === "breached") return request.escalationLevel >= 2;
+        if (filter === "severe") return request.escalationLevel >= 3;
+        return true;
+      });
+
+      return {
+        schemaReady: true as const,
+        filter,
+        counts,
+        rows: filtered.map((request) => ({
+          id: request.id,
+          requestNumber: request.requestNumber,
+          category: request.category,
+          title: request.title,
+          priority: priorityLabel(request.priority),
+          queue: request.queue ?? "Unassigned",
+          assigneeId: request.assigneeId ?? null,
+          sla: slaLabel(request.slaDueAt, now),
+          escalationLevel: request.escalationLevel,
+          escalation: request.escalationLevel >= 3 ? "Severe" : request.escalationLevel >= 2 ? "Breached" : "Warning",
+          escalationReason: request.escalationReason ?? "Escalation threshold reached",
+          escalatedAt: dateTimeLabel(request.escalatedAt),
+          status: priorityLabel(request.status)
+        }))
+      };
     });
-
-    const now = new Date();
-    const counts = {
-      all: requests.length,
-      warning: requests.filter((request) => request.escalationLevel === 1).length,
-      breached: requests.filter((request) => request.escalationLevel >= 2).length,
-      severe: requests.filter((request) => request.escalationLevel >= 3).length
-    };
-
-    const filtered = requests.filter((request) => {
-      if (filter === "warning") return request.escalationLevel === 1;
-      if (filter === "breached") return request.escalationLevel >= 2;
-      if (filter === "severe") return request.escalationLevel >= 3;
-      return true;
-    });
-
-    return {
-      filter,
-      counts,
-      rows: filtered.map((request) => ({
-        id: request.id,
-        requestNumber: request.requestNumber,
-        category: request.category,
-        title: request.title,
-        priority: priorityLabel(request.priority),
-        queue: request.queue ?? "Unassigned",
-        assigneeId: request.assigneeId ?? null,
-        sla: slaLabel(request.slaDueAt, now),
-        escalationLevel: request.escalationLevel,
-        escalation: request.escalationLevel >= 3 ? "Severe" : request.escalationLevel >= 2 ? "Breached" : "Warning",
-        escalationReason: request.escalationReason ?? "Escalation threshold reached",
-        escalatedAt: dateTimeLabel(request.escalatedAt),
-        status: priorityLabel(request.status)
-      }))
-    };
-  });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2021" || error.code === "P2022")) {
+      return {
+        schemaReady: false as const,
+        filter,
+        counts: { all: 0, warning: 0, breached: 0, severe: 0 },
+        rows: []
+      };
+    }
+    throw error;
+  }
 }
