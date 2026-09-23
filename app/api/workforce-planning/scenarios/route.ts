@@ -2,19 +2,29 @@ import { DataClassification, WorkforceScenarioStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
-import { getRequestContext, unauthorized } from "@/lib/request-context";
+import { getWorkforcePlanningLiveData } from "@/lib/governance-planning-live-data";
+import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "workforce-plan:read")) return forbidden();
-  const data = await db.workforceScenario.findMany({ where: { tenantId: ctx.tenantId }, orderBy: { updatedAt: "desc" }, include: { _count: { select: { lines: true } } }, take: 100 });
-  return Response.json({ data });
+  const live = await getWorkforcePlanningLiveData(ctx);
+  return Response.json({
+    data: live.rows,
+    summary: {
+      activeEmployments: live.activeEmployments,
+      scenarioCount: live.scenarioCount,
+      approvedScenarios: live.approvedScenarios,
+      relationshipScoped: live.relationshipScoped
+    }
+  });
 }
 
 export async function POST(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
+  if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "workforce-plan:write")) return forbidden();
   const body = await request.json() as { code?: string; name?: string; description?: string; baseDate?: string; horizonMonths?: number; currency?: string; assumptions?: unknown };
   const code = body.code?.trim().toUpperCase();
