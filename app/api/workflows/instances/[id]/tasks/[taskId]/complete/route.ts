@@ -8,7 +8,6 @@ import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/re
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; taskId: string }> }) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
-  if (!can(ctx, "workflows:run")) return forbidden();
   if (!mutationOriginAllowed(request)) return Response.json({ error: "Mutation origin is not allowed." }, { status: 403 });
   const { id, taskId } = await params;
   const body = await request.json() as { result?: unknown };
@@ -29,8 +28,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const task = instance.tasks.find((candidate) => candidate.id === taskId);
     if (!task) throw new Error("TASK");
     if (task.status !== WorkflowTaskStatus.READY && task.status !== WorkflowTaskStatus.IN_PROGRESS) throw new Error("STATE");
-    if (task.assigneeId && task.assigneeId !== ctx.actorId) throw new Error("ASSIGNMENT");
-    if (!task.assigneeId && task.assigneeRole && task.assigneeRole !== ctx.role) throw new Error("ASSIGNMENT");
+
+    const assignedToActor = task.assigneeId === ctx.actorId || (!task.assigneeId && Boolean(task.assigneeRole) && task.assigneeRole === ctx.role);
+    const unassigned = !task.assigneeId && !task.assigneeRole;
+    if (!assignedToActor && !(unassigned && can(ctx, "workflows:run"))) throw new Error("ASSIGNMENT");
 
     const now = new Date();
     await tx.workflowTask.update({
