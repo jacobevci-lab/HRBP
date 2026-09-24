@@ -62,6 +62,18 @@ expect(notificationPath, notification, /DEVELOPMENT_PLAN_ACTIVATED/, "plan activ
 expect(notificationPath, notification, /workEmail:\s*true/, "employee activation notice must resolve identity from governed employment email");
 expect(notificationPath, notification, /resourceType:\s*"DevelopmentPlanParticipant"/, "employee activation notice must deep-link to employee self-service rather than privileged Talent");
 
+const reminderPath = "lib/development-plan-reminders.ts";
+const reminders = await source(reminderPath);
+expect(reminderPath, reminders, /HRBP_DEVELOPMENT_PLAN_WARNING_DAYS/, "development reminder warning window must be runtime configurable");
+expect(reminderPath, reminders, /DevelopmentPlanStatus\.ACTIVE/, "only active development plans may generate due reminders");
+expect(reminderPath, reminders, /DEVELOPMENT_PLAN_DUE_SOON/, "development plans must generate due-soon reminders");
+expect(reminderPath, reminders, /DEVELOPMENT_PLAN_OVERDUE/, "development plans must generate overdue reminders");
+expect(reminderPath, reminders, /recipientRole:\s*owner\s*\?\s*null\s*:\s*PlatformRole\.TALENT_ADMIN/, "inactive plan owners must fall back to Talent Admin governance");
+expect(reminderPath, reminders, /resourceType:\s*"DevelopmentPlan"/, "owner reminders must deep-link to governed Talent plan review");
+expect(reminderPath, reminders, /resourceType:\s*"DevelopmentPlanParticipant"/, "employee reminders must deep-link to Learning self-service");
+expect(reminderPath, reminders, /workEmail:\s*true/, "employee reminder identity must resolve from the governed employment email");
+expect(reminderPath, reminders, /dedupeKey:/, "development reminders must be idempotently deduplicated");
+
 for (const transitionPath of [
   "app/api/learning/assignments/[id]/transition/route.ts",
   "app/api/learning/assignments/[id]/self-transition/route.ts"
@@ -113,8 +125,20 @@ const presentationPath = "lib/notification-presentation.ts";
 const presentation = await source(presentationPath);
 expect(presentationPath, presentation, /DEVELOPMENT_PLAN_REASSESSMENT_REQUIRED/, "notification center must present development-plan reassessment events");
 expect(presentationPath, presentation, /DEVELOPMENT_PLAN_ACTIVATED/, "notification center must present employee plan activation events");
+expect(presentationPath, presentation, /DEVELOPMENT_PLAN_DUE_SOON/, "notification center must present development-plan due-soon events");
+expect(presentationPath, presentation, /DEVELOPMENT_PLAN_OVERDUE/, "notification center must present development-plan overdue events");
 expect(presentationPath, presentation, /resourceType\s*===\s*"DevelopmentPlan"/, "reviewer development-plan alerts must deep-link to Talent");
 expect(presentationPath, presentation, /resourceType\s*===\s*"DevelopmentPlanParticipant"[\s\S]*\/module\/learning/, "employee plan alerts must deep-link to Learning self-service");
+
+const maintenancePath = "app/api/internal/maintenance/route.ts";
+const maintenance = await source(maintenancePath);
+expect(maintenancePath, maintenance, /queueDevelopmentPlanReminders/, "scheduled maintenance must queue development plan reminders");
+expect(maintenancePath, maintenance, /developmentPlanReminders/, "maintenance response must expose development plan reminder results");
+
+const envPath = ".env.example";
+const env = await source(envPath);
+expect(envPath, env, /HRBP_DEVELOPMENT_PLAN_WARNING_DAYS=/, "development reminder warning window must be documented");
+expect(envPath, env, /HRBP_DEVELOPMENT_PLAN_REMINDER_BATCH_SIZE=/, "development reminder batch size must be documented");
 
 const participantDataPath = "lib/learning-participant-data.ts";
 const participantData = await source(participantDataPath);
@@ -138,4 +162,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated development plan contract: talent provenance, employee self-service, activation notifications, relationship scope, learning evidence, human skill reassessment and auditable lifecycle governance are enforced.");
+console.log("Validated development plan contract: talent provenance, employee self-service, activation/due reminders, relationship scope, learning evidence, human skill reassessment and auditable lifecycle governance are enforced.");
