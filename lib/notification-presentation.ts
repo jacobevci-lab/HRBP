@@ -21,6 +21,9 @@ export function notificationTitle(eventType: string, locale: Locale) {
     WORKFLOW_TASK_READY: { en: "Workflow task ready", tr: "İş akışı görevi hazır" },
     WORKFLOW_TASK_DUE_SOON: { en: "Workflow task due soon", tr: "İş akışı görevinin süresi yaklaşıyor" },
     WORKFLOW_TASK_OVERDUE: { en: "Workflow task overdue", tr: "İş akışı görevi gecikti" },
+    LEAVE_APPROVAL_REQUIRED: { en: "Leave approval required", tr: "İzin onayı gerekiyor" },
+    LEAVE_REQUEST_APPROVED: { en: "Leave request approved", tr: "İzin talebi onaylandı" },
+    LEAVE_REQUEST_REJECTED: { en: "Leave request rejected", tr: "İzin talebi reddedildi" },
     PERFORMANCE_SELF_REVIEW_READY: { en: "Self review ready", tr: "Öz değerlendirme hazır" },
     PERFORMANCE_MANAGER_REVIEW_READY: { en: "Manager review ready", tr: "Yönetici değerlendirmesi hazır" },
     LEARNING_ASSIGNMENT_READY: { en: "Learning assignment ready", tr: "Eğitim ataması hazır" },
@@ -61,6 +64,12 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const integrityReason = text(data.reason);
   const cycleName = text(data.cycleName);
   const participantName = text(data.participantName);
+  const employeeName = text(data.employeeName);
+  const leaveType = text(data.leaveType);
+  const leaveStartsAt = text(data.startsAt);
+  const leaveEndsAt = text(data.endsAt);
+  const leaveUnits = text(data.units);
+  const leaveDecision = text(data.decision);
   const positionCode = text(data.positionCode);
   const positionTitle = text(data.positionTitle);
   const reviewDueAt = text(data.reviewDueAt);
@@ -79,6 +88,15 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   if (brokenEventId) {
     const detail = integrityReason ?? (locale === "tr" ? "Hash-zinciri doğrulaması başarısız oldu." : "Hash-chain verification failed.");
     return `${brokenEventId}: ${detail}`;
+  }
+  if (leaveType && leaveStartsAt && leaveEndsAt) {
+    const formatter = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" });
+    const range = `${formatter.format(new Date(leaveStartsAt))} → ${formatter.format(new Date(leaveEndsAt))}`;
+    const owner = employeeName ? `${employeeName} · ` : "";
+    const units = leaveUnits ? ` · ${leaveUnits}` : "";
+    if (leaveDecision === "APPROVED") return locale === "tr" ? `${owner}${leaveType} · ${range}${units} · onaylandı.` : `${owner}${leaveType} · ${range}${units} · approved.`;
+    if (leaveDecision === "REJECTED") return locale === "tr" ? `${owner}${leaveType} · ${range}${units} · reddedildi.` : `${owner}${leaveType} · ${range}${units} · rejected.`;
+    return locale === "tr" ? `${owner}${leaveType} · ${range}${units} · onayınızı bekliyor.` : `${owner}${leaveType} · ${range}${units} · waiting for your approval.`;
   }
   if (benefitPlanName) {
     const plan = benefitPlanCode ? `${benefitPlanCode} · ${benefitPlanName}` : benefitPlanName;
@@ -159,6 +177,7 @@ export function notificationResourceHref(resourceType: string, resourceId?: stri
   if (resourceType === "PolicyException" || resourceType === "PolicyRecord") return id ? `/module/policies?record=${encodeURIComponent(id)}` : "/module/policies";
   if (resourceType === "WorkflowTask") return id ? `/module/workflows?task=${encodeURIComponent(id)}` : "/module/workflows";
   if (resourceType === "WorkflowInstance") return id ? `/module/workflows?instance=${encodeURIComponent(id)}` : "/module/workflows";
+  if (resourceType === "LeaveRequest") return id ? `/module/leave?request=${encodeURIComponent(id)}` : "/module/leave";
   if (resourceType === "PerformanceReview") return id ? `/module/performance?review=${encodeURIComponent(id)}` : "/module/performance";
   if (resourceType === "LearningAssignment") return id ? `/module/learning?assignment=${encodeURIComponent(id)}` : "/module/learning";
   if (resourceType === "SuccessionPlan") return id ? `/module/succession?plan=${encodeURIComponent(id)}` : "/module/succession";
