@@ -143,7 +143,7 @@ export function NotificationsModulePage() {
                   ? (locale === "tr" ? "Okunmadı yap" : "Mark unread")
                   : (locale === "tr" ? "Okundu yap" : "Mark read")}
               </button>
-              <Link href={notificationResourceHref(item.resourceType)} onClick={() => !item.readAt && void updateRead(item.id, true)}>
+              <Link href={notificationResourceHref(item.resourceType, item.resourceId)} onClick={() => !item.readAt && void updateRead(item.id, true)}>
                 {locale === "tr" ? "Kaydı aç" : "Open record"}
               </Link>
             </div>
