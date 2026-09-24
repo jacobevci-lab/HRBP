@@ -120,17 +120,22 @@ export function GlobalSearch() {
     }
   }
 
+  const activeDescendant = open && items.length ? `global-search-option-${activeIndex}` : undefined;
+
   return (
     <div className="global-search-root" ref={rootRef}>
       <div className={`global-search ${open ? "is-open" : ""}`}>
         <Search size={17}/>
         <input
           ref={inputRef}
+          role="combobox"
+          aria-autocomplete="list"
           value={query}
           placeholder={t("shell.search")}
           aria-label={t("shell.search")}
           aria-expanded={open}
           aria-controls="global-search-results"
+          aria-activedescendant={activeDescendant}
           onFocus={() => setOpen(true)}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={onKeyDown}
@@ -140,10 +145,11 @@ export function GlobalSearch() {
 
       {open ? (
         <div className="global-search-menu" id="global-search-results" role="listbox">
-          {statusText ? <div className={`global-search-state ${degraded ? "degraded" : ""}`}>{statusText}</div> : null}
+          {statusText ? <div className={`global-search-state ${degraded ? "degraded" : ""}`} aria-live="polite">{statusText}</div> : null}
           {items.map((item, index) => (
             <Link
               key={`${item.type}:${item.id}`}
+              id={`global-search-option-${index}`}
               href={item.href}
               role="option"
               aria-selected={index === activeIndex}
