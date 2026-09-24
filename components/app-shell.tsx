@@ -3,21 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Menu, Plus, Sparkles, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { navigation } from "@/lib/navigation";
 import { GlobalSearch } from "@/components/global-search";
 import { SessionIndicator } from "@/components/session-indicator";
+import { SessionProvider, useSessionContext } from "@/components/session-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TopbarAccount } from "@/components/topbar-account";
 import { LocaleProvider, useLocale } from "@/components/locale-provider";
 import { LocaleToggle } from "@/components/locale-toggle";
 import { NotificationCenter } from "@/components/notification-center";
-
-type SessionNavigationResponse = {
-  authenticated?: boolean;
-  navigationCapabilities?: string[];
-  user?: { tenantName?: string | null };
-};
 
 function initials(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -27,52 +22,25 @@ function initials(value: string) {
 function AppShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
-  const [tenantName, setTenantName] = useState<string | null>(null);
-  const [navigationCapabilities, setNavigationCapabilities] = useState<Set<string> | null>(null);
+  const { session, loading } = useSessionContext();
   const { t } = useLocale();
-
-  useEffect(() => {
-    let active = true;
-    void fetch("/api/auth/session", { cache: "no-store" })
-      .then(async (response) => response.ok ? response.json() as Promise<SessionNavigationResponse> : null)
-      .then((session) => {
-        if (!active || !session) return;
-        const isAuthenticated = Boolean(session.authenticated);
-        setAuthenticated(isAuthenticated);
-        if (isAuthenticated) {
-          setNavigationCapabilities(new Set(session.navigationCapabilities ?? []));
-          setTenantName(session.user?.tenantName?.trim() || null);
-        } else {
-          setNavigationCapabilities(null);
-          setTenantName(null);
-        }
-      })
-      .catch(() => {
-        if (!active) return;
-        setAuthenticated(false);
-        setNavigationCapabilities(null);
-        setTenantName(null);
-      });
-    return () => { active = false; };
-  }, []);
+  const authenticated = Boolean(session?.authenticated);
+  const navigationCapabilities = useMemo(() => new Set(session?.navigationCapabilities ?? []), [session?.navigationCapabilities]);
 
   const visibleNavigation = useMemo(() => navigation
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        if (item.requiredCapability) {
-          return authenticated === true && Boolean(navigationCapabilities?.has(item.requiredCapability));
-        }
-        if (item.requiresAuthentication) return authenticated === true;
+        if (item.requiredCapability) return authenticated && navigationCapabilities.has(item.requiredCapability);
+        if (item.requiresAuthentication) return authenticated;
         return true;
       })
     }))
     .filter((group) => group.items.length > 0), [authenticated, navigationCapabilities]);
-  const workspaceName = tenantName ?? "HRBP One";
+  const workspaceName = session?.user?.tenantName?.trim() || "HRBP One";
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-session-loading={loading ? "true" : "false"}>
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="brand-row">
           <Link href="/" className="brand" onClick={() => setMobileOpen(false)}>
@@ -114,8 +82,8 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
             <LocaleToggle/>
             <ThemeToggle/>
             <NotificationCenter/>
-            {authenticated && navigationCapabilities?.has("ai:use") ? <Link className="ai-button" href="/module/ai-assistant"><Sparkles size={16}/> {t("shell.ask")}</Link> : null}
-            {authenticated && navigationCapabilities?.has("people:write") ? <Link className="create-button" href="/module/people/new"><Plus size={17}/> {t("shell.create")}</Link> : null}
+            {authenticated && navigationCapabilities.has("ai:use") ? <Link className="ai-button" href="/module/ai-assistant"><Sparkles size={16}/> {t("shell.ask")}</Link> : null}
+            {authenticated && navigationCapabilities.has("people:write") ? <Link className="create-button" href="/module/people/new"><Plus size={17}/> {t("shell.create")}</Link> : null}
             <TopbarAccount/>
           </div>
         </header>
@@ -126,5 +94,5 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  return <LocaleProvider><AppShellContent>{children}</AppShellContent></LocaleProvider>;
+  return <LocaleProvider><SessionProvider><AppShellContent>{children}</AppShellContent></SessionProvider></LocaleProvider>;
 }
