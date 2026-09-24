@@ -17,6 +17,8 @@ export function notificationTitle(eventType: string, locale: Locale) {
     WORKFLOW_TASK_READY: { en: "Workflow task ready", tr: "İş akışı görevi hazır" },
     WORKFLOW_TASK_DUE_SOON: { en: "Workflow task due soon", tr: "İş akışı görevinin süresi yaklaşıyor" },
     WORKFLOW_TASK_OVERDUE: { en: "Workflow task overdue", tr: "İş akışı görevi gecikti" },
+    PERFORMANCE_SELF_REVIEW_READY: { en: "Self review ready", tr: "Öz değerlendirme hazır" },
+    PERFORMANCE_MANAGER_REVIEW_READY: { en: "Manager review ready", tr: "Yönetici değerlendirmesi hazır" },
     AUDIT_INTEGRITY_FAILURE: { en: "Audit ledger integrity failure", tr: "Denetim defteri bütünlük hatası" }
   };
   const known = titles[eventType];
@@ -40,10 +42,22 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const dueAt = text(data.dueAt);
   const brokenEventId = text(data.brokenEventId);
   const integrityReason = text(data.reason);
+  const cycleName = text(data.cycleName);
+  const participantName = text(data.participantName);
 
   if (brokenEventId) {
     const detail = integrityReason ?? (locale === "tr" ? "Hash-zinciri doğrulaması başarısız oldu." : "Hash-chain verification failed.");
-    return locale === "tr" ? `${brokenEventId}: ${detail}` : `${brokenEventId}: ${detail}`;
+    return `${brokenEventId}: ${detail}`;
+  }
+  if (cycleName && participantName) {
+    return locale === "tr"
+      ? `${cycleName}: ${participantName} için değerlendirme aksiyonu bekliyor.`
+      : `${cycleName}: a review action is waiting for ${participantName}.`;
+  }
+  if (cycleName) {
+    return locale === "tr"
+      ? `${cycleName} için performans değerlendirme aksiyonu bekliyor.`
+      : `A performance review action is waiting for ${cycleName}.`;
   }
   if (workflowName && taskName) {
     const deadline = dueAt ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(dueAt)) : null;
@@ -67,6 +81,7 @@ export function notificationResourceHref(resourceType: string, resourceId?: stri
   if (resourceType === "PolicyException" || resourceType === "PolicyRecord") return id ? `/module/policies?record=${encodeURIComponent(id)}` : "/module/policies";
   if (resourceType === "WorkflowTask") return id ? `/module/workflows?task=${encodeURIComponent(id)}` : "/module/workflows";
   if (resourceType === "WorkflowInstance") return id ? `/module/workflows?instance=${encodeURIComponent(id)}` : "/module/workflows";
+  if (resourceType === "PerformanceReview") return id ? `/module/performance?review=${encodeURIComponent(id)}` : "/module/performance";
   if (resourceType === "AuditEvent") return id ? `/module/audit?q=${encodeURIComponent(id)}` : "/module/audit";
   return "/";
 }
