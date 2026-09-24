@@ -24,9 +24,25 @@ export async function POST(request: Request) {
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "performance:write")) return forbidden();
   const body = await request.json() as { name?: string; startsAt?: string; endsAt?: string; calibrationAt?: string };
-  if (!body.name || !body.startsAt || !body.endsAt) return Response.json({ error: "name, startsAt and endsAt are required." }, { status: 400 });
+  const name = body.name?.trim();
+  if (!name || !body.startsAt || !body.endsAt) return Response.json({ error: "name, startsAt and endsAt are required." }, { status: 400 });
+
+  const startsAt = new Date(body.startsAt);
+  const endsAt = new Date(body.endsAt);
+  const calibrationAt = body.calibrationAt ? new Date(body.calibrationAt) : undefined;
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || (calibrationAt && Number.isNaN(calibrationAt.getTime()))) return Response.json({ error: "Cycle dates must be valid dates." }, { status: 400 });
+  if (endsAt <= startsAt) return Response.json({ error: "endsAt must be after startsAt." }, { status: 400 });
+  if (calibrationAt && (calibrationAt < startsAt || calibrationAt > endsAt)) return Response.json({ error: "calibrationAt must be inside the cycle date range." }, { status: 400 });
+
   const data = await db.$transaction(async (tx) => {
-    const cycle = await tx.reviewCycle.create({ data: { tenantId: ctx.tenantId, name: body.name!, startsAt: new Date(body.startsAt!), endsAt: new Date(body.endsAt!), calibrationAt: body.calibrationAt ? new Date(body.calibrationAt) : undefined, status: ReviewCycleStatus.DRAFT } });
+    const cycle = await tx.reviewCycle.create({ data: {
+      tenantId: ctx.tenantId,
+      name: name.slice(0, 180),
+      startsAt,
+      endsAt,
+      calibrationAt,
+      status: ReviewCycleStatus.DRAFT
+    }});
     await appendAudit(tx, ctx, { action: "review-cycle.created", resourceType: "ReviewCycle", resourceId: cycle.id, classification: DataClassification.CONFIDENTIAL });
     return cycle;
   });
