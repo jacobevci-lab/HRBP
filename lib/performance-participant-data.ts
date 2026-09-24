@@ -1,4 +1,4 @@
-import { ReviewCycleStatus, ReviewStatus } from "@prisma/client";
+import { GoalStatus, ReviewCycleStatus, ReviewStatus } from "@prisma/client";
 import { can } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
 import type { RequestContext } from "@/lib/request-context";
@@ -22,19 +22,29 @@ export type ParticipantManagerReview = {
   updatedAt: string;
 };
 
+export type ParticipantGoal = {
+  id: string;
+  title: string;
+  status: string;
+  progress: number;
+  dueAt: string;
+};
+
 export type PerformanceParticipantData = {
   selfReviews: ParticipantSelfReview[];
   managerReviews: ParticipantManagerReview[];
+  ownGoals: ParticipantGoal[];
 };
 
 export async function getPerformanceParticipantData(ctx: RequestContext): Promise<PerformanceParticipantData> {
-  if (!ctx.employmentId) return { selfReviews: [], managerReviews: [] };
+  if (!ctx.employmentId) return { selfReviews: [], managerReviews: [], ownGoals: [] };
 
   return withDb(async (db) => {
     const selfEnabled = can(ctx, "performance:self-submit");
     const managerEnabled = can(ctx, "performance:manager-review");
+    const goalProgressEnabled = can(ctx, "performance:goal-progress");
 
-    const [selfReviews, managerReviews] = await Promise.all([
+    const [selfReviews, managerReviews, ownGoals] = await Promise.all([
       selfEnabled ? db.performanceReview.findMany({
         where: {
           tenantId: ctx.tenantId,
@@ -68,6 +78,16 @@ export async function getPerformanceParticipantData(ctx: RequestContext): Promis
           updatedAt: true,
           cycle: { select: { name: true } }
         }
+      }) : Promise.resolve([]),
+      goalProgressEnabled ? db.goal.findMany({
+        where: {
+          tenantId: ctx.tenantId,
+          employmentId: ctx.employmentId,
+          status: { in: [GoalStatus.ACTIVE, GoalStatus.AT_RISK] }
+        },
+        orderBy: [{ dueAt: "asc" }, { updatedAt: "desc" }],
+        take: 50,
+        select: { id: true, title: true, status: true, progress: true, dueAt: true }
       }) : Promise.resolve([])
     ]);
 
@@ -102,7 +122,14 @@ export async function getPerformanceParticipantData(ctx: RequestContext): Promis
           selfRating: review.selfRating,
           updatedAt: review.updatedAt.toISOString()
         }] : [];
-      })
+      }),
+      ownGoals: ownGoals.map((goal) => ({
+        id: goal.id,
+        title: goal.title,
+        status: goal.status,
+        progress: goal.progress,
+        dueAt: goal.dueAt.toISOString()
+      }))
     };
   });
 }
