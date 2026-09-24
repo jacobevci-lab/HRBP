@@ -1,5 +1,6 @@
 import { monitorAuditIntegrity } from "@/lib/audit-monitoring";
 import { runBenefitsMaintenance } from "@/lib/benefits-maintenance";
+import { queueDevelopmentPlanReminders } from "@/lib/development-plan-reminders";
 import { internalBearerAuthorized } from "@/lib/internal-auth";
 import { runLearningMaintenance } from "@/lib/learning-maintenance";
 import { queueLearningReminders } from "@/lib/learning-reminders";
@@ -16,12 +17,13 @@ export async function POST(request: Request) {
   // race each other for the same tenant ledger head.
   const benefitsLifecycle = await runBenefitsMaintenance();
   const learningLifecycle = await runLearningMaintenance();
-  const [workflowReminders, learningReminders, successionReminders, auditIntegrity] = await Promise.all([
+  const [workflowReminders, learningReminders, successionReminders, developmentPlanReminders, auditIntegrity] = await Promise.all([
     queueWorkflowReminders(),
     queueLearningReminders(),
     queueSuccessionReviewReminders(),
+    queueDevelopmentPlanReminders(),
     monitorAuditIntegrity()
   ]);
   const data = await runOperationalMaintenance();
-  return Response.json({ data: { ...data, benefitsLifecycle, learningLifecycle, workflowReminders, learningReminders, successionReminders, auditIntegrity } });
+  return Response.json({ data: { ...data, benefitsLifecycle, learningLifecycle, workflowReminders, learningReminders, successionReminders, developmentPlanReminders, auditIntegrity } });
 }
