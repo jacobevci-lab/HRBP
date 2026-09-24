@@ -79,10 +79,35 @@ expect(consolePath, consoleSource, /Deactivate|Pasife al/, "benefit plan governa
 expect(consolePath, consoleSource, /employerContribution/, "benefit plan governance must maintain employer contribution metadata");
 expect(consolePath, consoleSource, /employeeContribution/, "benefit plan governance must maintain employee contribution metadata");
 
+const maintenancePath = "lib/benefits-maintenance.ts";
+const maintenance = await source(maintenancePath);
+expect(maintenancePath, maintenance, /HRBP_BENEFITS_EXPIRY_BATCH_SIZE/, "benefit expiry maintenance must be runtime bounded");
+expect(maintenancePath, maintenance, /effectiveTo:\s*\{\s*not:\s*null,\s*lte:\s*now\s*\}/, "benefit expiry maintenance must only process expired active plans");
+expect(maintenancePath, maintenance, /benefit-plan\.expired/, "expired benefit plans must emit audit evidence");
+expect(maintenancePath, maintenance, /benefit-enrollment\.ended-on-plan-expiry/, "open enrollments ended by plan expiry must emit audit evidence");
+expect(maintenancePath, maintenance, /BENEFIT_PLAN_EXPIRED/, "expired benefit plans must generate an operational notification");
+expect(maintenancePath, maintenance, /recipientRole:\s*PlatformRole\.HR_OPERATIONS/, "benefit expiry notifications must route to an operational owner role");
+expect(maintenancePath, maintenance, /anomalousEnrollments/, "legacy date anomalies must be surfaced instead of silently rewritten");
+
+const internalMaintenancePath = "app/api/internal/maintenance/route.ts";
+const internalMaintenance = await source(internalMaintenancePath);
+expect(internalMaintenancePath, internalMaintenance, /runBenefitsMaintenance/, "internal maintenance must execute benefit lifecycle normalization");
+expect(internalMaintenancePath, internalMaintenance, /benefitsLifecycle/, "maintenance response must expose benefit lifecycle results");
+
+const presentationPath = "lib/notification-presentation.ts";
+const presentation = await source(presentationPath);
+expect(presentationPath, presentation, /BENEFIT_PLAN_EXPIRED/, "notification center must present benefit plan expiry events");
+expect(presentationPath, presentation, /resourceType\s*===\s*"BenefitPlan"/, "benefit plan notifications must deep-link to benefits workspace");
+expect(presentationPath, presentation, /anomalousEnrollments/, "benefit plan expiry summaries must surface anomaly counts");
+
+const envPath = ".env.example";
+const env = await source(envPath);
+expect(envPath, env, /HRBP_BENEFITS_EXPIRY_BATCH_SIZE=/, "benefit expiry maintenance batch size must be documented");
+
 if (failures.length) {
   console.error("Benefits governance contract validation failed:\n");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log("Validated benefits governance contract: pending-only election creation and amendments, relationship scope, effective-date integrity, open-enrollment conflict protection, state-aware transitions and non-destructive plan lifecycle are enforced.");
+console.log("Validated benefits governance contract: pending-only election creation and amendments, relationship scope, effective-date integrity, open-enrollment conflict protection, state-aware transitions, non-destructive plan lifecycle and automated expiry evidence are enforced.");
