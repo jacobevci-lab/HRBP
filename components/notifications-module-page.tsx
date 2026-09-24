@@ -20,6 +20,10 @@ type NotificationItem = {
 
 type NotificationResponse = { data?: { items: NotificationItem[]; unreadCount: number } };
 
+function notifyBadgeChanged() {
+  window.dispatchEvent(new Event("hrbp:notifications-changed"));
+}
+
 export function NotificationsModulePage() {
   const { locale } = useLocale();
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -63,6 +67,7 @@ export function NotificationsModulePage() {
       setItems((current) => current.map((item) => item.id === id ? { ...item, readAt: read ? new Date().toISOString() : null } : item));
     }
     setUnreadCount((current) => Math.max(0, current + (read ? -1 : 1)));
+    notifyBadgeChanged();
   }
 
   async function markAllRead() {
@@ -75,6 +80,7 @@ export function NotificationsModulePage() {
     const now = new Date().toISOString();
     setUnreadCount(0);
     setItems((current) => unreadOnly ? [] : current.map((item) => ({ ...item, readAt: item.readAt ?? now })));
+    notifyBadgeChanged();
   }
 
   useEffect(() => {
