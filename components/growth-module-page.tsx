@@ -147,18 +147,25 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
             ]);
             const data = await getTalentGovernanceData(ctx);
             lifecycle = <TalentGovernanceConsole {...data}/>;
+          } else if (slug === "learning") {
+            const [{ GrowthLifecycleConsole }, lifecycleData, { LearningGovernanceConsole }, { getLearningGovernanceData }] = await Promise.all([
+              import("@/components/growth-lifecycle-console"),
+              import("@/lib/growth-lifecycle-data"),
+              import("@/components/learning-governance-console"),
+              import("@/lib/learning-governance-data")
+            ]);
+            const [assignments, governance] = await Promise.all([
+              lifecycleData.getLearningAssignmentOperationsData(ctx),
+              getLearningGovernanceData(ctx)
+            ]);
+            lifecycle = <><GrowthLifecycleConsole slug="learning" assignments={assignments}/><LearningGovernanceConsole {...governance}/></>;
           } else {
             const [{ GrowthLifecycleConsole }, lifecycleData] = await Promise.all([
               import("@/components/growth-lifecycle-console"),
               import("@/lib/growth-lifecycle-data")
             ]);
-            if (slug === "benefits") {
-              const enrollments = await lifecycleData.getBenefitEnrollmentOperationsData(ctx);
-              lifecycle = <GrowthLifecycleConsole slug="benefits" enrollments={enrollments}/>;
-            } else {
-              const assignments = await lifecycleData.getLearningAssignmentOperationsData(ctx);
-              lifecycle = <GrowthLifecycleConsole slug="learning" assignments={assignments}/>;
-            }
+            const enrollments = await lifecycleData.getBenefitEnrollmentOperationsData(ctx);
+            lifecycle = <GrowthLifecycleConsole slug="benefits" enrollments={enrollments}/>;
           }
         } catch (lifecycleError) {
           console.error(`[HRBP] ${slug} lifecycle queue could not initialize.`, lifecycleError);
