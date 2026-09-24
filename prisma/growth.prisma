@@ -79,6 +79,13 @@ enum LearningAssignmentStatus {
   WAIVED
 }
 
+enum DevelopmentPlanStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
 model BenefitPlan {
   id                   String @id @default(cuid())
   tenantId             String
@@ -178,17 +185,18 @@ model PerformanceReview {
 }
 
 model TalentAssessment {
-  id             String @id @default(cuid())
-  tenantId       String
-  employmentId   String
-  cycleLabel     String
-  performance    PerformanceBand
-  potential      PotentialBand
-  criticalTalent Boolean @default(false)
-  assessedById   String
-  assessedAt     DateTime @default(now())
-  notes          String?
-  classification DataClassification @default(CONFIDENTIAL)
+  id               String @id @default(cuid())
+  tenantId         String
+  employmentId     String
+  cycleLabel       String
+  performance      PerformanceBand
+  potential        PotentialBand
+  criticalTalent   Boolean @default(false)
+  assessedById     String
+  assessedAt       DateTime @default(now())
+  notes            String?
+  classification   DataClassification @default(CONFIDENTIAL)
+  developmentPlans DevelopmentPlan[] @relation("TalentAssessmentDevelopmentPlans")
 
   @@unique([tenantId, employmentId, cycleLabel])
   @@index([tenantId, cycleLabel, potential, performance])
@@ -221,6 +229,7 @@ model SuccessionCandidate {
   addedAt             DateTime @default(now())
   plan                SuccessionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   learningAssignments LearningAssignment[] @relation("SuccessionCandidateDevelopment")
+  developmentPlans    DevelopmentPlan[] @relation("SuccessionCandidateDevelopmentPlans")
 
   @@unique([planId, employmentId])
   @@index([tenantId, employmentId])
@@ -237,6 +246,7 @@ model Skill {
   active                 Boolean @default(true)
   employments            EmploymentSkill[]
   developmentAssignments LearningAssignment[] @relation("LearningDevelopmentSkill")
+  developmentPlans       DevelopmentPlan[] @relation("DevelopmentPlanFocusSkill")
 
   @@unique([tenantId, code])
   @@index([tenantId, active, category])
@@ -273,12 +283,42 @@ model LearningCourse {
   @@index([tenantId, active, mandatory])
 }
 
+model DevelopmentPlan {
+  id                    String @id @default(cuid())
+  tenantId              String
+  employmentId          String
+  title                 String
+  objective             String?
+  outcomeNotes          String?
+  status                DevelopmentPlanStatus @default(DRAFT)
+  ownerId               String
+  sourceAssessmentId    String?
+  successionCandidateId String?
+  focusSkillId          String?
+  targetProficiency     SkillProficiency?
+  startsAt              DateTime
+  targetAt              DateTime
+  completedAt           DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  sourceAssessment      TalentAssessment? @relation("TalentAssessmentDevelopmentPlans", fields: [sourceAssessmentId], references: [id], onDelete: SetNull)
+  successionCandidate   SuccessionCandidate? @relation("SuccessionCandidateDevelopmentPlans", fields: [successionCandidateId], references: [id], onDelete: SetNull)
+  focusSkill            Skill? @relation("DevelopmentPlanFocusSkill", fields: [focusSkillId], references: [id], onDelete: SetNull)
+  learningAssignments   LearningAssignment[] @relation("DevelopmentPlanLearning")
+
+  @@index([tenantId, employmentId, status])
+  @@index([tenantId, ownerId, status])
+  @@index([tenantId, targetAt, status])
+  @@index([tenantId, successionCandidateId, status])
+}
+
 model LearningAssignment {
   id                    String @id @default(cuid())
   tenantId              String
   employmentId          String
   courseId              String
   successionCandidateId String?
+  developmentPlanId     String?
   developmentSkillId    String?
   targetProficiency     SkillProficiency?
   status                LearningAssignmentStatus @default(ASSIGNED)
@@ -289,11 +329,13 @@ model LearningAssignment {
   certificateReference  String?
   course                LearningCourse @relation(fields: [courseId], references: [id], onDelete: Restrict)
   successionCandidate   SuccessionCandidate? @relation("SuccessionCandidateDevelopment", fields: [successionCandidateId], references: [id], onDelete: SetNull)
+  developmentPlan       DevelopmentPlan? @relation("DevelopmentPlanLearning", fields: [developmentPlanId], references: [id], onDelete: SetNull)
   developmentSkill      Skill? @relation("LearningDevelopmentSkill", fields: [developmentSkillId], references: [id], onDelete: SetNull)
 
   @@unique([employmentId, courseId, assignedAt])
   @@index([tenantId, employmentId])
   @@index([tenantId, status, dueAt])
   @@index([tenantId, successionCandidateId, status])
+  @@index([tenantId, developmentPlanId, status])
   @@index([tenantId, developmentSkillId, targetProficiency])
 }
