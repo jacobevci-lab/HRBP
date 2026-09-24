@@ -24,8 +24,7 @@ export async function queueDevelopmentPlanReminders() {
       title: true,
       targetAt: true,
       targetProficiency: true,
-      focusSkill: { select: { code: true, name: true } },
-      employment: undefined
+      focusSkill: { select: { code: true, name: true } }
     }
   });
 
