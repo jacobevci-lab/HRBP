@@ -34,7 +34,7 @@ type ActionQueueResponse = {
 
 type Filter = "all" | "overdue" | "due-soon";
 
-export function WorkflowActionCenter() {
+export function WorkflowActionCenter({ initialTaskId, initialInstanceId }: { initialTaskId?: string; initialInstanceId?: string }) {
   const { locale } = useLocale();
   const [items, setItems] = useState<WorkflowTaskItem[]>([]);
   const [summary, setSummary] = useState({ total: 0, overdue: 0, dueSoon: 0 });
@@ -63,6 +63,15 @@ export function WorkflowActionCenter() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (loading || (!initialTaskId && !initialInstanceId)) return;
+    setFilter("all");
+    const target = initialTaskId
+      ? document.getElementById(`workflow-task-${initialTaskId}`)
+      : document.querySelector<HTMLElement>(`[data-workflow-instance="${CSS.escape(initialInstanceId ?? "")}"]`);
+    target?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [initialInstanceId, initialTaskId, loading]);
 
   const visibleItems = useMemo(() => {
     const now = Date.now();
@@ -165,8 +174,9 @@ export function WorkflowActionCenter() {
             {!loading && visibleItems.length === 0 ? <tr><td colSpan={7} className="workflow-action-empty"><CheckCircle2 size={17}/>{locale === "tr" ? "Bu görünümde bekleyen görev yok." : "No pending tasks in this view."}</td></tr> : null}
             {visibleItems.map((item) => {
               const due = dueState(item.dueAt);
+              const focused = item.id === initialTaskId || item.instance.id === initialInstanceId;
               return (
-                <tr key={item.id}>
+                <tr key={item.id} id={`workflow-task-${item.id}`} data-workflow-instance={item.instance.id} className={focused ? "focused" : undefined}>
                   <td><strong>{item.name}</strong><small>{item.stepKey}</small></td>
                   <td><strong>{item.instance.definition.name}</strong><small>{item.instance.definition.key} · v{item.instance.definition.version}</small></td>
                   <td><span>{item.instance.subjectType}</span><small>{item.instance.subjectId}</small></td>
