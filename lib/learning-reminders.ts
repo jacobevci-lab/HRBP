@@ -26,19 +26,43 @@ export async function queueLearningReminders() {
     }
   });
 
-  const employmentKeys = [...new Map(assignments.map((row) => [`${row.tenantId}:${row.employmentId}`, { tenantId: row.tenantId, id: row.employmentId }])).values()];
+  const employmentKeys: Array<{ tenantId: string; id: string }> = [];
+  const seenEmployments = new Set<string>();
+  for (const row of assignments) {
+    const key = `${row.tenantId}:${row.employmentId}`;
+    if (seenEmployments.has(key)) continue;
+    seenEmployments.add(key);
+    employmentKeys.push({ tenantId: row.tenantId, id: row.employmentId });
+  }
+
   const employments = employmentKeys.length ? await db.employment.findMany({
     where: { OR: employmentKeys },
     select: { id: true, tenantId: true, person: { select: { workEmail: true } } }
   }) : [];
-  const employmentMap = new Map(employments.map((row) => [`${row.tenantId}:${row.id}`, row.person.workEmail?.trim().toLowerCase() ?? null]));
+  const employmentMap = new Map<string, string | null>();
+  for (const row of employments) {
+    employmentMap.set(`${row.tenantId}:${row.id}`, row.person.workEmail?.trim().toLowerCase() ?? null);
+  }
 
-  const userPairs = [...new Map(employments.flatMap((row) => {
+  const userPairs: Array<{ tenantId: string; email: string }> = [];
+  const seenUsers = new Set<string>();
+  for (const row of employments) {
     const email = row.person.workEmail?.trim().toLowerCase();
-    return email ? [[`${row.tenantId}:${email}`, { tenantId: row.tenantId, email }]] : [];
-  })).values()];
+    if (!email) continue;
+    const key = `${row.tenantId}:${email}`;
+    if (seenUsers.has(key)) continue;
+    seenUsers.add(key);
+    userPairs.push({ tenantId: row.tenantId, email });
+  }
+
   const users = userPairs.length ? await db.userAccount.findMany({
-    where: { active: true, OR: userPairs.map((pair) => ({ tenantId: pair.tenantId, email: { equals: pair.email, mode: "insensitive" as const } })) },
+    where: {
+      active: true,
+      OR: userPairs.map((pair) => ({
+        tenantId: pair.tenantId,
+        email: { equals: pair.email, mode: "insensitive" as const }
+      }))
+    },
     select: { id: true, tenantId: true, email: true }
   }) : [];
   const userMap = new Map(users.map((user) => [`${user.tenantId}:${user.email.trim().toLowerCase()}`, user.id]));
