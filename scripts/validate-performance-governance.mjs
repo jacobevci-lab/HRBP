@@ -16,7 +16,8 @@ const authorizationPath = "lib/authorization.ts";
 const authorization = await source(authorizationPath);
 expect(authorizationPath, authorization, /"performance:self-submit"/, "authorization must define employee self-review submission capability");
 expect(authorizationPath, authorization, /"performance:manager-review"/, "authorization must define assigned-manager review capability");
-expect(authorizationPath, authorization, /EMPLOYEE:[\s\S]*"performance:read"[\s\S]*"performance:self-submit"/, "employees must be able to access their own performance review flow");
+expect(authorizationPath, authorization, /"performance:goal-progress"/, "authorization must define employee-owned goal progress capability");
+expect(authorizationPath, authorization, /EMPLOYEE:[\s\S]*"performance:read"[\s\S]*"performance:self-submit"[\s\S]*"performance:goal-progress"/, "employees must be able to access their own review and goal-progress flow");
 expect(authorizationPath, authorization, /MANAGER:[\s\S]*"performance:manager-review"/, "managers must receive the manager-review capability");
 
 const participantDataPath = "lib/performance-participant-data.ts";
@@ -24,11 +25,15 @@ const participantData = await source(participantDataPath);
 expect(participantDataPath, participantData, /employmentId:\s*ctx\.employmentId/, "self-review queue must be bound to the signed employment identity");
 expect(participantDataPath, participantData, /managerEmploymentId:\s*ctx\.employmentId/, "manager-review queue must be bound to the assigned manager employment identity");
 expect(participantDataPath, participantData, /ReviewCycleStatus\.OPEN/, "participant queues must close when the review cycle leaves the open phase");
+expect(participantDataPath, participantData, /goalProgressEnabled\s*=\s*can\(ctx,\s*"performance:goal-progress"\)/, "participant data must capability-gate employee goal progress");
+expect(participantDataPath, participantData, /employmentId:\s*ctx\.employmentId[\s\S]*GoalStatus\.ACTIVE[\s\S]*GoalStatus\.AT_RISK/, "employee goal queue must be own-employment scoped and limited to mutable goal states");
 
 const participantConsolePath = "components/performance-participant-console.tsx";
 const participantConsole = await source(participantConsolePath);
 expect(participantConsolePath, participantConsole, /\/self-submit/, "participant console must use the identity-bound self-submit endpoint");
 expect(participantConsolePath, participantConsole, /\/manager-submit/, "participant console must use the identity-bound manager-submit endpoint");
+expect(participantConsolePath, participantConsole, /\/self-progress/, "participant console must use the identity-bound goal progress endpoint");
+expect(participantConsolePath, participantConsole, /"PATCH"/, "employee goal progress must use an explicit PATCH mutation");
 
 const operationsConsolePath = "components/performance-operations-console.tsx";
 const operationsConsole = await source(operationsConsolePath);
@@ -103,6 +108,15 @@ expect(goalPath, goalRoute, /goal\.status\s*===\s*GoalStatus\.COMPLETED\s*\|\|\s
 expect(goalPath, goalRoute, /canActOnEmployment/, "goal changes must enforce relationship scope");
 expect(goalPath, goalRoute, /appendAudit/, "goal changes must emit audit evidence");
 
+const selfGoalPath = "app/api/performance/goals/[id]/self-progress/route.ts";
+const selfGoalRoute = await source(selfGoalPath);
+expect(selfGoalPath, selfGoalRoute, /can\(ctx,\s*"performance:goal-progress"\)/, "employee goal progress must require the dedicated capability");
+expect(selfGoalPath, selfGoalRoute, /goal\.employmentId\s*!==\s*ctx\.employmentId/, "employee goal progress must reject another employee's goal");
+expect(selfGoalPath, selfGoalRoute, /goal\.status\s*!==\s*GoalStatus\.ACTIVE[\s\S]*goal\.status\s*!==\s*GoalStatus\.AT_RISK/, "employee progress must be limited to active or at-risk goals");
+expect(selfGoalPath, selfGoalRoute, /updateMany/, "employee goal progress must use a state-aware write");
+expect(selfGoalPath, selfGoalRoute, /data:\s*\{\s*progress\s*\}/, "employee goal endpoint must update progress only and not governance status");
+expect(selfGoalPath, selfGoalRoute, /goal\.self-progress-updated/, "employee goal progress must emit audit evidence");
+
 const createGoalPath = "app/api/performance/goals/route.ts";
 const createGoalRoute = await source(createGoalPath);
 expect(createGoalPath, createGoalRoute, /parentGoalId[\s\S]*tenantId:\s*ctx\.tenantId/, "goal hierarchy must not accept a cross-tenant parent");
@@ -114,4 +128,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated performance governance contract: employee self decisions, assigned-manager decisions, governed manager assignment, identity-resolved notifications, calibration governance, relationship scope and audit evidence are enforced.");
+console.log("Validated performance governance contract: employee self decisions, assigned-manager decisions, employee-owned goal progress, governed manager assignment, identity-resolved notifications, calibration governance, relationship scope and audit evidence are enforced.");
