@@ -32,6 +32,10 @@ export type LearningAssignmentOperation = {
   dueAt: string | null;
   completedAt: string | null;
   score: string | null;
+  successionCandidateId: string | null;
+  developmentSkillCode: string | null;
+  developmentSkillName: string | null;
+  targetProficiency: string | null;
 };
 
 async function employmentNames(ctx: RequestContext, ids: string[]) {
@@ -109,6 +113,9 @@ export async function getLearningAssignmentOperationsData(ctx: RequestContext): 
         dueAt: true,
         completedAt: true,
         score: true,
+        successionCandidateId: true,
+        targetProficiency: true,
+        developmentSkill: { select: { code: true, name: true } },
         course: { select: { code: true, title: true, mandatory: true } }
       }
     });
@@ -125,6 +132,10 @@ export async function getLearningAssignmentOperationsData(ctx: RequestContext): 
     status: row.status,
     dueAt: row.dueAt?.toISOString() ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,
-    score: row.score?.toString() ?? null
+    score: row.score?.toString() ?? null,
+    successionCandidateId: row.successionCandidateId,
+    developmentSkillCode: row.developmentSkill?.code ?? null,
+    developmentSkillName: row.developmentSkill?.name ?? null,
+    targetProficiency: row.targetProficiency
   }));
 }
