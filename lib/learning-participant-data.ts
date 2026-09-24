@@ -13,6 +13,8 @@ export type LearningParticipantAssignment = {
   dueAt: string | null;
   assignedAt: string;
   successionCandidateId: string | null;
+  developmentPlanId: string | null;
+  developmentPlanTitle: string | null;
   developmentSkillCode: string | null;
   developmentSkillName: string | null;
   targetProficiency: string | null;
@@ -36,6 +38,8 @@ export async function getLearningParticipantData(ctx: RequestContext): Promise<L
         dueAt: true,
         assignedAt: true,
         successionCandidateId: true,
+        developmentPlanId: true,
+        developmentPlan: { select: { title: true } },
         targetProficiency: true,
         developmentSkill: { select: { code: true, name: true } },
         course: { select: { code: true, title: true, provider: true, mandatory: true } }
@@ -52,6 +56,8 @@ export async function getLearningParticipantData(ctx: RequestContext): Promise<L
       dueAt: row.dueAt?.toISOString() ?? null,
       assignedAt: row.assignedAt.toISOString(),
       successionCandidateId: row.successionCandidateId,
+      developmentPlanId: row.developmentPlanId,
+      developmentPlanTitle: row.developmentPlan?.title ?? null,
       developmentSkillCode: row.developmentSkill?.code ?? null,
       developmentSkillName: row.developmentSkill?.name ?? null,
       targetProficiency: row.targetProficiency
