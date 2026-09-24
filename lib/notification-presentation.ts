@@ -28,6 +28,9 @@ export function notificationTitle(eventType: string, locale: Locale) {
     COMPENSATION_CHANGE_APPROVED: { en: "Compensation change approved", tr: "Ücret değişikliği onaylandı" },
     COMPENSATION_CHANGE_REJECTED: { en: "Compensation change rejected", tr: "Ücret değişikliği reddedildi" },
     COMPENSATION_PAYROLL_HANDOFF_READY: { en: "Compensation payroll handoff ready", tr: "Ücret değişikliği bordro devrine hazır" },
+    PAYROLL_APPROVAL_REQUIRED: { en: "Payroll approval required", tr: "Bordro onayı gerekiyor" },
+    PAYROLL_RUN_APPROVED: { en: "Payroll run approved", tr: "Bordro çalıştırması onaylandı" },
+    PAYROLL_RUN_PAID: { en: "Payroll run marked paid", tr: "Bordro ödendi olarak işaretlendi" },
     LEAVE_APPROVAL_REQUIRED: { en: "Leave approval required", tr: "İzin onayı gerekiyor" },
     LEAVE_REQUEST_APPROVED: { en: "Leave request approved", tr: "İzin talebi onaylandı" },
     LEAVE_REQUEST_REJECTED: { en: "Leave request rejected", tr: "İzin talebi reddedildi" },
@@ -82,6 +85,11 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const compensationProposedAnnualBase = text(data.compensationProposedAnnualBase);
   const compensationEffectiveAt = text(data.compensationEffectiveAt);
   const compensationDecision = text(data.compensationDecision);
+  const payrollPeriodCode = text(data.payrollPeriodCode);
+  const payrollCountryCode = text(data.payrollCountryCode);
+  const payrollRunNumber = numberValue(data.payrollRunNumber);
+  const payrollPayDate = text(data.payrollPayDate);
+  const payrollDecision = text(data.payrollDecision);
   const leaveType = text(data.leaveType);
   const leaveStartsAt = text(data.startsAt);
   const leaveEndsAt = text(data.endsAt);
@@ -105,6 +113,13 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   if (brokenEventId) {
     const detail = integrityReason ?? (locale === "tr" ? "Hash-zinciri doğrulaması başarısız oldu." : "Hash-chain verification failed.");
     return `${brokenEventId}: ${detail}`;
+  }
+  if (payrollPeriodCode && payrollCountryCode && payrollRunNumber !== undefined) {
+    const payDate = payrollPayDate ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(payrollPayDate)) : null;
+    const run = `${payrollCountryCode} · ${payrollPeriodCode} · #${payrollRunNumber}`;
+    if (payrollDecision === "APPROVED") return locale === "tr" ? `${run}${payDate ? ` · ödeme ${payDate}` : ""} · bağımsız onay tamamlandı.` : `${run}${payDate ? ` · pay date ${payDate}` : ""} · independent approval completed.`;
+    if (payrollDecision === "PAID") return locale === "tr" ? `${run}${payDate ? ` · ödeme ${payDate}` : ""} · ödendi olarak işaretlendi.` : `${run}${payDate ? ` · pay date ${payDate}` : ""} · marked paid.`;
+    return locale === "tr" ? `${run}${payDate ? ` · ödeme ${payDate}` : ""} · bağımsız bordro onayı bekliyor.` : `${run}${payDate ? ` · pay date ${payDate}` : ""} · waiting for independent payroll approval.`;
   }
   if (compensationEmployeeName && compensationCurrency && compensationProposedAnnualBase && compensationEffectiveAt) {
     const effective = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(compensationEffectiveAt));
@@ -219,6 +234,7 @@ export function notificationResourceHref(resourceType: string, resourceId?: stri
   if (resourceType === "WorkflowInstance") return id ? `/module/workflows?instance=${encodeURIComponent(id)}` : "/module/workflows";
   if (resourceType === "TimeEntry") return id ? `/module/time-attendance?entry=${encodeURIComponent(id)}` : "/module/time-attendance";
   if (resourceType === "CompensationChange") return id ? `/module/compensation?change=${encodeURIComponent(id)}` : "/module/compensation";
+  if (resourceType === "PayrollRun") return id ? `/module/payroll?run=${encodeURIComponent(id)}` : "/module/payroll";
   if (resourceType === "LeaveRequest") return id ? `/module/leave?request=${encodeURIComponent(id)}` : "/module/leave";
   if (resourceType === "PerformanceReview") return id ? `/module/performance?review=${encodeURIComponent(id)}` : "/module/performance";
   if (resourceType === "LearningAssignment") return id ? `/module/learning?assignment=${encodeURIComponent(id)}` : "/module/learning";
