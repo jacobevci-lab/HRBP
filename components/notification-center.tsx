@@ -90,7 +90,12 @@ export function NotificationCenter() {
     }
     void refresh();
     const interval = window.setInterval(() => void refresh(), 60_000);
-    return () => window.clearInterval(interval);
+    const onChanged = () => void refresh();
+    window.addEventListener("hrbp:notifications-changed", onChanged);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("hrbp:notifications-changed", onChanged);
+    };
   }, [authenticated, refresh]);
 
   useEffect(() => {
