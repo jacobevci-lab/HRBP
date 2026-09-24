@@ -2,18 +2,8 @@
 
 import Link from "next/link";
 import { LogIn, LogOut, ShieldCheck } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
-
-type SessionResponse = {
-  authenticated: boolean;
-  oidcConfigured: boolean;
-  user?: {
-    displayName: string;
-    email: string | null;
-    role: string;
-  };
-};
+import { useSessionContext } from "@/components/session-provider";
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "U";
@@ -41,19 +31,10 @@ function roleLabel(role: string, locale: "en" | "tr") {
 }
 
 export function TopbarAccount() {
-  const [session, setSession] = useState<SessionResponse | null>(null);
+  const { session, loading } = useSessionContext();
   const { locale } = useLocale();
 
-  useEffect(() => {
-    let active = true;
-    fetch("/api/auth/session", { cache: "no-store", credentials: "same-origin" })
-      .then((response) => response.ok ? response.json() as Promise<SessionResponse> : Promise.reject(new Error("session_unavailable")))
-      .then((value) => { if (active) setSession(value); })
-      .catch(() => { if (active) setSession({ authenticated: false, oidcConfigured: false }); });
-    return () => { active = false; };
-  }, []);
-
-  if (!session) {
+  if (loading || !session) {
     return <div className="topbar-account topbar-account-loading"><span className="topbar-avatar">…</span><span>{locale === "tr" ? "Oturum kontrol ediliyor" : "Checking session"}</span></div>;
   }
 
