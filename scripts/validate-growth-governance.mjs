@@ -14,9 +14,9 @@ expect(modulePath, modulePage, /if\s*\(!ctx\)/, "public growth routes must branc
 
 const operationsPath = "lib/growth-operations-data.ts";
 const operations = await source(operationsPath);
-expect(operationsPath, operations, /slug\s*===\s*"benefits"\s*\?\s*db\.benefitPlan\.findMany/, "benefit plan options must only load in benefits operations");
-expect(operationsPath, operations, /slug\s*===\s*"succession"\s*\?\s*db\.successionPlan\.findMany/, "succession options must only load in succession operations");
-expect(operationsPath, operations, /slug\s*===\s*"learning"\s*\?\s*db\.learningCourse\.findMany/, "learning options must only load in learning operations");
+expect(operationsPath, operations, /slug\s*===\s*"benefits"\s*\?\s*(?:await\s+)?db\.benefitPlan\.findMany/, "benefit plan options must only load in benefits operations");
+expect(operationsPath, operations, /slug\s*===\s*"succession"\s*\?\s*(?:await\s+)?db\.successionPlan\.findMany/, "succession options must only load in succession operations");
+expect(operationsPath, operations, /slug\s*===\s*"learning"\s*\?\s*(?:await\s+)?db\.learningCourse\.findMany/, "learning options must only load in learning operations");
 expect(operationsPath, operations, /resolveEmploymentScope/, "growth employee selectors must remain relationship scoped");
 
 const benefitsPath = "app/api/benefits/enrollments/[id]/transition/route.ts";
