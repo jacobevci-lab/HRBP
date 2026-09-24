@@ -14,6 +14,17 @@ type DevelopmentPlanReassessmentInput = {
   targetProficiency: string;
 };
 
+type DevelopmentPlanActivatedInput = {
+  tenantId: string;
+  employmentId: string;
+  planId: string;
+  planTitle: string;
+  targetAt: Date;
+  skillCode?: string | null;
+  skillName?: string | null;
+  targetProficiency?: string | null;
+};
+
 /**
  * Learning completion is evidence for a development plan, not proof that a
  * skill target has been achieved. The plan owner (or Talent Admin fallback)
@@ -41,6 +52,47 @@ export async function enqueueDevelopmentPlanReassessment(
       skillCode: input.skillCode,
       skillName: input.skillName,
       targetProficiency: input.targetProficiency
+    }
+  });
+}
+
+/**
+ * Development plans become visible/actionable to employees only once activated.
+ * Identity resolution mirrors the OIDC work-email bridge used elsewhere in the
+ * platform and never broadcasts employee-specific plan details to a role.
+ */
+export async function enqueueDevelopmentPlanActivated(
+  tx: Prisma.TransactionClient,
+  input: DevelopmentPlanActivatedInput
+) {
+  const employment = await tx.employment.findFirst({
+    where: { id: input.employmentId, tenantId: input.tenantId },
+    select: { person: { select: { workEmail: true } } }
+  });
+  const email = employment?.person.workEmail?.trim();
+  if (!email) return null;
+
+  const user = await tx.userAccount.findFirst({
+    where: { tenantId: input.tenantId, active: true, email: { equals: email, mode: "insensitive" } },
+    select: { id: true }
+  });
+  if (!user) return null;
+
+  return enqueueNotificationOutbox(tx, {
+    tenantId: input.tenantId,
+    eventType: "DEVELOPMENT_PLAN_ACTIVATED",
+    recipientUserId: user.id,
+    templateKey: "talent.development-plan-activated",
+    resourceType: "DevelopmentPlan",
+    resourceId: input.planId,
+    dedupeKey: `development-plan:${input.planId}:activated`,
+    classification: DataClassification.CONFIDENTIAL,
+    payload: {
+      planTitle: input.planTitle,
+      targetAt: input.targetAt.toISOString(),
+      skillCode: input.skillCode ?? null,
+      skillName: input.skillName ?? null,
+      targetProficiency: input.targetProficiency ?? null
     }
   });
 }
