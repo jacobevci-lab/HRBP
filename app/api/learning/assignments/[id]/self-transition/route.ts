@@ -2,6 +2,7 @@ import { DataClassification, LearningAssignmentStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { enqueueDevelopmentPlanReassessment } from "@/lib/development-plan-notifications";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { enqueueSuccessionDevelopmentReassessment } from "@/lib/succession-development-notifications";
 
@@ -39,6 +40,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           targetProficiency: true,
           course: { select: { code: true, title: true } },
           developmentSkill: { select: { code: true, name: true } },
+          developmentPlan: { select: { id: true, title: true, ownerId: true } },
           successionCandidate: {
             select: { id: true, plan: { select: { ownerId: true, positionId: true } } }
           }
@@ -72,6 +74,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         resourceId: id,
         classification: DataClassification.CONFIDENTIAL
       });
+
+      if (next === LearningAssignmentStatus.COMPLETED && assignment.developmentPlan && assignment.developmentSkill && assignment.targetProficiency) {
+        const activeOwner = await tx.userAccount.findFirst({
+          where: { id: assignment.developmentPlan.ownerId, tenantId: ctx.tenantId, active: true },
+          select: { id: true }
+        });
+        await enqueueDevelopmentPlanReassessment(tx, {
+          tenantId: ctx.tenantId,
+          assignmentId: id,
+          planId: assignment.developmentPlan.id,
+          ownerId: activeOwner?.id ?? null,
+          planTitle: assignment.developmentPlan.title,
+          courseCode: assignment.course.code,
+          courseTitle: assignment.course.title,
+          skillCode: assignment.developmentSkill.code,
+          skillName: assignment.developmentSkill.name,
+          targetProficiency: assignment.targetProficiency
+        });
+      }
 
       if (next === LearningAssignmentStatus.COMPLETED && assignment.successionCandidate && assignment.developmentSkill && assignment.targetProficiency) {
         const [position, activeOwner] = await Promise.all([
