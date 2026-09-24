@@ -131,7 +131,7 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
         operations = <ConsoleWarning locale={locale} title={c(locale, "Governed write console is temporarily unavailable", "Yönetişimli yazma konsolu geçici olarak kullanılamıyor")} body={c(locale, "Live domain data remains read-only until the transaction console recovers.", "İşlem konsolu toparlanana kadar canlı alan verisi salt-okunur kalır.")}/>;
       }
 
-      if (slug === "benefits" || slug === "learning" || slug === "succession") {
+      if (slug === "benefits" || slug === "learning" || slug === "succession" || slug === "talent") {
         try {
           if (slug === "succession") {
             const [{ SuccessionGovernanceConsole }, { getSuccessionGovernanceData }] = await Promise.all([
@@ -140,6 +140,13 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
             ]);
             const plans = await getSuccessionGovernanceData(ctx);
             lifecycle = <SuccessionGovernanceConsole plans={plans}/>;
+          } else if (slug === "talent") {
+            const [{ TalentGovernanceConsole }, { getTalentGovernanceData }] = await Promise.all([
+              import("@/components/talent-governance-console"),
+              import("@/lib/talent-governance-data")
+            ]);
+            const data = await getTalentGovernanceData(ctx);
+            lifecycle = <TalentGovernanceConsole {...data}/>;
           } else {
             const [{ GrowthLifecycleConsole }, lifecycleData] = await Promise.all([
               import("@/components/growth-lifecycle-console"),
