@@ -1,4 +1,4 @@
-import { DataClassification } from "@prisma/client";
+import { BenefitEnrollmentStatus, DataClassification } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
@@ -56,10 +56,29 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const data = await db.$transaction(async (tx) => {
       const plan = await tx.benefitPlan.findFirst({
         where: { id, tenantId: ctx.tenantId },
-        select: { id: true, active: true, effectiveFrom: true }
+        select: { id: true, active: true, effectiveFrom: true, effectiveTo: true }
       });
       if (!plan) throw new Error("NOT_FOUND");
       if (effectiveTo && effectiveTo < plan.effectiveFrom) throw new Error("INVALID_RANGE");
+
+      const nextEffectiveTo = hasEffectiveTo ? effectiveTo : plan.effectiveTo;
+      if (hasActive && Boolean(body.active) && nextEffectiveTo && nextEffectiveTo < new Date()) throw new Error("PLAN_EXPIRED");
+
+      if (hasEffectiveTo && effectiveTo) {
+        const conflictingEnrollment = await tx.benefitEnrollment.findFirst({
+          where: {
+            tenantId: ctx.tenantId,
+            benefitPlanId: id,
+            status: { in: [BenefitEnrollmentStatus.PENDING, BenefitEnrollmentStatus.ACTIVE, BenefitEnrollmentStatus.SUSPENDED] },
+            OR: [
+              { effectiveFrom: { gt: effectiveTo } },
+              { effectiveTo: { gt: effectiveTo } }
+            ]
+          },
+          select: { id: true }
+        });
+        if (conflictingEnrollment) throw new Error("ENROLLMENT_DATE_CONFLICT");
+      }
 
       const updated = await tx.benefitPlan.update({
         where: { id },
@@ -87,6 +106,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const code = error instanceof Error ? error.message : "";
     if (code === "NOT_FOUND") return Response.json({ error: "Benefit plan not found in tenant." }, { status: 404 });
     if (code === "INVALID_RANGE") return Response.json({ error: "effectiveTo cannot be earlier than effectiveFrom." }, { status: 400 });
+    if (code === "PLAN_EXPIRED") return Response.json({ error: "An expired benefit plan cannot be reactivated until its effective end date is extended." }, { status: 409 });
+    if (code === "ENROLLMENT_DATE_CONFLICT") return Response.json({ error: "The proposed plan end date conflicts with a pending, active or suspended enrollment. Resolve enrollment dates first." }, { status: 409 });
     throw error;
   }
 }
