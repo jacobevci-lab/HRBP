@@ -30,6 +30,8 @@ export function notificationTitle(eventType: string, locale: Locale) {
     SUCCESSION_PLAN_REVIEW_OVERDUE: { en: "Succession plan review overdue", tr: "Yedekleme planı incelemesi gecikti" },
     SUCCESSION_DEVELOPMENT_REASSESSMENT_REQUIRED: { en: "Succession development evidence ready", tr: "Yedekleme gelişim kanıtı hazır" },
     DEVELOPMENT_PLAN_ACTIVATED: { en: "Development plan activated", tr: "Gelişim planı aktifleştirildi" },
+    DEVELOPMENT_PLAN_DUE_SOON: { en: "Development plan target due soon", tr: "Gelişim planı hedef tarihi yaklaşıyor" },
+    DEVELOPMENT_PLAN_OVERDUE: { en: "Development plan target overdue", tr: "Gelişim planı hedef tarihi gecikti" },
     DEVELOPMENT_PLAN_REASSESSMENT_REQUIRED: { en: "Development plan evidence ready", tr: "Gelişim planı kanıtı hazır" },
     BENEFIT_PLAN_EXPIRED: { en: "Benefit plan expired", tr: "Yan hak planının süresi doldu" },
     AUDIT_INTEGRITY_FAILURE: { en: "Audit ledger integrity failure", tr: "Denetim defteri bütünlük hatası" }
@@ -54,6 +56,7 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const taskName = text(data.taskName);
   const dueAt = text(data.dueAt);
   const targetAt = text(data.targetAt);
+  const reminderState = text(data.reminderState);
   const brokenEventId = text(data.brokenEventId);
   const integrityReason = text(data.reason);
   const cycleName = text(data.cycleName);
@@ -88,6 +91,16 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   if (planTitle && targetAt && !courseTitle) {
     const deadline = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(targetAt));
     const skill = skillName ? ` · ${skillCode ? `${skillCode} · ` : ""}${skillName}${targetProficiency ? ` → ${targetProficiency}` : ""}` : "";
+    if (reminderState === "overdue") {
+      return locale === "tr"
+        ? `${planTitle}${skill} · hedef tarih ${deadline} geçti. Plan ve gelişim kanıtları gözden geçirilmeli.`
+        : `${planTitle}${skill} · target date ${deadline} has passed. Review the plan and development evidence.`;
+    }
+    if (reminderState === "due-soon") {
+      return locale === "tr"
+        ? `${planTitle}${skill} · hedef tarih ${deadline} yaklaşıyor. Açık gelişim aksiyonlarını gözden geçirin.`
+        : `${planTitle}${skill} · target date ${deadline} is approaching. Review open development actions.`;
+    }
     return locale === "tr"
       ? `${planTitle}${skill} · hedef tarih ${deadline}. Plan Learning self-servisinizde görüntülenebilir.`
       : `${planTitle}${skill} · target date ${deadline}. The plan is available in Learning self-service.`;
