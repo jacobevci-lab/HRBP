@@ -38,6 +38,7 @@ export function SettingsConnectionsManager() {
           name: form.get("name"),
           type: form.get("type"),
           issuer: form.get("issuer"),
+          metadataUrl: form.get("metadataUrl"),
           clientId: form.get("clientId"),
           directoryTenantId: form.get("directoryTenantId"),
           secretRef: form.get("secretRef"),
@@ -99,7 +100,8 @@ export function SettingsConnectionsManager() {
         <div className="settings-connection-fields">
           <label>{c("Name", "Ad")}<input name="name" maxLength={120} required placeholder="Corporate Entra ID"/></label>
           <label>{c("Type", "Tür")}<select name="type" defaultValue="ENTRA_ID">{identityTypes.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}</select></label>
-          <label className="wide">Issuer URL<input name="issuer" type="url" maxLength={1024} placeholder="https://login.microsoftonline.com/.../v2.0"/></label>
+          <label className="wide">{c("Issuer / LDAP endpoint", "Issuer / LDAP endpoint")}<input name="issuer" maxLength={1024} placeholder="https://login.microsoftonline.com/.../v2.0 or ldaps://ldap.example.com"/></label>
+          <label className="wide">SAML metadata URL<input name="metadataUrl" type="url" maxLength={1024} placeholder="https://idp.example.com/metadata.xml"/></label>
           <label>Client ID<input name="clientId" maxLength={256}/></label>
           <label>{c("Directory tenant ID", "Directory tenant ID")}<input name="directoryTenantId" maxLength={191}/></label>
           <label className="wide">Secret reference<input name="secretRef" maxLength={512} placeholder="vault://identity/entra-client-secret"/></label>
