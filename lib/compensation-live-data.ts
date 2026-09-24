@@ -1,6 +1,6 @@
 import { CompensationChangeStatus, EmploymentStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
-import { employmentIdFilter, resolveEmploymentScope } from "@/lib/employment-scope";
+import { employmentIdFilter, employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
 import type { RequestContext } from "@/lib/request-context";
 
 function formatDate(date: Date) {
@@ -29,11 +29,21 @@ export type CompensationQueueRow = {
   createdAt: string;
 };
 
+export type CompensationEligibleEmployment = {
+  id: string;
+  employee: string;
+  employeeNumber: string;
+  position: string;
+  organization: string;
+  currency: string | null;
+  currentAnnualBase: string | null;
+};
+
 export async function getCompensationWorkspaceData(ctx: RequestContext) {
   return withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
     const now = new Date();
-    const [currentHistory, changes] = await Promise.all([
+    const [currentHistory, changes, eligibleEmployments] = await Promise.all([
       db.compensationHistory.findMany({
         where: {
           effectiveFrom: { lte: now },
@@ -48,13 +58,41 @@ export async function getCompensationWorkspaceData(ctx: RequestContext) {
         orderBy: [{ createdAt: "desc" }, { effectiveAt: "desc" }],
         take: 150,
         select: {
-          id: true, currency: true, currentAnnualBase: true, proposedAnnualBase: true, effectiveAt: true,
-          status: true, reason: true, requestedById: true, approvedById: true, createdAt: true,
+          id: true,
+          currency: true,
+          currentAnnualBase: true,
+          proposedAnnualBase: true,
+          effectiveAt: true,
+          status: true,
+          reason: true,
+          requestedById: true,
+          approvedById: true,
+          createdAt: true,
           employment: {
             select: {
               person: { select: { employeeNumber: true, givenName: true, familyName: true } },
               position: { select: { title: true, orgUnit: { select: { name: true } } } }
             }
+          }
+        }
+      }),
+      db.employment.findMany({
+        where: {
+          tenantId: ctx.tenantId,
+          status: { not: EmploymentStatus.TERMINATED },
+          ...employmentPrimaryKeyFilter(scope)
+        },
+        orderBy: [{ person: { familyName: "asc" } }, { person: { givenName: "asc" } }],
+        take: 300,
+        select: {
+          id: true,
+          person: { select: { employeeNumber: true, givenName: true, familyName: true } },
+          position: { select: { title: true, orgUnit: { select: { name: true } } } },
+          compensation: {
+            where: { effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }] },
+            orderBy: { effectiveFrom: "desc" },
+            take: 1,
+            select: { currency: true, annualBase: true }
           }
         }
       })
@@ -69,6 +107,15 @@ export async function getCompensationWorkspaceData(ctx: RequestContext) {
       approved: changes.filter((change) => change.status === CompensationChangeStatus.APPROVED).length,
       applied: changes.filter((change) => change.status === CompensationChangeStatus.APPLIED).length,
       currencies: [...totalsByCurrency.entries()].map(([currency, total]) => ({ currency, total })),
+      eligibleEmployments: eligibleEmployments.map<CompensationEligibleEmployment>((employment) => ({
+        id: employment.id,
+        employee: `${employment.person.givenName} ${employment.person.familyName}`,
+        employeeNumber: employment.person.employeeNumber ?? "—",
+        position: employment.position?.title ?? "Unassigned",
+        organization: employment.position?.orgUnit.name ?? "Unassigned",
+        currency: employment.compensation[0]?.currency ?? null,
+        currentAnnualBase: employment.compensation[0]?.annualBase.toString() ?? null
+      })),
       rows: changes.map<CompensationQueueRow>((change) => ({
         id: change.id,
         employee: `${change.employment.person.givenName} ${change.employment.person.familyName}`,

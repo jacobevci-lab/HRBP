@@ -11,7 +11,7 @@ export type Capability =
   | "offboarding:read" | "offboarding:write"
   | "time:read" | "time:write" | "time:self-entry" | "time:approve" | "time:lock" | "time:configure"
   | "leave:read" | "leave:write" | "leave:self-request" | "leave:approve" | "leave:configure"
-  | "compensation:read" | "compensation:write"
+  | "compensation:read" | "compensation:propose" | "compensation:approve" | "compensation:apply"
   | "payroll:read" | "payroll:write"
   | "benefits:read" | "benefits:write"
   | "performance:read" | "performance:write" | "performance:self-submit" | "performance:manager-review" | "performance:goal-progress"
@@ -53,7 +53,8 @@ const grants: Record<PlatformRole, Capability[]> = {
     "documents:read", "documents:write", "documents:sign",
     "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
     "offboarding:read", "offboarding:write",
-    "time:read", "leave:read", "leave:write", "leave:self-request", "leave:approve", "compensation:read", "benefits:read",
+    "time:read", "leave:read", "leave:write", "leave:self-request", "leave:approve",
+    "compensation:read", "compensation:propose", "benefits:read",
     "performance:read", "performance:write", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
     "talent:read", "talent:write", "succession:read", "succession:write", "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write", "policies:read",
@@ -94,7 +95,7 @@ const grants: Record<PlatformRole, Capability[]> = {
   ],
   COMPENSATION_ADMIN: [
     "people:read", "organization:read", "positions:read",
-    "compensation:read", "compensation:write", "payroll:read", "benefits:read",
+    "compensation:read", "compensation:propose", "compensation:approve", "compensation:apply", "payroll:read", "benefits:read",
     "policies:read", "analytics:read"
   ],
   PAYROLL_ADMIN: [
