@@ -1,4 +1,5 @@
 import { monitorAuditIntegrity } from "@/lib/audit-monitoring";
+import { runBenefitsMaintenance } from "@/lib/benefits-maintenance";
 import { internalBearerAuthorized } from "@/lib/internal-auth";
 import { runLearningMaintenance } from "@/lib/learning-maintenance";
 import { queueLearningReminders } from "@/lib/learning-reminders";
@@ -11,9 +12,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "Valid internal maintenance credentials are required." }, { status: 401 });
   }
 
-  // Normalize time-driven learning state first so reminder classification and
-  // employee self-service both observe the same governed lifecycle state.
-  const learningLifecycle = await runLearningMaintenance();
+  // Normalize time-driven domain state first so reminders, self-service and
+  // reporting observe the same governed lifecycle state.
+  const [benefitsLifecycle, learningLifecycle] = await Promise.all([
+    runBenefitsMaintenance(),
+    runLearningMaintenance()
+  ]);
   const [workflowReminders, learningReminders, successionReminders, auditIntegrity] = await Promise.all([
     queueWorkflowReminders(),
     queueLearningReminders(),
@@ -21,5 +25,5 @@ export async function POST(request: Request) {
     monitorAuditIntegrity()
   ]);
   const data = await runOperationalMaintenance();
-  return Response.json({ data: { ...data, learningLifecycle, workflowReminders, learningReminders, successionReminders, auditIntegrity } });
+  return Response.json({ data: { ...data, benefitsLifecycle, learningLifecycle, workflowReminders, learningReminders, successionReminders, auditIntegrity } });
 }
