@@ -12,7 +12,7 @@ for (const capability of ["benefits:write", "talent:write", "succession:write", 
 expect(modulePath, modulePage, /getGrowthOperationsData\(ctx,\s*writeSlug\)/, "growth lookup data must be limited to the active write domain");
 expect(modulePath, modulePage, /if\s*\(!ctx\)/, "public growth routes must branch before authenticated write consoles");
 expect(modulePath, modulePage, /SuccessionGovernanceConsole/, "succession writers must receive the governed plan and candidate queue");
-expect(modulePath, modulePage, /getSuccessionGovernanceData\(ctx\)/, "succession governance queue must load from signed request context");
+expect(modulePath, modulePage, /getSuccessionGovernanceData\(ctx[,)]/, "succession governance queue must load from signed request context");
 expect(modulePath, modulePage, /LearningParticipantConsole/, "learning readers with self-progress capability must receive the employee learning inbox");
 expect(modulePath, modulePage, /getLearningParticipantData\(ctx\)/, "learning participant data must load from the signed request context");
 expect(modulePath, modulePage, /can\(ctx,\s*"learning:self-progress"\)/, "learning self-service UI must be capability-gated");
@@ -38,7 +38,7 @@ expect(benefitsPath, benefits, /appendAudit/, "benefit transitions must emit aud
 
 const learningPath = "app/api/learning/assignments/[id]/transition/route.ts";
 const learning = await source(learningPath);
-expect(learningPath, learning, /can\(ctx,\s*"learning:write"\)/, "benefit transitions must require learning:write");
+expect(learningPath, learning, /can\(ctx,\s*"learning:write"\)/, "learning transitions must require learning:write");
 expect(learningPath, learning, /canActOnEmployment/, "learning transitions must enforce relationship scope");
 expect(learningPath, learning, /COMPLETED:\s*\[\]/, "completed learning assignments must be terminal");
 expect(learningPath, learning, /score\s*<\s*0\s*\|\|\s*score\s*>\s*100/, "learning completion scores must be bounded");
