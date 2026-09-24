@@ -20,6 +20,8 @@ export function notificationTitle(eventType: string, locale: Locale) {
     PERFORMANCE_SELF_REVIEW_READY: { en: "Self review ready", tr: "Öz değerlendirme hazır" },
     PERFORMANCE_MANAGER_REVIEW_READY: { en: "Manager review ready", tr: "Yönetici değerlendirmesi hazır" },
     LEARNING_ASSIGNMENT_READY: { en: "Learning assignment ready", tr: "Eğitim ataması hazır" },
+    LEARNING_ASSIGNMENT_DUE_SOON: { en: "Learning assignment due soon", tr: "Eğitim atamasının süresi yaklaşıyor" },
+    LEARNING_ASSIGNMENT_OVERDUE: { en: "Learning assignment overdue", tr: "Eğitim ataması gecikti" },
     SUCCESSION_PLAN_REVIEW_DUE_SOON: { en: "Succession plan review due soon", tr: "Yedekleme planı inceleme tarihi yaklaşıyor" },
     SUCCESSION_PLAN_REVIEW_OVERDUE: { en: "Succession plan review overdue", tr: "Yedekleme planı incelemesi gecikti" },
     AUDIT_INTEGRITY_FAILURE: { en: "Audit ledger integrity failure", tr: "Denetim defteri bütünlük hatası" }
