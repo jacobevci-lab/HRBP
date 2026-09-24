@@ -82,7 +82,7 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
     let lifecycle: React.ReactNode = null;
     const writeCapability = writeAccessFor(slug);
 
-    if (slug === "performance" && (can(ctx, "performance:self-submit") || can(ctx, "performance:manager-review"))) {
+    if (slug === "performance" && (can(ctx, "performance:self-submit") || can(ctx, "performance:manager-review") || can(ctx, "performance:goal-progress"))) {
       try {
         const [{ PerformanceParticipantConsole }, { getPerformanceParticipantData }] = await Promise.all([
           import("@/components/performance-participant-console"),
@@ -119,18 +119,27 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
         operations = <ConsoleWarning locale={locale} title={c(locale, "Governed write console is temporarily unavailable", "Yönetişimli yazma konsolu geçici olarak kullanılamıyor")} body={c(locale, "Live domain data remains read-only until the transaction console recovers.", "İşlem konsolu toparlanana kadar canlı alan verisi salt-okunur kalır.")}/>;
       }
 
-      if (slug === "benefits" || slug === "learning") {
+      if (slug === "benefits" || slug === "learning" || slug === "succession") {
         try {
-          const [{ GrowthLifecycleConsole }, lifecycleData] = await Promise.all([
-            import("@/components/growth-lifecycle-console"),
-            import("@/lib/growth-lifecycle-data")
-          ]);
-          if (slug === "benefits") {
-            const enrollments = await lifecycleData.getBenefitEnrollmentOperationsData(ctx);
-            lifecycle = <GrowthLifecycleConsole slug="benefits" enrollments={enrollments}/>;
+          if (slug === "succession") {
+            const [{ SuccessionGovernanceConsole }, { getSuccessionGovernanceData }] = await Promise.all([
+              import("@/components/succession-governance-console"),
+              import("@/lib/succession-governance-data")
+            ]);
+            const plans = await getSuccessionGovernanceData(ctx);
+            lifecycle = <SuccessionGovernanceConsole plans={plans}/>;
           } else {
-            const assignments = await lifecycleData.getLearningAssignmentOperationsData(ctx);
-            lifecycle = <GrowthLifecycleConsole slug="learning" assignments={assignments}/>;
+            const [{ GrowthLifecycleConsole }, lifecycleData] = await Promise.all([
+              import("@/components/growth-lifecycle-console"),
+              import("@/lib/growth-lifecycle-data")
+            ]);
+            if (slug === "benefits") {
+              const enrollments = await lifecycleData.getBenefitEnrollmentOperationsData(ctx);
+              lifecycle = <GrowthLifecycleConsole slug="benefits" enrollments={enrollments}/>;
+            } else {
+              const assignments = await lifecycleData.getLearningAssignmentOperationsData(ctx);
+              lifecycle = <GrowthLifecycleConsole slug="learning" assignments={assignments}/>;
+            }
           }
         } catch (lifecycleError) {
           console.error(`[HRBP] ${slug} lifecycle queue could not initialize.`, lifecycleError);
