@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Activity, CheckCircle2, CircleAlert, ClipboardCheck, Flag, Plus, ShieldCheck, Target, UsersRound } from "lucide-react";
+import { Activity, CheckCircle2, CircleAlert, ClipboardCheck, Flag, ShieldCheck, Target, UsersRound } from "lucide-react";
 import { useLocale } from "@/components/locale-provider";
 import type { PerformanceOperationsData, PerformanceReviewOperation } from "@/lib/performance-operations-data";
 
@@ -91,7 +91,7 @@ export function PerformanceOperationsConsole({ employments, cycles, reviews, goa
 
   return <section className="performance-console card">
     <div className="performance-console-head">
-      <div><span className="section-kicker">{c("Human-owned performance transactions", "İnsan sahipliğinde performans işlemleri")}</span><h3>{c("Performance operations console", "Performans operasyon konsolu")}</h3><p>{c("Create cycles, goals and reviews; then move records through explicit governed states. Ratings are entered by authorized people only and every mutation is audit logged.", "Döngü, hedef ve değerlendirme oluşturun; kayıtları açık yönetişim durumlarından ilerletin. Puanlar yalnız yetkili kişiler tarafından girilir ve her değişiklik denetim kaydı üretir.")}</p></div>
+      <div><span className="section-kicker">{c("Human-owned performance transactions", "İnsan sahipliğinde performans işlemleri")}</span><h3>{c("Performance operations console", "Performans operasyon konsolu")}</h3><p>{c("Create cycles, goals and reviews; govern lifecycle state and final calibration. Employee self ratings and manager ratings are identity-bound and cannot be entered from this administration console.", "Döngü, hedef ve değerlendirme oluşturun; yaşam döngüsü durumunu ve nihai kalibrasyonu yönetin. Çalışan öz değerlendirme ve yönetici puanları kimliğe bağlıdır ve bu yönetim konsolundan girilemez.")}</p></div>
       <div className="performance-console-health"><ShieldCheck size={16}/><span>{c("Human decision boundary active", "İnsan karar sınırı aktif")}</span></div>
     </div>
 
@@ -120,7 +120,7 @@ export function PerformanceOperationsConsole({ employments, cycles, reviews, goa
         <div className="performance-form-title"><ClipboardCheck size={17}/><div><strong>{c("New employee review", "Yeni çalışan değerlendirmesi")}</strong><small>{c("One review per employee and cycle", "Çalışan ve döngü başına tek değerlendirme")}</small></div></div>
         <label>{c("Cycle", "Döngü")}<select name="cycleId" required defaultValue=""><option value="" disabled>{c("Select cycle", "Döngü seçin")}</option>{creatableCycles.map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.name} · {label(cycle.status, locale)}</option>)}</select></label>
         <label>{c("Employee", "Çalışan")}<select name="employmentId" required defaultValue=""><option value="" disabled>{c("Select employee", "Çalışan seçin")}</option>{employments.map((employment) => <option key={employment.id} value={employment.id}>{employment.person} · {employment.employeeNumber}</option>)}</select></label>
-        <label>{c("Manager employment", "Yönetici istihdam kaydı")}<select name="managerEmploymentId" defaultValue=""><option value="">{c("Not assigned", "Atanmadı")}</option>{employments.map((employment) => <option key={employment.id} value={employment.id}>{employment.person} · {employment.position}</option>)}</select></label>
+        <label>{c("Manager employment", "Yönetici istihdam kaydı")}<select name="managerEmploymentId" defaultValue=""><option value="">{c("Use governed manager relationship", "Yönetişimli yönetici ilişkisini kullan")}</option>{employments.map((employment) => <option key={employment.id} value={employment.id}>{employment.person} · {employment.position}</option>)}</select></label>
         <button className="create-button" disabled={pending !== null || !employments.length || !creatableCycles.length}>{pending === "new-review" ? c("Creating…", "Oluşturuluyor…") : c("Create review", "Değerlendirme oluştur")}</button>
       </form>
     </div>
@@ -150,20 +150,21 @@ export function PerformanceOperationsConsole({ employments, cycles, reviews, goa
 function ReviewOperation({ review, pending, mutate }: { review: PerformanceReviewOperation; pending: string | null; mutate: (key: string, url: string, method: "POST" | "PATCH", payload: Record<string, unknown>) => Promise<boolean> }) {
   const { locale } = useLocale();
   const c = (en: string, tr: string) => locale === "tr" ? tr : en;
-  const next = review.status === "NOT_STARTED" ? "SELF_REVIEW" : review.status === "SELF_REVIEW" ? "MANAGER_REVIEW" : review.status === "MANAGER_REVIEW" ? "CALIBRATION" : review.status === "CALIBRATION" ? "FINALIZED" : undefined;
-  const ratingName = review.status === "SELF_REVIEW" ? "selfRating" : review.status === "MANAGER_REVIEW" ? "managerRating" : review.status === "CALIBRATION" ? "finalRating" : null;
-  const currentRating = review.status === "SELF_REVIEW" ? review.selfRating : review.status === "MANAGER_REVIEW" ? review.managerRating : review.status === "CALIBRATION" ? review.finalRating : null;
+  const next = review.status === "NOT_STARTED" ? "SELF_REVIEW" : review.status === "CALIBRATION" ? "FINALIZED" : undefined;
+  const awaitingParticipant = review.status === "SELF_REVIEW" || review.status === "MANAGER_REVIEW";
 
   return <form className="performance-operation review-operation" onSubmit={(event) => {
     event.preventDefault();
     if (!next) return;
     const data = new FormData(event.currentTarget);
     const payload: Record<string, unknown> = { status: next };
-    if (ratingName) payload[ratingName] = data.get(ratingName);
-    if (review.status === "CALIBRATION") payload.calibrationNotes = data.get("calibrationNotes") || undefined;
+    if (review.status === "CALIBRATION") {
+      payload.finalRating = data.get("finalRating");
+      payload.calibrationNotes = data.get("calibrationNotes") || undefined;
+    }
     void mutate(`review-${review.id}`, `/api/performance/reviews/${review.id}/transition`, "POST", payload);
   }}>
     <div className="performance-operation-main"><strong>{review.person}</strong><small>{review.cycleName}</small><div className="performance-rating-line"><em className={`growth-pill ${review.status.toLowerCase().replaceAll("_", "-")}`}>{label(review.status, locale)}</em>{review.finalRating ? <span>{c("Final", "Nihai")}: {label(review.finalRating, locale)}</span> : review.managerRating ? <span>{c("Manager", "Yönetici")}: {label(review.managerRating, locale)}</span> : review.selfRating ? <span>{c("Self", "Öz")}: {label(review.selfRating, locale)}</span> : null}</div></div>
-    {next ? <div className="performance-review-controls">{ratingName ? <select name={ratingName} required defaultValue={currentRating ?? ""}><option value="" disabled>{c("Select human rating", "İnsan puanı seçin")}</option>{ratings.map((ratingValue) => <option key={ratingValue} value={ratingValue}>{label(ratingValue, locale)}</option>)}</select> : null}{review.status === "CALIBRATION" ? <input name="calibrationNotes" placeholder={c("Calibration note", "Kalibrasyon notu")}/> : null}<button className="secondary-button" disabled={pending !== null}>{pending === `review-${review.id}` ? "…" : label(next, locale)}</button></div> : <div className="performance-finalized"><CheckCircle2 size={14}/>{c("Finalized", "Kesinleşti")}</div>}
+    {review.status === "CALIBRATION" ? <div className="performance-review-controls"><select name="finalRating" required defaultValue={review.finalRating ?? ""}><option value="" disabled>{c("Select final calibration rating", "Nihai kalibrasyon puanı seçin")}</option>{ratings.map((ratingValue) => <option key={ratingValue} value={ratingValue}>{label(ratingValue, locale)}</option>)}</select><input name="calibrationNotes" placeholder={c("Calibration note", "Kalibrasyon notu")}/><button className="secondary-button" disabled={pending !== null}>{pending === `review-${review.id}` ? "…" : label("FINALIZED", locale)}</button></div> : next ? <div className="performance-review-controls"><button className="secondary-button" disabled={pending !== null}>{pending === `review-${review.id}` ? "…" : label(next, locale)}</button></div> : awaitingParticipant ? <div className="performance-finalized"><UsersRound size={14}/>{review.status === "SELF_REVIEW" ? c("Waiting for employee submission", "Çalışan gönderimi bekleniyor") : c("Waiting for assigned manager", "Atanmış yönetici bekleniyor")}</div> : <div className="performance-finalized"><CheckCircle2 size={14}/>{c("Finalized", "Kesinleşti")}</div>}
   </form>;
 }
