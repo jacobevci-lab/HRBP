@@ -10,7 +10,7 @@ export type Capability =
   | "onboarding:read" | "onboarding:write"
   | "offboarding:read" | "offboarding:write"
   | "time:read" | "time:write"
-  | "leave:read" | "leave:write"
+  | "leave:read" | "leave:write" | "leave:self-request" | "leave:approve" | "leave:configure"
   | "compensation:read" | "compensation:write"
   | "payroll:read" | "payroll:write"
   | "benefits:read" | "benefits:write"
@@ -33,7 +33,7 @@ export type Capability =
 const grants: Record<PlatformRole, Capability[]> = {
   EMPLOYEE: [
     "people:read", "documents:read", "onboarding:read",
-    "time:read", "time:write", "leave:read", "leave:write",
+    "time:read", "time:write", "leave:read", "leave:self-request",
     "performance:read", "performance:self-submit", "performance:goal-progress",
     "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write",
@@ -42,7 +42,7 @@ const grants: Record<PlatformRole, Capability[]> = {
   MANAGER: [
     "people:read", "organization:read", "positions:read", "documents:read",
     "recruiting:read", "onboarding:read", "offboarding:read",
-    "time:read", "time:write", "leave:read", "leave:write",
+    "time:read", "time:write", "leave:read", "leave:self-request", "leave:approve",
     "performance:read", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
     "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write",
@@ -53,7 +53,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "documents:read", "documents:write", "documents:sign",
     "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
     "offboarding:read", "offboarding:write",
-    "time:read", "leave:read", "leave:write", "compensation:read", "benefits:read",
+    "time:read", "leave:read", "leave:write", "leave:self-request", "leave:approve", "compensation:read", "benefits:read",
     "performance:read", "performance:write", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
     "talent:read", "talent:write", "succession:read", "succession:write", "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write", "policies:read",
@@ -67,7 +67,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "documents:read", "documents:write", "documents:sign", "documents:grant", "documents:govern",
     "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
     "offboarding:read", "offboarding:write", "time:read", "time:write",
-    "leave:read", "leave:write", "compensation:read", "benefits:read", "benefits:write",
+    "leave:read", "leave:write", "leave:self-request", "leave:approve", "leave:configure", "compensation:read", "benefits:read", "benefits:write",
     "performance:read", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
     "learning:read", "learning:write", "learning:self-progress",
     "hr-service:read", "hr-service:write",
@@ -82,7 +82,7 @@ const grants: Record<PlatformRole, Capability[]> = {
   ],
   TIME_ADMIN: [
     "people:read", "organization:read", "time:read", "time:write",
-    "leave:read", "leave:write", "policies:read"
+    "leave:read", "leave:write", "leave:self-request", "leave:approve", "leave:configure", "policies:read"
   ],
   TALENT_ADMIN: [
     "people:read", "organization:read", "positions:read",
@@ -118,7 +118,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "people:read", "people:write", "organization:read", "organization:write",
     "positions:read", "positions:write", "documents:read", "documents:write",
     "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
-    "offboarding:read", "time:read", "time:write", "leave:read", "leave:write",
+    "offboarding:read", "time:read", "time:write", "leave:read", "leave:write", "leave:self-request", "leave:approve", "leave:configure",
     "benefits:read", "performance:read", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
     "talent:read", "succession:read", "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write", "policies:read", "engagement:read",
