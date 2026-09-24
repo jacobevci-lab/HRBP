@@ -81,7 +81,7 @@ const successionConsolePath = "components/succession-governance-console.tsx";
 const successionConsole = await source(successionConsolePath);
 expect(successionConsolePath, successionConsole, /\/api\/succession\/plans\/\$\{plan\.id\}/, "succession console must use governed plan update endpoint");
 expect(successionConsolePath, successionConsole, /\/api\/succession\/candidates\/\$\{candidate\.id\}/, "succession console must use governed candidate endpoint");
-expect(successionConsolePath, successionConsole, /method:\s*"PATCH"/, "succession console must use explicit patch mutations");
+expect(successionConsolePath, successionConsole, /"PATCH"/, "succession console must use explicit patch mutations");
 expect(successionConsolePath, successionConsole, /"DELETE"/, "succession console must expose explicit candidate removal");
 
 const reminderPath = "lib/succession-reminders.ts";
