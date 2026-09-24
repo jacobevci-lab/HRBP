@@ -12,7 +12,7 @@ export type Capability =
   | "time:read" | "time:write" | "time:self-entry" | "time:approve" | "time:lock" | "time:configure"
   | "leave:read" | "leave:write" | "leave:self-request" | "leave:approve" | "leave:configure"
   | "compensation:read" | "compensation:write" | "compensation:propose" | "compensation:approve" | "compensation:apply"
-  | "payroll:read" | "payroll:write"
+  | "payroll:read" | "payroll:write" | "payroll:prepare" | "payroll:approve" | "payroll:pay" | "payroll:configure"
   | "benefits:read" | "benefits:write"
   | "performance:read" | "performance:write" | "performance:self-submit" | "performance:manager-review" | "performance:goal-progress"
   | "talent:read" | "talent:write"
@@ -100,7 +100,7 @@ const grants: Record<PlatformRole, Capability[]> = {
   ],
   PAYROLL_ADMIN: [
     "people:read", "organization:read", "time:read", "leave:read",
-    "compensation:read", "payroll:read", "payroll:write",
+    "compensation:read", "payroll:read", "payroll:prepare", "payroll:approve", "payroll:pay", "payroll:configure",
     "benefits:read", "offboarding:read", "policies:read"
   ],
   ER_INVESTIGATOR: [
@@ -137,8 +137,9 @@ const highlyRestrictedReaders = new Set<PlatformRole>([
 ]);
 
 export function can(ctx: RequestContext, capability: Capability) {
-  // Deprecated UI compatibility alias. Domain APIs must use propose/approve/apply.
+  // Deprecated UI compatibility aliases. Domain APIs must use granular capabilities.
   if (capability === "compensation:write") return grants[ctx.role].includes("compensation:propose");
+  if (capability === "payroll:write") return grants[ctx.role].includes("payroll:prepare");
   return grants[ctx.role].includes(capability);
 }
 
