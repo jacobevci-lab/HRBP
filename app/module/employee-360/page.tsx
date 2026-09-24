@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { CircleAlert, CircleCheckBig, Workflow } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { PublicCoreLanding } from "@/components/public-core-landing";
+import { getServerRequestContext } from "@/lib/server-session";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -24,6 +26,9 @@ async function renderEmployee360(personId?: string, tab?: string) {
 }
 
 export default async function Employee360Page({ searchParams }: { searchParams: SearchParams }) {
+  const ctx = await getServerRequestContext();
+  if (!ctx) return <AppShell><PublicCoreLanding slug="employee-360"/></AppShell>;
+
   const search = await searchParams;
   const personId = typeof search.person === "string" ? search.person : undefined;
   const tab = typeof search.tab === "string" ? search.tab : undefined;

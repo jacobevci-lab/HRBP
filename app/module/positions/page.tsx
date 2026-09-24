@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { CircleAlert, CircleCheckBig, Plus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { PublicCoreLanding } from "@/components/public-core-landing";
+import { getServerRequestContext } from "@/lib/server-session";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,6 +24,9 @@ async function renderPositions() {
 }
 
 export default async function PositionsPage() {
+  const ctx = await getServerRequestContext();
+  if (!ctx) return <AppShell><PublicCoreLanding slug="positions"/></AppShell>;
+
   const state = await renderPositions();
   return (
     <AppShell>

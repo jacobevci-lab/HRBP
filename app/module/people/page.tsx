@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { CircleAlert, CircleCheckBig, Plus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { PublicCoreLanding } from "@/components/public-core-landing";
+import { getServerRequestContext } from "@/lib/server-session";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -35,6 +37,9 @@ async function renderPeople(query: string) {
 }
 
 export default async function PeoplePage({ searchParams }: { searchParams: SearchParams }) {
+  const ctx = await getServerRequestContext();
+  if (!ctx) return <AppShell><PublicCoreLanding slug="people"/></AppShell>;
+
   const search = await searchParams;
   const query = typeof search.q === "string" ? search.q : "";
   const state = await renderPeople(query);
