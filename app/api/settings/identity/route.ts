@@ -3,18 +3,8 @@ import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
+import { identityIssuer, identityMetadataUrl } from "@/lib/settings-connection-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
-
-function optionalHttpUrl(value: unknown, maxLength = 1024): string | null | undefined {
-  const parsed = asOptionalText(value, maxLength);
-  if (parsed === undefined || parsed === null) return parsed;
-  try {
-    const url = new URL(parsed);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
 
 export async function GET(request: Request) {
   const ctx = getRequestContext(request);
@@ -47,12 +37,12 @@ export async function POST(request: Request) {
     : null;
   if (!name || !type) return Response.json({ error: "name and valid identity provider type are required." }, { status: 400 });
 
-  const issuer = optionalHttpUrl(body.issuer);
-  const metadataUrl = optionalHttpUrl(body.metadataUrl);
+  const issuer = identityIssuer(body.issuer, type);
+  const metadataUrl = identityMetadataUrl(body.metadataUrl);
   const clientId = asOptionalText(body.clientId, 256);
   const directoryTenantId = asOptionalText(body.directoryTenantId, 191);
   const secretRef = asOptionalText(body.secretRef, 512);
-  if (issuer === null) return Response.json({ error: "issuer must be a valid HTTP(S) URL." }, { status: 400 });
+  if (issuer === null) return Response.json({ error: type === IdentityProviderType.LDAP ? "issuer must be a valid LDAP(S) endpoint." : "issuer must be a valid HTTP(S) URL." }, { status: 400 });
   if (metadataUrl === null) return Response.json({ error: "metadataUrl must be a valid HTTP(S) URL." }, { status: 400 });
   if (clientId === null || directoryTenantId === null || secretRef === null) return Response.json({ error: "One or more identity provider fields are invalid." }, { status: 400 });
 

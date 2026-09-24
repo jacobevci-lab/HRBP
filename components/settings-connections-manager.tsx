@@ -38,6 +38,7 @@ export function SettingsConnectionsManager() {
           name: form.get("name"),
           type: form.get("type"),
           issuer: form.get("issuer"),
+          metadataUrl: form.get("metadataUrl"),
           clientId: form.get("clientId"),
           directoryTenantId: form.get("directoryTenantId"),
           secretRef: form.get("secretRef"),
@@ -75,14 +76,13 @@ export function SettingsConnectionsManager() {
           baseUrl: form.get("baseUrl"),
           authType: form.get("authType"),
           secretRef: form.get("secretRef"),
-          scopes: splitScopes(String(form.get("scopes") ?? "")),
-          enabled: form.get("enabled") === "on"
+          scopes: splitScopes(String(form.get("scopes") ?? ""))
         })
       });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
       formElement.reset();
-      setIntegrationNotice({ kind: "ok", text: c("Integration registered as DRAFT and audited.", "Entegrasyon DRAFT olarak kaydedildi ve denetim kaydına işlendi.") });
+      setIntegrationNotice({ kind: "ok", text: c("Integration registered as disabled DRAFT. Activate it from Lifecycle Control after metadata review.", "Entegrasyon devre dışı DRAFT olarak kaydedildi. Metadata kontrolünden sonra Yaşam Döngüsü Kontrolü alanından aktifleştirin.") });
       router.refresh();
     } catch (error) {
       setIntegrationNotice({ kind: "error", text: error instanceof Error ? error.message : c("Integration could not be created.", "Entegrasyon oluşturulamadı.") });
@@ -99,7 +99,8 @@ export function SettingsConnectionsManager() {
         <div className="settings-connection-fields">
           <label>{c("Name", "Ad")}<input name="name" maxLength={120} required placeholder="Corporate Entra ID"/></label>
           <label>{c("Type", "Tür")}<select name="type" defaultValue="ENTRA_ID">{identityTypes.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}</select></label>
-          <label className="wide">Issuer URL<input name="issuer" type="url" maxLength={1024} placeholder="https://login.microsoftonline.com/.../v2.0"/></label>
+          <label className="wide">{c("Issuer / LDAP endpoint", "Issuer / LDAP endpoint")}<input name="issuer" maxLength={1024} placeholder="https://login.microsoftonline.com/.../v2.0 or ldaps://ldap.example.com"/></label>
+          <label className="wide">SAML metadata URL<input name="metadataUrl" type="url" maxLength={1024} placeholder="https://idp.example.com/metadata.xml"/></label>
           <label>Client ID<input name="clientId" maxLength={256}/></label>
           <label>{c("Directory tenant ID", "Directory tenant ID")}<input name="directoryTenantId" maxLength={191}/></label>
           <label className="wide">Secret reference<input name="secretRef" maxLength={512} placeholder="vault://identity/entra-client-secret"/></label>
@@ -114,7 +115,7 @@ export function SettingsConnectionsManager() {
       </form>
 
       <form className="card settings-connection-form" onSubmit={createIntegration}>
-        <div className="settings-connection-title"><Link2 size={18}/><div><strong>{c("System integration", "Sistem entegrasyonu")}</strong><small>{c("Register an HR, ITSM, payroll, directory or analytics connection.", "İK, ITSM, bordro, directory veya analitik bağlantısını kaydedin.")}</small></div></div>
+        <div className="settings-connection-title"><Link2 size={18}/><div><strong>{c("System integration", "Sistem entegrasyonu")}</strong><small>{c("Register an HR, ITSM, payroll, directory or analytics connection. New records remain disabled until explicit activation.", "İK, ITSM, bordro, directory veya analitik bağlantısını kaydedin. Yeni kayıtlar açıkça aktifleştirilene kadar devre dışı kalır.")}</small></div></div>
         <div className="settings-connection-fields">
           <label>{c("Name", "Ad")}<input name="name" maxLength={120} required placeholder="Corporate Jira"/></label>
           <label>{c("System type", "Sistem türü")}<input name="systemType" maxLength={120} required placeholder="JIRA"/></label>
@@ -123,7 +124,6 @@ export function SettingsConnectionsManager() {
           <label>Secret reference<input name="secretRef" maxLength={512} placeholder="vault://integrations/jira"/></label>
           <label className="wide">{c("Scopes (comma or space separated)", "Scope'lar (virgül veya boşlukla ayrılmış)")}<input name="scopes" maxLength={4000} placeholder="read:jira-work, read:jira-user"/></label>
         </div>
-        <div className="settings-connection-flags"><label><input name="enabled" type="checkbox"/><span>{c("Enable after registration", "Kayıttan sonra etkinleştir")}</span></label></div>
         {integrationNotice ? <div className={`settings-policy-message ${integrationNotice.kind}`}>{integrationNotice.text}</div> : null}
         <button className="create-button" type="submit" disabled={integrationBusy}><Plus size={15}/>{integrationBusy ? c("Creating…", "Oluşturuluyor…") : c("Register integration", "Entegrasyon kaydet")}</button>
       </form>
