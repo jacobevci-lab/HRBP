@@ -66,6 +66,20 @@ export async function WorkPayModulePage({ slug }: { slug: Slug }) {
       : await (await import("@/components/work-pay-live-workspace")).WorkPayLiveWorkspace({ slug });
     let participant: React.ReactNode = null;
 
+    if (slug === "time-attendance" && ctx.employmentId && can(ctx, "time:self-entry")) {
+      try {
+        const [{ TimeParticipantConsole }, { getTimeParticipantData }] = await Promise.all([
+          import("@/components/time-participant-console"),
+          import("@/lib/time-participant-data")
+        ]);
+        const data = await getTimeParticipantData(ctx);
+        participant = <TimeParticipantConsole employmentId={ctx.employmentId} data={data}/>;
+      } catch (participantError) {
+        console.error("[HRBP] time self-service could not initialize.", participantError);
+        participant = <ConsoleWarning locale={locale} title={c(locale, "Time self-service is temporarily unavailable", "Zaman self-servis geçici olarak kullanılamıyor")} body={c(locale, "No time mutation was attempted. The governed time operating view remains available while self-service recovers.", "Hiçbir zaman kaydı değişikliği denenmedi. Self-servis toparlanırken yönetişimli zaman operasyon görünümü kullanılabilir.")}/>;
+      }
+    }
+
     if (slug === "leave" && ctx.employmentId && can(ctx, "leave:self-request")) {
       try {
         const [{ LeaveParticipantConsole }, { getLeaveParticipantData }] = await Promise.all([

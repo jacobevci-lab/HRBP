@@ -9,6 +9,7 @@ import { PayrollTransitionButton } from "@/components/payroll-transition-button"
 import { TimeEntryTransitionButtons } from "@/components/time-entry-transition-buttons";
 
 type TimeTarget = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "LOCKED";
+type TimeAccess = { selfEntry: boolean; operationalWrite: boolean; approve: boolean; lock: boolean };
 
 function Metric({ icon, label, value, meta }: { icon: React.ReactNode; label: string; value: string; meta: string }) {
   return <div className="workpay-metric card"><div className="workpay-metric-icon">{icon}</div><div><span>{label}</span><strong>{value}</strong><small>{meta}</small></div></div>;
@@ -30,12 +31,11 @@ function money(currency: string, amount: number) {
   }
 }
 
-function timeTargets(role: string, actorEmploymentId: string | undefined, rowEmploymentId: string, status: TimeTarget): TimeTarget[] {
+function timeTargets(access: TimeAccess, actorEmploymentId: string | undefined, rowEmploymentId: string, status: TimeTarget): TimeTarget[] {
   const self = Boolean(actorEmploymentId && actorEmploymentId === rowEmploymentId);
-  const operational = role === "TIME_ADMIN" || role === "HR_OPERATIONS";
-  if ((status === "DRAFT" || status === "REJECTED") && (self || operational)) return ["SUBMITTED"];
-  if (status === "SUBMITTED" && !self && (role === "MANAGER" || operational)) return ["APPROVED", "REJECTED"];
-  if (status === "APPROVED" && operational) return ["LOCKED"];
+  if ((status === "DRAFT" || status === "REJECTED") && ((self && access.selfEntry) || (!self && access.operationalWrite))) return ["SUBMITTED"];
+  if (status === "SUBMITTED" && !self && access.approve) return ["APPROVED", "REJECTED"];
+  if (status === "APPROVED" && !self && access.lock) return ["LOCKED"];
   return [];
 }
 
@@ -52,7 +52,13 @@ export async function WorkPayLiveWorkspace({ slug }: { slug: "time-attendance" |
 
   if (slug === "time-attendance") {
     const data = await getTimeAttendanceLiveData(ctx);
-    const canWrite = can(ctx, "time:write");
+    const access: TimeAccess = {
+      selfEntry: can(ctx, "time:self-entry"),
+      operationalWrite: can(ctx, "time:write"),
+      approve: can(ctx, "time:approve"),
+      lock: can(ctx, "time:lock")
+    };
+    const showControl = access.selfEntry || access.operationalWrite || access.approve || access.lock;
     return <div className="workpay-shell">
       <section className="workpay-metrics">
         <Metric icon={<UsersRound size={18}/>} label="Expected today" value={String(data.expected)} meta="Authorized employment population"/>
@@ -61,11 +67,11 @@ export async function WorkPayLiveWorkspace({ slug }: { slug: "time-attendance" |
         <Metric icon={<AlertTriangle size={18}/>} label="Exceptions" value={String(data.exceptions)} meta={`${data.scheduleCoverage}% schedule coverage`}/>
       </section>
       <section className="workpay-split">
-        <div className="card workpay-panel"><div className="workpay-panel-head"><div><span className="section-kicker">Live daily control</span><h3>Attendance operating view</h3></div><span className="matrix-note">Relationship scoped</span></div><div className="workpay-table-wrap"><table className="workpay-table"><thead><tr><th>Employee</th><th>Organization</th><th>In</th><th>Out</th><th>Worked</th><th>OT</th><th>Source</th><th>Status</th>{canWrite ? <th>Control</th> : null}</tr></thead><tbody>{data.rows.length ? data.rows.map((row) => {
-          const targets = canWrite ? timeTargets(ctx.role, ctx.employmentId, row.employmentId, row.rawStatus as TimeTarget) : [];
-          return <tr key={row.id}><td><strong>{row.employee}</strong><small className="cell-sub">{row.employeeNumber} · {row.position}</small></td><td>{row.organization}</td><td>{row.startAt}</td><td>{row.endAt}</td><td>{Math.floor(row.minutes / 60)}h {row.minutes % 60}m</td><td>{row.overtimeMinutes ? `${Math.floor(row.overtimeMinutes / 60)}h ${row.overtimeMinutes % 60}m` : "—"}</td><td>{row.source}</td><td><Status value={row.status}/></td>{canWrite ? <td><TimeEntryTransitionButtons entryId={row.id} targets={targets}/></td> : null}</tr>;
-        }) : <tr><td colSpan={canWrite ? 9 : 8} style={{ textAlign: "center", padding: 28 }}>No time entries are recorded for today.</td></tr>}</tbody></table></div></div>
-        <aside className="card workpay-side"><div className="workpay-panel-head"><div><span className="section-kicker">Access model</span><h3>Relationship-aware time data</h3></div><ShieldCheck size={18}/></div><div className="control-stack"><div><ShieldCheck size={17}/><span><strong>Employee</strong><small>Own records can be submitted; approval is never self-service.</small></span></div><div><UsersRound size={17}/><span><strong>Manager</strong><small>Direct reports can be approved or rejected; own time cannot be self-approved.</small></span></div><div><CheckCircle2 size={17}/><span><strong>Time operations</strong><small>Explicit operations roles can submit exceptions, approve and lock records for payroll consumption.</small></span></div></div></aside>
+        <div className="card workpay-panel"><div className="workpay-panel-head"><div><span className="section-kicker">Live daily control</span><h3>Attendance operating view</h3></div><span className="matrix-note">Relationship scoped</span></div><div className="workpay-table-wrap"><table className="workpay-table"><thead><tr><th>Employee</th><th>Organization</th><th>In</th><th>Out</th><th>Worked</th><th>OT</th><th>Source</th><th>Status</th>{showControl ? <th>Control</th> : null}</tr></thead><tbody>{data.rows.length ? data.rows.map((row) => {
+          const targets = showControl ? timeTargets(access, ctx.employmentId, row.employmentId, row.rawStatus as TimeTarget) : [];
+          return <tr key={row.id}><td><strong>{row.employee}</strong><small className="cell-sub">{row.employeeNumber} · {row.position}</small></td><td>{row.organization}</td><td>{row.startAt}</td><td>{row.endAt}</td><td>{Math.floor(row.minutes / 60)}h {row.minutes % 60}m</td><td>{row.overtimeMinutes ? `${Math.floor(row.overtimeMinutes / 60)}h ${row.overtimeMinutes % 60}m` : "—"}</td><td>{row.source}</td><td><Status value={row.status}/></td>{showControl ? <td><TimeEntryTransitionButtons entryId={row.id} targets={targets}/></td> : null}</tr>;
+        }) : <tr><td colSpan={showControl ? 9 : 8} style={{ textAlign: "center", padding: 28 }}>No time entries are recorded for today.</td></tr>}</tbody></table></div></div>
+        <aside className="card workpay-side"><div className="workpay-panel-head"><div><span className="section-kicker">Approval & payroll control</span><h3>Separated time authority</h3></div><ShieldCheck size={18}/></div><div className="control-stack"><div><ShieldCheck size={17}/><span><strong>Employee self-service</strong><small>Own drafts can be created and submitted only through signed employment identity.</small></span></div><div><UsersRound size={17}/><span><strong>Manager approval</strong><small>Relationship-scoped reports can be approved or rejected; self-approval remains blocked.</small></span></div><div><CheckCircle2 size={17}/><span><strong>Payroll-ready lock</strong><small>An effective schedule and valid interval are required. The approving actor cannot also perform the payroll lock.</small></span></div></div></aside>
       </section>
     </div>;
   }

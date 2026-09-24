@@ -1,21 +1,16 @@
-import { DataClassification, PlatformRole } from "@prisma/client";
+import { DataClassification, Prisma } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { asDate, asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
-
-const scheduleManagers = new Set<PlatformRole>([
-  PlatformRole.TIME_ADMIN,
-  PlatformRole.HR_OPERATIONS,
-  PlatformRole.TENANT_ADMIN
-]);
 
 export async function POST(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
-  if (!can(ctx, "time:write") || !scheduleManagers.has(ctx.role)) return forbidden("Work schedule assignment requires a time-administration role.");
+  if (!can(ctx, "time:configure")) return forbidden("Work schedule assignment requires time:configure.");
 
   const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
@@ -34,37 +29,76 @@ export async function POST(request: Request) {
     return Response.json({ error: "effectiveTo must be after effectiveFrom." }, { status: 400 });
   }
 
-  const data = await db.$transaction(async (tx) => {
-    const [employment, schedule] = await Promise.all([
-      tx.employment.findFirst({ where: { id: employmentId, tenantId: ctx.tenantId }, select: { id: true } }),
-      tx.workSchedule.findFirst({ where: { id: scheduleId, tenantId: ctx.tenantId, active: true }, select: { id: true } })
-    ]);
-    if (!employment || !schedule) throw new Error("NOT_FOUND");
+  try {
+    const data = await db.$transaction(async (tx) => {
+      const scope = await resolveEmploymentScope(tx, ctx);
+      if (!canActOnEmployment(scope, employmentId)) throw new Error("OUT_OF_SCOPE");
 
-    const previousAssignments = await tx.workScheduleAssignment.findMany({
-      where: { tenantId: ctx.tenantId, employmentId, effectiveTo: null, effectiveFrom: { lt: effectiveFrom } },
-      select: { id: true }
-    });
-    for (const previous of previousAssignments) {
-      await tx.workScheduleAssignment.update({
-        where: { id: previous.id },
-        data: { effectiveTo: effectiveFrom }
+      const [employment, schedule] = await Promise.all([
+        tx.employment.findFirst({ where: { id: employmentId, tenantId: ctx.tenantId }, select: { id: true } }),
+        tx.workSchedule.findFirst({
+          where: { id: scheduleId, tenantId: ctx.tenantId, active: true },
+          select: { id: true, effectiveFrom: true, effectiveTo: true }
+        })
+      ]);
+      if (!employment || !schedule) throw new Error("NOT_FOUND");
+      if (effectiveFrom < schedule.effectiveFrom) throw new Error("SCHEDULE_RANGE");
+      const normalizedEffectiveTo = effectiveTo ?? schedule.effectiveTo ?? undefined;
+      if (normalizedEffectiveTo && normalizedEffectiveTo <= effectiveFrom) throw new Error("SCHEDULE_RANGE");
+      if (schedule.effectiveTo && normalizedEffectiveTo && normalizedEffectiveTo > schedule.effectiveTo) throw new Error("SCHEDULE_RANGE");
+
+      const futureOverlap = await tx.workScheduleAssignment.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          employmentId,
+          effectiveFrom: {
+            gte: effectiveFrom,
+            ...(normalizedEffectiveTo ? { lt: normalizedEffectiveTo } : {})
+          }
+        },
+        select: { id: true }
       });
-    }
+      if (futureOverlap) throw new Error("OVERLAP");
 
-    const assignment = await tx.workScheduleAssignment.create({
-      data: {
-        tenantId: ctx.tenantId,
-        employmentId,
-        scheduleId,
-        effectiveFrom,
-        effectiveTo
+      const previousAssignments = await tx.workScheduleAssignment.findMany({
+        where: {
+          tenantId: ctx.tenantId,
+          employmentId,
+          effectiveFrom: { lt: effectiveFrom },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gt: effectiveFrom } }]
+        },
+        select: { id: true }
+      });
+      for (const previous of previousAssignments) {
+        await tx.workScheduleAssignment.update({ where: { id: previous.id }, data: { effectiveTo: effectiveFrom } });
       }
-    });
-    await appendAudit(tx, ctx, { action: "work-schedule.assigned", resourceType: "WorkScheduleAssignment", resourceId: assignment.id, classification: DataClassification.CONFIDENTIAL });
-    return assignment;
-  }).catch((error) => error instanceof Error && error.message === "NOT_FOUND" ? null : Promise.reject(error));
 
-  if (!data) return Response.json({ error: "Employment or active work schedule not found in tenant." }, { status: 404 });
-  return Response.json({ data }, { status: 201 });
+      const assignment = await tx.workScheduleAssignment.create({
+        data: {
+          tenantId: ctx.tenantId,
+          employmentId,
+          scheduleId,
+          effectiveFrom,
+          effectiveTo: normalizedEffectiveTo
+        }
+      });
+      await appendAudit(tx, ctx, {
+        action: "work-schedule.assigned",
+        resourceType: "WorkScheduleAssignment",
+        resourceId: assignment.id,
+        classification: DataClassification.CONFIDENTIAL
+      });
+      return assignment;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return Response.json({ data }, { status: 201 });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    if (code === "NOT_FOUND") return Response.json({ error: "Employment or active work schedule not found in tenant." }, { status: 404 });
+    if (code === "OUT_OF_SCOPE") return forbidden("Employment is outside your authorized relationship scope.");
+    if (code === "SCHEDULE_RANGE") return Response.json({ error: "Assignment dates must stay within the active schedule effective range." }, { status: 409 });
+    if (code === "OVERLAP") return Response.json({ error: "A future work schedule assignment overlaps the requested effective range." }, { status: 409 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return Response.json({ error: "A schedule assignment already begins on this effective date." }, { status: 409 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") return Response.json({ error: "Schedule assignment changed concurrently. Retry the request." }, { status: 409 });
+    throw error;
+  }
 }

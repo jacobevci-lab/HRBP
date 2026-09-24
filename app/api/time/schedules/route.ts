@@ -1,14 +1,18 @@
-import { DataClassification, PlatformRole } from "@prisma/client";
+import { DataClassification, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
+import { asDate, asFiniteNumber, asText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
-const scheduleManagers = new Set<PlatformRole>([
-  PlatformRole.TIME_ADMIN,
-  PlatformRole.HR_OPERATIONS,
-  PlatformRole.TENANT_ADMIN
-]);
+function validTimeZone(value: string) {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(new Date());
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function GET(request: Request) {
   const ctx = getRequestContext(request);
@@ -22,26 +26,49 @@ export async function POST(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
-  if (!can(ctx, "time:write") || !scheduleManagers.has(ctx.role)) return forbidden("Work schedule configuration requires a time-administration role.");
+  if (!can(ctx, "time:configure")) return forbidden("Work schedule configuration requires time:configure.");
 
-  const body = await request.json() as { code?: string; name?: string; timezone?: string; weeklyMinutes?: number; effectiveFrom?: string };
-  if (!body.code || !body.name || !body.timezone || !body.effectiveFrom || !Number.isInteger(body.weeklyMinutes) || (body.weeklyMinutes ?? 0) <= 0) {
-    return Response.json({ error: "code, name, timezone, effectiveFrom and positive integer weeklyMinutes are required." }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
+  const code = asText(body.code, 40);
+  const name = asText(body.name, 160);
+  const timezone = asText(body.timezone, 100);
+  const weeklyMinutes = asFiniteNumber(body.weeklyMinutes);
+  const effectiveFrom = asDate(body.effectiveFrom);
+
+  if (!code || !name || !timezone || weeklyMinutes === null || !effectiveFrom) {
+    return Response.json({ error: "code, name, timezone, weeklyMinutes and effectiveFrom must be valid scalar values." }, { status: 400 });
   }
+  if (!Number.isInteger(weeklyMinutes) || weeklyMinutes <= 0 || weeklyMinutes > 10080) {
+    return Response.json({ error: "weeklyMinutes must be a positive integer no greater than 10080." }, { status: 400 });
+  }
+  if (!validTimeZone(timezone)) return Response.json({ error: "timezone must be a valid IANA time zone." }, { status: 400 });
 
-  const data = await db.$transaction(async (tx) => {
-    const schedule = await tx.workSchedule.create({
-      data: {
-        tenantId: ctx.tenantId,
-        code: body.code!.trim().toUpperCase(),
-        name: body.name!.trim(),
-        timezone: body.timezone!.trim(),
-        weeklyMinutes: body.weeklyMinutes!,
-        effectiveFrom: new Date(body.effectiveFrom!)
-      }
+  try {
+    const data = await db.$transaction(async (tx) => {
+      const schedule = await tx.workSchedule.create({
+        data: {
+          tenantId: ctx.tenantId,
+          code: code.toUpperCase(),
+          name,
+          timezone,
+          weeklyMinutes,
+          effectiveFrom
+        }
+      });
+      await appendAudit(tx, ctx, {
+        action: "work-schedule.created",
+        resourceType: "WorkSchedule",
+        resourceId: schedule.id,
+        classification: DataClassification.INTERNAL
+      });
+      return schedule;
     });
-    await appendAudit(tx, ctx, { action: "work-schedule.created", resourceType: "WorkSchedule", resourceId: schedule.id, classification: DataClassification.INTERNAL });
-    return schedule;
-  });
-  return Response.json({ data }, { status: 201 });
+    return Response.json({ data }, { status: 201 });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return Response.json({ error: "A schedule with the same code and effective date already exists." }, { status: 409 });
+    }
+    throw error;
+  }
 }
