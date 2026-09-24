@@ -6,6 +6,7 @@ import type { Locale } from "@/lib/i18n";
 import { getServerRequestContext } from "@/lib/server-session";
 
 type GrowthSlug = "benefits" | "performance" | "talent" | "succession" | "learning";
+type GrowthWriteSlug = Exclude<GrowthSlug, "performance">;
 
 const copy: Record<GrowthSlug, { en: { title: string; description: string }; tr: { title: string; description: string } }> = {
   benefits: {
@@ -38,6 +39,15 @@ function accessFor(slug: GrowthSlug): Capability {
   return "learning:read";
 }
 
+function writeAccessFor(slug: GrowthSlug): Capability | null {
+  if (slug === "benefits") return "benefits:write";
+  if (slug === "performance") return "performance:write";
+  if (slug === "talent") return "talent:write";
+  if (slug === "succession") return "succession:write";
+  if (slug === "learning") return "learning:write";
+  return null;
+}
+
 function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
 
 export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
@@ -64,18 +74,28 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
     const { GrowthLiveWorkspace } = await import("@/components/growth-live-workspace");
     const liveWorkspace = await GrowthLiveWorkspace({ slug });
     let operations: React.ReactNode = null;
+    const writeCapability = writeAccessFor(slug);
 
-    if (slug === "performance" && can(ctx, "performance:write")) {
+    if (writeCapability && can(ctx, writeCapability)) {
       try {
-        const [{ PerformanceOperationsConsole }, { getPerformanceOperationsData }] = await Promise.all([
-          import("@/components/performance-operations-console"),
-          import("@/lib/performance-operations-data")
-        ]);
-        const data = await getPerformanceOperationsData(ctx);
-        operations = <PerformanceOperationsConsole {...data}/>;
+        if (slug === "performance") {
+          const [{ PerformanceOperationsConsole }, { getPerformanceOperationsData }] = await Promise.all([
+            import("@/components/performance-operations-console"),
+            import("@/lib/performance-operations-data")
+          ]);
+          const data = await getPerformanceOperationsData(ctx);
+          operations = <PerformanceOperationsConsole {...data}/>;
+        } else {
+          const [{ GrowthOperationsConsole }, { getGrowthOperationsData }] = await Promise.all([
+            import("@/components/growth-operations-console"),
+            import("@/lib/growth-operations-data")
+          ]);
+          const data = await getGrowthOperationsData(ctx);
+          operations = <GrowthOperationsConsole slug={slug as GrowthWriteSlug} {...data}/>;
+        }
       } catch (operationsError) {
-        console.error("[HRBP] Performance operations console could not initialize; live read surface remains available.", operationsError);
-        operations = <section className="card module-degraded-banner" style={{ marginTop: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}><CircleAlert size={18}/><div><strong style={{ display: "block", fontSize: 11 }}>{c(locale, "Performance write console is temporarily unavailable", "Performans yazma konsolu geçici olarak kullanılamıyor")}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5 }}>{c(locale, "Live performance data remains read-only until the governed transaction console recovers.", "Yönetişimli işlem konsolu toparlanana kadar canlı performans verisi salt-okunur kalır.")}</p></div></section>;
+        console.error(`[HRBP] ${slug} operations console could not initialize; live read surface remains available.`, operationsError);
+        operations = <section className="card module-degraded-banner" style={{ marginTop: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}><CircleAlert size={18}/><div><strong style={{ display: "block", fontSize: 11 }}>{c(locale, "Governed write console is temporarily unavailable", "Yönetişimli yazma konsolu geçici olarak kullanılamıyor")}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5 }}>{c(locale, "Live domain data remains read-only until the transaction console recovers.", "İşlem konsolu toparlanana kadar canlı alan verisi salt-okunur kalır.")}</p></div></section>;
       }
     }
 
