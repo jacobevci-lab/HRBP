@@ -2,6 +2,7 @@ import { DataClassification, DevelopmentPlanStatus, LearningAssignmentStatus, Sk
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { enqueueDevelopmentPlanActivated } from "@/lib/development-plan-notifications";
 import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -57,7 +58,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           startsAt: true,
           targetAt: true,
           focusSkillId: true,
-          targetProficiency: true
+          targetProficiency: true,
+          focusSkill: { select: { code: true, name: true } }
         }
       });
       if (!plan) throw new Error("NOT_FOUND");
@@ -121,6 +123,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         resourceId: id,
         classification: DataClassification.CONFIDENTIAL
       });
+
+      if (requestedStatus === DevelopmentPlanStatus.ACTIVE && plan.status === DevelopmentPlanStatus.DRAFT) {
+        await enqueueDevelopmentPlanActivated(tx, {
+          tenantId: ctx.tenantId,
+          employmentId: plan.employmentId,
+          planId: plan.id,
+          planTitle: title ?? plan.title,
+          targetAt: nextTargetAt,
+          skillCode: plan.focusSkill?.code,
+          skillName: plan.focusSkill?.name,
+          targetProficiency: plan.targetProficiency
+        });
+      }
       return updated;
     });
     return Response.json({ data });
