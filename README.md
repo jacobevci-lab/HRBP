@@ -6,7 +6,7 @@ Enterprise HRBP platform reference implementation built with Next.js, PostgreSQL
 
 HRBP One models the workforce as a governed relationship graph instead of a collection of disconnected forms. Core HR, work/pay, growth, employee services, governance/planning and administration share the same tenant, authorization, audit and effective-dated data plane.
 
-The operating experience is action-oriented: authenticated users see only modules allowed by their capabilities, global search respects the same scope, workflow tasks are routed into a personal Action Center, and in-app notifications deep-link users to the governed resource that needs attention.
+The operating experience is action-oriented: authenticated users see only modules allowed by their capabilities, global search respects the same scope, workflow tasks are routed into a personal Action Center, and in-app notifications deep-link users to the governed resource that needs attention. Public staging intentionally keeps the product map discoverable through read-only sample workspaces while protected records and mutations remain unavailable until an authorized sign-in.
 
 ## Security model
 
@@ -18,7 +18,7 @@ The operating experience is action-oriented: authenticated users see only module
 - Private document download is proxied server-side from S3-compatible object storage; bucket/object credentials are never returned to the browser.
 - Policy governance follows DRAFT → REVIEW → APPROVED → PUBLISHED and requires independent approval.
 - HR Service combines relationship scope with explicit queue membership and queue ownership.
-- Navigation and global search are capability-aware; protected module metadata is not exposed to unauthenticated users.
+- Authenticated navigation and global search are capability-aware. Public staging may expose module labels and sample-only previews, but never protected records, secrets or privileged actions.
 - Workflow task completion is restricted to the assigned user, assigned platform role, or an explicitly governed shared task.
 
 ## Workflow and notification operations

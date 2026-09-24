@@ -40,7 +40,16 @@ export async function WorkPayModulePage({ slug }: { slug: Slug }) {
   const meta = copy[slug][locale];
   const capability = capabilityFor(slug);
 
-  if (!ctx || !can(ctx, capability)) {
+  if (!ctx) {
+    const { WorkPayWorkspace } = await import("@/components/work-pay-workspace");
+    return <AppShell>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><ShieldCheck size={16}/> {c(locale, "Read-only staging preview", "Salt-okunur staging önizlemesi")}</button></div></section>
+      <section className="card module-degraded-banner" style={{ marginBottom: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}><ShieldCheck size={18} style={{ flex: "0 0 auto", marginTop: 1 }}/><div><strong style={{ display: "block", fontSize: 11 }}>{c(locale, "Safe demo data", "Güvenli demo verisi")}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5 }}>{c(locale, "This public staging view uses sample values only. Protected payroll, compensation and employee records remain unavailable until you sign in with an authorized role.", "Bu genel staging görünümü yalnızca örnek değerler kullanır. Korumalı bordro, ücret ve çalışan kayıtları, yetkili bir rolle giriş yapılana kadar kullanılamaz.")}</p></div></section>
+      <WorkPayWorkspace slug={slug}/>
+    </AppShell>;
+  }
+
+  if (!can(ctx, capability)) {
     return <AppShell>
       <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div></section>
       <section className="card module-table"><div className="empty-state"><ShieldCheck size={24}/><h3>{c(locale, "Access is restricted", "Erişim kısıtlı")}</h3><p>{c(locale, `Your signed role does not include ${capability}.`, `İmzalı rolünüz ${capability} yetkisini içermiyor.`)}</p></div></section>
