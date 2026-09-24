@@ -1,7 +1,10 @@
-import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, CalendarClock, ChevronRight, CircleAlert, CircleCheckBig, Clock3, Ellipsis, FileWarning, ShieldCheck, Sparkles, UserPlus, UsersRound } from "lucide-react";
+import Link from "next/link";
+import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, CalendarClock, ChevronRight, CircleAlert, CircleCheckBig, Clock3, FileWarning, ShieldCheck, Sparkles, UserPlus, UsersRound } from "lucide-react";
+import { can } from "@/lib/authorization";
 import { getDashboardDataSafe } from "@/lib/dashboard-safe";
 import { getServerLocale } from "@/lib/i18n-server";
 import { translate, type Locale, type TranslationKey } from "@/lib/i18n";
+import { getServerSessionClaims } from "@/lib/server-session";
 
 function dayLabel(locale: Locale) {
   return new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-GB", {
@@ -39,20 +42,38 @@ function localizedStatus(locale: Locale, status: string) {
 }
 
 export async function Dashboard() {
-  const locale = await getServerLocale();
+  const [locale, session, dashboard] = await Promise.all([
+    getServerLocale(),
+    getServerSessionClaims(),
+    getDashboardDataSafe()
+  ]);
   const t = (key: TranslationKey, vars?: Record<string, string | number>) => translate(locale, key, vars);
-  const { data, degraded } = await getDashboardDataSafe();
+  const { data, degraded } = dashboard;
+  const ctx = session ? { tenantId: session.tenantId, actorId: session.actorId, role: session.role, employmentId: session.employmentId } : null;
+  const firstName = session?.displayName?.trim().split(/\s+/)[0] || (locale === "tr" ? "ekip" : "team");
   const maxPlan = Math.max(...data.headcountSeries.map((item) => item.plan), 1);
   const yoyTrend = data.yoyChange >= 0 ? "up" : "down";
   const yoyLabel = locale === "tr" ? `%${Math.abs(data.yoyChange).toFixed(1)} yıllık` : `${Math.abs(data.yoyChange).toFixed(1)}% YoY`;
+  const links = {
+    analytics: ctx && can(ctx, "analytics:read") ? "/module/analytics" : null,
+    organization: ctx && can(ctx, "organization:read") ? "/module/organization" : null,
+    onboarding: ctx && can(ctx, "onboarding:read") ? "/module/onboarding" : null,
+    cases: ctx && can(ctx, "cases:read") ? "/module/employee-relations" : null,
+    recruiting: ctx && can(ctx, "recruiting:read") ? "/module/recruiting" : null,
+    people: ctx && can(ctx, "people:read") ? "/module/people" : null,
+    audit: ctx && can(ctx, "audit:read") ? "/module/audit" : null,
+    settings: ctx && can(ctx, "settings:read") ? "/module/settings" : null,
+    ai: ctx && can(ctx, "ai:use") ? "/module/ai-assistant" : null,
+    workflows: session ? "/module/workflows" : null
+  };
 
   return (
     <>
       <section className="page-heading">
-        <div><div className="eyebrow">{dayLabel(locale)}</div><h1>{greeting(locale)}, Yakup.</h1><p>{degraded ? t("dashboard.safeSignals") : t("dashboard.liveSignals", { tenant: data.tenantName })}</p></div>
+        <div><div className="eyebrow">{dayLabel(locale)}</div><h1>{greeting(locale)}, {firstName}.</h1><p>{degraded ? t("dashboard.safeSignals") : t("dashboard.liveSignals", { tenant: data.tenantName })}</p></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {degraded ? <button className="secondary-button" disabled><CircleAlert size={15}/> {t("dashboard.safeFallback")}</button> : null}
-          <button className="secondary-button">{t("dashboard.customize")}</button>
+          {links.settings ? <Link className="secondary-button" href={links.settings}>{t("dashboard.customize")}</Link> : null}
         </div>
       </section>
 
@@ -64,19 +85,19 @@ export async function Dashboard() {
       <section className="ai-brief">
         <div className="ai-orb"><Sparkles size={20}/></div>
         <div className="ai-copy"><div className="section-kicker">{t("dashboard.aiMorningBrief")}</div><h2>{t("dashboard.aiHeadline")}</h2><p>{t("dashboard.aiDetail", { starters: data.upcomingStarters, positions: data.criticalOpenPositions, cases: data.openCases })}</p></div>
-        <button>{t("dashboard.viewFullBrief")} <ChevronRight size={16}/></button>
+        {links.ai ? <Link href={links.ai}>{t("dashboard.viewFullBrief")} <ChevronRight size={16}/></Link> : null}
       </section>
 
       <section className="metrics-grid">
-        <Metric label={t("dashboard.totalWorkforce")} value={String(data.totalWorkforce)} meta={t("dashboard.startedThisMonth", { count: data.startedThisMonth })} trend="up" icon={<UsersRound size={18}/>} />
-        <Metric label={t("dashboard.openPositions")} value={String(data.openPositions)} meta={t("dashboard.criticalRoles", { count: data.criticalOpenPositions })} icon={<BriefcaseBusiness size={18}/>} />
-        <Metric label={t("dashboard.newStarters")} value={String(data.upcomingStarters)} meta={t("dashboard.next30Days")} trend="up" icon={<UserPlus size={18}/>} />
-        <Metric label={t("dashboard.openHrCases")} value={String(data.openCases)} meta={t("dashboard.restrictedCaseWall")} trend={data.openCases ? "down" : undefined} icon={<ShieldCheck size={18}/>} />
+        <Metric label={t("dashboard.totalWorkforce")} value={String(data.totalWorkforce)} meta={t("dashboard.startedThisMonth", { count: data.startedThisMonth })} trend="up" icon={<UsersRound size={18}/>} href={links.people} />
+        <Metric label={t("dashboard.openPositions")} value={String(data.openPositions)} meta={t("dashboard.criticalRoles", { count: data.criticalOpenPositions })} icon={<BriefcaseBusiness size={18}/>} href={links.recruiting} />
+        <Metric label={t("dashboard.newStarters")} value={String(data.upcomingStarters)} meta={t("dashboard.next30Days")} trend="up" icon={<UserPlus size={18}/>} href={links.onboarding} />
+        <Metric label={t("dashboard.openHrCases")} value={String(data.openCases)} meta={t("dashboard.restrictedCaseWall")} trend={data.openCases ? "down" : undefined} icon={<ShieldCheck size={18}/>} href={links.cases} />
       </section>
 
       <section className="dashboard-grid two-thirds">
         <div className="card workforce-card">
-          <CardHeader title={t("dashboard.workforceOverview")} subtitle={t("dashboard.headcount12")} action={t("dashboard.viewAnalytics")} />
+          <CardHeader title={t("dashboard.workforceOverview")} subtitle={t("dashboard.headcount12")} action={t("dashboard.viewAnalytics")} href={links.analytics} />
           <div className="workforce-summary"><div><span>{t("dashboard.currentHeadcount")}</span><strong>{data.totalWorkforce}</strong><small>{yoyTrend === "up" ? <ArrowUpRight size={14}/> : <ArrowDownRight size={14}/>} {yoyLabel}</small></div><div className="legend"><span><i className="legend-current"/>{t("dashboard.employees")}</span><span><i className="legend-open"/>{t("dashboard.plan")}</span></div></div>
           <div className="bar-chart">{data.headcountSeries.map((item) => <div className="bar-col" key={item.label}><div className="bar-plan" style={{height:`${Math.max((item.plan / maxPlan) * 100, 8)}%`}}/><div className="bar-actual" style={{height:`${Math.max((item.actual / maxPlan) * 100, item.actual ? 7 : 0)}%`}}/><span>{item.label}</span></div>)}</div>
         </div>
@@ -84,22 +105,22 @@ export async function Dashboard() {
         <div className="card action-card">
           <CardHeader title={t("dashboard.needsAttention")} subtitle={degraded ? t("dashboard.safePriorities") : t("dashboard.livePriorities")} />
           <div className="attention-list">
-            <Attention icon={<CalendarClock size={17}/>} tone="amber" title={t("dashboard.upcomingStarters")} detail={t("dashboard.peopleStart", { count: data.upcomingStarters })} tag={t("nav.onboarding")} />
-            <Attention icon={<FileWarning size={17}/>} tone="red" title={t("dashboard.employeeRelations")} detail={t("dashboard.activeCases", { count: data.openCases })} tag={data.openCases ? t("dashboard.review") : t("dashboard.clear")} />
-            <Attention icon={<BriefcaseBusiness size={17}/>} tone="purple" title={t("dashboard.criticalVacancies")} detail={t("dashboard.positionsRemainOpen", { count: data.criticalOpenPositions })} tag={t("dashboard.hiring")} />
-            <Attention icon={<Clock3 size={17}/>} tone="sage" title={t("dashboard.onboardingPlans")} detail={t("dashboard.plansInProgress", { count: data.onboardingInProgress })} tag={t("dashboard.items", { count: data.onboardingInProgress })} />
+            <Attention icon={<CalendarClock size={17}/>} tone="amber" title={t("dashboard.upcomingStarters")} detail={t("dashboard.peopleStart", { count: data.upcomingStarters })} tag={t("nav.onboarding")} href={links.onboarding} />
+            <Attention icon={<FileWarning size={17}/>} tone="red" title={t("dashboard.employeeRelations")} detail={t("dashboard.activeCases", { count: data.openCases })} tag={data.openCases ? t("dashboard.review") : t("dashboard.clear")} href={links.cases} />
+            <Attention icon={<BriefcaseBusiness size={17}/>} tone="purple" title={t("dashboard.criticalVacancies")} detail={t("dashboard.positionsRemainOpen", { count: data.criticalOpenPositions })} tag={t("dashboard.hiring")} href={links.recruiting} />
+            <Attention icon={<Clock3 size={17}/>} tone="sage" title={t("dashboard.onboardingPlans")} detail={t("dashboard.plansInProgress", { count: data.onboardingInProgress })} tag={t("dashboard.items", { count: data.onboardingInProgress })} href={links.onboarding} />
           </div>
-          <button className="card-footer-button">{t("dashboard.openActionCenter")} <ChevronRight size={15}/></button>
+          {links.workflows ? <Link className="card-footer-button" href={links.workflows}>{t("dashboard.openActionCenter")} <ChevronRight size={15}/></Link> : null}
         </div>
       </section>
 
       <section className="dashboard-grid half">
         <div className="card">
-          <CardHeader title={t("dashboard.organizationHealth")} subtitle={t("dashboard.activeWorkforceDistribution")} action={t("dashboard.openOrgChart")} />
+          <CardHeader title={t("dashboard.organizationHealth")} subtitle={t("dashboard.activeWorkforceDistribution")} action={t("dashboard.openOrgChart")} href={links.organization} />
           <div className="department-list">{data.departments.map(({name,count,pct}) => <div className="department-row" key={name}><div className="dept-main"><span>{name}</span><strong>{count}</strong></div><div className="dept-track"><i style={{width:`${Math.min(pct * 2.1, 100)}%`}}/></div><small>{pct}%</small></div>)}</div>
         </div>
         <div className="card">
-          <CardHeader title={t("dashboard.lifecycleActivity")} subtitle={t("dashboard.thisMonth")} action={t("dashboard.viewAll")} />
+          <CardHeader title={t("dashboard.lifecycleActivity")} subtitle={t("dashboard.thisMonth")} action={t("dashboard.viewAll")} href={links.people} />
           <div className="lifecycle-grid">
             <Lifecycle icon={<UserPlus size={17}/>} value={String(data.lifecycle.starters)} label={t("dashboard.starters")} helper={t("dashboard.onboardingCount", { count: data.onboardingInProgress })} />
             <Lifecycle icon={<ArrowUpRight size={17}/>} value={String(data.lifecycle.promotions)} label={t("dashboard.promotions")} helper={t("dashboard.effectiveDated")} />
@@ -114,7 +135,7 @@ export async function Dashboard() {
 
       <section className="dashboard-grid two-thirds bottom-grid">
         <div className="card">
-          <CardHeader title={t("dashboard.recentPeopleChanges")} subtitle={t("dashboard.employeeEvents")} action={t("dashboard.viewEventLedger")} />
+          <CardHeader title={t("dashboard.recentPeopleChanges")} subtitle={t("dashboard.employeeEvents")} action={t("dashboard.viewEventLedger")} href={links.audit} />
           <div className="table-wrap"><table><thead><tr><th>{t("dashboard.employee")}</th><th>{t("dashboard.event")}</th><th>{t("dashboard.organization")}</th><th>{t("dashboard.effective")}</th><th>{t("dashboard.status")}</th></tr></thead><tbody>
             {data.recentEvents.slice(0, 4).map((event) => <EventRow key={event.id} avatar={event.initials} name={event.name} event={event.event} org={event.org} date={event.date} status={event.status} displayStatus={localizedStatus(locale, event.status)} />)}
           </tbody></table></div>
@@ -129,8 +150,16 @@ export async function Dashboard() {
   );
 }
 
-function CardHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: string }) { return <div className="card-header"><div><h3>{title}</h3><p>{subtitle}</p></div>{action ? <button>{action}<ChevronRight size={15}/></button> : <button className="more-button"><Ellipsis size={18}/></button>}</div>; }
-function Metric({ label, value, meta, trend, icon }: { label:string; value:string; meta:string; trend?:"up"|"down"; icon:React.ReactNode }) { return <div className="metric-card"><div className="metric-top"><span className="metric-icon">{icon}</span><button><Ellipsis size={17}/></button></div><span className="metric-label">{label}</span><div className="metric-value">{value}</div><div className={`metric-meta ${trend || ""}`}>{trend === "up" && <ArrowUpRight size={14}/>} {trend === "down" && <ArrowDownRight size={14}/>} {meta}</div></div>; }
-function Attention({icon,tone,title,detail,tag}:{icon:React.ReactNode;tone:string;title:string;detail:string;tag:string}) { return <button className="attention-row"><span className={`attention-icon ${tone}`}>{icon}</span><span><strong>{title}</strong><small>{detail}</small></span><em>{tag}</em><ChevronRight size={15}/></button>; }
+function CardHeader({ title, subtitle, action, href }: { title: string; subtitle: string; action?: string; href?: string | null }) {
+  return <div className="card-header"><div><h3>{title}</h3><p>{subtitle}</p></div>{action && href ? <Link href={href}>{action}<ChevronRight size={15}/></Link> : null}</div>;
+}
+function Metric({ label, value, meta, trend, icon, href }: { label:string; value:string; meta:string; trend?:"up"|"down"; icon:React.ReactNode; href?:string|null }) {
+  const body = <><div className="metric-top"><span className="metric-icon">{icon}</span></div><span className="metric-label">{label}</span><div className="metric-value">{value}</div><div className={`metric-meta ${trend || ""}`}>{trend === "up" && <ArrowUpRight size={14}/>} {trend === "down" && <ArrowDownRight size={14}/>} {meta}</div></>;
+  return href ? <Link className="metric-card" href={href}>{body}</Link> : <div className="metric-card">{body}</div>;
+}
+function Attention({icon,tone,title,detail,tag,href}:{icon:React.ReactNode;tone:string;title:string;detail:string;tag:string;href?:string|null}) {
+  const body = <><span className={`attention-icon ${tone}`}>{icon}</span><span><strong>{title}</strong><small>{detail}</small></span><em>{tag}</em><ChevronRight size={15}/></>;
+  return href ? <Link className="attention-row" href={href}>{body}</Link> : <div className="attention-row">{body}</div>;
+}
 function Lifecycle({icon,value,label,helper}:{icon:React.ReactNode;value:string;label:string;helper:string}) { return <div className="lifecycle-item"><span>{icon}</span><strong>{value}</strong><p>{label}</p><small>{helper}</small></div>; }
 function EventRow({avatar,name,event,org,date,status,displayStatus}:{avatar:string;name:string;event:string;org:string;date:string;status:string;displayStatus:string}) { return <tr><td><div className="person-cell"><span>{avatar}</span><strong>{name}</strong></div></td><td>{event}</td><td>{org}</td><td>{date}</td><td><em className={`status ${status.toLowerCase()}`}>{displayStatus}</em></td></tr>; }
