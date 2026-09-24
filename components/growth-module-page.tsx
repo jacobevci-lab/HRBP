@@ -50,6 +50,10 @@ function writeAccessFor(slug: GrowthSlug): Capability | null {
 
 function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
 
+function ConsoleWarning({ locale, title, body }: { locale: Locale; title: string; body: string }) {
+  return <section className="card module-degraded-banner" style={{ marginTop: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}><CircleAlert size={18}/><div><strong style={{ display: "block", fontSize: 11 }}>{title}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5 }}>{body}</p></div></section>;
+}
+
 export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
   const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   const meta = copy[slug][locale];
@@ -74,6 +78,7 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
     const { GrowthLiveWorkspace } = await import("@/components/growth-live-workspace");
     const liveWorkspace = await GrowthLiveWorkspace({ slug });
     let operations: React.ReactNode = null;
+    let lifecycle: React.ReactNode = null;
     const writeCapability = writeAccessFor(slug);
 
     if (writeCapability && can(ctx, writeCapability)) {
@@ -96,7 +101,26 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
         }
       } catch (operationsError) {
         console.error(`[HRBP] ${slug} operations console could not initialize; live read surface remains available.`, operationsError);
-        operations = <section className="card module-degraded-banner" style={{ marginTop: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}><CircleAlert size={18}/><div><strong style={{ display: "block", fontSize: 11 }}>{c(locale, "Governed write console is temporarily unavailable", "Yönetişimli yazma konsolu geçici olarak kullanılamıyor")}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5 }}>{c(locale, "Live domain data remains read-only until the transaction console recovers.", "İşlem konsolu toparlanana kadar canlı alan verisi salt-okunur kalır.")}</p></div></section>;
+        operations = <ConsoleWarning locale={locale} title={c(locale, "Governed write console is temporarily unavailable", "Yönetişimli yazma konsolu geçici olarak kullanılamıyor")} body={c(locale, "Live domain data remains read-only until the transaction console recovers.", "İşlem konsolu toparlanana kadar canlı alan verisi salt-okunur kalır.")}/>;
+      }
+
+      if (slug === "benefits" || slug === "learning") {
+        try {
+          const [{ GrowthLifecycleConsole }, lifecycleData] = await Promise.all([
+            import("@/components/growth-lifecycle-console"),
+            import("@/lib/growth-lifecycle-data")
+          ]);
+          if (slug === "benefits") {
+            const enrollments = await lifecycleData.getBenefitEnrollmentOperationsData(ctx);
+            lifecycle = <GrowthLifecycleConsole slug="benefits" enrollments={enrollments}/>;
+          } else {
+            const assignments = await lifecycleData.getLearningAssignmentOperationsData(ctx);
+            lifecycle = <GrowthLifecycleConsole slug="learning" assignments={assignments}/>;
+          }
+        } catch (lifecycleError) {
+          console.error(`[HRBP] ${slug} lifecycle queue could not initialize.`, lifecycleError);
+          lifecycle = <ConsoleWarning locale={locale} title={c(locale, "Lifecycle queue is temporarily unavailable", "Yaşam döngüsü kuyruğu geçici olarak kullanılamıyor")} body={c(locale, "Creation remains available, but transition actions are hidden until the governed queue recovers.", "Oluşturma işlemleri kullanılabilir; ancak yönetişimli kuyruk toparlanana kadar geçiş aksiyonları gizlenir.")}/>;
+        }
       }
     }
 
@@ -104,6 +128,7 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
       <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> {c(locale, "Governed live data", "Yönetişimli canlı veri")}</button></div></section>
       {liveWorkspace}
       {operations}
+      {lifecycle}
     </AppShell>;
   } catch (error) {
     console.error(`[HRBP] Dedicated ${slug} workspace failed; protected fallback activated.`, error);
