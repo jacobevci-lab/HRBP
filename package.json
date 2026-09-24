@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "npm run db:generate && next dev",
-    "prebuild": "npm run routes:validate && npm run ui:validate && npm run staging:validate && npm run performance:validate && npm run growth:validate",
+    "prebuild": "npm run routes:validate && npm run ui:validate && npm run staging:validate && npm run performance:validate && npm run growth:validate && npm run growth-automation:validate",
     "build": "npm run db:generate && next build",
     "start": "next start",
     "lint": "eslint .",
@@ -16,6 +16,7 @@
     "staging:validate": "node scripts/validate-public-staging.mjs",
     "performance:validate": "node scripts/validate-performance-governance.mjs",
     "growth:validate": "node scripts/validate-growth-governance.mjs",
+    "growth-automation:validate": "node scripts/validate-growth-automation.mjs",
     "typecheck": "npm run db:generate && tsc --noEmit",
     "security:audit:prod": "npm audit --omit=dev --audit-level=high",
     "security:audit:full": "npm audit --audit-level=high",
