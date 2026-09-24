@@ -26,7 +26,9 @@ export async function GET(request: Request) {
   const moduleResults = navigation
     .flatMap((group) => group.items)
     .filter((item) => {
-      if (!ctx) return !item.requiredCapability && !item.requiresAuthentication;
+      // Public staging intentionally exposes the full product map while all
+      // tenant records and privileged actions remain behind authentication.
+      if (!ctx) return true;
       if (item.requiredCapability) return can(ctx, item.requiredCapability);
       return true;
     })
@@ -40,7 +42,9 @@ export async function GET(request: Request) {
       type: "module" as const,
       id: item.slug,
       title: translate(locale, item.labelKey),
-      subtitle: locale === "tr" ? "HRBP One çalışma alanı" : "HRBP One workspace",
+      subtitle: !ctx
+        ? (locale === "tr" ? "Salt-okunur staging modülü" : "Read-only staging module")
+        : (locale === "tr" ? "HRBP One çalışma alanı" : "HRBP One workspace"),
       href: item.slug === "dashboard" ? "/" : `/module/${item.slug}`
     }));
 
