@@ -6,6 +6,8 @@ Enterprise HRBP platform reference implementation built with Next.js, PostgreSQL
 
 HRBP One models the workforce as a governed relationship graph instead of a collection of disconnected forms. Core HR, work/pay, growth, employee services, governance/planning and administration share the same tenant, authorization, audit and effective-dated data plane.
 
+The Growth graph connects human-owned talent assessments to succession candidates, structured skill gaps and governed learning assignments. Learning completion becomes auditable development evidence and routes a reassessment action back to the succession owner; it never automatically changes assessed proficiency, talent classification or successor readiness.
+
 The operating experience is action-oriented: authenticated users see only modules allowed by their capabilities, global search respects the same scope, workflow tasks are routed into a personal Action Center, and in-app notifications deep-link users to the governed resource that needs attention. Public staging intentionally keeps the product map discoverable through read-only sample workspaces while protected records and mutations remain unavailable until an authorized sign-in.
 
 ## Security model
@@ -20,6 +22,7 @@ The operating experience is action-oriented: authenticated users see only module
 - HR Service combines relationship scope with explicit queue membership and queue ownership.
 - Authenticated navigation and global search are capability-aware. Public staging may expose module labels and sample-only previews, but never protected records, secrets or privileged actions.
 - Workflow task completion is restricted to the assigned user, assigned platform role, or an explicitly governed shared task.
+- Cross-domain succession development creation requires both succession and learning write capabilities; completion evidence returns to an authorized human reviewer instead of driving an automated employment decision.
 
 ## Workflow and notification operations
 
@@ -41,6 +44,6 @@ For the private document vault configure `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STOR
 
 ## Quality gates
 
-The GitHub Actions CI validates route structure, UI localization/theme rules, Prisma schema, TypeScript, Next.js production build, OpenNext/Cloudflare packaging and a local Worker runtime smoke test. The Worker smoke test also exercises scheduled maintenance and the durable notification dispatcher against PostgreSQL.
+The GitHub Actions CI validates route structure, UI localization/theme rules, Prisma schema, TypeScript, Next.js production build, OpenNext/Cloudflare packaging and a local Worker runtime smoke test. The build gate also validates the connected Growth contract so talent signals, succession plans, skill targets, learning provenance and human reassessment boundaries cannot silently drift apart. The Worker smoke test exercises scheduled maintenance and the durable notification dispatcher against PostgreSQL.
 
-Staging schema synchronization is intentionally a manually dispatched workflow. It applies Prisma schema changes, seeds each vertical slice and verifies minimum domain counts before granting the runtime database role.
+Staging schema synchronization is intentionally a manually dispatched workflow. It applies Prisma schema changes, seeds each vertical slice—including connected succession-development assignments—and verifies minimum domain counts before granting the runtime database role.
