@@ -4,7 +4,6 @@ import { EmployeeServicesWorkspace } from "@/components/employee-services-worksp
 import { GovernancePlanningWorkspace } from "@/components/governance-planning-workspace";
 import { GrowthWorkspace } from "@/components/growth-workspace";
 import { OffboardingWorkspace } from "@/components/offboarding-workspace";
-import { PlatformAdminWorkspace } from "@/components/platform-admin-workspace";
 import { RecruitingWorkspace } from "@/components/recruiting-workspace";
 import { WorkPayWorkspace } from "@/components/work-pay-workspace";
 import { getServerLocale } from "@/lib/i18n-server";
@@ -38,7 +37,24 @@ function titleFor(locale: Locale, slug: string) {
   return item ? translate(locale, item.labelKey) : slug.split("-").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
 }
 
-async function PublicWorkspace({ slug }: { slug: string }) {
+function PublicSettingsPreview({ locale }: { locale: Locale }) {
+  const tr = locale === "tr";
+  const rows = tr
+    ? [["Demo Entra ID", "SSO + SCIM", "MFA zorunlu", "Aktif"], ["Demo Okta", "SSO", "MFA zorunlu", "İncelemede"], ["Demo ERP", "Webhook / API", "Secret ref", "Sağlıklı"]]
+    : [["Demo Entra ID", "SSO + SCIM", "MFA required", "Active"], ["Demo Okta", "SSO", "MFA required", "Review"], ["Demo ERP", "Webhook / API", "Secret ref", "Healthy"]];
+
+  return <div className="platform-shell">
+    <section className="platform-metrics">
+      <div className="platform-metric card"><div className="platform-metric-icon"><ShieldCheck size={18}/></div><div><span>{tr ? "Kimlik sağlayıcıları" : "Identity providers"}</span><strong>2</strong><small>{tr ? "Sentetik konfigürasyon" : "Synthetic configuration"}</small></div></div>
+      <div className="platform-metric card"><div className="platform-metric-icon"><ShieldCheck size={18}/></div><div><span>{tr ? "Entegrasyonlar" : "Integrations"}</span><strong>3</strong><small>{tr ? "Secret değerleri gösterilmez" : "Secret values are never shown"}</small></div></div>
+      <div className="platform-metric card"><div className="platform-metric-icon"><ShieldCheck size={18}/></div><div><span>MFA</span><strong>100%</strong><small>{tr ? "Ayrıcalıklı erişimde zorunlu" : "Required for privileged access"}</small></div></div>
+      <div className="platform-metric card"><div className="platform-metric-icon"><ShieldCheck size={18}/></div><div><span>{tr ? "Veri bölgesi" : "Data region"}</span><strong>EU</strong><small>{tr ? "Örnek tenant politikası" : "Sample tenant policy"}</small></div></div>
+    </section>
+    <section className="card platform-panel"><div className="platform-head"><div><span className="section-kicker">{tr ? "Salt-okunur yapılandırma kataloğu" : "Read-only configuration catalog"}</span><h3>{tr ? "Kimlik ve entegrasyon önizlemesi" : "Identity and integration preview"}</h3></div><ShieldCheck size={18}/></div><div className="platform-table-wrap"><table className="platform-table compact"><thead><tr><th>{tr ? "Bağlantı" : "Connection"}</th><th>{tr ? "Tür" : "Type"}</th><th>{tr ? "Kontrol" : "Control"}</th><th>{tr ? "Durum" : "Status"}</th></tr></thead><tbody>{rows.map((row)=><tr key={row[0]}>{row.map((value)=><td key={value}>{value}</td>)}</tr>)}</tbody></table></div></section>
+  </div>;
+}
+
+async function PublicWorkspace({ slug, locale }: { slug: string; locale: Locale }) {
   if (["people", "organization", "positions", "employee-360", "documents", "audit"].includes(slug)) return <CoreHRWorkspace slug={slug}/>;
   if (["recruiting", "onboarding"].includes(slug)) return <RecruitingWorkspace slug={slug}/>;
   if (slug === "offboarding") return <OffboardingWorkspace/>;
@@ -46,7 +62,7 @@ async function PublicWorkspace({ slug }: { slug: string }) {
   if (["benefits", "performance", "talent", "succession", "learning"].includes(slug)) return <GrowthWorkspace slug={slug}/>;
   if (["employee-relations", "hr-service", "policies", "workflows"].includes(slug)) return <EmployeeServicesWorkspace slug={slug}/>;
   if (["engagement", "workforce-planning", "analytics", "ai-assistant", "privacy"].includes(slug)) return <GovernancePlanningWorkspace slug={slug}/>;
-  if (["settings"].includes(slug)) return <PlatformAdminWorkspace slug={slug}/>;
+  if (slug === "settings") return <PublicSettingsPreview locale={locale}/>;
   return null;
 }
 
@@ -57,7 +73,7 @@ export async function PublicModuleLanding({ slug }: { slug: string }) {
   const description = (tr ? descriptionsTr : descriptionsEn)[slug] ?? (tr
     ? `${title} modülünün güvenli, salt-okunur staging önizlemesi.`
     : `Safe, read-only staging preview for the ${title} module.`);
-  const content = await PublicWorkspace({ slug });
+  const content = await PublicWorkspace({ slug, locale });
 
   return <>
     <section className="page-heading module-heading">
