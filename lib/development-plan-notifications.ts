@@ -83,7 +83,7 @@ export async function enqueueDevelopmentPlanActivated(
     eventType: "DEVELOPMENT_PLAN_ACTIVATED",
     recipientUserId: user.id,
     templateKey: "talent.development-plan-activated",
-    resourceType: "DevelopmentPlan",
+    resourceType: "DevelopmentPlanParticipant",
     resourceId: input.planId,
     dedupeKey: `development-plan:${input.planId}:activated`,
     classification: DataClassification.CONFIDENTIAL,
