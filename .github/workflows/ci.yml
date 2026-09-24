@@ -51,7 +51,42 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run cf:build
-      - name: Smoke test Cloudflare Worker and Prisma runtime
+      - name: Seed notification maintenance smoke records
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { PrismaClient } from '@prisma/client';
+          const db = new PrismaClient();
+          const old = new Date(Date.now() - 200 * 24 * 60 * 60 * 1000);
+
+          await db.notificationOutbox.upsert({
+            where: { tenantId_dedupeKey: { tenantId: 'ci-tenant', dedupeKey: 'ci-dispatch' } },
+            update: {
+              status: 'PENDING', attempts: 0, nextAttemptAt: new Date(), lockedAt: null,
+              deliveredAt: null, readAt: null, lastError: null
+            },
+            create: {
+              tenantId: 'ci-tenant', eventType: 'CI_NOTIFICATION', recipientUserId: 'ci-user',
+              resourceType: 'CI', resourceId: 'dispatch', dedupeKey: 'ci-dispatch'
+            }
+          });
+
+          await db.notificationOutbox.upsert({
+            where: { tenantId_dedupeKey: { tenantId: 'ci-tenant', dedupeKey: 'ci-retention' } },
+            update: {
+              status: 'DELIVERED', attempts: 1, deliveredAt: old, readAt: old,
+              nextAttemptAt: old, lockedAt: null, lastError: null
+            },
+            create: {
+              tenantId: 'ci-tenant', eventType: 'CI_OLD_NOTIFICATION', recipientUserId: 'ci-user',
+              resourceType: 'CI', resourceId: 'retention', dedupeKey: 'ci-retention', status: 'DELIVERED',
+              attempts: 1, nextAttemptAt: old, deliveredAt: old, readAt: old, createdAt: old
+            }
+          });
+
+          await db.$disconnect();
+          NODE
+      - name: Smoke test Cloudflare Worker, Prisma and maintenance
         shell: bash
         run: |
           set -euo pipefail
@@ -87,3 +122,29 @@ jobs:
               exit 1
             }
           cat /tmp/hrbp-maintenance.json
+
+          node --input-type=module <<'NODE'
+          import { PrismaClient } from '@prisma/client';
+          const db = new PrismaClient();
+          const dispatched = await db.notificationOutbox.findUnique({
+            where: { tenantId_dedupeKey: { tenantId: 'ci-tenant', dedupeKey: 'ci-dispatch' } }
+          });
+          const retained = await db.notificationOutbox.findUnique({
+            where: { tenantId_dedupeKey: { tenantId: 'ci-tenant', dedupeKey: 'ci-retention' } }
+          });
+
+          console.log({
+            dispatched: dispatched && { status: dispatched.status, attempts: dispatched.attempts, deliveredAt: dispatched.deliveredAt },
+            oldReadNotificationPruned: retained === null
+          });
+
+          if (!dispatched || dispatched.status !== 'DELIVERED' || dispatched.attempts !== 1 || !dispatched.deliveredAt) {
+            console.error('Notification dispatcher did not deliver the pending CI record exactly once.');
+            process.exit(1);
+          }
+          if (retained !== null) {
+            console.error('Notification retention did not prune the stale read CI record.');
+            process.exit(1);
+          }
+          await db.$disconnect();
+          NODE
