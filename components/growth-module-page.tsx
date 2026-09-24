@@ -77,9 +77,24 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
   try {
     const { GrowthLiveWorkspace } = await import("@/components/growth-live-workspace");
     const liveWorkspace = await GrowthLiveWorkspace({ slug });
+    let participant: React.ReactNode = null;
     let operations: React.ReactNode = null;
     let lifecycle: React.ReactNode = null;
     const writeCapability = writeAccessFor(slug);
+
+    if (slug === "performance" && (can(ctx, "performance:self-submit") || can(ctx, "performance:manager-review"))) {
+      try {
+        const [{ PerformanceParticipantConsole }, { getPerformanceParticipantData }] = await Promise.all([
+          import("@/components/performance-participant-console"),
+          import("@/lib/performance-participant-data")
+        ]);
+        const participantData = await getPerformanceParticipantData(ctx);
+        participant = <PerformanceParticipantConsole {...participantData}/>;
+      } catch (participantError) {
+        console.error("[HRBP] performance participant inbox could not initialize.", participantError);
+        participant = <ConsoleWarning locale={locale} title={c(locale, "Participant review inbox is temporarily unavailable", "Katılımcı değerlendirme kutusu geçici olarak kullanılamıyor")} body={c(locale, "No participant decision was changed. The governed read surface remains available while the inbox recovers.", "Hiçbir katılımcı kararı değiştirilmedi. Kutu toparlanırken yönetişimli salt-okunur görünüm kullanılabilir.")}/>;
+      }
+    }
 
     if (writeCapability && can(ctx, writeCapability)) {
       try {
@@ -127,6 +142,7 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
     return <AppShell>
       <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> {c(locale, "Governed live data", "Yönetişimli canlı veri")}</button></div></section>
       {liveWorkspace}
+      {participant}
       {operations}
       {lifecycle}
     </AppShell>;
