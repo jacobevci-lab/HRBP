@@ -16,37 +16,38 @@ export async function pruneNotificationOutbox(now = new Date()) {
   const sourceDays = retentionDays("HRBP_NOTIFICATION_SOURCE_RETENTION_DAYS", 90, 14, 3650);
   const deadLetterDays = retentionDays("HRBP_NOTIFICATION_DEAD_LETTER_RETENTION_DAYS", 180, 30, 3650);
 
-  const [readDelivered, staleUnread, roleSources, deadLetters] = await db.$transaction([
-    db.notificationOutbox.deleteMany({
-      where: {
-        status: NotificationOutboxStatus.DELIVERED,
-        recipientUserId: { not: null },
-        readAt: { not: null, lt: cutoff(now, readDays) }
-      }
-    }),
-    db.notificationOutbox.deleteMany({
-      where: {
-        status: NotificationOutboxStatus.DELIVERED,
-        recipientUserId: { not: null },
-        readAt: null,
-        deliveredAt: { lt: cutoff(now, unreadDays) }
-      }
-    }),
-    db.notificationOutbox.deleteMany({
-      where: {
-        status: NotificationOutboxStatus.DELIVERED,
-        recipientUserId: null,
-        recipientRole: { not: null },
-        deliveredAt: { lt: cutoff(now, sourceDays) }
-      }
-    }),
-    db.notificationOutbox.deleteMany({
-      where: {
-        status: NotificationOutboxStatus.DEAD_LETTER,
-        updatedAt: { lt: cutoff(now, deadLetterDays) }
-      }
-    })
-  ]);
+  // Keep retention as independent idempotent deletes instead of a batched Prisma
+  // transaction. This is intentionally compatible with Cloudflare Hyperdrive,
+  // where interactive/batched transaction support can differ from direct pg.
+  const readDelivered = await db.notificationOutbox.deleteMany({
+    where: {
+      status: NotificationOutboxStatus.DELIVERED,
+      recipientUserId: { not: null },
+      readAt: { not: null, lt: cutoff(now, readDays) }
+    }
+  });
+  const staleUnread = await db.notificationOutbox.deleteMany({
+    where: {
+      status: NotificationOutboxStatus.DELIVERED,
+      recipientUserId: { not: null },
+      readAt: null,
+      deliveredAt: { lt: cutoff(now, unreadDays) }
+    }
+  });
+  const roleSources = await db.notificationOutbox.deleteMany({
+    where: {
+      status: NotificationOutboxStatus.DELIVERED,
+      recipientUserId: null,
+      recipientRole: { not: null },
+      deliveredAt: { lt: cutoff(now, sourceDays) }
+    }
+  });
+  const deadLetters = await db.notificationOutbox.deleteMany({
+    where: {
+      status: NotificationOutboxStatus.DEAD_LETTER,
+      updatedAt: { lt: cutoff(now, deadLetterDays) }
+    }
+  });
 
   return {
     deleted: {
