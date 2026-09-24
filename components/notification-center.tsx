@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Bell, CheckCheck } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
+import { useSessionContext } from "@/components/session-provider";
 import { notificationResourceHref, notificationSummary, notificationTitle } from "@/lib/notification-presentation";
 
 type NotificationItem = {
@@ -26,6 +27,8 @@ type NotificationResponse = {
 
 export function NotificationCenter() {
   const { locale, t } = useLocale();
+  const { session, loading: sessionLoading } = useSessionContext();
+  const authenticated = Boolean(session?.authenticated);
   const containerRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -33,6 +36,7 @@ export function NotificationCenter() {
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
+    if (!authenticated) return;
     try {
       setLoading(true);
       const response = await fetch("/api/notifications?limit=8", { cache: "no-store" });
@@ -49,7 +53,7 @@ export function NotificationCenter() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [authenticated]);
 
   async function markRead(id: string) {
     const target = items.find((item) => item.id === id);
@@ -78,10 +82,16 @@ export function NotificationCenter() {
   }
 
   useEffect(() => {
+    if (!authenticated) {
+      setItems([]);
+      setUnreadCount(0);
+      setOpen(false);
+      return;
+    }
     void refresh();
     const interval = window.setInterval(() => void refresh(), 60_000);
     return () => window.clearInterval(interval);
-  }, [refresh]);
+  }, [authenticated, refresh]);
 
   useEffect(() => {
     if (!open) return;
@@ -99,6 +109,8 @@ export function NotificationCenter() {
       timeStyle: "short"
     }).format(date);
   }
+
+  if (sessionLoading || !authenticated) return null;
 
   return (
     <div className="notification-center" ref={containerRef}>
