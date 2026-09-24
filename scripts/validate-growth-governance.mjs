@@ -13,6 +13,14 @@ expect(modulePath, modulePage, /getGrowthOperationsData\(ctx,\s*writeSlug\)/, "g
 expect(modulePath, modulePage, /if\s*\(!ctx\)/, "public growth routes must branch before authenticated write consoles");
 expect(modulePath, modulePage, /SuccessionGovernanceConsole/, "succession writers must receive the governed plan and candidate queue");
 expect(modulePath, modulePage, /getSuccessionGovernanceData\(ctx\)/, "succession governance queue must load from signed request context");
+expect(modulePath, modulePage, /LearningParticipantConsole/, "learning readers with self-progress capability must receive the employee learning inbox");
+expect(modulePath, modulePage, /getLearningParticipantData\(ctx\)/, "learning participant data must load from the signed request context");
+expect(modulePath, modulePage, /can\(ctx,\s*"learning:self-progress"\)/, "learning self-service UI must be capability-gated");
+
+const authorizationPath = "lib/authorization.ts";
+const authorization = await source(authorizationPath);
+expect(authorizationPath, authorization, /"learning:self-progress"/, "authorization must define employee-owned learning progress capability");
+expect(authorizationPath, authorization, /EMPLOYEE:[\s\S]*"learning:read"[\s\S]*"learning:self-progress"/, "employees must receive learning read and self-progress capabilities");
 
 const operationsPath = "lib/growth-operations-data.ts";
 const operations = await source(operationsPath);
@@ -30,11 +38,48 @@ expect(benefitsPath, benefits, /appendAudit/, "benefit transitions must emit aud
 
 const learningPath = "app/api/learning/assignments/[id]/transition/route.ts";
 const learning = await source(learningPath);
-expect(learningPath, learning, /can\(ctx,\s*"learning:write"\)/, "learning transitions must require learning:write");
+expect(learningPath, learning, /can\(ctx,\s*"learning:write"\)/, "benefit transitions must require learning:write");
 expect(learningPath, learning, /canActOnEmployment/, "learning transitions must enforce relationship scope");
 expect(learningPath, learning, /COMPLETED:\s*\[\]/, "completed learning assignments must be terminal");
 expect(learningPath, learning, /score\s*<\s*0\s*\|\|\s*score\s*>\s*100/, "learning completion scores must be bounded");
 expect(learningPath, learning, /appendAudit/, "learning transitions must emit audit evidence");
+
+const learningParticipantDataPath = "lib/learning-participant-data.ts";
+const learningParticipantData = await source(learningParticipantDataPath);
+expect(learningParticipantDataPath, learningParticipantData, /can\(ctx,\s*"learning:self-progress"\)/, "learning participant data must require the self-progress capability");
+expect(learningParticipantDataPath, learningParticipantData, /employmentId:\s*ctx\.employmentId/, "learning participant data must be bound to the signed employment identity");
+expect(learningParticipantDataPath, learningParticipantData, /LearningAssignmentStatus\.ASSIGNED[\s\S]*LearningAssignmentStatus\.IN_PROGRESS[\s\S]*LearningAssignmentStatus\.OVERDUE/, "learning participant inbox must expose only actionable employee states");
+
+const learningSelfPath = "app/api/learning/assignments/[id]/self-transition/route.ts";
+const learningSelf = await source(learningSelfPath);
+expect(learningSelfPath, learningSelf, /can\(ctx,\s*"learning:self-progress"\)/, "employee learning transitions must require self-progress capability");
+expect(learningSelfPath, learningSelf, /assignment\.employmentId\s*!==\s*ctx\.employmentId/, "employee learning transitions must reject another employee's assignment");
+expect(learningSelfPath, learningSelf, /ASSIGNED:\s*\[LearningAssignmentStatus\.IN_PROGRESS\]/, "employees may only start an assigned learning item");
+expect(learningSelfPath, learningSelf, /IN_PROGRESS:\s*\[LearningAssignmentStatus\.COMPLETED\]/, "employees may only complete an in-progress learning item");
+expect(learningSelfPath, learningSelf, /WAIVED:\s*\[\]/, "employees must not self-waive learning obligations");
+expect(learningSelfPath, learningSelf, /updateMany/, "employee learning transitions must use a state-aware write");
+expect(learningSelfPath, learningSelf, /score\s*<\s*0\s*\|\|\s*score\s*>\s*100/, "employee completion score must be bounded");
+expect(learningSelfPath, learningSelf, /learning-assignment\.self-transition/, "employee learning transitions must emit explicit audit evidence");
+
+const learningParticipantConsolePath = "components/learning-participant-console.tsx";
+const learningParticipantConsole = await source(learningParticipantConsolePath);
+expect(learningParticipantConsolePath, learningParticipantConsole, /\/self-transition/, "employee learning console must use the identity-bound endpoint");
+expect(learningParticipantConsolePath, learningParticipantConsole, /status:\s*next/, "employee learning console must submit an explicit next state");
+expect(learningParticipantConsolePath, learningParticipantConsole, /certificateReference/, "employee learning console must support completion evidence reference");
+
+const learningNotificationPath = "lib/learning-notifications.ts";
+const learningNotifications = await source(learningNotificationPath);
+expect(learningNotificationPath, learningNotifications, /workEmail:\s*true/, "learning notifications must resolve user identity from employment work email");
+expect(learningNotificationPath, learningNotifications, /userAccount\.findFirst/, "learning notifications must resolve a provisioned platform account");
+expect(learningNotificationPath, learningNotifications, /tenantId:\s*input\.tenantId[\s\S]*active:\s*true/, "learning notification recipients must be active and tenant-scoped");
+expect(learningNotificationPath, learningNotifications, /LEARNING_ASSIGNMENT_READY/, "new learning assignments must have a dedicated notification event");
+expect(learningNotificationPath, learningNotifications, /enqueueNotificationOutbox/, "learning assignment notification must use the durable outbox");
+
+const learningCreatePath = "app/api/learning/assignments/route.ts";
+const learningCreate = await source(learningCreatePath);
+expect(learningCreatePath, learningCreate, /enqueueLearningAssignmentNotification/, "learning assignment creation must notify the employee identity");
+expect(learningCreatePath, learningCreate, /dueAt must be a valid date/, "learning assignment due dates must be validated");
+expect(learningCreatePath, learningCreate, /appendAudit/, "learning assignment creation must emit audit evidence");
 
 const talentPath = "app/api/talent/assessments/route.ts";
 const talent = await source(talentPath);
@@ -100,6 +145,8 @@ expect(maintenancePath, maintenance, /successionReminders/, "maintenance respons
 
 const presentationPath = "lib/notification-presentation.ts";
 const presentation = await source(presentationPath);
+expect(presentationPath, presentation, /LEARNING_ASSIGNMENT_READY/, "notification center must present learning assignment actions");
+expect(presentationPath, presentation, /resourceType\s*===\s*"LearningAssignment"/, "learning notifications must deep-link to the learning workspace");
 expect(presentationPath, presentation, /SUCCESSION_PLAN_REVIEW_DUE_SOON/, "notification center must present succession due-soon reminders");
 expect(presentationPath, presentation, /SUCCESSION_PLAN_REVIEW_OVERDUE/, "notification center must present succession overdue reminders");
 expect(presentationPath, presentation, /resourceType\s*===\s*"SuccessionPlan"/, "succession notifications must deep-link to succession workspace");
@@ -110,4 +157,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated growth governance contract: write capabilities, relationship scope, succession plan ownership, candidate rank integrity, reminder delivery, explicit lifecycle transitions and audit evidence are enforced.");
+console.log("Validated growth governance contract: write capabilities, relationship scope, employee-owned learning progress, succession plan ownership, candidate rank integrity, reminder delivery, explicit lifecycle transitions and audit evidence are enforced.");
