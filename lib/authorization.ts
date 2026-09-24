@@ -11,7 +11,7 @@ export type Capability =
   | "offboarding:read" | "offboarding:write"
   | "time:read" | "time:write" | "time:self-entry" | "time:approve" | "time:lock" | "time:configure"
   | "leave:read" | "leave:write" | "leave:self-request" | "leave:approve" | "leave:configure"
-  | "compensation:read" | "compensation:propose" | "compensation:approve" | "compensation:apply"
+  | "compensation:read" | "compensation:write" | "compensation:propose" | "compensation:approve" | "compensation:apply"
   | "payroll:read" | "payroll:write"
   | "benefits:read" | "benefits:write"
   | "performance:read" | "performance:write" | "performance:self-submit" | "performance:manager-review" | "performance:goal-progress"
@@ -137,6 +137,8 @@ const highlyRestrictedReaders = new Set<PlatformRole>([
 ]);
 
 export function can(ctx: RequestContext, capability: Capability) {
+  // Deprecated UI compatibility alias. Domain APIs must use propose/approve/apply.
+  if (capability === "compensation:write") return grants[ctx.role].includes("compensation:propose");
   return grants[ctx.role].includes(capability);
 }
 

@@ -24,6 +24,10 @@ export function notificationTitle(eventType: string, locale: Locale) {
     TIME_ENTRY_APPROVAL_REQUIRED: { en: "Time entry approval required", tr: "Zaman kaydı onayı gerekiyor" },
     TIME_ENTRY_APPROVED: { en: "Time entry approved", tr: "Zaman kaydı onaylandı" },
     TIME_ENTRY_REJECTED: { en: "Time entry rejected", tr: "Zaman kaydı reddedildi" },
+    COMPENSATION_APPROVAL_REQUIRED: { en: "Compensation approval required", tr: "Ücret değişikliği onayı gerekiyor" },
+    COMPENSATION_CHANGE_APPROVED: { en: "Compensation change approved", tr: "Ücret değişikliği onaylandı" },
+    COMPENSATION_CHANGE_REJECTED: { en: "Compensation change rejected", tr: "Ücret değişikliği reddedildi" },
+    COMPENSATION_PAYROLL_HANDOFF_READY: { en: "Compensation payroll handoff ready", tr: "Ücret değişikliği bordro devrine hazır" },
     LEAVE_APPROVAL_REQUIRED: { en: "Leave approval required", tr: "İzin onayı gerekiyor" },
     LEAVE_REQUEST_APPROVED: { en: "Leave request approved", tr: "İzin talebi onaylandı" },
     LEAVE_REQUEST_REJECTED: { en: "Leave request rejected", tr: "İzin talebi reddedildi" },
@@ -72,6 +76,12 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const timeMinutes = numberValue(data.minutes);
   const timeOvertimeMinutes = numberValue(data.overtimeMinutes);
   const timeDecision = text(data.decision);
+  const compensationEmployeeName = text(data.compensationEmployeeName);
+  const compensationCurrency = text(data.compensationCurrency);
+  const compensationCurrentAnnualBase = text(data.compensationCurrentAnnualBase);
+  const compensationProposedAnnualBase = text(data.compensationProposedAnnualBase);
+  const compensationEffectiveAt = text(data.compensationEffectiveAt);
+  const compensationDecision = text(data.compensationDecision);
   const leaveType = text(data.leaveType);
   const leaveStartsAt = text(data.startsAt);
   const leaveEndsAt = text(data.endsAt);
@@ -95,6 +105,20 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   if (brokenEventId) {
     const detail = integrityReason ?? (locale === "tr" ? "Hash-zinciri doğrulaması başarısız oldu." : "Hash-chain verification failed.");
     return `${brokenEventId}: ${detail}`;
+  }
+  if (compensationEmployeeName && compensationCurrency && compensationProposedAnnualBase && compensationEffectiveAt) {
+    const effective = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(compensationEffectiveAt));
+    let proposed = `${compensationCurrency} ${compensationProposedAnnualBase}`;
+    let current = compensationCurrentAnnualBase ? `${compensationCurrency} ${compensationCurrentAnnualBase}` : null;
+    try {
+      proposed = new Intl.NumberFormat(locale === "tr" ? "tr-TR" : "en-US", { style: "currency", currency: compensationCurrency, maximumFractionDigits: 0 }).format(Number(compensationProposedAnnualBase));
+      current = compensationCurrentAnnualBase ? new Intl.NumberFormat(locale === "tr" ? "tr-TR" : "en-US", { style: "currency", currency: compensationCurrency, maximumFractionDigits: 0 }).format(Number(compensationCurrentAnnualBase)) : null;
+    } catch {}
+    const delta = current ? `${current} → ${proposed}` : proposed;
+    if (compensationDecision === "APPROVED") return locale === "tr" ? `${compensationEmployeeName} · ${delta} · ${effective} tarihinde geçerli · onaylandı.` : `${compensationEmployeeName} · ${delta} · effective ${effective} · approved.`;
+    if (compensationDecision === "REJECTED") return locale === "tr" ? `${compensationEmployeeName} · ${delta} · ${effective} tarihinde geçerli · reddedildi.` : `${compensationEmployeeName} · ${delta} · effective ${effective} · rejected.`;
+    if (compensationDecision === "APPLIED") return locale === "tr" ? `${compensationEmployeeName} · ${proposed} · ${effective} tarihinde geçerli · bordro devri hazır.` : `${compensationEmployeeName} · ${proposed} · effective ${effective} · payroll handoff ready.`;
+    return locale === "tr" ? `${compensationEmployeeName} · ${delta} · ${effective} tarihinde geçerli · bağımsız onay bekliyor.` : `${compensationEmployeeName} · ${delta} · effective ${effective} · waiting for independent approval.`;
   }
   if (timeWorkDate && timeMinutes !== undefined) {
     const day = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(timeWorkDate));
@@ -194,6 +218,7 @@ export function notificationResourceHref(resourceType: string, resourceId?: stri
   if (resourceType === "WorkflowTask") return id ? `/module/workflows?task=${encodeURIComponent(id)}` : "/module/workflows";
   if (resourceType === "WorkflowInstance") return id ? `/module/workflows?instance=${encodeURIComponent(id)}` : "/module/workflows";
   if (resourceType === "TimeEntry") return id ? `/module/time-attendance?entry=${encodeURIComponent(id)}` : "/module/time-attendance";
+  if (resourceType === "CompensationChange") return id ? `/module/compensation?change=${encodeURIComponent(id)}` : "/module/compensation";
   if (resourceType === "LeaveRequest") return id ? `/module/leave?request=${encodeURIComponent(id)}` : "/module/leave";
   if (resourceType === "PerformanceReview") return id ? `/module/performance?review=${encodeURIComponent(id)}` : "/module/performance";
   if (resourceType === "LearningAssignment") return id ? `/module/learning?assignment=${encodeURIComponent(id)}` : "/module/learning";

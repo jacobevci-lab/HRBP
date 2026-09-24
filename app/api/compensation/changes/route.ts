@@ -70,7 +70,7 @@ export async function POST(request: Request) {
             OR: [{ effectiveTo: null }, { effectiveTo: { gte: effectiveAt } }]
           },
           orderBy: { effectiveFrom: "desc" },
-          select: { annualBase: true, currency: true }
+          select: { annualBase: true, currency: true, effectiveFrom: true }
         }),
         tx.compensationChange.findFirst({
           where: {
@@ -84,6 +84,7 @@ export async function POST(request: Request) {
       ]);
 
       if (existingOpenChange) throw new Error("OPEN_CHANGE_CONFLICT");
+      if (baseline?.effectiveFrom.getTime() === effectiveAt.getTime()) throw new Error("EFFECTIVE_DATE_CONFLICT");
       if (baseline && baseline.currency === currency && baseline.annualBase.equals(proposedAnnualBase)) throw new Error("NO_OP_CHANGE");
 
       const change = await tx.compensationChange.create({
@@ -116,6 +117,7 @@ export async function POST(request: Request) {
     if (code === "OUT_OF_SCOPE") return forbidden("Employment is outside your authorized relationship scope.");
     if (code === "NOT_FOUND") return Response.json({ error: "Active employment not found in tenant." }, { status: 404 });
     if (code === "OPEN_CHANGE_CONFLICT") return Response.json({ error: "An open compensation change already exists for this employment and effective date." }, { status: 409 });
+    if (code === "EFFECTIVE_DATE_CONFLICT") return Response.json({ error: "A governed compensation history record already starts on this effective date. Choose a new effective date instead of overwriting salary history." }, { status: 409 });
     if (code === "NO_OP_CHANGE") return Response.json({ error: "The proposed compensation matches the governed salary already effective on that date." }, { status: 409 });
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") return Response.json({ error: "Compensation state changed concurrently. Retry the proposal." }, { status: 409 });
     throw error;
