@@ -37,6 +37,20 @@ expectAbsent(operationsConsolePath, operationsConsole, /data\.get\("managerEmplo
 expect(operationsConsolePath, operationsConsole, /Manager is assigned automatically from the governed employment relationship/, "review creation UI must disclose governed manager assignment");
 expect(operationsConsolePath, operationsConsole, /review\.status\s*===\s*"SELF_REVIEW"\s*\|\|\s*review\.status\s*===\s*"MANAGER_REVIEW"/, "administration console must render participant-owned phases as waiting states");
 
+const notificationPath = "lib/performance-notifications.ts";
+const notifications = await source(notificationPath);
+expect(notificationPath, notifications, /person:\s*\{\s*select:\s*\{\s*workEmail:\s*true\s*\}\s*\}/, "performance notifications must resolve identity from the employment work email");
+expect(notificationPath, notifications, /userAccount\.findFirst/, "performance notifications must resolve to a provisioned platform account");
+expect(notificationPath, notifications, /tenantId,[\s\S]*active:\s*true/, "notification recipient lookup must remain tenant-scoped and active-only");
+expect(notificationPath, notifications, /enqueueNotificationOutbox/, "performance actions must use the transactional notification outbox");
+expect(notificationPath, notifications, /recipientUserId:\s*user\.id/, "performance notifications must target a resolved user rather than broadcast roles");
+
+const presentationPath = "lib/notification-presentation.ts";
+const presentation = await source(presentationPath);
+expect(presentationPath, presentation, /PERFORMANCE_SELF_REVIEW_READY/, "notification center must present self-review actions");
+expect(presentationPath, presentation, /PERFORMANCE_MANAGER_REVIEW_READY/, "notification center must present manager-review actions");
+expect(presentationPath, presentation, /resourceType\s*===\s*"PerformanceReview"/, "performance notifications must deep-link back to the performance module");
+
 const selfPath = "app/api/performance/reviews/[id]/self-submit/route.ts";
 const selfRoute = await source(selfPath);
 expect(selfPath, selfRoute, /can\(ctx,\s*"performance:self-submit"\)/, "self submission must require the self-submit capability");
@@ -44,6 +58,8 @@ expect(selfPath, selfRoute, /review\.employmentId\s*!==\s*ctx\.employmentId/, "s
 expect(selfPath, selfRoute, /MANAGER_REQUIRED/, "self submission must not strand a review without an assigned manager");
 expect(selfPath, selfRoute, /updateMany/, "self submission must use a state-aware write to avoid duplicate concurrent decisions");
 expect(selfPath, selfRoute, /performance-review\.self-submitted/, "self submission must emit audit evidence");
+expect(selfPath, selfRoute, /PERFORMANCE_MANAGER_REVIEW_READY/, "self submission must notify the assigned manager identity");
+expect(selfPath, selfRoute, /recipientEmploymentId:\s*managerEmploymentId/, "manager notification must target the governed manager employment");
 
 const managerPath = "app/api/performance/reviews/[id]/manager-submit/route.ts";
 const managerRoute = await source(managerPath);
@@ -63,6 +79,8 @@ expect(reviewPath, reviewRoute, /ReviewCycleStatus\.CALIBRATION/, "final review 
 expect(reviewPath, reviewRoute, /FINAL_RATING_REQUIRED/, "final rating must be explicitly human-entered before finalization");
 expect(reviewPath, reviewRoute, /canActOnEmployment/, "review governance transitions must enforce relationship scope");
 expect(reviewPath, reviewRoute, /appendAudit/, "review governance transitions must emit audit evidence");
+expect(reviewPath, reviewRoute, /PERFORMANCE_SELF_REVIEW_READY/, "opening self review must enqueue an identity-resolved employee notification");
+expect(reviewPath, reviewRoute, /recipientEmploymentId:\s*review\.employmentId/, "self-review notification must target the review subject employment");
 
 const createReviewPath = "app/api/performance/reviews/route.ts";
 const createReviewRoute = await source(createReviewPath);
@@ -96,4 +114,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated performance governance contract: employee self decisions, assigned-manager decisions, governed manager assignment, calibration governance, relationship scope and audit evidence are enforced.");
+console.log("Validated performance governance contract: employee self decisions, assigned-manager decisions, governed manager assignment, identity-resolved notifications, calibration governance, relationship scope and audit evidence are enforced.");
