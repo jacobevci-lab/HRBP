@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
 import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
+import { enqueuePerformanceParticipantNotification } from "@/lib/performance-notifications";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 const transitions: Record<ReviewStatus, ReviewStatus[]> = {
@@ -40,7 +41,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           status: true,
           managerRating: true,
           finalRating: true,
-          cycle: { select: { status: true } }
+          cycle: { select: { status: true, name: true } }
         }
       });
       if (!review) throw new Error("NOT_FOUND");
@@ -68,6 +69,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         resourceId: id,
         classification: DataClassification.CONFIDENTIAL
       });
+      if (next === ReviewStatus.SELF_REVIEW) {
+        await enqueuePerformanceParticipantNotification(tx, {
+          tenantId: ctx.tenantId,
+          eventType: "PERFORMANCE_SELF_REVIEW_READY",
+          recipientEmploymentId: review.employmentId,
+          reviewId: id,
+          cycleName: review.cycle.name,
+          dedupeKey: `performance-review:${id}:self-review-ready`
+        });
+      }
       return updated;
     });
     return Response.json({ data });
