@@ -22,6 +22,7 @@ expect(helperPath, helper, /TimeEntryStatus\.LOCKED/, "payroll readiness must re
 expect(helperPath, helper, /LeaveRequestStatus\.DRAFT[\s\S]*LeaveRequestStatus\.PENDING/, "payroll readiness must detect undecided leave inputs");
 expect(helperPath, helper, /CompensationChangeStatus\.DRAFT[\s\S]*CompensationChangeStatus\.APPROVAL[\s\S]*CompensationChangeStatus\.APPROVED/, "payroll readiness must detect unapplied compensation changes");
 expect(helperPath, helper, /createHash\("sha256"\)/, "locked payroll inputs must have a deterministic fingerprint");
+expect(helperPath, helper, /period:\s*\{[\s\S]*startsAt:[\s\S]*endsAt:[\s\S]*payDate:[\s\S]*countryPack:/, "input fingerprint must use stable period facts rather than mutable period lifecycle state");
 expect(helperPath, helper, /payroll-run\.inputs-locked/, "fingerprint verification must use immutable audit evidence");
 
 const resultPath = "app/api/payroll/runs/[id]/results/route.ts";
@@ -86,10 +87,35 @@ expect(notificationsPath, notifications, /PAYROLL_RUN_APPROVED/, "payroll approv
 expect(notificationsPath, notifications, /PAYROLL_RUN_PAID/, "payroll payment must have a dedicated durable notification");
 expect(notificationsPath, notifications, /DataClassification\.RESTRICTED/, "payroll notification payloads must remain restricted");
 
+const presentationPath = "lib/notification-presentation.ts";
+const presentation = await source(presentationPath);
+expect(presentationPath, presentation, /PAYROLL_APPROVAL_REQUIRED/, "notification center must present payroll approval actions");
+expect(presentationPath, presentation, /PAYROLL_RUN_APPROVED/, "notification center must present payroll approval results");
+expect(presentationPath, presentation, /PAYROLL_RUN_PAID/, "notification center must present payroll payment completion");
+expect(presentationPath, presentation, /resourceType\s*===\s*"PayrollRun"/, "payroll notifications must deep-link to the payroll module");
+expect(presentationPath, presentation, /payrollPeriodCode[\s\S]*payrollCountryCode[\s\S]*payrollRunNumber/, "payroll notifications must summarize governed period and run context");
+
+const buttonPath = "components/payroll-transition-button.tsx";
+const button = await source(buttonPath);
+expect(buttonPath, button, /status\s*===\s*"APPROVAL"[\s\S]*access\.approve/, "UI approval action must require explicit approval access");
+expect(buttonPath, button, /status\s*===\s*"APPROVED"[\s\S]*access\.pay/, "UI payment action must require explicit payment access");
+expect(buttonPath, button, /access\.prepare/, "UI preparation actions must require preparation access");
+expect(buttonPath, button, /payload\?\.blockers/, "payroll readiness blockers must be surfaced to the operator");
+expect(buttonPath, button, /Lock & validate/, "payroll UI must disclose the input-lock boundary");
+
+const workspacePath = "components/work-pay-live-workspace.tsx";
+const workspace = await source(workspacePath);
+expect(workspacePath, workspace, /can\(ctx,\s*"payroll:prepare"\)/, "payroll workspace must resolve preparation authority independently");
+expect(workspacePath, workspace, /can\(ctx,\s*"payroll:approve"\)/, "payroll workspace must resolve approval authority independently");
+expect(workspacePath, workspace, /can\(ctx,\s*"payroll:pay"\)/, "payroll workspace must resolve payment authority independently");
+expect(workspacePath, workspace, /can\(ctx,\s*"payroll:configure"\)/, "payroll workspace must resolve configuration authority independently");
+expect(workspacePath, workspace, /Input fingerprint protected/, "payroll workspace must disclose locked-input integrity");
+expect(workspacePath, workspace, /Payment separation/, "payroll workspace must disclose approval/payment separation");
+
 if (failures.length) {
   console.error("Payroll governance contract validation failed:\n");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log("Validated payroll governance contract: granular authority, controlled period setup, server-owned ledger totals, input readiness and fingerprint locking, four-eyes approval, payment separation, state-aware lifecycle and durable notifications are enforced.");
+console.log("Validated payroll governance contract: granular authority, controlled period setup, server-owned ledger totals, input readiness and fingerprint locking, four-eyes approval, payment separation, state-aware lifecycle, operator controls and durable notifications are enforced.");
