@@ -31,12 +31,21 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        if (item.requiredCapability) return authenticated && navigationCapabilities.has(item.requiredCapability);
-        if (item.requiresAuthentication) return authenticated;
+        // While the identity context is still loading, keep the shell stable and
+        // avoid flashing privileged navigation for an authenticated user.
+        if (loading) return !item.requiredCapability && !item.requiresAuthentication;
+
+        // Public staging is intentionally a read-only product demo. Keep the
+        // complete product navigation discoverable; individual pages still
+        // enforce their own authorization and mutation guards server-side.
+        if (!authenticated) return true;
+
+        if (item.requiredCapability) return navigationCapabilities.has(item.requiredCapability);
+        if (item.requiresAuthentication) return true;
         return true;
       })
     }))
-    .filter((group) => group.items.length > 0), [authenticated, navigationCapabilities]);
+    .filter((group) => group.items.length > 0), [authenticated, loading, navigationCapabilities]);
   const workspaceName = session?.user?.tenantName?.trim() || "HRBP One";
 
   return (
