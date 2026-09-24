@@ -26,7 +26,8 @@ export function SettingsConnectionsManager() {
   async function createIdentity(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (identityBusy) return;
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     setIdentityBusy(true);
     setIdentityNotice(null);
     try {
@@ -47,7 +48,7 @@ export function SettingsConnectionsManager() {
       });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-      event.currentTarget.reset();
+      formElement.reset();
       setIdentityNotice({ kind: "ok", text: c("Identity provider registered as DRAFT and audited.", "Kimlik sağlayıcı DRAFT olarak kaydedildi ve denetim kaydına işlendi.") });
       router.refresh();
     } catch (error) {
@@ -60,7 +61,8 @@ export function SettingsConnectionsManager() {
   async function createIntegration(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (integrationBusy) return;
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     setIntegrationBusy(true);
     setIntegrationNotice(null);
     try {
@@ -79,7 +81,7 @@ export function SettingsConnectionsManager() {
       });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-      event.currentTarget.reset();
+      formElement.reset();
       setIntegrationNotice({ kind: "ok", text: c("Integration registered as DRAFT and audited.", "Entegrasyon DRAFT olarak kaydedildi ve denetim kaydına işlendi.") });
       router.refresh();
     } catch (error) {
