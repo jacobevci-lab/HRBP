@@ -136,7 +136,7 @@ export function NotificationCenter() {
               <Link
                 key={item.id}
                 className={`notification-menu-item ${item.readAt ? "" : "unread"}`}
-                href={notificationResourceHref(item.resourceType)}
+                href={notificationResourceHref(item.resourceType, item.resourceId)}
                 onClick={() => {
                   setOpen(false);
                   if (!item.readAt) void markRead(item.id);
