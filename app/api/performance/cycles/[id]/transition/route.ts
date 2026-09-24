@@ -33,6 +33,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!(transitions[cycle.status] ?? []).includes(next)) throw new Error("INVALID_TRANSITION");
 
       if (next === ReviewCycleStatus.OPEN && cycle.endsAt <= cycle.startsAt) throw new Error("INVALID_DATES");
+      if (next === ReviewCycleStatus.CALIBRATION) {
+        const pendingParticipants = await tx.performanceReview.count({
+          where: {
+            tenantId: ctx.tenantId,
+            cycleId: id,
+            status: { in: [ReviewStatus.NOT_STARTED, ReviewStatus.SELF_REVIEW, ReviewStatus.MANAGER_REVIEW] }
+          }
+        });
+        if (pendingParticipants > 0) throw new Error(`PENDING_PARTICIPANTS:${pendingParticipants}`);
+      }
       if (next === ReviewCycleStatus.FINALIZED) {
         const unfinished = await tx.performanceReview.count({
           where: { tenantId: ctx.tenantId, cycleId: id, status: { not: ReviewStatus.FINALIZED } }
@@ -58,6 +68,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (code === "NOT_FOUND") return Response.json({ error: "Review cycle not found in tenant." }, { status: 404 });
     if (code === "INVALID_TRANSITION") return Response.json({ error: "Cycle transition is not allowed from the current state." }, { status: 409 });
     if (code === "INVALID_DATES") return Response.json({ error: "Cycle end date must be after its start date." }, { status: 400 });
+    if (code.startsWith("PENDING_PARTICIPANTS:")) return Response.json({ error: `${code.split(":")[1]} reviews are still awaiting employee or manager action before calibration can begin.` }, { status: 409 });
     if (code.startsWith("UNFINISHED:")) return Response.json({ error: `${code.split(":")[1]} reviews must be finalized before the cycle can be finalized.` }, { status: 409 });
     throw error;
   }
