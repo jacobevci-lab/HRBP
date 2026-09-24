@@ -17,7 +17,7 @@ export type Capability =
   | "performance:read" | "performance:write" | "performance:self-submit" | "performance:manager-review" | "performance:goal-progress"
   | "talent:read" | "talent:write"
   | "succession:read" | "succession:write"
-  | "learning:read" | "learning:write"
+  | "learning:read" | "learning:write" | "learning:self-progress"
   | "cases:read" | "cases:write"
   | "hr-service:read" | "hr-service:write"
   | "policies:read" | "policies:write" | "policies:approve" | "policies:acknowledge"
@@ -35,6 +35,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "people:read", "documents:read", "onboarding:read",
     "time:read", "time:write", "leave:read", "leave:write",
     "performance:read", "performance:self-submit", "performance:goal-progress",
+    "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write",
     "policies:read", "policies:acknowledge", "engagement:read", "ai:use"
   ],
@@ -43,6 +44,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "recruiting:read", "onboarding:read", "offboarding:read",
     "time:read", "time:write", "leave:read", "leave:write",
     "performance:read", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
+    "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write",
     "policies:read", "policies:acknowledge", "engagement:read", "analytics:read", "ai:use"
   ],
@@ -53,7 +55,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "offboarding:read", "offboarding:write",
     "time:read", "leave:read", "leave:write", "compensation:read", "benefits:read",
     "performance:read", "performance:write", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
-    "talent:read", "talent:write", "succession:read", "succession:write", "learning:read",
+    "talent:read", "talent:write", "succession:read", "succession:write", "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write", "policies:read",
     "engagement:read", "engagement:write",
     "workforce-plan:read", "workforce-plan:write", "analytics:read", "ai:use",
@@ -66,7 +68,8 @@ const grants: Record<PlatformRole, Capability[]> = {
     "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
     "offboarding:read", "offboarding:write", "time:read", "time:write",
     "leave:read", "leave:write", "compensation:read", "benefits:read", "benefits:write",
-    "performance:read", "performance:self-submit", "performance:manager-review", "performance:goal-progress", "learning:read", "learning:write",
+    "performance:read", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
+    "learning:read", "learning:write", "learning:self-progress",
     "hr-service:read", "hr-service:write",
     "policies:read", "policies:write", "policies:approve",
     "engagement:read", "engagement:write", "workforce-plan:read", "workforce-plan:write",
@@ -84,7 +87,7 @@ const grants: Record<PlatformRole, Capability[]> = {
   TALENT_ADMIN: [
     "people:read", "organization:read", "positions:read",
     "performance:read", "performance:write", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
-    "talent:read", "talent:write", "succession:read", "succession:write", "learning:read", "learning:write",
+    "talent:read", "talent:write", "succession:read", "succession:write", "learning:read", "learning:write", "learning:self-progress",
     "policies:read", "engagement:read", "engagement:write", "analytics:read", "ai:use"
   ],
   COMPENSATION_ADMIN: [
@@ -117,7 +120,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
     "offboarding:read", "time:read", "time:write", "leave:read", "leave:write",
     "benefits:read", "performance:read", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
-    "talent:read", "succession:read", "learning:read",
+    "talent:read", "succession:read", "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write", "policies:read", "engagement:read",
     "workforce-plan:read", "analytics:read", "ai:use",
     "workflows:read", "workflows:write", "settings:read", "settings:write", "audit:read"
