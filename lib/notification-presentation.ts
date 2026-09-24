@@ -29,6 +29,7 @@ export function notificationTitle(eventType: string, locale: Locale) {
     SUCCESSION_PLAN_REVIEW_DUE_SOON: { en: "Succession plan review due soon", tr: "Yedekleme planı inceleme tarihi yaklaşıyor" },
     SUCCESSION_PLAN_REVIEW_OVERDUE: { en: "Succession plan review overdue", tr: "Yedekleme planı incelemesi gecikti" },
     SUCCESSION_DEVELOPMENT_REASSESSMENT_REQUIRED: { en: "Succession development evidence ready", tr: "Yedekleme gelişim kanıtı hazır" },
+    DEVELOPMENT_PLAN_REASSESSMENT_REQUIRED: { en: "Development plan evidence ready", tr: "Gelişim planı kanıtı hazır" },
     BENEFIT_PLAN_EXPIRED: { en: "Benefit plan expired", tr: "Yan hak planının süresi doldu" },
     AUDIT_INTEGRITY_FAILURE: { en: "Audit ledger integrity failure", tr: "Denetim defteri bütünlük hatası" }
   };
@@ -58,6 +59,7 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const positionCode = text(data.positionCode);
   const positionTitle = text(data.positionTitle);
   const reviewDueAt = text(data.reviewDueAt);
+  const planTitle = text(data.planTitle);
   const courseCode = text(data.courseCode);
   const courseTitle = text(data.courseTitle);
   const skillCode = text(data.skillCode);
@@ -85,9 +87,10 @@ export function notificationSummary(payload: unknown, locale: Locale) {
     const course = courseCode ? `${courseCode} · ${courseTitle}` : courseTitle;
     const skill = skillCode ? `${skillCode} · ${skillName}` : skillName;
     const position = positionTitle ? (positionCode ? `${positionCode} · ${positionTitle}` : positionTitle) : null;
+    const context = planTitle ? ` · ${planTitle}` : position ? ` · ${position}` : "";
     return locale === "tr"
-      ? `${course} tamamlandı · ${skill} hedefi ${targetProficiency}${position ? ` · ${position}` : ""}. İnsan değerlendirmesi gerekiyor.`
-      : `${course} completed · ${skill} target ${targetProficiency}${position ? ` · ${position}` : ""}. Human reassessment is required.`;
+      ? `${course} tamamlandı · ${skill} hedefi ${targetProficiency}${context}. İnsan değerlendirmesi gerekiyor.`
+      : `${course} completed · ${skill} target ${targetProficiency}${context}. Human reassessment is required.`;
   }
   if (courseTitle) {
     const course = courseCode ? `${courseCode} · ${courseTitle}` : courseTitle;
@@ -138,6 +141,7 @@ export function notificationResourceHref(resourceType: string, resourceId?: stri
   if (resourceType === "LearningAssignment") return id ? `/module/learning?assignment=${encodeURIComponent(id)}` : "/module/learning";
   if (resourceType === "SuccessionPlan") return id ? `/module/succession?plan=${encodeURIComponent(id)}` : "/module/succession";
   if (resourceType === "SuccessionCandidate") return id ? `/module/succession?candidate=${encodeURIComponent(id)}` : "/module/succession";
+  if (resourceType === "DevelopmentPlan") return id ? `/module/talent?developmentPlan=${encodeURIComponent(id)}` : "/module/talent";
   if (resourceType === "BenefitPlan") return id ? `/module/benefits?plan=${encodeURIComponent(id)}` : "/module/benefits";
   if (resourceType === "AuditEvent") return id ? `/module/audit?q=${encodeURIComponent(id)}` : "/module/audit";
   return "/";
