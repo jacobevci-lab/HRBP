@@ -31,6 +31,7 @@ function label(value: string, locale: "en" | "tr") {
 }
 
 function dateOnly(value: string | null) { return value ? value.slice(0, 10) : "—"; }
+function inputDate(value: string | null) { return value ? value.slice(0, 10) : ""; }
 
 export function GrowthLifecycleConsole(props: Props) {
   const router = useRouter();
@@ -39,14 +40,14 @@ export function GrowthLifecycleConsole(props: Props) {
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
-  async function transition(key: string, url: string, payload: Record<string, unknown>) {
+  async function request(key: string, url: string, method: "POST" | "PATCH", payload: Record<string, unknown>, successText?: string) {
     setPending(key);
     setNotice(null);
     try {
-      const response = await fetch(url, { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      const response = await fetch(url, { method, credentials: "same-origin", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(body.error || c(`Request failed (${response.status})`, `İstek başarısız (${response.status})`));
-      setNotice({ tone: "ok", text: c("Lifecycle transition completed and audit evidence written.", "Yaşam döngüsü geçişi tamamlandı ve denetim kanıtı yazıldı.") });
+      setNotice({ tone: "ok", text: successText ?? c("Lifecycle transition completed and audit evidence written.", "Yaşam döngüsü geçişi tamamlandı ve denetim kanıtı yazıldı.") });
       router.refresh();
     } catch (error) {
       setNotice({ tone: "error", text: error instanceof Error ? error.message : c("Transaction failed.", "İşlem başarısız.") });
@@ -57,7 +58,7 @@ export function GrowthLifecycleConsole(props: Props) {
 
   return <section className="performance-console card growth-lifecycle-console">
     <div className="performance-console-head">
-      <div><span className="section-kicker">{props.slug === "benefits" ? c("Enrollment lifecycle", "Kayıt yaşam döngüsü") : c("Learning execution", "Eğitim yürütme")}</span><h3>{props.slug === "benefits" ? c("Governed benefit elections", "Yönetişimli yan hak seçimleri") : c("Governed learning assignments", "Yönetişimli eğitim atamaları")}</h3><p>{props.slug === "benefits" ? c("Approve, suspend, waive or end employee benefit elections without overwriting historical effective dates.", "Çalışan yan hak seçimlerini tarihsel geçerlilik bilgisini ezmeden etkinleştirin, askıya alın, muaf tutun veya sonlandırın.") : c("Move learning obligations through explicit assignment states and retain completion evidence.", "Eğitim yükümlülüklerini açık atama durumlarından ilerletin ve tamamlama kanıtını koruyun.")}</p></div>
+      <div><span className="section-kicker">{props.slug === "benefits" ? c("Enrollment lifecycle", "Kayıt yaşam döngüsü") : c("Learning execution", "Eğitim yürütme")}</span><h3>{props.slug === "benefits" ? c("Governed benefit elections", "Yönetişimli yan hak seçimleri") : c("Governed learning assignments", "Yönetişimli eğitim atamaları")}</h3><p>{props.slug === "benefits" ? c("Amend pending elections, then approve, suspend, waive or end coverage without overwriting governed history.", "Bekleyen seçimleri düzeltin; ardından yönetişimli geçmişi ezmeden kapsamı etkinleştirin, askıya alın, muaf tutun veya sonlandırın.") : c("Move learning obligations through explicit assignment states and retain completion evidence.", "Eğitim yükümlülüklerini açık atama durumlarından ilerletin ve tamamlama kanıtını koruyun.")}</p></div>
       <div className="performance-console-health"><ShieldCheck size={16}/><span>{c("Lifecycle controls active", "Yaşam döngüsü kontrolleri aktif")}</span></div>
     </div>
     {notice ? <div className={`performance-notice ${notice.tone}`}><span>{notice.tone === "ok" ? <CheckCircle2 size={15}/> : <CircleAlert size={15}/>}</span>{notice.text}</div> : null}
@@ -69,7 +70,27 @@ export function GrowthLifecycleConsole(props: Props) {
       <div className="growth-lifecycle-icon"><HeartHandshake size={16}/></div>
       <div className="growth-lifecycle-copy"><strong>{row.person}</strong><small>{row.employeeNumber} · {row.planCode} · {row.plan}</small><span>{c("Coverage", "Kapsam")}: {row.coverageTier} · {dateOnly(row.effectiveFrom)} → {dateOnly(row.effectiveTo)}</span></div>
       <em className={`growth-pill ${row.status.toLowerCase().replaceAll("_", "-")}`}>{label(row.status, locale)}</em>
-      <div className="growth-lifecycle-actions">{(benefitTransitions[row.status] ?? []).map((next) => <button className="secondary-button" type="button" key={next} disabled={pending !== null} onClick={() => void transition(`benefit-${row.id}-${next}`, `/api/benefits/enrollments/${row.id}/transition`, { status: next })}>{pending === `benefit-${row.id}-${next}` ? "…" : label(next, locale)}</button>)}</div>
+      <div className="growth-lifecycle-actions">
+        {row.status === "PENDING" ? <form className="performance-review-controls" onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          void request(`benefit-amend-${row.id}`, `/api/benefits/enrollments/${row.id}`, "PATCH", {
+            coverageTier: data.get("coverageTier") || null,
+            employerContribution: data.get("employerContribution") || null,
+            employeeContribution: data.get("employeeContribution") || null,
+            effectiveFrom: data.get("effectiveFrom"),
+            effectiveTo: data.get("effectiveTo") || null
+          }, c("Pending benefit election amended and audit evidence written.", "Bekleyen yan hak seçimi düzeltildi ve denetim kanıtı yazıldı."));
+        }}>
+          <input name="coverageTier" maxLength={120} defaultValue={row.coverageTier === "—" ? "" : row.coverageTier} placeholder={c("Coverage tier", "Kapsam seviyesi")}/>
+          <input name="employerContribution" type="number" min="0" step="0.01" defaultValue={row.employerContribution ?? ""} placeholder={c("Employer contribution", "İşveren katkısı")}/>
+          <input name="employeeContribution" type="number" min="0" step="0.01" defaultValue={row.employeeContribution ?? ""} placeholder={c("Employee contribution", "Çalışan katkısı")}/>
+          <input name="effectiveFrom" type="date" required min={inputDate(row.planEffectiveFrom)} max={inputDate(row.planEffectiveTo) || undefined} defaultValue={inputDate(row.effectiveFrom)}/>
+          <input name="effectiveTo" type="date" min={inputDate(row.effectiveFrom)} max={inputDate(row.planEffectiveTo) || undefined} defaultValue={inputDate(row.effectiveTo)}/>
+          <button className="secondary-button" disabled={pending !== null}>{pending === `benefit-amend-${row.id}` ? "…" : c("Save pending election", "Bekleyen seçimi kaydet")}</button>
+        </form> : null}
+        {(benefitTransitions[row.status] ?? []).map((next) => <button className="secondary-button" type="button" key={next} disabled={pending !== null} onClick={() => void request(`benefit-${row.id}-${next}`, `/api/benefits/enrollments/${row.id}/transition`, "POST", { status: next })}>{pending === `benefit-${row.id}-${next}` ? "…" : label(next, locale)}</button>)}
+      </div>
     </article>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No active benefit elections require lifecycle action.", "Yaşam döngüsü aksiyonu gerektiren aktif yan hak seçimi yok.")}</span></div>}</div>;
   }
 
@@ -78,7 +99,7 @@ export function GrowthLifecycleConsole(props: Props) {
       <div className="growth-lifecycle-icon"><GraduationCap size={16}/></div>
       <div className="growth-lifecycle-copy"><strong>{row.person}</strong><small>{row.employeeNumber} · {row.courseCode} · {row.course}</small><span>{row.mandatory ? c("Mandatory", "Zorunlu") : c("Development", "Gelişim")} · <Clock3 size={11}/> {c("Due", "Son tarih")} {dateOnly(row.dueAt)}</span></div>
       <em className={`growth-pill ${row.status.toLowerCase().replaceAll("_", "-")}`}>{label(row.status, locale)}</em>
-      <div className="growth-lifecycle-actions">{(learningTransitions[row.status] ?? []).map((next) => <button className="secondary-button" type="button" key={next} disabled={pending !== null} onClick={() => void transition(`learning-${row.id}-${next}`, `/api/learning/assignments/${row.id}/transition`, { status: next })}>{pending === `learning-${row.id}-${next}` ? "…" : label(next, locale)}</button>)}</div>
+      <div className="growth-lifecycle-actions">{(learningTransitions[row.status] ?? []).map((next) => <button className="secondary-button" type="button" key={next} disabled={pending !== null} onClick={() => void request(`learning-${row.id}-${next}`, `/api/learning/assignments/${row.id}/transition`, "POST", { status: next })}>{pending === `learning-${row.id}-${next}` ? "…" : label(next, locale)}</button>)}</div>
     </article>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No open learning assignments require action.", "Aksiyon gerektiren açık eğitim ataması yok.")}</span></div>}</div>;
   }
 }
