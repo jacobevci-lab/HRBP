@@ -25,7 +25,11 @@ export async function GET(request: Request) {
   const ctx = getRequestContext(request);
   const moduleResults = navigation
     .flatMap((group) => group.items)
-    .filter((item) => !ctx || !item.requiredCapability || can(ctx, item.requiredCapability))
+    .filter((item) => {
+      if (!ctx) return !item.requiredCapability && !item.requiresAuthentication;
+      if (item.requiredCapability) return can(ctx, item.requiredCapability);
+      return true;
+    })
     .filter((item) => {
       const enLabel = translate("en", item.labelKey).toLocaleLowerCase("en-US");
       const trLabel = translate("tr", item.labelKey).toLocaleLowerCase("tr-TR");
