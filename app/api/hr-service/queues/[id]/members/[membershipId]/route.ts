@@ -1,4 +1,4 @@
-import { DataClassification, PlatformRole, ServiceQueueRole } from "@prisma/client";
+import { DataClassification, ServiceQueueRole } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
