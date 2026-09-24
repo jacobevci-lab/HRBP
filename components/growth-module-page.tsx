@@ -142,12 +142,18 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
             const data = await getSuccessionGovernanceData(ctx, { includeDevelopmentCatalog: allowLearningPlan });
             lifecycle = <SuccessionGovernanceConsole {...data} allowLearningPlan={allowLearningPlan}/>;
           } else if (slug === "talent") {
-            const [{ TalentGovernanceConsole }, { getTalentGovernanceData }] = await Promise.all([
+            const allowLearningPlan = can(ctx, "learning:write");
+            const [{ TalentGovernanceConsole }, { getTalentGovernanceData }, { DevelopmentPlanConsole }, { getDevelopmentPlanGovernanceData }] = await Promise.all([
               import("@/components/talent-governance-console"),
-              import("@/lib/talent-governance-data")
+              import("@/lib/talent-governance-data"),
+              import("@/components/development-plan-console"),
+              import("@/lib/development-plan-data")
             ]);
-            const data = await getTalentGovernanceData(ctx);
-            lifecycle = <TalentGovernanceConsole {...data}/>;
+            const [talent, development] = await Promise.all([
+              getTalentGovernanceData(ctx),
+              getDevelopmentPlanGovernanceData(ctx, { includeLearningCatalog: allowLearningPlan })
+            ]);
+            lifecycle = <><TalentGovernanceConsole {...talent}/><DevelopmentPlanConsole {...development} assessments={talent.rows} allowLearningPlan={allowLearningPlan}/></>;
           } else if (slug === "learning") {
             const [{ GrowthLifecycleConsole }, lifecycleData, { LearningGovernanceConsole }, { getLearningGovernanceData }] = await Promise.all([
               import("@/components/growth-lifecycle-console"),
