@@ -39,6 +39,9 @@ expect(planUpdatePath, planUpdate, /can\(ctx,\s*"benefits:write"\)/, "benefit pl
 expect(planUpdatePath, planUpdate, /benefit-plan\.deactivated/, "benefit plan lifecycle must support auditable deactivation");
 expect(planUpdatePath, planUpdate, /benefit-plan\.reactivated/, "benefit plan lifecycle must support auditable reactivation");
 expect(planUpdatePath, planUpdate, /effectiveTo cannot be earlier than effectiveFrom/, "benefit plan lifecycle must protect effective-date ordering");
+expect(planUpdatePath, planUpdate, /ENROLLMENT_DATE_CONFLICT/, "benefit plan end dates must not invalidate open enrollment periods");
+expect(planUpdatePath, planUpdate, /PLAN_EXPIRED/, "expired benefit plans must not be reactivated without extending their end date");
+expect(planUpdatePath, planUpdate, /BenefitEnrollmentStatus\.PENDING[\s\S]*BenefitEnrollmentStatus\.ACTIVE[\s\S]*BenefitEnrollmentStatus\.SUSPENDED/, "benefit plan date conflict checks must cover all open election states");
 
 const transitionPath = "app/api/benefits/enrollments/[id]/transition/route.ts";
 const transition = await source(transitionPath);
@@ -82,4 +85,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated benefits governance contract: pending-only election creation and amendments, relationship scope, effective-date integrity, state-aware transitions and non-destructive plan lifecycle are enforced.");
+console.log("Validated benefits governance contract: pending-only election creation and amendments, relationship scope, effective-date integrity, open-enrollment conflict protection, state-aware transitions and non-destructive plan lifecycle are enforced.");
