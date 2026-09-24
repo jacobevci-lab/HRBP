@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, CircleAlert, Clock3, GraduationCap, HeartHandshake, ShieldCheck } from "lucide-react";
+import { CheckCircle2, CircleAlert, Clock3, GraduationCap, HeartHandshake, ShieldCheck, Sparkles } from "lucide-react";
 import { useLocale } from "@/components/locale-provider";
 import type { BenefitEnrollmentOperation, LearningAssignmentOperation } from "@/lib/growth-lifecycle-data";
 
@@ -24,7 +24,8 @@ const learningTransitions: Record<string, string[]> = {
 function label(value: string, locale: "en" | "tr") {
   const tr: Record<string, string> = {
     PENDING: "Bekliyor", ACTIVE: "Aktif", WAIVED: "Muaf", SUSPENDED: "Askıda", ENDED: "Sona erdi",
-    ASSIGNED: "Atandı", IN_PROGRESS: "Devam ediyor", COMPLETED: "Tamamlandı", OVERDUE: "Gecikmiş"
+    ASSIGNED: "Atandı", IN_PROGRESS: "Devam ediyor", COMPLETED: "Tamamlandı", OVERDUE: "Gecikmiş",
+    AWARENESS: "Farkındalık", FOUNDATION: "Temel", PRACTITIONER: "Uygulayıcı", ADVANCED: "İleri", EXPERT: "Uzman"
   };
   if (locale === "tr" && tr[value]) return tr[value];
   return value.toLowerCase().split("_").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
@@ -58,7 +59,7 @@ export function GrowthLifecycleConsole(props: Props) {
 
   return <section className="performance-console card growth-lifecycle-console">
     <div className="performance-console-head">
-      <div><span className="section-kicker">{props.slug === "benefits" ? c("Enrollment lifecycle", "Kayıt yaşam döngüsü") : c("Learning execution", "Eğitim yürütme")}</span><h3>{props.slug === "benefits" ? c("Governed benefit elections", "Yönetişimli yan hak seçimleri") : c("Governed learning assignments", "Yönetişimli eğitim atamaları")}</h3><p>{props.slug === "benefits" ? c("Amend pending elections, then approve, suspend, waive or end coverage without overwriting governed history.", "Bekleyen seçimleri düzeltin; ardından yönetişimli geçmişi ezmeden kapsamı etkinleştirin, askıya alın, muaf tutun veya sonlandırın.") : c("Move learning obligations through explicit assignment states and retain completion evidence.", "Eğitim yükümlülüklerini açık atama durumlarından ilerletin ve tamamlama kanıtını koruyun.")}</p></div>
+      <div><span className="section-kicker">{props.slug === "benefits" ? c("Enrollment lifecycle", "Kayıt yaşam döngüsü") : c("Learning execution", "Eğitim yürütme")}</span><h3>{props.slug === "benefits" ? c("Governed benefit elections", "Yönetişimli yan hak seçimleri") : c("Governed learning assignments", "Yönetişimli eğitim atamaları")}</h3><p>{props.slug === "benefits" ? c("Amend pending elections, then approve, suspend, waive or end coverage without overwriting governed history.", "Bekleyen seçimleri düzeltin; ardından yönetişimli geçmişi ezmeden kapsamı etkinleştirin, askıya alın, muaf tutun veya sonlandırın.") : c("Move learning obligations through explicit assignment states and retain completion evidence. Succession-linked items keep their development provenance and require a later human readiness reassessment.", "Eğitim yükümlülüklerini açık atama durumlarından ilerletin ve tamamlama kanıtını koruyun. Yedeklemeye bağlı kayıtlar gelişim kaynağını korur ve sonrasında insan hazırlık değerlendirmesi gerektirir.")}</p></div>
       <div className="performance-console-health"><ShieldCheck size={16}/><span>{c("Lifecycle controls active", "Yaşam döngüsü kontrolleri aktif")}</span></div>
     </div>
     {notice ? <div className={`performance-notice ${notice.tone}`}><span>{notice.tone === "ok" ? <CheckCircle2 size={15}/> : <CircleAlert size={15}/>}</span>{notice.text}</div> : null}
@@ -97,7 +98,7 @@ export function GrowthLifecycleConsole(props: Props) {
   function LearningQueue({ rows }: { rows: LearningAssignmentOperation[] }) {
     return <div className="growth-lifecycle-list">{rows.length ? rows.map((row) => <article className="growth-lifecycle-row" key={row.id}>
       <div className="growth-lifecycle-icon"><GraduationCap size={16}/></div>
-      <div className="growth-lifecycle-copy"><strong>{row.person}</strong><small>{row.employeeNumber} · {row.courseCode} · {row.course}</small><span>{row.mandatory ? c("Mandatory", "Zorunlu") : c("Development", "Gelişim")} · <Clock3 size={11}/> {c("Due", "Son tarih")} {dateOnly(row.dueAt)}</span></div>
+      <div className="growth-lifecycle-copy"><strong>{row.person}</strong><small>{row.employeeNumber} · {row.courseCode} · {row.course}</small><span>{row.mandatory ? c("Mandatory", "Zorunlu") : c("Development", "Gelişim")} · <Clock3 size={11}/> {c("Due", "Son tarih")} {dateOnly(row.dueAt)}</span>{row.successionCandidateId && row.developmentSkillName ? <span><Sparkles size={11}/> {c("Succession development", "Yedekleme gelişimi")} · {row.developmentSkillCode} · {row.developmentSkillName}{row.targetProficiency ? ` → ${label(row.targetProficiency, locale)}` : ""}</span> : null}</div>
       <em className={`growth-pill ${row.status.toLowerCase().replaceAll("_", "-")}`}>{label(row.status, locale)}</em>
       <div className="growth-lifecycle-actions">{(learningTransitions[row.status] ?? []).map((next) => <button className="secondary-button" type="button" key={next} disabled={pending !== null} onClick={() => void request(`learning-${row.id}-${next}`, `/api/learning/assignments/${row.id}/transition`, "POST", { status: next })}>{pending === `learning-${row.id}-${next}` ? "…" : label(next, locale)}</button>)}</div>
     </article>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No open learning assignments require action.", "Aksiyon gerektiren açık eğitim ataması yok.")}</span></div>}</div>;
