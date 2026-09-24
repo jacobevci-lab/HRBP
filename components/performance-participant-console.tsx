@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, CircleAlert, ClipboardCheck, ShieldCheck, UsersRound } from "lucide-react";
+import { CheckCircle2, CircleAlert, ClipboardCheck, ShieldCheck, Target, UsersRound } from "lucide-react";
 import { useLocale } from "@/components/locale-provider";
 import type { PerformanceParticipantData } from "@/lib/performance-participant-data";
 
@@ -16,6 +16,8 @@ function label(value: string, locale: "en" | "tr") {
     SELF_REVIEW: "Öz değerlendirme",
     MANAGER_REVIEW: "Yönetici değerlendirmesi",
     CALIBRATION: "Kalibrasyon",
+    ACTIVE: "Aktif",
+    AT_RISK: "Riskte",
     NEEDS_IMPROVEMENT: "Gelişim gerekli",
     DEVELOPING: "Gelişiyor",
     MEETS: "Beklentiyi karşılıyor",
@@ -26,28 +28,32 @@ function label(value: string, locale: "en" | "tr") {
   return value.toLowerCase().split("_").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
 }
 
-export function PerformanceParticipantConsole({ selfReviews, managerReviews }: PerformanceParticipantData) {
+function dueDate(value: string, locale: "en" | "tr") {
+  return new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-GB", { dateStyle: "medium" }).format(new Date(value));
+}
+
+export function PerformanceParticipantConsole({ selfReviews, managerReviews, ownGoals }: PerformanceParticipantData) {
   const router = useRouter();
   const { locale } = useLocale();
   const c = (en: string, tr: string) => locale === "tr" ? tr : en;
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
 
-  if (!selfReviews.length && !managerReviews.length) return null;
+  if (!selfReviews.length && !managerReviews.length && !ownGoals.length) return null;
 
-  async function submit(key: string, url: string, payload: Record<string, unknown>) {
+  async function submit(key: string, url: string, payload: Record<string, unknown>, method: "POST" | "PATCH" = "POST") {
     setPending(key);
     setNotice(null);
     try {
       const response = await fetch(url, {
-        method: "POST",
+        method,
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload)
       });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(body.error || c(`Request failed (${response.status})`, `İstek başarısız (${response.status})`));
-      setNotice({ tone: "ok", text: c("Review submitted and audit evidence written.", "Değerlendirme gönderildi ve denetim kanıtı yazıldı.") });
+      setNotice({ tone: "ok", text: c("Performance action saved and audit evidence written.", "Performans aksiyonu kaydedildi ve denetim kanıtı yazıldı.") });
       router.refresh();
     } catch (error) {
       setNotice({ tone: "error", text: error instanceof Error ? error.message : c("Submission failed.", "Gönderim başarısız.") });
@@ -60,8 +66,8 @@ export function PerformanceParticipantConsole({ selfReviews, managerReviews }: P
     <div className="performance-console-head">
       <div>
         <span className="section-kicker">{c("My performance actions", "Performans aksiyonlarım")}</span>
-        <h3>{c("Participant review inbox", "Katılımcı değerlendirme kutusu")}</h3>
-        <p>{c("Self ratings are submitted by the employee. Manager ratings are submitted only by the assigned manager employment. HR governance cannot impersonate either decision.", "Öz değerlendirme çalışan tarafından; yönetici puanı yalnız atanmış yönetici istihdam kaydı tarafından gönderilir. İK yönetişimi bu kararların yerine geçemez.")}</p>
+        <h3>{c("Participant performance inbox", "Katılımcı performans kutusu")}</h3>
+        <p>{c("Self ratings, assigned-manager ratings and personal goal progress are identity-bound. HR governance controls lifecycle and calibration without impersonating participant decisions.", "Öz değerlendirme, atanmış yönetici puanı ve kişisel hedef ilerlemesi kimliğe bağlıdır. İK yönetişimi katılımcı kararlarının yerine geçmeden yaşam döngüsünü ve kalibrasyonu yönetir.")}</p>
       </div>
       <div className="performance-console-health"><ShieldCheck size={16}/><span>{c("Identity-bound decisions", "Kimliğe bağlı kararlar")}</span></div>
     </div>
@@ -93,5 +99,17 @@ export function PerformanceParticipantConsole({ selfReviews, managerReviews }: P
         </form>) : <p className="performance-empty">{c("No manager review requires action.", "Aksiyon bekleyen yönetici değerlendirmesi yok.")}</p>}</div>
       </div>
     </div>
+
+    {ownGoals.length ? <div className="performance-ops-panel goal-operations">
+      <div className="performance-panel-title"><Target size={16}/><div><strong>{c("My goal progress", "Hedef ilerlemem")}</strong><small>{ownGoals.length} {c("active goals", "aktif hedef")}</small></div></div>
+      <div className="performance-goal-grid">{ownGoals.map((goal) => <form key={goal.id} className="performance-goal-card" onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        void submit(`own-goal-${goal.id}`, `/api/performance/goals/${goal.id}/self-progress`, { progress: Number(data.get("progress")) }, "PATCH");
+      }}>
+        <div><strong>{goal.title}</strong><small>{label(goal.status, locale)} · {c("Due", "Bitiş")} {dueDate(goal.dueAt, locale)}</small></div>
+        <div className="performance-goal-controls"><input name="progress" type="number" min="0" max="100" required defaultValue={goal.progress}/><span>%</span><button className="secondary-button" disabled={pending !== null}>{pending === `own-goal-${goal.id}` ? "…" : c("Update progress", "İlerlemeyi güncelle")}</button></div>
+      </form>)}</div>
+    </div> : null}
   </section>;
 }
