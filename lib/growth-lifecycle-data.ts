@@ -12,8 +12,12 @@ export type BenefitEnrollmentOperation = {
   planCode: string;
   status: string;
   coverageTier: string;
+  employerContribution: string | null;
+  employeeContribution: string | null;
   effectiveFrom: string;
   effectiveTo: string | null;
+  planEffectiveFrom: string;
+  planEffectiveTo: string | null;
 };
 
 export type LearningAssignmentOperation = {
@@ -60,9 +64,11 @@ export async function getBenefitEnrollmentOperationsData(ctx: RequestContext): P
         employmentId: true,
         status: true,
         coverageTier: true,
+        employerContribution: true,
+        employeeContribution: true,
         effectiveFrom: true,
         effectiveTo: true,
-        benefitPlan: { select: { code: true, name: true } }
+        benefitPlan: { select: { code: true, name: true, effectiveFrom: true, effectiveTo: true } }
       }
     });
   });
@@ -76,8 +82,12 @@ export async function getBenefitEnrollmentOperationsData(ctx: RequestContext): P
     planCode: row.benefitPlan.code,
     status: row.status,
     coverageTier: row.coverageTier ?? "—",
+    employerContribution: row.employerContribution?.toString() ?? null,
+    employeeContribution: row.employeeContribution?.toString() ?? null,
     effectiveFrom: row.effectiveFrom.toISOString(),
-    effectiveTo: row.effectiveTo?.toISOString() ?? null
+    effectiveTo: row.effectiveTo?.toISOString() ?? null,
+    planEffectiveFrom: row.benefitPlan.effectiveFrom.toISOString(),
+    planEffectiveTo: row.benefitPlan.effectiveTo?.toISOString() ?? null
   }));
 }
 
