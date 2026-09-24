@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpenCheck, CheckCircle2, CircleAlert, Clock3, ShieldCheck } from "lucide-react";
+import { BookOpenCheck, CheckCircle2, CircleAlert, Clock3, ShieldCheck, Sparkles } from "lucide-react";
 import { useLocale } from "@/components/locale-provider";
 import type { LearningParticipantAssignment } from "@/lib/learning-participant-data";
 
 function label(value: string, locale: "en" | "tr") {
-  const tr: Record<string, string> = { ASSIGNED: "Atandı", IN_PROGRESS: "Devam ediyor", OVERDUE: "Gecikmiş", COMPLETED: "Tamamlandı" };
+  const tr: Record<string, string> = {
+    ASSIGNED: "Atandı", IN_PROGRESS: "Devam ediyor", OVERDUE: "Gecikmiş", COMPLETED: "Tamamlandı",
+    AWARENESS: "Farkındalık", FOUNDATION: "Temel", PRACTITIONER: "Uygulayıcı", ADVANCED: "İleri", EXPERT: "Uzman"
+  };
   if (locale === "tr" && tr[value]) return tr[value];
   return value.toLowerCase().split("_").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
 }
@@ -46,7 +49,7 @@ export function LearningParticipantConsole({ assignments }: { assignments: Learn
 
   return <section className="performance-console card growth-lifecycle-console">
     <div className="performance-console-head">
-      <div><span className="section-kicker">{c("My learning", "Eğitimlerim")}</span><h3>{c("Assigned learning actions", "Atanmış eğitim aksiyonları")}</h3><p>{c("Start your assigned learning and submit completion evidence for your own employment record. Waivers and compliance overrides remain administrator-owned.", "Atanmış eğitimlerinizi başlatın ve yalnız kendi istihdam kaydınız için tamamlama kanıtı gönderin. Muafiyet ve uyum istisnaları yönetici sahipliğinde kalır.")}</p></div>
+      <div><span className="section-kicker">{c("My learning", "Eğitimlerim")}</span><h3>{c("Assigned learning actions", "Atanmış eğitim aksiyonları")}</h3><p>{c("Start your assigned learning and submit completion evidence for your own employment record. Succession-linked development remains evidence for a later human readiness review; completing a course does not automatically change your talent or succession status.", "Atanmış eğitimlerinizi başlatın ve yalnız kendi istihdam kaydınız için tamamlama kanıtı gönderin. Yedeklemeye bağlı gelişim, daha sonraki insan hazırlık değerlendirmesi için kanıt olarak kalır; bir eğitimi tamamlamak yetenek veya yedekleme durumunuzu otomatik değiştirmez.")}</p></div>
       <div className="performance-console-health"><ShieldCheck size={16}/><span>{c("Identity-bound progress", "Kimliğe bağlı ilerleme")}</span></div>
     </div>
 
@@ -63,7 +66,7 @@ export function LearningParticipantConsole({ assignments }: { assignments: Learn
       });
     }}>
       <div className="growth-lifecycle-icon"><BookOpenCheck size={16}/></div>
-      <div className="growth-lifecycle-copy"><strong>{assignment.course}</strong><small>{assignment.courseCode} · {assignment.provider}</small><span>{assignment.mandatory ? c("Mandatory", "Zorunlu") : c("Development", "Gelişim")} · <Clock3 size={11}/> {c("Due", "Son tarih")} {dateOnly(assignment.dueAt)}</span></div>
+      <div className="growth-lifecycle-copy"><strong>{assignment.course}</strong><small>{assignment.courseCode} · {assignment.provider}</small><span>{assignment.mandatory ? c("Mandatory", "Zorunlu") : c("Development", "Gelişim")} · <Clock3 size={11}/> {c("Due", "Son tarih")} {dateOnly(assignment.dueAt)}</span>{assignment.successionCandidateId && assignment.developmentSkillName ? <span><Sparkles size={11}/> {c("Succession development", "Yedekleme gelişimi")} · {assignment.developmentSkillCode} · {assignment.developmentSkillName}{assignment.targetProficiency ? ` → ${label(assignment.targetProficiency, locale)}` : ""}</span> : null}</div>
       <em className={`growth-pill ${assignment.status.toLowerCase().replaceAll("_", "-")}`}>{label(assignment.status, locale)}</em>
       <div className="performance-review-controls">{assignment.status !== "ASSIGNED" ? <><input name="score" type="number" min="0" max="100" step="0.01" placeholder={c("Score", "Puan")}/><input name="certificateReference" maxLength={500} placeholder={c("Certificate / evidence reference", "Sertifika / kanıt referansı")}/></> : null}<button className="secondary-button" disabled={pending !== null}>{pending === `learning-self-${assignment.id}` ? "…" : assignment.status === "ASSIGNED" ? c("Start", "Başlat") : c("Complete", "Tamamla")}</button></div>
     </form>)}</div>
