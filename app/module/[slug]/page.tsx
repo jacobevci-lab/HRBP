@@ -7,6 +7,7 @@ import { ModuleLanding } from "@/components/module-landing";
 import { NotificationsModulePage } from "@/components/notifications-module-page";
 import { PublicCoreLanding } from "@/components/public-core-landing";
 import { SecurityPolicyEditorLoader } from "@/components/security-policy-editor-loader";
+import { SettingsConnectionsManager } from "@/components/settings-connections-manager";
 import { SettingsLivePage } from "@/components/settings-live-page";
 import { WorkflowActionCenter } from "@/components/workflow-action-center";
 import { WorkPayModulePage } from "@/components/work-pay-module-page";
@@ -36,7 +37,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const instanceId = typeof search.instance === "string" ? search.instance : undefined;
 
   if (ctx && slug === "notifications") return <AppShell><NotificationsModulePage/></AppShell>;
-  if (ctx && slug === "settings") return <AppShell><SettingsLivePage/><SecurityPolicyEditorLoader/></AppShell>;
+  if (ctx && slug === "settings") return <AppShell><SettingsLivePage/><SecurityPolicyEditorLoader/>{can(ctx, "settings:write") ? <SettingsConnectionsManager/> : null}</AppShell>;
   if (ctx && slug === "analytics") return <AnalyticsModulePage/>;
   if (ctx && growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug}/>;
   if (ctx && workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug}/>;
