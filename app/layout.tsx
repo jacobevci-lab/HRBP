@@ -7,6 +7,7 @@ import "./recruiting-ops.css";
 import "./work-pay.css";
 import "./growth.css";
 import "./performance-operations.css";
+import "./growth-lifecycle.css";
 import "./employee-services.css";
 import "./governance-planning.css";
 import "./platform-admin.css";
