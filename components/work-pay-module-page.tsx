@@ -35,6 +35,10 @@ function capabilityFor(slug: Slug): Capability {
 
 function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
 
+function ConsoleWarning({ locale, title, body }: { locale: Locale; title: string; body: string }) {
+  return <section className="card module-degraded-banner" style={{ marginTop: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}><CircleAlert size={18}/><div><strong style={{ display: "block", fontSize: 11 }}>{title}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5 }}>{body}</p></div></section>;
+}
+
 export async function WorkPayModulePage({ slug }: { slug: Slug }) {
   const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   const meta = copy[slug][locale];
@@ -60,10 +64,26 @@ export async function WorkPayModulePage({ slug }: { slug: Slug }) {
     const content = slug === "compensation"
       ? await (await import("@/components/compensation-live-workspace")).CompensationLiveWorkspace()
       : await (await import("@/components/work-pay-live-workspace")).WorkPayLiveWorkspace({ slug });
+    let participant: React.ReactNode = null;
+
+    if (slug === "leave" && ctx.employmentId && can(ctx, "leave:self-request")) {
+      try {
+        const [{ LeaveParticipantConsole }, { getLeaveParticipantData }] = await Promise.all([
+          import("@/components/leave-participant-console"),
+          import("@/lib/leave-participant-data")
+        ]);
+        const data = await getLeaveParticipantData(ctx);
+        participant = <LeaveParticipantConsole employmentId={ctx.employmentId} data={data}/>;
+      } catch (participantError) {
+        console.error("[HRBP] leave self-service could not initialize.", participantError);
+        participant = <ConsoleWarning locale={locale} title={c(locale, "Leave self-service is temporarily unavailable", "İzin self-servis geçici olarak kullanılamıyor")} body={c(locale, "No leave mutation was attempted. The governed leave operating view remains available while self-service recovers.", "Hiçbir izin değişikliği denenmedi. Self-servis toparlanırken yönetişimli izin operasyon görünümü kullanılabilir.")}/>;
+      }
+    }
 
     return <AppShell>
       <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> {c(locale, "Governed live data", "Yönetişimli canlı veri")}</button></div></section>
       {content}
+      {participant}
     </AppShell>;
   } catch (error) {
     console.error(`[HRBP] Dedicated ${slug} workspace failed; protected fallback activated.`, error);
