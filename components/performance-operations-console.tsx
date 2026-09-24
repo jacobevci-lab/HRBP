@@ -82,7 +82,7 @@ export function PerformanceOperationsConsole({ employments, cycles, reviews, goa
   async function createReview(form: HTMLFormElement) {
     const data = new FormData(form);
     const ok = await mutate("new-review", "/api/performance/reviews", "POST", {
-      cycleId: data.get("cycleId"), employmentId: data.get("employmentId"), managerEmploymentId: data.get("managerEmploymentId") || null
+      cycleId: data.get("cycleId"), employmentId: data.get("employmentId")
     });
     if (ok) form.reset();
   }
@@ -120,7 +120,7 @@ export function PerformanceOperationsConsole({ employments, cycles, reviews, goa
         <div className="performance-form-title"><ClipboardCheck size={17}/><div><strong>{c("New employee review", "Yeni çalışan değerlendirmesi")}</strong><small>{c("One review per employee and cycle", "Çalışan ve döngü başına tek değerlendirme")}</small></div></div>
         <label>{c("Cycle", "Döngü")}<select name="cycleId" required defaultValue=""><option value="" disabled>{c("Select cycle", "Döngü seçin")}</option>{creatableCycles.map((cycle) => <option key={cycle.id} value={cycle.id}>{cycle.name} · {label(cycle.status, locale)}</option>)}</select></label>
         <label>{c("Employee", "Çalışan")}<select name="employmentId" required defaultValue=""><option value="" disabled>{c("Select employee", "Çalışan seçin")}</option>{employments.map((employment) => <option key={employment.id} value={employment.id}>{employment.person} · {employment.employeeNumber}</option>)}</select></label>
-        <label>{c("Manager employment", "Yönetici istihdam kaydı")}<select name="managerEmploymentId" defaultValue=""><option value="">{c("Use governed manager relationship", "Yönetişimli yönetici ilişkisini kullan")}</option>{employments.map((employment) => <option key={employment.id} value={employment.id}>{employment.person} · {employment.position}</option>)}</select></label>
+        <div className="performance-console-health"><ShieldCheck size={14}/><span>{c("Manager is assigned automatically from the governed employment relationship.", "Yönetici, yönetişimli istihdam ilişkisinden otomatik atanır.")}</span></div>
         <button className="create-button" disabled={pending !== null || !employments.length || !creatableCycles.length}>{pending === "new-review" ? c("Creating…", "Oluşturuluyor…") : c("Create review", "Değerlendirme oluştur")}</button>
       </form>
     </div>
