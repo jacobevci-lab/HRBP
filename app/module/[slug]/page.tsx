@@ -6,6 +6,7 @@ import { HRServiceEscalationPanel } from "@/components/hr-service-escalation-pan
 import { ModuleLanding } from "@/components/module-landing";
 import { NotificationsModulePage } from "@/components/notifications-module-page";
 import { PublicCoreLanding } from "@/components/public-core-landing";
+import { SettingsLivePage } from "@/components/settings-live-page";
 import { WorkflowActionCenter } from "@/components/workflow-action-center";
 import { WorkPayModulePage } from "@/components/work-pay-module-page";
 import { can } from "@/lib/authorization";
@@ -34,6 +35,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const instanceId = typeof search.instance === "string" ? search.instance : undefined;
 
   if (ctx && slug === "notifications") return <AppShell><NotificationsModulePage/></AppShell>;
+  if (ctx && slug === "settings") return <AppShell><SettingsLivePage/></AppShell>;
   if (ctx && slug === "analytics") return <AnalyticsModulePage/>;
   if (ctx && growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug}/>;
   if (ctx && workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug}/>;
