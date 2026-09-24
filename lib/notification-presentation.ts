@@ -19,6 +19,8 @@ export function notificationTitle(eventType: string, locale: Locale) {
     WORKFLOW_TASK_OVERDUE: { en: "Workflow task overdue", tr: "İş akışı görevi gecikti" },
     PERFORMANCE_SELF_REVIEW_READY: { en: "Self review ready", tr: "Öz değerlendirme hazır" },
     PERFORMANCE_MANAGER_REVIEW_READY: { en: "Manager review ready", tr: "Yönetici değerlendirmesi hazır" },
+    SUCCESSION_PLAN_REVIEW_DUE_SOON: { en: "Succession plan review due soon", tr: "Yedekleme planı inceleme tarihi yaklaşıyor" },
+    SUCCESSION_PLAN_REVIEW_OVERDUE: { en: "Succession plan review overdue", tr: "Yedekleme planı incelemesi gecikti" },
     AUDIT_INTEGRITY_FAILURE: { en: "Audit ledger integrity failure", tr: "Denetim defteri bütünlük hatası" }
   };
   const known = titles[eventType];
@@ -44,10 +46,18 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const integrityReason = text(data.reason);
   const cycleName = text(data.cycleName);
   const participantName = text(data.participantName);
+  const positionCode = text(data.positionCode);
+  const positionTitle = text(data.positionTitle);
+  const reviewDueAt = text(data.reviewDueAt);
 
   if (brokenEventId) {
     const detail = integrityReason ?? (locale === "tr" ? "Hash-zinciri doğrulaması başarısız oldu." : "Hash-chain verification failed.");
     return `${brokenEventId}: ${detail}`;
+  }
+  if (positionTitle && reviewDueAt) {
+    const deadline = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(reviewDueAt));
+    const position = positionCode ? `${positionCode} · ${positionTitle}` : positionTitle;
+    return locale === "tr" ? `${position} · inceleme tarihi ${deadline}` : `${position} · review due ${deadline}`;
   }
   if (cycleName && participantName) {
     return locale === "tr"
@@ -82,6 +92,7 @@ export function notificationResourceHref(resourceType: string, resourceId?: stri
   if (resourceType === "WorkflowTask") return id ? `/module/workflows?task=${encodeURIComponent(id)}` : "/module/workflows";
   if (resourceType === "WorkflowInstance") return id ? `/module/workflows?instance=${encodeURIComponent(id)}` : "/module/workflows";
   if (resourceType === "PerformanceReview") return id ? `/module/performance?review=${encodeURIComponent(id)}` : "/module/performance";
+  if (resourceType === "SuccessionPlan") return id ? `/module/succession?plan=${encodeURIComponent(id)}` : "/module/succession";
   if (resourceType === "AuditEvent") return id ? `/module/audit?q=${encodeURIComponent(id)}` : "/module/audit";
   return "/";
 }
