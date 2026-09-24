@@ -39,10 +39,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (review.status !== ReviewStatus.MANAGER_REVIEW) throw new Error("INVALID_STATE");
       if (!review.selfRating) throw new Error("SELF_RATING_REQUIRED");
 
-      const updated = await tx.performanceReview.update({
-        where: { id },
+      const result = await tx.performanceReview.updateMany({
+        where: {
+          id,
+          tenantId: ctx.tenantId,
+          managerEmploymentId: ctx.employmentId,
+          status: ReviewStatus.MANAGER_REVIEW
+        },
         data: { managerRating, status: ReviewStatus.CALIBRATION }
       });
+      if (result.count !== 1) throw new Error("STALE_STATE");
+      const updated = await tx.performanceReview.findUnique({ where: { id } });
+      if (!updated) throw new Error("NOT_FOUND");
+
       await appendAudit(tx, ctx, {
         action: "performance-review.manager-submitted",
         resourceType: "PerformanceReview",
@@ -57,7 +66,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (code === "NOT_FOUND") return Response.json({ error: "Performance review not found in tenant." }, { status: 404 });
     if (code === "NOT_ASSIGNED_MANAGER") return forbidden("Manager review can only be submitted by the assigned manager employment.");
     if (code === "CYCLE_LOCKED") return Response.json({ error: "The review cycle is no longer open for manager submission." }, { status: 409 });
-    if (code === "INVALID_STATE") return Response.json({ error: "This review is not awaiting manager review." }, { status: 409 });
+    if (code === "INVALID_STATE" || code === "STALE_STATE") return Response.json({ error: "This review is no longer awaiting manager review." }, { status: 409 });
     if (code === "SELF_RATING_REQUIRED") return Response.json({ error: "The employee self rating is required before manager review." }, { status: 409 });
     throw error;
   }
