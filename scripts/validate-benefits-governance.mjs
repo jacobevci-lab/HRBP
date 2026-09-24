@@ -23,6 +23,16 @@ expect(enrollmentCreatePath, enrollmentCreate, /OUTSIDE_PLAN_PERIOD/, "new benef
 expect(enrollmentCreatePath, enrollmentCreate, /benefit-enrollment\.created-pending/, "new benefit elections must emit explicit pending-state audit evidence");
 expect(enrollmentCreatePath, enrollmentCreate, /canActOnEmployment/, "benefit election creation must enforce relationship scope");
 
+const enrollmentUpdatePath = "app/api/benefits/enrollments/[id]/route.ts";
+const enrollmentUpdate = await source(enrollmentUpdatePath);
+expect(enrollmentUpdatePath, enrollmentUpdate, /can\(ctx,\s*"benefits:write"\)/, "pending benefit election amendments must require benefits:write");
+expect(enrollmentUpdatePath, enrollmentUpdate, /enrollment\.status\s*!==\s*BenefitEnrollmentStatus\.PENDING/, "only pending benefit elections may be amended");
+expect(enrollmentUpdatePath, enrollmentUpdate, /canActOnEmployment/, "pending benefit election amendments must remain relationship scoped");
+expect(enrollmentUpdatePath, enrollmentUpdate, /PLAN_INACTIVE/, "pending elections on inactive plans must be locked");
+expect(enrollmentUpdatePath, enrollmentUpdate, /OUTSIDE_PLAN_PERIOD/, "pending election amendments must preserve plan effective-date boundaries");
+expect(enrollmentUpdatePath, enrollmentUpdate, /updateMany/, "pending election amendments must use state-aware writes");
+expect(enrollmentUpdatePath, enrollmentUpdate, /benefit-enrollment\.pending-amended/, "pending election amendments must emit explicit audit evidence");
+
 const planUpdatePath = "app/api/benefits/plans/[id]/route.ts";
 const planUpdate = await source(planUpdatePath);
 expect(planUpdatePath, planUpdate, /can\(ctx,\s*"benefits:write"\)/, "benefit plan lifecycle maintenance must require benefits:write");
@@ -37,6 +47,19 @@ expect(transitionPath, transition, /PLAN_INACTIVE/, "inactive benefit plans must
 expect(transitionPath, transition, /OUTSIDE_PLAN_PERIOD/, "benefit lifecycle transitions must preserve plan effective-date boundaries");
 expect(transitionPath, transition, /updateMany/, "benefit lifecycle transitions must use state-aware writes");
 expect(transitionPath, transition, /STALE_STATE/, "benefit lifecycle transitions must detect concurrent state changes");
+
+const lifecycleDataPath = "lib/growth-lifecycle-data.ts";
+const lifecycleData = await source(lifecycleDataPath);
+expect(lifecycleDataPath, lifecycleData, /employerContribution:\s*true/, "benefit lifecycle data must expose election employer contribution");
+expect(lifecycleDataPath, lifecycleData, /employeeContribution:\s*true/, "benefit lifecycle data must expose election employee contribution");
+expect(lifecycleDataPath, lifecycleData, /benefitPlan:\s*\{\s*select:\s*\{[^}]*effectiveFrom:\s*true[^}]*effectiveTo:\s*true/, "benefit lifecycle data must expose governing plan date bounds");
+
+const lifecycleConsolePath = "components/growth-lifecycle-console.tsx";
+const lifecycleConsole = await source(lifecycleConsolePath);
+expect(lifecycleConsolePath, lifecycleConsole, /\/api\/benefits\/enrollments\/\$\{row\.id\}/, "pending benefit election console must use the governed amendment endpoint");
+expect(lifecycleConsolePath, lifecycleConsole, /"PATCH"/, "pending benefit election console must use explicit patch mutations");
+expect(lifecycleConsolePath, lifecycleConsole, /row\.status\s*===\s*"PENDING"/, "pending amendment controls must be hidden after election leaves pending state");
+expect(lifecycleConsolePath, lifecycleConsole, /Save pending election|Bekleyen seçimi kaydet/, "benefit lifecycle console must expose pending election amendment action");
 
 const dataPath = "lib/benefits-governance-data.ts";
 const data = await source(dataPath);
@@ -59,4 +82,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated benefits governance contract: pending-only election creation, relationship scope, effective-date integrity, state-aware transitions and non-destructive plan lifecycle are enforced.");
+console.log("Validated benefits governance contract: pending-only election creation and amendments, relationship scope, effective-date integrity, state-aware transitions and non-destructive plan lifecycle are enforced.");
