@@ -16,7 +16,8 @@ export function notificationTitle(eventType: string, locale: Locale) {
     POLICY_RETIRED: { en: "Policy retired", tr: "Politika yürürlükten kaldırıldı" },
     WORKFLOW_TASK_READY: { en: "Workflow task ready", tr: "İş akışı görevi hazır" },
     WORKFLOW_TASK_DUE_SOON: { en: "Workflow task due soon", tr: "İş akışı görevinin süresi yaklaşıyor" },
-    WORKFLOW_TASK_OVERDUE: { en: "Workflow task overdue", tr: "İş akışı görevi gecikti" }
+    WORKFLOW_TASK_OVERDUE: { en: "Workflow task overdue", tr: "İş akışı görevi gecikti" },
+    AUDIT_INTEGRITY_FAILURE: { en: "Audit ledger integrity failure", tr: "Denetim defteri bütünlük hatası" }
   };
   const known = titles[eventType];
   if (known) return known[locale];
@@ -37,7 +38,13 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const workflowName = text(data.workflowName);
   const taskName = text(data.taskName);
   const dueAt = text(data.dueAt);
+  const brokenEventId = text(data.brokenEventId);
+  const integrityReason = text(data.reason);
 
+  if (brokenEventId) {
+    const detail = integrityReason ?? (locale === "tr" ? "Hash-zinciri doğrulaması başarısız oldu." : "Hash-chain verification failed.");
+    return locale === "tr" ? `${brokenEventId}: ${detail}` : `${brokenEventId}: ${detail}`;
+  }
   if (workflowName && taskName) {
     const deadline = dueAt ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(dueAt)) : null;
     if (deadline) return `${workflowName}: ${taskName} · SLA ${deadline}`;
@@ -60,5 +67,6 @@ export function notificationResourceHref(resourceType: string, resourceId?: stri
   if (resourceType === "PolicyException" || resourceType === "PolicyRecord") return id ? `/module/policies?record=${encodeURIComponent(id)}` : "/module/policies";
   if (resourceType === "WorkflowTask") return id ? `/module/workflows?task=${encodeURIComponent(id)}` : "/module/workflows";
   if (resourceType === "WorkflowInstance") return id ? `/module/workflows?instance=${encodeURIComponent(id)}` : "/module/workflows";
+  if (resourceType === "AuditEvent") return id ? `/module/audit?q=${encodeURIComponent(id)}` : "/module/audit";
   return "/";
 }
