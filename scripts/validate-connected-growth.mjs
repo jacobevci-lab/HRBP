@@ -32,7 +32,9 @@ for (const transitionPath of [
 ]) {
   const transition = await source(transitionPath);
   expect(transitionPath, transition, /enqueueSuccessionDevelopmentReassessment/, "learning completion must request human succession reassessment");
-  expect(transitionPath, transition, /successionCandidate[\s\S]*developmentSkill[\s\S]*targetProficiency/, "reassessment must only be queued for structured succession development assignments");
+  expect(transitionPath, transition, /successionCandidate/, "reassessment must require succession candidate provenance");
+  expect(transitionPath, transition, /developmentSkill/, "reassessment must require a structured development skill");
+  expect(transitionPath, transition, /targetProficiency/, "reassessment must require a governed target proficiency");
   expect(transitionPath, transition, /updateMany/, "learning transitions must remain state-aware");
 }
 
