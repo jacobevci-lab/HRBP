@@ -33,6 +33,8 @@ export type LearningAssignmentOperation = {
   completedAt: string | null;
   score: string | null;
   successionCandidateId: string | null;
+  developmentPlanId: string | null;
+  developmentPlanTitle: string | null;
   developmentSkillCode: string | null;
   developmentSkillName: string | null;
   targetProficiency: string | null;
@@ -114,6 +116,8 @@ export async function getLearningAssignmentOperationsData(ctx: RequestContext): 
         completedAt: true,
         score: true,
         successionCandidateId: true,
+        developmentPlanId: true,
+        developmentPlan: { select: { title: true } },
         targetProficiency: true,
         developmentSkill: { select: { code: true, name: true } },
         course: { select: { code: true, title: true, mandatory: true } }
@@ -134,6 +138,8 @@ export async function getLearningAssignmentOperationsData(ctx: RequestContext): 
     completedAt: row.completedAt?.toISOString() ?? null,
     score: row.score?.toString() ?? null,
     successionCandidateId: row.successionCandidateId,
+    developmentPlanId: row.developmentPlanId,
+    developmentPlanTitle: row.developmentPlan?.title ?? null,
     developmentSkillCode: row.developmentSkill?.code ?? null,
     developmentSkillName: row.developmentSkill?.name ?? null,
     targetProficiency: row.targetProficiency
