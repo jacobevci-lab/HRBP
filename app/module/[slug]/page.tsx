@@ -7,7 +7,7 @@ import { GrowthModulePage } from "@/components/growth-module-page";
 import { HRServiceEscalationPanel } from "@/components/hr-service-escalation-panel";
 import { ModuleLanding } from "@/components/module-landing";
 import { NotificationsModulePage } from "@/components/notifications-module-page";
-import { PublicCoreLanding } from "@/components/public-core-landing";
+import { PublicModuleLanding } from "@/components/public-module-landing";
 import { SecurityPolicyEditorLoader } from "@/components/security-policy-editor-loader";
 import { SettingsConnectionsManager } from "@/components/settings-connections-manager";
 import { SettingsLivePage } from "@/components/settings-live-page";
@@ -24,7 +24,6 @@ type GrowthSlug = "benefits" | "performance" | "talent" | "succession" | "learni
 type WorkPaySlug = "time-attendance" | "leave" | "compensation" | "payroll";
 type GovernanceSlug = "engagement" | "workforce-planning" | "ai-assistant" | "privacy";
 
-const publicCoreSlugs = new Set(["people", "organization", "positions", "employee-360"]);
 const growthSlugs = new Set<GrowthSlug>(["benefits", "performance", "talent", "succession", "learning"]);
 const workPaySlugs = new Set<WorkPaySlug>(["time-attendance", "leave", "compensation", "payroll"]);
 const governanceSlugs = new Set<GovernanceSlug>(["engagement", "workforce-planning", "ai-assistant", "privacy"]);
@@ -38,25 +37,23 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const taskId = typeof search.task === "string" ? search.task : undefined;
   const instanceId = typeof search.instance === "string" ? search.instance : undefined;
 
-  if (ctx && slug === "notifications") return <AppShell><NotificationsModulePage/></AppShell>;
-  if (ctx && slug === "settings") return <AppShell><SettingsLivePage/><SecurityPolicyEditorLoader/><ConnectionLifecyclePanel/>{can(ctx, "settings:write") ? <SettingsConnectionsManager/> : null}</AppShell>;
-  if (ctx && slug === "audit") return <AppShell><AuditLivePage searchParams={search}/></AppShell>;
-  if (ctx && slug === "analytics") return <AnalyticsModulePage/>;
-  if (ctx && growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug}/>;
-  if (ctx && workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug}/>;
-  if (ctx && governanceSlugs.has(slug as GovernanceSlug)) return <GovernancePlanningModulePage slug={slug as GovernanceSlug}/>;
+  if (!ctx) return <AppShell><PublicModuleLanding slug={slug}/></AppShell>;
 
-  const workflowAdminVisible = Boolean(ctx && can(ctx, "workflows:read"));
+  if (slug === "notifications") return <AppShell><NotificationsModulePage/></AppShell>;
+  if (slug === "settings") return <AppShell><SettingsLivePage/><SecurityPolicyEditorLoader/><ConnectionLifecyclePanel/>{can(ctx, "settings:write") ? <SettingsConnectionsManager/> : null}</AppShell>;
+  if (slug === "audit") return <AppShell><AuditLivePage searchParams={search}/></AppShell>;
+  if (slug === "analytics") return <AnalyticsModulePage/>;
+  if (growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug}/>;
+  if (workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug}/>;
+  if (governanceSlugs.has(slug as GovernanceSlug)) return <GovernancePlanningModulePage slug={slug as GovernanceSlug}/>;
+
+  const workflowAdminVisible = can(ctx, "workflows:read");
 
   return (
     <AppShell>
-      {!ctx && publicCoreSlugs.has(slug)
-        ? <PublicCoreLanding slug={slug as "people" | "organization" | "positions" | "employee-360"}/>
-        : <>
-            {ctx && slug === "workflows" ? <WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId}/> : null}
-            {slug !== "workflows" || !ctx || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/> : null}
-            {ctx && slug === "hr-service" ? <HRServiceEscalationPanel filterValue={escalation}/> : null}
-          </>}
+      {slug === "workflows" ? <WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId}/> : null}
+      {slug !== "workflows" || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/> : null}
+      {slug === "hr-service" ? <HRServiceEscalationPanel filterValue={escalation}/> : null}
     </AppShell>
   );
 }
