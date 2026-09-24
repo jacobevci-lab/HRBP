@@ -12,37 +12,6 @@ function parseRank(value: unknown) {
   return rank;
 }
 
-async function candidateContext(id: string, tenantId: string) {
-  return db.successionCandidate.findFirst({
-    where: { id, tenantId },
-    select: {
-      id: true,
-      planId: true,
-      employmentId: true,
-      plan: { select: { id: true, positionId: true, active: true } }
-    }
-  });
-}
-
-async function ensureScope(ctx: NonNullable<ReturnType<typeof getRequestContext>>, candidate: Awaited<ReturnType<typeof candidateContext>>) {
-  if (!candidate) throw new Error("NOT_FOUND");
-  const scope = await resolveEmploymentScope(db, ctx);
-  if (!canActOnEmployment(scope, candidate.employmentId)) throw new Error("OUT_OF_SCOPE");
-  if (scope !== null) {
-    const scopedIncumbent = await db.employment.findFirst({
-      where: {
-        tenantId: ctx.tenantId,
-        positionId: candidate.plan.positionId,
-        status: { not: EmploymentStatus.TERMINATED },
-        ...employmentPrimaryKeyFilter(scope)
-      },
-      select: { id: true }
-    });
-    if (!scopedIncumbent) throw new Error("PLAN_OUT_OF_SCOPE");
-  }
-  return scope;
-}
-
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
