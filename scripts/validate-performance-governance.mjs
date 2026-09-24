@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 async function source(path) { return readFile(path, "utf8"); }
 const failures = [];
 function expect(path, text, pattern, message) { if (!pattern.test(text)) failures.push(`${path}: ${message}`); }
+function expectAbsent(path, text, pattern, message) { if (pattern.test(text)) failures.push(`${path}: ${message}`); }
 
 const modulePath = "components/growth-module-page.tsx";
 const modulePage = await source(modulePath);
@@ -23,6 +24,18 @@ const participantData = await source(participantDataPath);
 expect(participantDataPath, participantData, /employmentId:\s*ctx\.employmentId/, "self-review queue must be bound to the signed employment identity");
 expect(participantDataPath, participantData, /managerEmploymentId:\s*ctx\.employmentId/, "manager-review queue must be bound to the assigned manager employment identity");
 expect(participantDataPath, participantData, /ReviewCycleStatus\.OPEN/, "participant queues must close when the review cycle leaves the open phase");
+
+const participantConsolePath = "components/performance-participant-console.tsx";
+const participantConsole = await source(participantConsolePath);
+expect(participantConsolePath, participantConsole, /\/self-submit/, "participant console must use the identity-bound self-submit endpoint");
+expect(participantConsolePath, participantConsole, /\/manager-submit/, "participant console must use the identity-bound manager-submit endpoint");
+
+const operationsConsolePath = "components/performance-operations-console.tsx";
+const operationsConsole = await source(operationsConsolePath);
+expectAbsent(operationsConsolePath, operationsConsole, /name="managerEmploymentId"/, "performance administration must not expose arbitrary manager selection");
+expectAbsent(operationsConsolePath, operationsConsole, /data\.get\("managerEmploymentId"\)/, "review creation payload must not accept a manually selected manager");
+expect(operationsConsolePath, operationsConsole, /Manager is assigned automatically from the governed employment relationship/, "review creation UI must disclose governed manager assignment");
+expect(operationsConsolePath, operationsConsole, /review\.status\s*===\s*"SELF_REVIEW"\s*\|\|\s*review\.status\s*===\s*"MANAGER_REVIEW"/, "administration console must render participant-owned phases as waiting states");
 
 const selfPath = "app/api/performance/reviews/[id]/self-submit/route.ts";
 const selfRoute = await source(selfPath);
@@ -83,4 +96,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated performance governance contract: employee self decisions, assigned-manager decisions, calibration governance, relationship scope and audit evidence are enforced.");
+console.log("Validated performance governance contract: employee self decisions, assigned-manager decisions, governed manager assignment, calibration governance, relationship scope and audit evidence are enforced.");
