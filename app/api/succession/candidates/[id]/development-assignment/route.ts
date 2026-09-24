@@ -1,4 +1,4 @@
-import { DataClassification, EmploymentStatus, LearningAssignmentStatus, SkillProficiency } from "@prisma/client";
+import { DataClassification, DevelopmentPlanStatus, EmploymentStatus, LearningAssignmentStatus, SkillProficiency } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
@@ -46,6 +46,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         select: {
           id: true,
           employmentId: true,
+          developmentGap: true,
           plan: { select: { id: true, positionId: true, active: true, ownerId: true } }
         }
       });
@@ -67,7 +68,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         if (!scopedIncumbent) throw new Error("PLAN_OUT_OF_SCOPE");
       }
 
-      const [course, skill, employment, position, currentSkill, duplicate] = await Promise.all([
+      const [course, skill, employment, position, currentSkill, duplicate, sourceAssessment, existingPlan] = await Promise.all([
         tx.learningCourse.findFirst({
           where: { id: courseId, tenantId: ctx.tenantId, active: true },
           select: { id: true, code: true, title: true }
@@ -94,12 +95,68 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             status: { in: [LearningAssignmentStatus.ASSIGNED, LearningAssignmentStatus.IN_PROGRESS, LearningAssignmentStatus.OVERDUE] }
           },
           select: { id: true }
+        }),
+        tx.talentAssessment.findFirst({
+          where: { tenantId: ctx.tenantId, employmentId: candidate.employmentId },
+          orderBy: { assessedAt: "desc" },
+          select: { id: true }
+        }),
+        tx.developmentPlan.findFirst({
+          where: {
+            tenantId: ctx.tenantId,
+            employmentId: candidate.employmentId,
+            successionCandidateId: candidate.id,
+            focusSkillId: skillId,
+            status: { in: [DevelopmentPlanStatus.DRAFT, DevelopmentPlanStatus.ACTIVE] }
+          },
+          orderBy: { updatedAt: "desc" },
+          select: { id: true, targetAt: true, targetProficiency: true, status: true }
         })
       ]);
       if (!course || !skill || !employment || !position) throw new Error("DEVELOPMENT_REFERENCE_NOT_FOUND");
       if (duplicate) throw new Error("DUPLICATE_OPEN_PLAN");
       if (currentSkill && proficiencyOrder.indexOf(targetProficiency) <= proficiencyOrder.indexOf(currentSkill.proficiency)) {
         throw new Error("TARGET_NOT_ABOVE_CURRENT");
+      }
+      if (existingPlan?.targetProficiency && proficiencyOrder.indexOf(targetProficiency) < proficiencyOrder.indexOf(existingPlan.targetProficiency)) {
+        throw new Error("TARGET_BELOW_PLAN");
+      }
+
+      let developmentPlanId = existingPlan?.id;
+      if (existingPlan) {
+        await tx.developmentPlan.update({
+          where: { id: existingPlan.id },
+          data: {
+            status: DevelopmentPlanStatus.ACTIVE,
+            targetAt: dueAt > existingPlan.targetAt ? dueAt : existingPlan.targetAt,
+            targetProficiency
+          }
+        });
+      } else {
+        const developmentPlan = await tx.developmentPlan.create({
+          data: {
+            tenantId: ctx.tenantId,
+            employmentId: candidate.employmentId,
+            title: `Succession development · ${position.title}`,
+            objective: candidate.developmentGap || `Build ${skill.name} capability for ${position.title}.`,
+            status: DevelopmentPlanStatus.ACTIVE,
+            ownerId: candidate.plan.ownerId ?? ctx.actorId,
+            sourceAssessmentId: sourceAssessment?.id,
+            successionCandidateId: candidate.id,
+            focusSkillId: skill.id,
+            targetProficiency,
+            startsAt: new Date(),
+            targetAt: dueAt
+          }
+        });
+        developmentPlanId = developmentPlan.id;
+        await appendAudit(tx, ctx, {
+          action: "development-plan.created-from-succession",
+          resourceType: "DevelopmentPlan",
+          resourceId: developmentPlan.id,
+          classification: DataClassification.CONFIDENTIAL,
+          purpose: `${position.positionCode}; ${skill.code} target ${targetProficiency}`
+        });
       }
 
       const assignment = await tx.learningAssignment.create({
@@ -108,6 +165,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           employmentId: candidate.employmentId,
           courseId: course.id,
           successionCandidateId: candidate.id,
+          developmentPlanId,
           developmentSkillId: skill.id,
           targetProficiency,
           status: LearningAssignmentStatus.ASSIGNED,
@@ -129,6 +187,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         classification: DataClassification.CONFIDENTIAL,
         purpose: `Learning assignment ${assignment.id} linked to ${skill.code}`
       });
+      if (developmentPlanId) {
+        await appendAudit(tx, ctx, {
+          action: "development-plan.learning-assignment-created",
+          resourceType: "DevelopmentPlan",
+          resourceId: developmentPlanId,
+          classification: DataClassification.CONFIDENTIAL,
+          purpose: `Learning assignment ${assignment.id} · ${course.code}`
+        });
+      }
       await enqueueLearningAssignmentNotification(tx, {
         tenantId: ctx.tenantId,
         employmentId: candidate.employmentId,
@@ -142,7 +209,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         ...assignment,
         course: { code: course.code, title: course.title },
         skill: { code: skill.code, name: skill.name },
-        currentProficiency: currentSkill?.proficiency ?? null
+        currentProficiency: currentSkill?.proficiency ?? null,
+        developmentPlanId
       };
     });
     return Response.json({ data }, { status: 201 });
@@ -155,6 +223,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (code === "DEVELOPMENT_REFERENCE_NOT_FOUND") return Response.json({ error: "Candidate employment, active course, active skill or target position was not found in tenant." }, { status: 404 });
     if (code === "DUPLICATE_OPEN_PLAN") return Response.json({ error: "An open development assignment already links this candidate, course and skill." }, { status: 409 });
     if (code === "TARGET_NOT_ABOVE_CURRENT") return Response.json({ error: "Target proficiency must be above the employee's current assessed proficiency." }, { status: 409 });
+    if (code === "TARGET_BELOW_PLAN") return Response.json({ error: "Target proficiency cannot be lower than the active development plan target." }, { status: 409 });
     throw error;
   }
 }
