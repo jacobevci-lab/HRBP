@@ -64,7 +64,7 @@ jobs:
             accessGrants, jurisdictions, goals, reviews, serviceRequests, serviceQueues, queueMembers,
             policies, policyExceptions, workflows,
             campaigns, scenarios, metrics, metricSnapshots, processing, dsrs,
-            connectedGrowthAssignments, notificationOutbox, invalidMetricScopes
+            connectedGrowthAssignments, developmentPlans, notificationOutbox, invalidMetricScopes
           ] = await Promise.all([
             db.tenant.count(),
             db.person.count(),
@@ -93,7 +93,15 @@ jobs:
             db.learningAssignment.count({
               where: {
                 successionCandidateId: { not: null },
+                developmentPlanId: { not: null },
                 developmentSkillId: { not: null },
+                targetProficiency: { not: null }
+              }
+            }),
+            db.developmentPlan.count({
+              where: {
+                successionCandidateId: { not: null },
+                focusSkillId: { not: null },
                 targetProficiency: { not: null }
               }
             }),
@@ -113,7 +121,7 @@ jobs:
             accessGrants, jurisdictions, goals, reviews, serviceRequests, serviceQueues, queueMembers,
             policies, policyExceptions, workflows,
             campaigns, scenarios, metrics, metricSnapshots, processing, dsrs,
-            connectedGrowthAssignments
+            connectedGrowthAssignments, developmentPlans
           };
           console.log({ ...counts, notificationOutbox, invalidMetricScopes });
           if (Object.values(counts).some((value) => value < 1)) process.exit(1);
