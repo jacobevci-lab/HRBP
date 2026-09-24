@@ -60,9 +60,15 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const visibleNavigation = useMemo(() => navigation
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => !navigationCapabilities || !item.requiredCapability || navigationCapabilities.has(item.requiredCapability))
+      items: group.items.filter((item) => {
+        if (item.requiredCapability) {
+          return authenticated === true && Boolean(navigationCapabilities?.has(item.requiredCapability));
+        }
+        if (item.requiresAuthentication) return authenticated === true;
+        return true;
+      })
     }))
-    .filter((group) => group.items.length > 0), [navigationCapabilities]);
+    .filter((group) => group.items.length > 0), [authenticated, navigationCapabilities]);
   const workspaceName = tenantName ?? "HRBP One";
 
   return (
