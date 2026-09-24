@@ -6,7 +6,8 @@ function expect(path, text, pattern, message) { if (!pattern.test(text)) failure
 
 const modulePath = "components/growth-module-page.tsx";
 const modulePage = await source(modulePath);
-expect(modulePath, modulePage, /slug\s*===\s*"performance"\s*&&\s*can\(ctx,\s*"performance:write"\)/, "performance write console must require performance:write");
+expect(modulePath, modulePage, /if\s*\(slug\s*===\s*"performance"\)\s*return\s*"performance:write"/, "performance must map to the performance:write capability");
+expect(modulePath, modulePage, /writeCapability\s*&&\s*can\(ctx,\s*writeCapability\)/, "growth write consoles must use their mapped write capability");
 expect(modulePath, modulePage, /PerformanceOperationsConsole/, "authenticated performance page must expose the governed operations console");
 
 const reviewPath = "app/api/performance/reviews/[id]/transition/route.ts";
@@ -27,7 +28,7 @@ expect(cyclePath, cycleRoute, /appendAudit/, "cycle transitions must emit audit 
 const goalPath = "app/api/performance/goals/[id]/route.ts";
 const goalRoute = await source(goalPath);
 expect(goalPath, goalRoute, /progress\s*<\s*0\s*\|\|\s*progress\s*>\s*100/, "goal progress must be range validated");
-expect(goalPath, goalRoute, /COMPLETED,\s*GoalStatus\.CANCELLED/, "terminal goals must be immutable");
+expect(goalPath, goalRoute, /goal\.status\s*===\s*GoalStatus\.COMPLETED\s*\|\|\s*goal\.status\s*===\s*GoalStatus\.CANCELLED/, "terminal goals must be immutable");
 expect(goalPath, goalRoute, /canActOnEmployment/, "goal changes must enforce relationship scope");
 expect(goalPath, goalRoute, /appendAudit/, "goal changes must emit audit evidence");
 
