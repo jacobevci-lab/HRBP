@@ -34,6 +34,20 @@ type ActionQueueResponse = {
 
 type Filter = "all" | "overdue" | "due-soon";
 
+async function acknowledgeTaskNotifications(taskId: string) {
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resourceType: "WorkflowTask", resourceId: taskId, read: true })
+    });
+    if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
+  } catch {
+    // Notification acknowledgement is best-effort and must never roll back an
+    // already completed workflow task.
+  }
+}
+
 export function WorkflowActionCenter({ initialTaskId, initialInstanceId }: { initialTaskId?: string; initialInstanceId?: string }) {
   const { locale } = useLocale();
   const [items, setItems] = useState<WorkflowTaskItem[]>([]);
@@ -103,6 +117,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId }: { ini
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
       setSuccess(locale === "tr" ? "Görev tamamlandı ve iş akışı bir sonraki adıma ilerletildi." : "Task completed and the workflow advanced to its next step.");
+      await acknowledgeTaskNotifications(item.id);
       await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : (locale === "tr" ? "Görev tamamlanamadı." : "Task could not be completed."));
