@@ -34,7 +34,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!goal) throw new Error("NOT_FOUND");
       const scope = await resolveEmploymentScope(tx, ctx);
       if (!canActOnEmployment(scope, goal.employmentId)) throw new Error("OUT_OF_SCOPE");
-      if ([GoalStatus.COMPLETED, GoalStatus.CANCELLED].includes(goal.status) && (progress !== undefined || (requestedStatus && requestedStatus !== goal.status))) throw new Error("TERMINAL");
+      const terminal = goal.status === GoalStatus.COMPLETED || goal.status === GoalStatus.CANCELLED;
+      if (terminal && (progress !== undefined || (requestedStatus && requestedStatus !== goal.status))) throw new Error("TERMINAL");
       if (requestedStatus && requestedStatus !== goal.status && !(statusTransitions[goal.status] ?? []).includes(requestedStatus)) throw new Error("INVALID_TRANSITION");
 
       const nextStatus = requestedStatus ?? goal.status;

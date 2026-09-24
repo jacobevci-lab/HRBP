@@ -68,7 +68,7 @@ export async function getGrowthOperationsData(ctx: RequestContext, slug: GrowthW
       },
       orderBy: { updatedAt: "desc" },
       take: 250,
-      select: { id: true, position: { select: { positionCode: true, title: true } } }
+      select: { id: true, positionId: true }
     }) : [];
 
     const courses = slug === "learning" ? await db.learningCourse.findMany({
@@ -85,6 +85,8 @@ export async function getGrowthOperationsData(ctx: RequestContext, slug: GrowthW
       select: { id: true, code: true, name: true, critical: true }
     }) : [];
 
+    const positionById = new Map(positions.map((position) => [position.id, position]));
+
     return {
       employments: employments.map((employment) => ({
         id: employment.id,
@@ -95,7 +97,10 @@ export async function getGrowthOperationsData(ctx: RequestContext, slug: GrowthW
       })),
       positions: positions.map((position) => ({ id: position.id, code: position.positionCode, title: position.title, organization: position.orgUnit.name, critical: position.critical })),
       benefitPlans: benefitPlans.map((plan) => ({ id: plan.id, code: plan.code, name: plan.name, type: plan.type })),
-      successionPlans: successionPlans.map((plan) => ({ id: plan.id, position: plan.position.title, positionCode: plan.position.positionCode })),
+      successionPlans: successionPlans.flatMap((plan) => {
+        const position = positionById.get(plan.positionId);
+        return position ? [{ id: plan.id, position: position.title, positionCode: position.positionCode }] : [];
+      }),
       courses: courses.map((course) => ({ id: course.id, code: course.code, title: course.title, mandatory: course.mandatory })),
       skills: skills.map((skill) => ({ id: skill.id, code: skill.code, name: skill.name, critical: skill.critical }))
     };

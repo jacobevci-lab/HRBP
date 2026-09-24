@@ -32,7 +32,8 @@ export async function POST(request: Request) {
         body.managerEmploymentId ? tx.employment.findFirst({ where: { id: body.managerEmploymentId, tenantId: ctx.tenantId }, select: { id: true } }) : Promise.resolve({ id: "" })
       ]);
       if (!cycle || !employment || (body.managerEmploymentId && !manager)) throw new Error("NOT_FOUND");
-      if (![ReviewCycleStatus.DRAFT, ReviewCycleStatus.OPEN].includes(cycle.status)) throw new Error("CYCLE_LOCKED");
+      const acceptsNewReviews = cycle.status === ReviewCycleStatus.DRAFT || cycle.status === ReviewCycleStatus.OPEN;
+      if (!acceptsNewReviews) throw new Error("CYCLE_LOCKED");
       const review = await tx.performanceReview.create({ data: { tenantId: ctx.tenantId, cycleId: body.cycleId!, employmentId: body.employmentId!, managerEmploymentId: body.managerEmploymentId || undefined, status: ReviewStatus.NOT_STARTED } });
       await appendAudit(tx, ctx, { action: "performance-review.created", resourceType: "PerformanceReview", resourceId: review.id, classification: DataClassification.CONFIDENTIAL });
       return review;
