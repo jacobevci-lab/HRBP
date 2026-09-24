@@ -4,17 +4,7 @@ import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
-
-function optionalHttpUrl(value: unknown, maxLength = 1024): string | null | undefined {
-  const parsed = asOptionalText(value, maxLength);
-  if (parsed === undefined || parsed === null) return parsed;
-  try {
-    const url = new URL(parsed);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
+import { optionalEndpoint } from "@/lib/settings-connection-validation";
 
 function scopesValue(value: unknown): Prisma.InputJsonValue | undefined | null {
   if (value === undefined || value === null) return undefined;
@@ -56,7 +46,7 @@ export async function POST(request: Request) {
   const name = asText(body.name, 120);
   const systemType = asText(body.systemType, 120);
   const authType = asText(body.authType, 80);
-  const baseUrl = optionalHttpUrl(body.baseUrl);
+  const baseUrl = optionalEndpoint(body.baseUrl, ["https:", "http:"]);
   const secretRef = asOptionalText(body.secretRef, 512);
   const scopes = scopesValue(body.scopes);
   if (!name || !systemType || !authType) return Response.json({ error: "name, systemType and authType are required." }, { status: 400 });
@@ -74,7 +64,7 @@ export async function POST(request: Request) {
           authType,
           secretRef,
           ...(scopes === undefined ? {} : { scopes }),
-          enabled: typeof body.enabled === "boolean" ? body.enabled : false,
+          enabled: false,
           status: ConnectionStatus.DRAFT,
           createdById: ctx.actorId
         }
@@ -84,7 +74,7 @@ export async function POST(request: Request) {
         resourceType: "IntegrationConnection",
         resourceId: connection.id,
         classification: DataClassification.RESTRICTED,
-        purpose: `Integration ${systemType} registered as DRAFT`
+        purpose: `Integration ${systemType} registered as disabled DRAFT pending governed activation`
       });
       return connection;
     });
