@@ -4,6 +4,7 @@ import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
 import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
+import { enqueueSuccessionDevelopmentReassessment } from "@/lib/succession-development-notifications";
 
 const transitions: Record<LearningAssignmentStatus, LearningAssignmentStatus[]> = {
   ASSIGNED: [LearningAssignmentStatus.IN_PROGRESS, LearningAssignmentStatus.WAIVED, LearningAssignmentStatus.OVERDUE],
@@ -30,15 +31,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const data = await db.$transaction(async (tx) => {
       const assignment = await tx.learningAssignment.findFirst({
         where: { id, tenantId: ctx.tenantId },
-        select: { id: true, employmentId: true, status: true, completedAt: true }
+        select: {
+          id: true,
+          employmentId: true,
+          status: true,
+          completedAt: true,
+          targetProficiency: true,
+          course: { select: { code: true, title: true } },
+          developmentSkill: { select: { code: true, name: true } },
+          successionCandidate: {
+            select: { id: true, plan: { select: { ownerId: true, positionId: true } } }
+          }
+        }
       });
       if (!assignment) throw new Error("NOT_FOUND");
       const scope = await resolveEmploymentScope(tx, ctx);
       if (!canActOnEmployment(scope, assignment.employmentId)) throw new Error("OUT_OF_SCOPE");
       if (!(transitions[assignment.status] ?? []).includes(next)) throw new Error("INVALID_TRANSITION");
 
-      const updated = await tx.learningAssignment.update({
-        where: { id },
+      const changed = await tx.learningAssignment.updateMany({
+        where: { id, tenantId: ctx.tenantId, status: assignment.status },
         data: {
           status: next,
           completedAt: next === LearningAssignmentStatus.COMPLETED ? new Date() : assignment.completedAt,
@@ -46,12 +58,44 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           certificateReference: next === LearningAssignmentStatus.COMPLETED && body.certificateReference ? String(body.certificateReference).trim().slice(0, 500) : undefined
         }
       });
+      if (changed.count !== 1) throw new Error("STALE_STATE");
+      const updated = await tx.learningAssignment.findUnique({ where: { id } });
+      if (!updated) throw new Error("NOT_FOUND");
+
       await appendAudit(tx, ctx, {
         action: `learning-assignment.transition.${assignment.status.toLowerCase()}.${next.toLowerCase()}`,
         resourceType: "LearningAssignment",
         resourceId: id,
         classification: DataClassification.CONFIDENTIAL
       });
+
+      if (next === LearningAssignmentStatus.COMPLETED && assignment.successionCandidate && assignment.developmentSkill && assignment.targetProficiency) {
+        const [position, activeOwner] = await Promise.all([
+          tx.position.findFirst({
+            where: { id: assignment.successionCandidate.plan.positionId, tenantId: ctx.tenantId },
+            select: { positionCode: true, title: true }
+          }),
+          assignment.successionCandidate.plan.ownerId ? tx.userAccount.findFirst({
+            where: { id: assignment.successionCandidate.plan.ownerId, tenantId: ctx.tenantId, active: true },
+            select: { id: true }
+          }) : Promise.resolve(null)
+        ]);
+        if (position) {
+          await enqueueSuccessionDevelopmentReassessment(tx, {
+            tenantId: ctx.tenantId,
+            assignmentId: id,
+            candidateId: assignment.successionCandidate.id,
+            ownerId: activeOwner?.id ?? null,
+            positionCode: position.positionCode,
+            positionTitle: position.title,
+            courseCode: assignment.course.code,
+            courseTitle: assignment.course.title,
+            skillCode: assignment.developmentSkill.code,
+            skillName: assignment.developmentSkill.name,
+            targetProficiency: assignment.targetProficiency
+          });
+        }
+      }
       return updated;
     });
     return Response.json({ data });
@@ -59,7 +103,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const code = error instanceof Error ? error.message : "";
     if (code === "OUT_OF_SCOPE") return forbidden("Employment is outside your authorized relationship scope.");
     if (code === "NOT_FOUND") return Response.json({ error: "Learning assignment not found in tenant." }, { status: 404 });
-    if (code === "INVALID_TRANSITION") return Response.json({ error: "Learning assignment transition is not allowed from the current state." }, { status: 409 });
+    if (code === "INVALID_TRANSITION" || code === "STALE_STATE") return Response.json({ error: "Learning assignment transition is not allowed from the current state." }, { status: 409 });
     throw error;
   }
 }
