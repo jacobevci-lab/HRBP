@@ -1,4 +1,4 @@
-import { ApplicationStage, OfferStatus, PositionStatus, RequisitionStatus } from "@prisma/client";
+import { ApplicationStage, PositionStatus, RequisitionStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
 
 export type RecruitingPositionOption = {
