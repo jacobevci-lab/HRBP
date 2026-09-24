@@ -1,0 +1,62 @@
+import { readFile } from "node:fs/promises";
+
+async function source(path) { return readFile(path, "utf8"); }
+const failures = [];
+function expect(path, text, pattern, message) { if (!pattern.test(text)) failures.push(`${path}: ${message}`); }
+
+const modulePath = "components/growth-module-page.tsx";
+const modulePage = await source(modulePath);
+expect(modulePath, modulePage, /BenefitsGovernanceConsole/, "benefits writers must receive the effective-dated plan governance console");
+expect(modulePath, modulePage, /getBenefitsGovernanceData\(ctx\)/, "benefit plan governance data must load from signed request context");
+
+const planCreatePath = "app/api/benefits/plans/route.ts";
+const planCreate = await source(planCreatePath);
+expect(planCreatePath, planCreate, /effectiveTo cannot be earlier than effectiveFrom/, "benefit plan creation must reject inverted effective dates");
+expect(planCreatePath, planCreate, /Contributions must be non-negative amounts or blank/, "benefit plan contributions must be bounded to non-negative values");
+expect(planCreatePath, planCreate, /countryCode must be a two-letter code or blank/, "benefit plan country codes must be normalized and validated");
+expect(planCreatePath, planCreate, /currency must be a three-letter code or blank/, "benefit plan currency codes must be normalized and validated");
+
+const enrollmentCreatePath = "app/api/benefits/enrollments/route.ts";
+const enrollmentCreate = await source(enrollmentCreatePath);
+expect(enrollmentCreatePath, enrollmentCreate, /status:\s*BenefitEnrollmentStatus\.PENDING/, "new benefit elections must always enter the governed pending state");
+expect(enrollmentCreatePath, enrollmentCreate, /OUTSIDE_PLAN_PERIOD/, "new benefit elections must stay within the plan effective period");
+expect(enrollmentCreatePath, enrollmentCreate, /benefit-enrollment\.created-pending/, "new benefit elections must emit explicit pending-state audit evidence");
+expect(enrollmentCreatePath, enrollmentCreate, /canActOnEmployment/, "benefit election creation must enforce relationship scope");
+
+const planUpdatePath = "app/api/benefits/plans/[id]/route.ts";
+const planUpdate = await source(planUpdatePath);
+expect(planUpdatePath, planUpdate, /can\(ctx,\s*"benefits:write"\)/, "benefit plan lifecycle maintenance must require benefits:write");
+expect(planUpdatePath, planUpdate, /benefit-plan\.deactivated/, "benefit plan lifecycle must support auditable deactivation");
+expect(planUpdatePath, planUpdate, /benefit-plan\.reactivated/, "benefit plan lifecycle must support auditable reactivation");
+expect(planUpdatePath, planUpdate, /effectiveTo cannot be earlier than effectiveFrom/, "benefit plan lifecycle must protect effective-date ordering");
+
+const transitionPath = "app/api/benefits/enrollments/[id]/transition/route.ts";
+const transition = await source(transitionPath);
+expect(transitionPath, transition, /benefitPlan:\s*\{\s*select:\s*\{\s*active:\s*true/, "benefit activation must load governing plan lifecycle state");
+expect(transitionPath, transition, /PLAN_INACTIVE/, "inactive benefit plans must reject coverage activation");
+expect(transitionPath, transition, /OUTSIDE_PLAN_PERIOD/, "benefit lifecycle transitions must preserve plan effective-date boundaries");
+expect(transitionPath, transition, /updateMany/, "benefit lifecycle transitions must use state-aware writes");
+expect(transitionPath, transition, /STALE_STATE/, "benefit lifecycle transitions must detect concurrent state changes");
+
+const dataPath = "lib/benefits-governance-data.ts";
+const data = await source(dataPath);
+expect(dataPath, data, /resolveEmploymentScope/, "benefit governance reads must resolve relationship scope");
+expect(dataPath, data, /employmentIdFilter\(scope\)/, "benefit governance counts must remain relationship scoped");
+expect(dataPath, data, /BenefitEnrollmentStatus\.ACTIVE/, "benefit governance must expose active coverage counts");
+expect(dataPath, data, /BenefitEnrollmentStatus\.PENDING/, "benefit governance must expose pending election counts");
+
+const consolePath = "components/benefits-governance-console.tsx";
+const consoleSource = await source(consolePath);
+expect(consolePath, consoleSource, /\/api\/benefits\/plans\/\$\{id\}/, "benefit governance console must use the governed plan endpoint");
+expect(consolePath, consoleSource, /method:\s*"PATCH"/, "benefit governance console must use explicit patch mutations");
+expect(consolePath, consoleSource, /Deactivate|Pasife al/, "benefit plan governance must expose non-destructive deactivation");
+expect(consolePath, consoleSource, /employerContribution/, "benefit plan governance must maintain employer contribution metadata");
+expect(consolePath, consoleSource, /employeeContribution/, "benefit plan governance must maintain employee contribution metadata");
+
+if (failures.length) {
+  console.error("Benefits governance contract validation failed:\n");
+  for (const failure of failures) console.error(`- ${failure}`);
+  process.exit(1);
+}
+
+console.log("Validated benefits governance contract: pending-only election creation, relationship scope, effective-date integrity, state-aware transitions and non-destructive plan lifecycle are enforced.");
