@@ -29,6 +29,7 @@ export function notificationTitle(eventType: string, locale: Locale) {
     SUCCESSION_PLAN_REVIEW_DUE_SOON: { en: "Succession plan review due soon", tr: "Yedekleme planı inceleme tarihi yaklaşıyor" },
     SUCCESSION_PLAN_REVIEW_OVERDUE: { en: "Succession plan review overdue", tr: "Yedekleme planı incelemesi gecikti" },
     SUCCESSION_DEVELOPMENT_REASSESSMENT_REQUIRED: { en: "Succession development evidence ready", tr: "Yedekleme gelişim kanıtı hazır" },
+    DEVELOPMENT_PLAN_ACTIVATED: { en: "Development plan activated", tr: "Gelişim planı aktifleştirildi" },
     DEVELOPMENT_PLAN_REASSESSMENT_REQUIRED: { en: "Development plan evidence ready", tr: "Gelişim planı kanıtı hazır" },
     BENEFIT_PLAN_EXPIRED: { en: "Benefit plan expired", tr: "Yan hak planının süresi doldu" },
     AUDIT_INTEGRITY_FAILURE: { en: "Audit ledger integrity failure", tr: "Denetim defteri bütünlük hatası" }
@@ -52,6 +53,7 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const workflowName = text(data.workflowName);
   const taskName = text(data.taskName);
   const dueAt = text(data.dueAt);
+  const targetAt = text(data.targetAt);
   const brokenEventId = text(data.brokenEventId);
   const integrityReason = text(data.reason);
   const cycleName = text(data.cycleName);
@@ -82,6 +84,13 @@ export function notificationSummary(payload: unknown, locale: Locale) {
     const anomalies = anomalousEnrollments ?? 0;
     if (locale === "tr") return `${plan}${deadline ? ` · ${deadline}` : ""} · ${ended} açık kayıt sonlandırıldı${anomalies ? ` · ${anomalies} anomali inceleme bekliyor` : ""}.`;
     return `${plan}${deadline ? ` · ${deadline}` : ""} · ${ended} open enrollments ended${anomalies ? ` · ${anomalies} anomalies require review` : ""}.`;
+  }
+  if (planTitle && targetAt && !courseTitle) {
+    const deadline = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(targetAt));
+    const skill = skillName ? ` · ${skillCode ? `${skillCode} · ` : ""}${skillName}${targetProficiency ? ` → ${targetProficiency}` : ""}` : "";
+    return locale === "tr"
+      ? `${planTitle}${skill} · hedef tarih ${deadline}. Plan Learning self-servisinizde görüntülenebilir.`
+      : `${planTitle}${skill} · target date ${deadline}. The plan is available in Learning self-service.`;
   }
   if (courseTitle && skillName && targetProficiency) {
     const course = courseCode ? `${courseCode} · ${courseTitle}` : courseTitle;
@@ -142,6 +151,7 @@ export function notificationResourceHref(resourceType: string, resourceId?: stri
   if (resourceType === "SuccessionPlan") return id ? `/module/succession?plan=${encodeURIComponent(id)}` : "/module/succession";
   if (resourceType === "SuccessionCandidate") return id ? `/module/succession?candidate=${encodeURIComponent(id)}` : "/module/succession";
   if (resourceType === "DevelopmentPlan") return id ? `/module/talent?developmentPlan=${encodeURIComponent(id)}` : "/module/talent";
+  if (resourceType === "DevelopmentPlanParticipant") return id ? `/module/learning?developmentPlan=${encodeURIComponent(id)}` : "/module/learning";
   if (resourceType === "BenefitPlan") return id ? `/module/benefits?plan=${encodeURIComponent(id)}` : "/module/benefits";
   if (resourceType === "AuditEvent") return id ? `/module/audit?q=${encodeURIComponent(id)}` : "/module/audit";
   return "/";
