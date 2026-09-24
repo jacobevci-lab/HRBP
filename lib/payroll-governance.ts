@@ -263,7 +263,13 @@ export async function computePayrollInputFingerprint(tx: PayrollTx, tenantId: st
   };
 
   const payload = normalize({
-    period: run.payrollPeriod,
+    period: {
+      id: run.payrollPeriod.id,
+      startsAt: run.payrollPeriod.startsAt,
+      endsAt: run.payrollPeriod.endsAt,
+      payDate: run.payrollPeriod.payDate,
+      countryPack: run.payrollPeriod.countryPack
+    },
     results: run.results,
     timeEntries,
     leaveRequests,
