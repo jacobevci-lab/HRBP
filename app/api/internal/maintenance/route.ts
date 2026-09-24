@@ -12,12 +12,10 @@ export async function POST(request: Request) {
     return Response.json({ error: "Valid internal maintenance credentials are required." }, { status: 401 });
   }
 
-  // Normalize time-driven domain state first so reminders, self-service and
-  // reporting observe the same governed lifecycle state.
-  const [benefitsLifecycle, learningLifecycle] = await Promise.all([
-    runBenefitsMaintenance(),
-    runLearningMaintenance()
-  ]);
+  // Audited lifecycle normalizers run serially so their hash-chain writes never
+  // race each other for the same tenant ledger head.
+  const benefitsLifecycle = await runBenefitsMaintenance();
+  const learningLifecycle = await runLearningMaintenance();
   const [workflowReminders, learningReminders, successionReminders, auditIntegrity] = await Promise.all([
     queueWorkflowReminders(),
     queueLearningReminders(),
