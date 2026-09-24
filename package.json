@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "npm run db:generate && next dev",
-    "prebuild": "npm run routes:validate && npm run ui:validate && npm run staging:validate && npm run performance:validate && npm run growth:validate && npm run growth-automation:validate && npm run talent-learning:validate && npm run benefits:validate && npm run connected-growth:validate && npm run development-plan:validate",
+    "prebuild": "npm run routes:validate && npm run ui:validate && npm run staging:validate && npm run performance:validate && npm run growth:validate && npm run growth-automation:validate && npm run talent-learning:validate && npm run benefits:validate && npm run connected-growth:validate && npm run development-plan:validate && npm run leave:validate",
     "build": "npm run db:generate && next build",
     "start": "next start",
     "lint": "eslint .",
@@ -21,6 +21,7 @@
     "benefits:validate": "node scripts/validate-benefits-governance.mjs",
     "connected-growth:validate": "node scripts/validate-connected-growth.mjs",
     "development-plan:validate": "node scripts/validate-development-plans.mjs",
+    "leave:validate": "node scripts/validate-leave-governance.mjs",
     "typecheck": "npm run db:generate && tsc --noEmit",
     "security:audit:prod": "npm audit --omit=dev --audit-level=high",
     "security:audit:full": "npm audit --audit-level=high",
