@@ -1,4 +1,4 @@
-import { DataClassification, PerformanceBand, ReviewStatus } from "@prisma/client";
+import { DataClassification, PerformanceBand, ReviewCycleStatus, ReviewStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
@@ -34,12 +34,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const data = await db.$transaction(async (tx) => {
       const review = await tx.performanceReview.findFirst({
         where: { id, tenantId: ctx.tenantId },
-        select: { id: true, employmentId: true, status: true, managerRating: true, finalRating: true }
+        select: {
+          id: true,
+          employmentId: true,
+          status: true,
+          managerRating: true,
+          finalRating: true,
+          cycle: { select: { status: true } }
+        }
       });
       if (!review) throw new Error("NOT_FOUND");
       const scope = await resolveEmploymentScope(tx, ctx);
       if (!canActOnEmployment(scope, review.employmentId)) throw new Error("OUT_OF_SCOPE");
       if (!(transitions[review.status] ?? []).includes(next)) throw new Error("INVALID_TRANSITION");
+      if (next === ReviewStatus.SELF_REVIEW && review.cycle.status !== ReviewCycleStatus.OPEN) throw new Error("CYCLE_PHASE");
+      if (next === ReviewStatus.FINALIZED && review.cycle.status !== ReviewCycleStatus.CALIBRATION) throw new Error("CYCLE_PHASE");
 
       const finalRating = next === ReviewStatus.FINALIZED ? (rating(body.finalRating) ?? review.finalRating ?? undefined) : undefined;
       if (next === ReviewStatus.FINALIZED && !review.managerRating) throw new Error("MANAGER_RATING_REQUIRED");
@@ -67,6 +76,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (code === "OUT_OF_SCOPE") return forbidden("Employment is outside your authorized relationship scope.");
     if (code === "NOT_FOUND") return Response.json({ error: "Performance review not found in tenant." }, { status: 404 });
     if (code === "INVALID_TRANSITION") return Response.json({ error: "Review transition is not allowed from the current state. Employee and manager phases must be submitted by their assigned identities." }, { status: 409 });
+    if (code === "CYCLE_PHASE") return Response.json({ error: "Review transition is not allowed in the current review-cycle phase." }, { status: 409 });
     if (code === "MANAGER_RATING_REQUIRED") return Response.json({ error: "A manager-submitted rating is required before calibration can be finalized." }, { status: 400 });
     if (code === "FINAL_RATING_REQUIRED") return Response.json({ error: "A human-entered final rating is required before finalization." }, { status: 400 });
     throw error;
