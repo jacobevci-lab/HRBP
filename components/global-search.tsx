@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { BriefcaseBusiness, Command, LayoutGrid, Search, UserRound, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
+import { useSessionContext } from "@/components/session-provider";
 
 type SearchItem = {
   type: "module" | "person" | "position";
@@ -25,6 +26,7 @@ function ResultIcon({ type }: { type: SearchItem["type"] }) {
 export function GlobalSearch() {
   const router = useRouter();
   const { locale, t } = useLocale();
+  const { session, loading: sessionLoading } = useSessionContext();
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
@@ -33,6 +35,8 @@ export function GlobalSearch() {
   const [loading, setLoading] = useState(false);
   const [degraded, setDegraded] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const publicStaging = !sessionLoading && !session?.authenticated;
+  const searchLabel = publicStaging ? (locale === "tr" ? "Modüllerde ara…" : "Search modules…") : t("shell.search");
 
   useEffect(() => {
     const onShortcut = (event: KeyboardEvent) => {
@@ -93,11 +97,13 @@ export function GlobalSearch() {
   }, [query]);
 
   const statusText = useMemo(() => {
-    if (query.trim().length < 2) return locale === "tr" ? "Aramak için en az 2 karakter yaz." : "Type at least 2 characters to search.";
+    if (query.trim().length < 2) return publicStaging
+      ? (locale === "tr" ? "Staging modüllerini aramak için en az 2 karakter yaz." : "Type at least 2 characters to search staging modules.")
+      : (locale === "tr" ? "Aramak için en az 2 karakter yaz." : "Type at least 2 characters to search.");
     if (loading) return locale === "tr" ? "Aranıyor…" : "Searching…";
     if (!items.length) return locale === "tr" ? "Eşleşme bulunamadı." : "No matches found.";
     return degraded ? (locale === "tr" ? "Canlı veri sınırlı; modül sonuçları gösteriliyor." : "Live data is limited; module results are shown.") : null;
-  }, [degraded, items.length, loading, locale, query]);
+  }, [degraded, items.length, loading, locale, publicStaging, query]);
 
   function choose(item: SearchItem) {
     setOpen(false);
@@ -131,8 +137,8 @@ export function GlobalSearch() {
           role="combobox"
           aria-autocomplete="list"
           value={query}
-          placeholder={t("shell.search")}
-          aria-label={t("shell.search")}
+          placeholder={searchLabel}
+          aria-label={searchLabel}
           aria-expanded={open}
           aria-controls="global-search-results"
           aria-activedescendant={activeDescendant}
