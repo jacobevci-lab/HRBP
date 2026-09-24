@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { AnalyticsModulePage } from "@/components/analytics-module-page";
+import { AuditLivePage } from "@/components/audit-live-page";
 import { ConnectionLifecyclePanel } from "@/components/connection-lifecycle-panel";
 import { GovernancePlanningModulePage } from "@/components/governance-planning-module-page";
 import { GrowthModulePage } from "@/components/growth-module-page";
@@ -39,6 +40,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
 
   if (ctx && slug === "notifications") return <AppShell><NotificationsModulePage/></AppShell>;
   if (ctx && slug === "settings") return <AppShell><SettingsLivePage/><SecurityPolicyEditorLoader/><ConnectionLifecyclePanel/>{can(ctx, "settings:write") ? <SettingsConnectionsManager/> : null}</AppShell>;
+  if (ctx && slug === "audit") return <AppShell><AuditLivePage searchParams={search}/></AppShell>;
   if (ctx && slug === "analytics") return <AnalyticsModulePage/>;
   if (ctx && growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug}/>;
   if (ctx && workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug}/>;
