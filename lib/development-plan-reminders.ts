@@ -1,4 +1,4 @@
-import { DataClassification, DevelopmentPlanStatus } from "@prisma/client";
+import { DataClassification, DevelopmentPlanStatus, PlatformRole } from "@prisma/client";
 import { db } from "@/lib/db";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { runtimeNumber } from "@/lib/runtime-env";
@@ -30,9 +30,9 @@ export async function queueDevelopmentPlanReminders() {
 
   let ownerDueSoon = 0;
   let ownerOverdue = 0;
+  let ownerRoleFallback = 0;
   let employeeDueSoon = 0;
   let employeeOverdue = 0;
-  let skippedInactiveOwner = 0;
   let skippedUnprovisionedEmployee = 0;
 
   for (const plan of plans) {
@@ -66,19 +66,19 @@ export async function queueDevelopmentPlanReminders() {
     };
 
     await db.$transaction(async (tx) => {
-      if (owner) {
-        await enqueueNotificationOutbox(tx, {
-          tenantId: plan.tenantId,
-          eventType,
-          recipientUserId: owner.id,
-          templateKey: isOverdue ? "talent.development-plan-overdue" : "talent.development-plan-due-soon",
-          resourceType: "DevelopmentPlan",
-          resourceId: plan.id,
-          dedupeKey: `development-plan:${plan.id}:owner:${reminderKey}:${plan.targetAt.toISOString().slice(0, 10)}`,
-          classification: DataClassification.CONFIDENTIAL,
-          payload
-        });
-      }
+      await enqueueNotificationOutbox(tx, {
+        tenantId: plan.tenantId,
+        eventType,
+        recipientUserId: owner?.id ?? null,
+        recipientRole: owner ? null : PlatformRole.TALENT_ADMIN,
+        templateKey: isOverdue ? "talent.development-plan-overdue" : "talent.development-plan-due-soon",
+        resourceType: "DevelopmentPlan",
+        resourceId: plan.id,
+        dedupeKey: `development-plan:${plan.id}:owner:${reminderKey}:${plan.targetAt.toISOString().slice(0, 10)}`,
+        classification: DataClassification.CONFIDENTIAL,
+        payload
+      });
+
       if (employeeUser && employeeUser.id !== owner?.id) {
         await enqueueNotificationOutbox(tx, {
           tenantId: plan.tenantId,
@@ -94,7 +94,7 @@ export async function queueDevelopmentPlanReminders() {
       }
     });
 
-    if (!owner) skippedInactiveOwner += 1;
+    if (!owner) ownerRoleFallback += 1;
     else if (isOverdue) ownerOverdue += 1;
     else ownerDueSoon += 1;
 
@@ -109,9 +109,9 @@ export async function queueDevelopmentPlanReminders() {
     scanned: plans.length,
     queuedOwnerDueSoon: ownerDueSoon,
     queuedOwnerOverdue: ownerOverdue,
+    queuedOwnerRoleFallback: ownerRoleFallback,
     queuedEmployeeDueSoon: employeeDueSoon,
     queuedEmployeeOverdue: employeeOverdue,
-    skippedInactiveOwner,
     skippedUnprovisionedEmployee,
     dueSoonWindowDays: warningDays
   };
