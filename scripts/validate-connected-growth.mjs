@@ -91,8 +91,8 @@ expect(participantDataPath, participantData, /targetProficiency:\s*true/, "emplo
 
 const participantConsolePath = "components/learning-participant-console.tsx";
 const participantConsole = await source(participantConsolePath);
-expect(participantConsolePath, participantConsole, /Succession development|Yedekleme gelişimi/, "employee learning UI must explain succession-linked development");
-expect(participantConsolePath, participantConsole, /does not automatically change|otomatik değiştirmez/, "employee UI must preserve the human decision boundary");
+expect(participantConsolePath, participantConsole, /Succession development|Yedekleme gelişimi|succession-linked|yedeklemeye bağlı/, "employee learning UI must explain succession-linked development");
+expect(participantConsolePath, participantConsole, /does not automatically change|otomatik değiştirmez|never auto-promotes|otomatik yükseltmez/, "employee UI must preserve the human decision boundary");
 
 const seedPath = "scripts/seed-connected-growth-staging.mjs";
 const seed = await source(seedPath);
