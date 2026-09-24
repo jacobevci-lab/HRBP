@@ -62,9 +62,27 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
 
   try {
     const { GrowthLiveWorkspace } = await import("@/components/growth-live-workspace");
+    const liveWorkspace = await GrowthLiveWorkspace({ slug });
+    let operations: React.ReactNode = null;
+
+    if (slug === "performance" && can(ctx, "performance:write")) {
+      try {
+        const [{ PerformanceOperationsConsole }, { getPerformanceOperationsData }] = await Promise.all([
+          import("@/components/performance-operations-console"),
+          import("@/lib/performance-operations-data")
+        ]);
+        const data = await getPerformanceOperationsData(ctx);
+        operations = <PerformanceOperationsConsole {...data}/>;
+      } catch (operationsError) {
+        console.error("[HRBP] Performance operations console could not initialize; live read surface remains available.", operationsError);
+        operations = <section className="card module-degraded-banner" style={{ marginTop: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}><CircleAlert size={18}/><div><strong style={{ display: "block", fontSize: 11 }}>{c(locale, "Performance write console is temporarily unavailable", "Performans yazma konsolu geçici olarak kullanılamıyor")}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5 }}>{c(locale, "Live performance data remains read-only until the governed transaction console recovers.", "Yönetişimli işlem konsolu toparlanana kadar canlı performans verisi salt-okunur kalır.")}</p></div></section>;
+      }
+    }
+
     return <AppShell>
       <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> {c(locale, "Governed live data", "Yönetişimli canlı veri")}</button></div></section>
-      {await GrowthLiveWorkspace({ slug })}
+      {liveWorkspace}
+      {operations}
     </AppShell>;
   } catch (error) {
     console.error(`[HRBP] Dedicated ${slug} workspace failed; protected fallback activated.`, error);
