@@ -2,6 +2,7 @@ import { DataClassification, PerformanceBand, ReviewCycleStatus, ReviewStatus } 
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { enqueuePerformanceParticipantNotification } from "@/lib/performance-notifications";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 function rating(value: unknown): PerformanceBand | null {
@@ -30,7 +31,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           employmentId: true,
           managerEmploymentId: true,
           status: true,
-          cycle: { select: { status: true } }
+          cycle: { select: { status: true, name: true } }
         }
       });
       if (!review) throw new Error("NOT_FOUND");
@@ -40,7 +41,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       const employment = await tx.employment.findFirst({
         where: { id: ctx.employmentId, tenantId: ctx.tenantId },
-        select: { managerEmploymentId: true }
+        select: {
+          managerEmploymentId: true,
+          person: { select: { givenName: true, familyName: true } }
+        }
       });
       if (!employment) throw new Error("EMPLOYMENT_NOT_FOUND");
       const managerEmploymentId = review.managerEmploymentId ?? employment.managerEmploymentId;
@@ -68,6 +72,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         resourceType: "PerformanceReview",
         resourceId: id,
         classification: DataClassification.CONFIDENTIAL
+      });
+      await enqueuePerformanceParticipantNotification(tx, {
+        tenantId: ctx.tenantId,
+        eventType: "PERFORMANCE_MANAGER_REVIEW_READY",
+        recipientEmploymentId: managerEmploymentId,
+        reviewId: id,
+        cycleName: review.cycle.name,
+        participantName: `${employment.person.givenName} ${employment.person.familyName}`,
+        dedupeKey: `performance-review:${id}:manager-review-ready`
       });
       return updated;
     });
