@@ -114,7 +114,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
             <LocaleToggle/>
             <ThemeToggle/>
             <NotificationCenter/>
-            {authenticated && navigationCapabilities?.has("ai:use") ? <button className="ai-button"><Sparkles size={16}/> {t("shell.ask")}</button> : null}
+            {authenticated && navigationCapabilities?.has("ai:use") ? <Link className="ai-button" href="/module/ai-assistant"><Sparkles size={16}/> {t("shell.ask")}</Link> : null}
             {authenticated && navigationCapabilities?.has("people:write") ? <Link className="create-button" href="/module/people/new"><Plus size={17}/> {t("shell.create")}</Link> : null}
             <TopbarAccount/>
           </div>
