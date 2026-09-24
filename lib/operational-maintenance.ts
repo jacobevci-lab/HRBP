@@ -3,6 +3,7 @@ import { appendAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { runNotificationDispatcher } from "@/lib/notification-dispatcher";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
+import { pruneNotificationOutbox } from "@/lib/notification-retention";
 import { runtimeNumber } from "@/lib/runtime-env";
 import type { RequestContext } from "@/lib/request-context";
 
@@ -265,6 +266,7 @@ export async function runOperationalMaintenance() {
   const expiredExceptions = await expirePolicyExceptions(startedAt);
   const retiredPolicies = await retirePolicies(startedAt);
   const notifications = await runNotificationDispatcher();
+  const notificationRetention = await pruneNotificationOutbox(startedAt);
   return {
     startedAt: startedAt.toISOString(),
     completedAt: new Date().toISOString(),
@@ -276,6 +278,7 @@ export async function runOperationalMaintenance() {
       retirementExceptionClosures: retiredPolicies.exceptionClosures,
       retirementNotificationsQueued: retiredPolicies.notificationsQueued
     },
-    notifications
+    notifications,
+    notificationRetention
   };
 }
