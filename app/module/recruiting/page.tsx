@@ -1,5 +1,7 @@
-import { CircleAlert, CircleCheckBig } from "lucide-react";
+import { CircleAlert, CircleCheckBig, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { getServerLocale } from "@/lib/i18n-server";
+import { getServerRequestContext } from "@/lib/server-session";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,12 +17,14 @@ async function renderRecruiting() {
 }
 
 export default async function RecruitingPage() {
+  const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   const state = await renderRecruiting();
+  const tr = locale === "tr";
   return (
     <AppShell>
       <section className="page-heading module-heading">
-        <div><div className="eyebrow">HRBP One / Recruiting</div><h1>Recruiting</h1><p>Plan position-backed requisitions, govern candidate data, manage selection and convert accepted offers directly into employee records.</p></div>
-        <div className="module-heading-actions">{state.degraded ? <button className="secondary-button" disabled><CircleAlert size={16}/> Protected fallback</button> : <button className="secondary-button" disabled><CircleCheckBig size={16}/> Governed live data</button>}</div>
+        <div><div className="eyebrow">HRBP One / {tr ? "İşe Alım" : "Recruiting"}</div><h1>{tr ? "İşe Alım" : "Recruiting"}</h1><p>{tr ? "Pozisyona bağlı işe alım taleplerini planlayın, aday verisini yönetin, seçimi takip edin ve kabul edilen teklifleri kontrollü biçimde çalışan kaydına dönüştürün." : "Plan position-backed requisitions, govern candidate data, manage selection and convert accepted offers directly into employee records."}</p></div>
+        <div className="module-heading-actions">{!ctx ? <button className="secondary-button" disabled><ShieldCheck size={16}/> {tr ? "Sentetik staging" : "Synthetic staging"}</button> : state.degraded ? <button className="secondary-button" disabled><CircleAlert size={16}/> {tr ? "Korumalı yedek mod" : "Protected fallback"}</button> : <button className="secondary-button" disabled><CircleCheckBig size={16}/> {tr ? "Yönetişimli canlı veri" : "Governed live data"}</button>}</div>
       </section>
       {state.content}
     </AppShell>

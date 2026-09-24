@@ -1,5 +1,7 @@
-import { CircleAlert, CircleCheckBig } from "lucide-react";
+import { CircleAlert, CircleCheckBig, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { getServerLocale } from "@/lib/i18n-server";
+import { getServerRequestContext } from "@/lib/server-session";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -18,11 +20,13 @@ async function renderOffboarding() {
 }
 
 export default async function OffboardingPage() {
+  const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   const state = await renderOffboarding();
+  const tr = locale === "tr";
   return <AppShell>
     <section className="page-heading module-heading">
-      <div><div className="eyebrow">HRBP One / Offboarding</div><h1>Offboarding</h1><p>Orchestrate controlled employee exits across HR, managers, identity, assets and payroll before the employment record can close.</p></div>
-      <div className="module-heading-actions">{state.degraded ? <button className="secondary-button" disabled><CircleAlert size={16}/> Protected fallback</button> : <button className="secondary-button" disabled><CircleCheckBig size={16}/> Governed exit workflow</button>}</div>
+      <div><div className="eyebrow">HRBP One / {tr ? "İşten Ayrılış" : "Offboarding"}</div><h1>{tr ? "İşten Ayrılış" : "Offboarding"}</h1><p>{tr ? "İstihdam kaydı kapanmadan önce çalışan ayrılışlarını İK, yönetici, kimlik, varlık ve bordro kontrolleriyle uçtan uca yönetin." : "Orchestrate controlled employee exits across HR, managers, identity, assets and payroll before the employment record can close."}</p></div>
+      <div className="module-heading-actions">{!ctx ? <button className="secondary-button" disabled><ShieldCheck size={16}/> {tr ? "Sentetik staging" : "Synthetic staging"}</button> : state.degraded ? <button className="secondary-button" disabled><CircleAlert size={16}/> {tr ? "Korumalı yedek mod" : "Protected fallback"}</button> : <button className="secondary-button" disabled><CircleCheckBig size={16}/> {tr ? "Yönetişimli ayrılış akışı" : "Governed exit workflow"}</button>}</div>
     </section>
     {state.content}
   </AppShell>;
