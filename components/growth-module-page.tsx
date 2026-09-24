@@ -94,6 +94,18 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
         console.error("[HRBP] performance participant inbox could not initialize.", participantError);
         participant = <ConsoleWarning locale={locale} title={c(locale, "Participant review inbox is temporarily unavailable", "Katılımcı değerlendirme kutusu geçici olarak kullanılamıyor")} body={c(locale, "No participant decision was changed. The governed read surface remains available while the inbox recovers.", "Hiçbir katılımcı kararı değiştirilmedi. Kutu toparlanırken yönetişimli salt-okunur görünüm kullanılabilir.")}/>;
       }
+    } else if (slug === "learning" && can(ctx, "learning:self-progress")) {
+      try {
+        const [{ LearningParticipantConsole }, { getLearningParticipantData }] = await Promise.all([
+          import("@/components/learning-participant-console"),
+          import("@/lib/learning-participant-data")
+        ]);
+        const assignments = await getLearningParticipantData(ctx);
+        participant = <LearningParticipantConsole assignments={assignments}/>;
+      } catch (participantError) {
+        console.error("[HRBP] learning participant inbox could not initialize.", participantError);
+        participant = <ConsoleWarning locale={locale} title={c(locale, "Learning self-service is temporarily unavailable", "Eğitim self-servis geçici olarak kullanılamıyor")} body={c(locale, "No employee learning progress was changed. The governed learning read surface remains available.", "Hiçbir çalışan eğitim ilerlemesi değiştirilmedi. Yönetişimli eğitim salt-okunur görünümü kullanılabilir.")}/>;
+      }
     }
 
     if (writeCapability && can(ctx, writeCapability)) {
