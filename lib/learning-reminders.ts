@@ -65,7 +65,12 @@ export async function queueLearningReminders() {
     },
     select: { id: true, tenantId: true, email: true }
   }) : [];
-  const userMap = new Map(users.map((user) => [`${user.tenantId}:${user.email.trim().toLowerCase()}`, user.id]));
+  const userMap = new Map<string, string>();
+  for (const user of users) {
+    const email = user.email?.trim().toLowerCase();
+    if (!email) continue;
+    userMap.set(`${user.tenantId}:${email}`, user.id);
+  }
 
   let dueSoon = 0;
   let overdue = 0;
