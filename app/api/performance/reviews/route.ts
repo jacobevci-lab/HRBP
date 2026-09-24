@@ -28,13 +28,16 @@ export async function POST(request: Request) {
       if (!canActOnEmployment(scope, body.employmentId!)) throw new Error("OUT_OF_SCOPE");
       const [cycle, employment, manager] = await Promise.all([
         tx.reviewCycle.findFirst({ where: { id: body.cycleId, tenantId: ctx.tenantId }, select: { id: true, status: true } }),
-        tx.employment.findFirst({ where: { id: body.employmentId, tenantId: ctx.tenantId }, select: { id: true } }),
-        body.managerEmploymentId ? tx.employment.findFirst({ where: { id: body.managerEmploymentId, tenantId: ctx.tenantId }, select: { id: true } }) : Promise.resolve({ id: "" })
+        tx.employment.findFirst({ where: { id: body.employmentId, tenantId: ctx.tenantId }, select: { id: true, managerEmploymentId: true } }),
+        body.managerEmploymentId ? tx.employment.findFirst({ where: { id: body.managerEmploymentId, tenantId: ctx.tenantId }, select: { id: true } }) : Promise.resolve(null)
       ]);
       if (!cycle || !employment || (body.managerEmploymentId && !manager)) throw new Error("NOT_FOUND");
       const acceptsNewReviews = cycle.status === ReviewCycleStatus.DRAFT || cycle.status === ReviewCycleStatus.OPEN;
       if (!acceptsNewReviews) throw new Error("CYCLE_LOCKED");
-      const review = await tx.performanceReview.create({ data: { tenantId: ctx.tenantId, cycleId: body.cycleId!, employmentId: body.employmentId!, managerEmploymentId: body.managerEmploymentId || undefined, status: ReviewStatus.NOT_STARTED } });
+      if (body.managerEmploymentId && employment.managerEmploymentId !== body.managerEmploymentId) throw new Error("MANAGER_MISMATCH");
+
+      const managerEmploymentId = body.managerEmploymentId || employment.managerEmploymentId || undefined;
+      const review = await tx.performanceReview.create({ data: { tenantId: ctx.tenantId, cycleId: body.cycleId!, employmentId: body.employmentId!, managerEmploymentId, status: ReviewStatus.NOT_STARTED } });
       await appendAudit(tx, ctx, { action: "performance-review.created", resourceType: "PerformanceReview", resourceId: review.id, classification: DataClassification.CONFIDENTIAL });
       return review;
     });
@@ -44,6 +47,7 @@ export async function POST(request: Request) {
     if (code === "OUT_OF_SCOPE") return forbidden("Employment is outside your authorized relationship scope.");
     if (code === "NOT_FOUND") return Response.json({ error: "Cycle or employment record not found in tenant." }, { status: 404 });
     if (code === "CYCLE_LOCKED") return Response.json({ error: "Reviews can only be added while the cycle is draft or open." }, { status: 409 });
+    if (code === "MANAGER_MISMATCH") return Response.json({ error: "The selected manager must match the employee's governed manager relationship." }, { status: 409 });
     if (code.includes("Unique constraint")) return Response.json({ error: "A review already exists for this employee in the selected cycle." }, { status: 409 });
     throw error;
   }
