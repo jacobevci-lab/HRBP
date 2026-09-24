@@ -30,6 +30,8 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const personId = typeof search.person === "string" ? search.person : undefined;
   const tab = typeof search.tab === "string" ? search.tab : undefined;
   const escalation = typeof search.escalation === "string" ? search.escalation : undefined;
+  const taskId = typeof search.task === "string" ? search.task : undefined;
+  const instanceId = typeof search.instance === "string" ? search.instance : undefined;
 
   if (ctx && slug === "notifications") return <AppShell><NotificationsModulePage/></AppShell>;
   if (ctx && slug === "analytics") return <AnalyticsModulePage/>;
@@ -44,7 +46,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
       {!ctx && publicCoreSlugs.has(slug)
         ? <PublicCoreLanding slug={slug as "people" | "organization" | "positions" | "employee-360"}/>
         : <>
-            {ctx && slug === "workflows" ? <WorkflowActionCenter/> : null}
+            {ctx && slug === "workflows" ? <WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId}/> : null}
             {slug !== "workflows" || !ctx || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/> : null}
             {ctx && slug === "hr-service" ? <HRServiceEscalationPanel filterValue={escalation}/> : null}
           </>}
