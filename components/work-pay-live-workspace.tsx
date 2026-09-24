@@ -11,6 +11,8 @@ import { TimeEntryTransitionButtons } from "@/components/time-entry-transition-b
 type TimeTarget = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "LOCKED";
 type TimeAccess = { selfEntry: boolean; operationalWrite: boolean; approve: boolean; lock: boolean };
 
+type PayrollAccess = { prepare: boolean; approve: boolean; pay: boolean; configure: boolean };
+
 function Metric({ icon, label, value, meta }: { icon: React.ReactNode; label: string; value: string; meta: string }) {
   return <div className="workpay-metric card"><div className="workpay-metric-icon">{icon}</div><div><span>{label}</span><strong>{value}</strong><small>{meta}</small></div></div>;
 }
@@ -94,17 +96,23 @@ export async function WorkPayLiveWorkspace({ slug }: { slug: "time-attendance" |
   }
 
   const data = await getPayrollLiveData(ctx);
-  const canWrite = can(ctx, "payroll:write");
+  const payrollAccess: PayrollAccess = {
+    prepare: can(ctx, "payroll:prepare"),
+    approve: can(ctx, "payroll:approve"),
+    pay: can(ctx, "payroll:pay"),
+    configure: can(ctx, "payroll:configure")
+  };
+  const showPayrollControl = payrollAccess.prepare || payrollAccess.approve || payrollAccess.pay;
   return <div className="workpay-shell">
     <section className="workpay-metrics">
       <Metric icon={<ReceiptText size={18}/>} label="Open payroll runs" value={String(data.openRuns)} meta="Excludes paid and cancelled runs"/>
-      <Metric icon={<Globe2 size={18}/>} label="Country packs" value={String(data.activeCountryPacks)} meta="Active jurisdiction engines"/>
+      <Metric icon={<Globe2 size={18}/>} label="Country packs" value={String(data.activeCountryPacks)} meta={payrollAccess.configure ? "Configuration authority granted" : "Configuration is role-separated"}/>
       <Metric icon={<UsersRound size={18}/>} label="Result records" value={String(data.employeesInLatestRuns)} meta="Across loaded recent runs"/>
-      <Metric icon={<LockKeyhole size={18}/>} label="Access boundary" value="Restricted" meta="Payroll capability required"/>
+      <Metric icon={<LockKeyhole size={18}/>} label="Access boundary" value="Restricted" meta="Prepare · approve · pay are independently authorized"/>
     </section>
     <section className="workpay-split">
-      <div className="card workpay-panel"><div className="workpay-panel-head"><div><span className="section-kicker">Live payroll operations</span><h3>Country-pack run register</h3></div><span className="matrix-note">Restricted</span></div><div className="workpay-table-wrap"><table className="workpay-table"><thead><tr><th>Period / country</th><th>Run</th><th>Employees</th><th>Gross</th><th>Net</th><th>Employer cost</th><th>Pay date</th><th>Status</th>{canWrite ? <th>Next control</th> : null}</tr></thead><tbody>{data.rows.length ? data.rows.map((row) => <tr key={row.id}><td><strong>{row.periodCode}</strong><small className="cell-sub">{row.country} · {row.countryCode} · pack {row.packVersion}</small></td><td>#{row.runNumber}<small className="cell-sub">Period: {row.periodStatus}</small></td><td>{row.employees}</td><td>{money(row.currency, row.gross)}</td><td>{money(row.currency, row.net)}</td><td>{money(row.currency, row.employerCost)}</td><td>{row.payDate}</td><td><Status value={row.status}/></td>{canWrite ? <td><PayrollTransitionButton runId={row.id} status={row.rawStatus}/></td> : null}</tr>) : <tr><td colSpan={canWrite ? 9 : 8} style={{ textAlign: "center", padding: 28 }}>No payroll runs are recorded.</td></tr>}</tbody></table></div></div>
-      <aside className="card workpay-side restricted-side"><div className="workpay-panel-head"><div><span className="section-kicker">Four-eyes payroll</span><h3>Controlled state machine</h3></div><BadgeDollarSign size={18}/></div><div className="control-stack"><div><CheckCircle2 size={17}/><span><strong>Draft → validation → calculation</strong><small>Each transition is explicit and audited.</small></span></div><div><ShieldCheck size={17}/><span><strong>Approval before payment</strong><small>Payroll write is isolated from broad tenant administration.</small></span></div><div><LockKeyhole size={17}/><span><strong>Restricted results</strong><small>Gross, net, tax and deductions never appear on the public surface.</small></span></div></div></aside>
+      <div className="card workpay-panel"><div className="workpay-panel-head"><div><span className="section-kicker">Live payroll operations</span><h3>Country-pack run register</h3></div><span className="matrix-note">Input fingerprint protected</span></div><div className="workpay-table-wrap"><table className="workpay-table"><thead><tr><th>Period / country</th><th>Run</th><th>Employees</th><th>Gross</th><th>Net</th><th>Employer cost</th><th>Pay date</th><th>Status</th>{showPayrollControl ? <th>Next control</th> : null}</tr></thead><tbody>{data.rows.length ? data.rows.map((row) => <tr key={row.id}><td><strong>{row.periodCode}</strong><small className="cell-sub">{row.country} · {row.countryCode} · pack {row.packVersion}</small></td><td>#{row.runNumber}<small className="cell-sub">Period: {row.periodStatus}</small></td><td>{row.employees}</td><td>{money(row.currency, row.gross)}</td><td>{money(row.currency, row.net)}</td><td>{money(row.currency, row.employerCost)}</td><td>{row.payDate}</td><td><Status value={row.status}/></td>{showPayrollControl ? <td><PayrollTransitionButton runId={row.id} status={row.rawStatus} access={payrollAccess}/></td> : null}</tr>) : <tr><td colSpan={showPayrollControl ? 9 : 8} style={{ textAlign: "center", padding: 28 }}>No payroll runs are recorded.</td></tr>}</tbody></table></div></div>
+      <aside className="card workpay-side restricted-side"><div className="workpay-panel-head"><div><span className="section-kicker">Four-eyes payroll</span><h3>Locked-input state machine</h3></div><BadgeDollarSign size={18}/></div><div className="control-stack"><div><CheckCircle2 size={17}/><span><strong>Prepare & input lock</strong><small>Time must be locked; pending leave and unapplied compensation block validation. A SHA-256 fingerprint freezes governed inputs before calculation.</small></span></div><div><ShieldCheck size={17}/><span><strong>Independent approval</strong><small>The run creator cannot approve the run. Approval authority is distinct from payroll preparation.</small></span></div><div><LockKeyhole size={17}/><span><strong>Payment separation</strong><small>The payroll approver cannot mark the same run paid. Post-lock input drift blocks calculation, approval and payment.</small></span></div></div></aside>
     </section>
   </div>;
 }
