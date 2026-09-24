@@ -71,11 +71,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const nextTargetAt = targetAt ?? plan.targetAt;
       if (nextTargetAt <= plan.startsAt) throw new Error("INVALID_TARGET_DATE");
 
-      if (requestedStatus === DevelopmentPlanStatus.ACTIVE) {
-        const assignmentCount = await tx.learningAssignment.count({ where: { tenantId: ctx.tenantId, developmentPlanId: id } });
-        if (plan.focusSkillId && plan.targetProficiency && assignmentCount < 1) throw new Error("LEARNING_ACTION_REQUIRED");
-      }
-
       if (requestedStatus === DevelopmentPlanStatus.COMPLETED) {
         const openAssignments = await tx.learningAssignment.count({
           where: {
@@ -146,7 +141,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (code === "PLAN_LOCKED") return Response.json({ error: "Completed or cancelled development plans are immutable." }, { status: 409 });
     if (code === "INVALID_TRANSITION" || code === "STALE_STATE") return Response.json({ error: "Development plan transition is not allowed from the current state." }, { status: 409 });
     if (code === "INVALID_TARGET_DATE") return Response.json({ error: "Target date must be after the plan start date." }, { status: 400 });
-    if (code === "LEARNING_ACTION_REQUIRED") return Response.json({ error: "At least one governed learning action is required before activating a skill-target development plan." }, { status: 409 });
     if (code.startsWith("OPEN_ASSIGNMENTS:")) return Response.json({ error: `${code.split(":")[1]} learning actions remain open; complete or waive them before closing the development plan.` }, { status: 409 });
     if (code === "OUTCOME_NOTES_REQUIRED") return Response.json({ error: "Human-entered outcome notes are required before completing the development plan." }, { status: 400 });
     if (code === "TARGET_NOT_REASSESSED") return Response.json({ error: "The target skill proficiency has not yet been confirmed by a human assessment." }, { status: 409 });
