@@ -2,18 +2,8 @@
 
 import Link from "next/link";
 import { LogIn, LogOut } from "lucide-react";
-import { useEffect, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
-
-type SessionResponse = {
-  authenticated: boolean;
-  oidcConfigured: boolean;
-  user?: {
-    displayName: string;
-    email: string | null;
-    role: string;
-  };
-};
+import { useSessionContext } from "@/components/session-provider";
 
 function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "U";
@@ -41,19 +31,10 @@ function roleLabel(role: string, locale: "en" | "tr") {
 }
 
 export function SessionIndicator() {
-  const [session, setSession] = useState<SessionResponse | null>(null);
+  const { session, loading } = useSessionContext();
   const { locale } = useLocale();
 
-  useEffect(() => {
-    let active = true;
-    fetch("/api/auth/session", { cache: "no-store" })
-      .then((response) => response.json() as Promise<SessionResponse>)
-      .then((value) => { if (active) setSession(value); })
-      .catch(() => { if (active) setSession({ authenticated: false, oidcConfigured: false }); });
-    return () => { active = false; };
-  }, []);
-
-  if (!session) {
+  if (loading || !session) {
     return <div className="session-identity"><div className="user-avatar">…</div><div className="user-copy"><strong>{locale === "tr" ? "Oturum kontrol ediliyor" : "Checking session"}</strong><small>{locale === "tr" ? "Kimlik bağlamı" : "Identity context"}</small></div></div>;
   }
 
