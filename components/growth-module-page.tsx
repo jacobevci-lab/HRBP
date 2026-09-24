@@ -96,14 +96,19 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
       }
     } else if (slug === "learning" && can(ctx, "learning:self-progress")) {
       try {
-        const [{ LearningParticipantConsole }, { getLearningParticipantData }] = await Promise.all([
+        const [{ LearningParticipantConsole }, { getLearningParticipantData }, { DevelopmentPlanParticipantConsole }, { getDevelopmentPlanParticipantData }] = await Promise.all([
           import("@/components/learning-participant-console"),
-          import("@/lib/learning-participant-data")
+          import("@/lib/learning-participant-data"),
+          import("@/components/development-plan-participant-console"),
+          import("@/lib/development-plan-participant-data")
         ]);
-        const assignments = await getLearningParticipantData(ctx);
-        participant = <LearningParticipantConsole assignments={assignments}/>;
+        const [assignments, plans] = await Promise.all([
+          getLearningParticipantData(ctx),
+          getDevelopmentPlanParticipantData(ctx)
+        ]);
+        participant = <><DevelopmentPlanParticipantConsole plans={plans}/><LearningParticipantConsole assignments={assignments}/></>;
       } catch (participantError) {
-        console.error("[HRBP] learning participant inbox could not initialize.", participantError);
+        console.error("[HRBP] learning and development self-service could not initialize.", participantError);
         participant = <ConsoleWarning locale={locale} title={c(locale, "Learning self-service is temporarily unavailable", "Eğitim self-servis geçici olarak kullanılamıyor")} body={c(locale, "No employee learning progress was changed. The governed learning read surface remains available.", "Hiçbir çalışan eğitim ilerlemesi değiştirilmedi. Yönetişimli eğitim salt-okunur görünümü kullanılabilir.")}/>;
       }
     }
@@ -143,6 +148,7 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
             lifecycle = <SuccessionGovernanceConsole {...data} allowLearningPlan={allowLearningPlan}/>;
           } else if (slug === "talent") {
             const allowLearningPlan = can(ctx, "learning:write");
+            const canReadLearningCatalog = can(ctx, "learning:read");
             const [{ TalentGovernanceConsole }, { getTalentGovernanceData }, { DevelopmentPlanConsole }, { getDevelopmentPlanGovernanceData }] = await Promise.all([
               import("@/components/talent-governance-console"),
               import("@/lib/talent-governance-data"),
@@ -151,7 +157,7 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
             ]);
             const [talent, development] = await Promise.all([
               getTalentGovernanceData(ctx),
-              getDevelopmentPlanGovernanceData(ctx, { includeLearningCatalog: allowLearningPlan })
+              getDevelopmentPlanGovernanceData(ctx, { includeLearningCatalog: canReadLearningCatalog })
             ]);
             lifecycle = <><TalentGovernanceConsole {...talent}/><DevelopmentPlanConsole {...development} assessments={talent.rows} allowLearningPlan={allowLearningPlan}/></>;
           } else if (slug === "learning") {
