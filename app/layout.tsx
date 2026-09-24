@@ -18,6 +18,7 @@ import "./workflows.css";
 import "./global-search.css";
 import "./dashboard-actions.css";
 import "./settings-live.css";
+import "./settings-connections.css";
 import "./warm-enterprise.css";
 import "./warm-enterprise-polish.css";
 import "./warm-enterprise-unified.css";
