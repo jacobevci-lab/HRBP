@@ -90,8 +90,9 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
             import("@/components/growth-operations-console"),
             import("@/lib/growth-operations-data")
           ]);
-          const data = await getGrowthOperationsData(ctx);
-          operations = <GrowthOperationsConsole slug={slug as GrowthWriteSlug} {...data}/>;
+          const writeSlug = slug as GrowthWriteSlug;
+          const data = await getGrowthOperationsData(ctx, writeSlug);
+          operations = <GrowthOperationsConsole slug={writeSlug} {...data}/>;
         }
       } catch (operationsError) {
         console.error(`[HRBP] ${slug} operations console could not initialize; live read surface remains available.`, operationsError);
