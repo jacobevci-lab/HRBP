@@ -40,7 +40,7 @@ export function notificationSummary(payload: unknown, locale: Locale) {
 
   if (workflowName && taskName) {
     const deadline = dueAt ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(dueAt)) : null;
-    if (deadline) return locale === "tr" ? `${workflowName}: ${taskName} · SLA ${deadline}` : `${workflowName}: ${taskName} · SLA ${deadline}`;
+    if (deadline) return `${workflowName}: ${taskName} · SLA ${deadline}`;
     return locale === "tr" ? `${workflowName}: ${taskName} aksiyonunu bekliyor.` : `${workflowName}: ${taskName} is waiting for your action.`;
   }
   if (taskName) return locale === "tr" ? `${taskName} aksiyonunu bekliyor.` : `${taskName} is waiting for your action.`;
@@ -54,9 +54,11 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   return locale === "tr" ? "Yeni bir İK bildirimi oluşturuldu." : "A new HR notification is available.";
 }
 
-export function notificationResourceHref(resourceType: string) {
-  if (resourceType === "HRServiceRequest") return "/module/hr-service";
-  if (resourceType === "PolicyException" || resourceType === "PolicyRecord") return "/module/policies";
-  if (resourceType === "WorkflowTask" || resourceType === "WorkflowInstance") return "/module/workflows";
+export function notificationResourceHref(resourceType: string, resourceId?: string) {
+  const id = resourceId?.trim();
+  if (resourceType === "HRServiceRequest") return id ? `/module/hr-service?record=${encodeURIComponent(id)}` : "/module/hr-service";
+  if (resourceType === "PolicyException" || resourceType === "PolicyRecord") return id ? `/module/policies?record=${encodeURIComponent(id)}` : "/module/policies";
+  if (resourceType === "WorkflowTask") return id ? `/module/workflows?task=${encodeURIComponent(id)}` : "/module/workflows";
+  if (resourceType === "WorkflowInstance") return id ? `/module/workflows?instance=${encodeURIComponent(id)}` : "/module/workflows";
   return "/";
 }
