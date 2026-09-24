@@ -8,6 +8,10 @@ function text(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function numberValue(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 export function notificationTitle(eventType: string, locale: Locale) {
   const titles: Record<string, { en: string; tr: string }> = {
     HR_SERVICE_ESCALATED: { en: "HR service request escalated", tr: "İK hizmet talebi eskale edildi" },
@@ -24,6 +28,7 @@ export function notificationTitle(eventType: string, locale: Locale) {
     LEARNING_ASSIGNMENT_OVERDUE: { en: "Learning assignment overdue", tr: "Eğitim ataması gecikti" },
     SUCCESSION_PLAN_REVIEW_DUE_SOON: { en: "Succession plan review due soon", tr: "Yedekleme planı inceleme tarihi yaklaşıyor" },
     SUCCESSION_PLAN_REVIEW_OVERDUE: { en: "Succession plan review overdue", tr: "Yedekleme planı incelemesi gecikti" },
+    BENEFIT_PLAN_EXPIRED: { en: "Benefit plan expired", tr: "Yan hak planının süresi doldu" },
     AUDIT_INTEGRITY_FAILURE: { en: "Audit ledger integrity failure", tr: "Denetim defteri bütünlük hatası" }
   };
   const known = titles[eventType];
@@ -54,10 +59,23 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const reviewDueAt = text(data.reviewDueAt);
   const courseCode = text(data.courseCode);
   const courseTitle = text(data.courseTitle);
+  const benefitPlanCode = text(data.benefitPlanCode);
+  const benefitPlanName = text(data.benefitPlanName);
+  const benefitPlanEffectiveTo = text(data.benefitPlanEffectiveTo);
+  const endedEnrollments = numberValue(data.endedEnrollments);
+  const anomalousEnrollments = numberValue(data.anomalousEnrollments);
 
   if (brokenEventId) {
     const detail = integrityReason ?? (locale === "tr" ? "Hash-zinciri doğrulaması başarısız oldu." : "Hash-chain verification failed.");
     return `${brokenEventId}: ${detail}`;
+  }
+  if (benefitPlanName) {
+    const plan = benefitPlanCode ? `${benefitPlanCode} · ${benefitPlanName}` : benefitPlanName;
+    const deadline = benefitPlanEffectiveTo ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(benefitPlanEffectiveTo)) : null;
+    const ended = endedEnrollments ?? 0;
+    const anomalies = anomalousEnrollments ?? 0;
+    if (locale === "tr") return `${plan}${deadline ? ` · ${deadline}` : ""} · ${ended} açık kayıt sonlandırıldı${anomalies ? ` · ${anomalies} anomali inceleme bekliyor` : ""}.`;
+    return `${plan}${deadline ? ` · ${deadline}` : ""} · ${ended} open enrollments ended${anomalies ? ` · ${anomalies} anomalies require review` : ""}.`;
   }
   if (courseTitle) {
     const course = courseCode ? `${courseCode} · ${courseTitle}` : courseTitle;
@@ -107,6 +125,7 @@ export function notificationResourceHref(resourceType: string, resourceId?: stri
   if (resourceType === "PerformanceReview") return id ? `/module/performance?review=${encodeURIComponent(id)}` : "/module/performance";
   if (resourceType === "LearningAssignment") return id ? `/module/learning?assignment=${encodeURIComponent(id)}` : "/module/learning";
   if (resourceType === "SuccessionPlan") return id ? `/module/succession?plan=${encodeURIComponent(id)}` : "/module/succession";
+  if (resourceType === "BenefitPlan") return id ? `/module/benefits?plan=${encodeURIComponent(id)}` : "/module/benefits";
   if (resourceType === "AuditEvent") return id ? `/module/audit?q=${encodeURIComponent(id)}` : "/module/audit";
   return "/";
 }
