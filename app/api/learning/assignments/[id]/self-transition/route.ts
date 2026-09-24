@@ -3,6 +3,7 @@ import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
+import { enqueueSuccessionDevelopmentReassessment } from "@/lib/succession-development-notifications";
 
 const transitions: Record<LearningAssignmentStatus, LearningAssignmentStatus[]> = {
   ASSIGNED: [LearningAssignmentStatus.IN_PROGRESS],
@@ -31,7 +32,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const data = await db.$transaction(async (tx) => {
       const assignment = await tx.learningAssignment.findFirst({
         where: { id, tenantId: ctx.tenantId },
-        select: { id: true, employmentId: true, status: true }
+        select: {
+          id: true,
+          employmentId: true,
+          status: true,
+          targetProficiency: true,
+          course: { select: { code: true, title: true } },
+          developmentSkill: { select: { code: true, name: true } },
+          successionCandidate: {
+            select: { id: true, plan: { select: { ownerId: true, positionId: true } } }
+          }
+        }
       });
       if (!assignment) throw new Error("NOT_FOUND");
       if (assignment.employmentId !== ctx.employmentId) throw new Error("NOT_SELF");
@@ -61,6 +72,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         resourceId: id,
         classification: DataClassification.CONFIDENTIAL
       });
+
+      if (next === LearningAssignmentStatus.COMPLETED && assignment.successionCandidate && assignment.developmentSkill && assignment.targetProficiency) {
+        const [position, activeOwner] = await Promise.all([
+          tx.position.findFirst({
+            where: { id: assignment.successionCandidate.plan.positionId, tenantId: ctx.tenantId },
+            select: { positionCode: true, title: true }
+          }),
+          assignment.successionCandidate.plan.ownerId ? tx.userAccount.findFirst({
+            where: { id: assignment.successionCandidate.plan.ownerId, tenantId: ctx.tenantId, active: true },
+            select: { id: true }
+          }) : Promise.resolve(null)
+        ]);
+        if (position) {
+          await enqueueSuccessionDevelopmentReassessment(tx, {
+            tenantId: ctx.tenantId,
+            assignmentId: id,
+            candidateId: assignment.successionCandidate.id,
+            ownerId: activeOwner?.id ?? null,
+            positionCode: position.positionCode,
+            positionTitle: position.title,
+            courseCode: assignment.course.code,
+            courseTitle: assignment.course.title,
+            skillCode: assignment.developmentSkill.code,
+            skillName: assignment.developmentSkill.name,
+            targetProficiency: assignment.targetProficiency
+          });
+        }
+      }
       return updated;
     });
     return Response.json({ data });
