@@ -40,48 +40,50 @@ export async function getGrowthOperationsData(ctx: RequestContext, slug: GrowthW
     });
 
     const scopedPositionIds = scope === null ? null : [...new Set(employments.flatMap((employment) => employment.positionId ? [employment.positionId] : []))];
-    const empty: never[] = [];
-    const [positions, benefitPlans, successionPlans, courses, skills] = await Promise.all([
-      slug === "succession" ? db.position.findMany({
-        where: {
-          tenantId: ctx.tenantId,
-          validTo: null,
-          status: { not: PositionStatus.CLOSED },
-          ...(scopedPositionIds === null ? {} : { id: { in: scopedPositionIds } })
-        },
-        orderBy: [{ critical: "desc" }, { positionCode: "asc" }],
-        take: 500,
-        select: { id: true, positionCode: true, title: true, critical: true, orgUnit: { select: { name: true } } }
-      }) : Promise.resolve(empty),
-      slug === "benefits" ? db.benefitPlan.findMany({
-        where: { tenantId: ctx.tenantId, active: true },
-        orderBy: [{ type: "asc" }, { name: "asc" }],
-        take: 250,
-        select: { id: true, code: true, name: true, type: true }
-      }) : Promise.resolve(empty),
-      slug === "succession" ? db.successionPlan.findMany({
-        where: {
-          tenantId: ctx.tenantId,
-          active: true,
-          ...(scopedPositionIds === null ? {} : { positionId: { in: scopedPositionIds } })
-        },
-        orderBy: { updatedAt: "desc" },
-        take: 250,
-        select: { id: true, position: { select: { positionCode: true, title: true } } }
-      }) : Promise.resolve(empty),
-      slug === "learning" ? db.learningCourse.findMany({
-        where: { tenantId: ctx.tenantId, active: true },
-        orderBy: [{ mandatory: "desc" }, { title: "asc" }],
-        take: 300,
-        select: { id: true, code: true, title: true, mandatory: true }
-      }) : Promise.resolve(empty),
-      slug === "learning" ? db.skill.findMany({
-        where: { tenantId: ctx.tenantId, active: true },
-        orderBy: [{ critical: "desc" }, { name: "asc" }],
-        take: 500,
-        select: { id: true, code: true, name: true, critical: true }
-      }) : Promise.resolve(empty)
-    ]);
+
+    const positions = slug === "succession" ? await db.position.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        validTo: null,
+        status: { not: PositionStatus.CLOSED },
+        ...(scopedPositionIds === null ? {} : { id: { in: scopedPositionIds } })
+      },
+      orderBy: [{ critical: "desc" }, { positionCode: "asc" }],
+      take: 500,
+      select: { id: true, positionCode: true, title: true, critical: true, orgUnit: { select: { name: true } } }
+    }) : [];
+
+    const benefitPlans = slug === "benefits" ? await db.benefitPlan.findMany({
+      where: { tenantId: ctx.tenantId, active: true },
+      orderBy: [{ type: "asc" }, { name: "asc" }],
+      take: 250,
+      select: { id: true, code: true, name: true, type: true }
+    }) : [];
+
+    const successionPlans = slug === "succession" ? await db.successionPlan.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        active: true,
+        ...(scopedPositionIds === null ? {} : { positionId: { in: scopedPositionIds } })
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 250,
+      select: { id: true, position: { select: { positionCode: true, title: true } } }
+    }) : [];
+
+    const courses = slug === "learning" ? await db.learningCourse.findMany({
+      where: { tenantId: ctx.tenantId, active: true },
+      orderBy: [{ mandatory: "desc" }, { title: "asc" }],
+      take: 300,
+      select: { id: true, code: true, title: true, mandatory: true }
+    }) : [];
+
+    const skills = slug === "learning" ? await db.skill.findMany({
+      where: { tenantId: ctx.tenantId, active: true },
+      orderBy: [{ critical: "desc" }, { name: "asc" }],
+      take: 500,
+      select: { id: true, code: true, name: true, critical: true }
+    }) : [];
 
     return {
       employments: employments.map((employment) => ({
