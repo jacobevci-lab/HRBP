@@ -33,6 +33,8 @@ expect(updatePath, update, /OUTCOME_NOTES_REQUIRED/, "plan completion must requi
 expect(updatePath, update, /TARGET_NOT_REASSESSED/, "plan completion must require a human-confirmed target proficiency");
 expect(updatePath, update, /updateMany/, "development plan transitions must use state-aware writes");
 expect(updatePath, update, /appendAudit/, "development plan lifecycle changes must emit audit evidence");
+expect(updatePath, update, /enqueueDevelopmentPlanActivated/, "draft-to-active transition must notify the employee identity");
+expect(updatePath, update, /requestedStatus\s*===\s*DevelopmentPlanStatus\.ACTIVE[\s\S]*plan\.status\s*===\s*DevelopmentPlanStatus\.DRAFT/, "employee activation notice must only fire on the governed first activation");
 
 const assignmentPath = "app/api/talent/development-plans/[id]/learning-assignment/route.ts";
 const assignment = await source(assignmentPath);
@@ -56,6 +58,9 @@ expect(notificationPath, notification, /DEVELOPMENT_PLAN_REASSESSMENT_REQUIRED/,
 expect(notificationPath, notification, /recipientUserId:\s*input\.ownerId/, "active development-plan owner must be the primary reassessment recipient");
 expect(notificationPath, notification, /PlatformRole\.TALENT_ADMIN/, "Talent Admin must be the fallback reassessment recipient");
 expect(notificationPath, notification, /not proof that a[\s\S]*skill target has been achieved/, "human skill decision boundary must be documented");
+expect(notificationPath, notification, /DEVELOPMENT_PLAN_ACTIVATED/, "plan activation must use a dedicated employee notification event");
+expect(notificationPath, notification, /workEmail:\s*true/, "employee activation notice must resolve identity from governed employment email");
+expect(notificationPath, notification, /resourceType:\s*"DevelopmentPlanParticipant"/, "employee activation notice must deep-link to employee self-service rather than privileged Talent");
 
 for (const transitionPath of [
   "app/api/learning/assignments/[id]/transition/route.ts",
@@ -74,11 +79,28 @@ expect(dataPath, data, /employmentIdFilter\(scope\)/, "development plan reads mu
 expect(dataPath, data, /learningAssignments/, "development plan data must surface linked learning evidence");
 expect(dataPath, data, /employmentSkill\.findMany/, "development plan data must surface current human-assessed skill proficiency");
 
+const participantPlanPath = "lib/development-plan-participant-data.ts";
+const participantPlan = await source(participantPlanPath);
+expect(participantPlanPath, participantPlan, /can\(ctx,\s*"learning:self-progress"\)/, "employee development plan view must stay inside the learning self-service capability");
+expect(participantPlanPath, participantPlan, /employmentId:\s*ctx\.employmentId/, "employee development plan view must be bound to the signed employment identity");
+expect(participantPlanPath, participantPlan, /DevelopmentPlanStatus\.ACTIVE[\s\S]*DevelopmentPlanStatus\.COMPLETED/, "employees must only see activated or completed plans");
+expect(participantPlanPath, participantPlan, /sourceAssessment:\s*\{\s*select:\s*\{\s*cycleLabel:\s*true/, "employee view may expose assessment provenance without exposing talent ratings");
+expect(participantPlanPath, participantPlan, /learningCompleted/, "employee view must summarize linked learning evidence");
+
+const participantConsolePath = "components/development-plan-participant-console.tsx";
+const participantConsole = await source(participantConsolePath);
+expect(participantConsolePath, participantConsole, /Individual development plans|Bireysel gelişim planlarım/, "employee self-service must visibly expose development plans");
+expect(participantConsolePath, participantConsole, /Course completion is evidence|Eğitim tamamlama yalnızca kanıttır/, "employee self-service must preserve the human decision boundary");
+expect(participantConsolePath, participantConsole, /learningCompleted/, "employee self-service must surface learning evidence progress");
+
 const modulePath = "components/growth-module-page.tsx";
 const modulePage = await source(modulePath);
 expect(modulePath, modulePage, /DevelopmentPlanConsole/, "talent module must surface the development plan console");
 expect(modulePath, modulePage, /getDevelopmentPlanGovernanceData/, "talent module must load governed development plan data");
 expect(modulePath, modulePage, /allowLearningPlan\s*=\s*can\(ctx,\s*"learning:write"\)/, "cross-domain learning actions must remain learning-write gated");
+expect(modulePath, modulePage, /canReadLearningCatalog\s*=\s*can\(ctx,\s*"learning:read"\)/, "talent writers with learning read access must be able to choose governed skills without receiving learning write access");
+expect(modulePath, modulePage, /DevelopmentPlanParticipantConsole/, "learning self-service must surface employee development plans");
+expect(modulePath, modulePage, /getDevelopmentPlanParticipantData\(ctx\)/, "employee development plan data must load from signed request context");
 
 const consolePath = "components/development-plan-console.tsx";
 const consoleSource = await source(consolePath);
@@ -90,7 +112,9 @@ expect(consolePath, consoleSource, /Human outcome|İnsan sonucu/, "development p
 const presentationPath = "lib/notification-presentation.ts";
 const presentation = await source(presentationPath);
 expect(presentationPath, presentation, /DEVELOPMENT_PLAN_REASSESSMENT_REQUIRED/, "notification center must present development-plan reassessment events");
-expect(presentationPath, presentation, /resourceType\s*===\s*"DevelopmentPlan"/, "development-plan alerts must deep-link to Talent");
+expect(presentationPath, presentation, /DEVELOPMENT_PLAN_ACTIVATED/, "notification center must present employee plan activation events");
+expect(presentationPath, presentation, /resourceType\s*===\s*"DevelopmentPlan"/, "reviewer development-plan alerts must deep-link to Talent");
+expect(presentationPath, presentation, /resourceType\s*===\s*"DevelopmentPlanParticipant"[\s\S]*\/module\/learning/, "employee plan alerts must deep-link to Learning self-service");
 
 const participantDataPath = "lib/learning-participant-data.ts";
 const participantData = await source(participantDataPath);
@@ -114,4 +138,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated development plan contract: talent provenance, relationship scope, learning evidence, human skill reassessment and auditable lifecycle governance are enforced.");
+console.log("Validated development plan contract: talent provenance, employee self-service, activation notifications, relationship scope, learning evidence, human skill reassessment and auditable lifecycle governance are enforced.");
