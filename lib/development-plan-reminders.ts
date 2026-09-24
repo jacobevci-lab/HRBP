@@ -62,7 +62,8 @@ export async function queueDevelopmentPlanReminders() {
       skillCode: plan.focusSkill?.code ?? null,
       skillName: plan.focusSkill?.name ?? null,
       targetProficiency: plan.targetProficiency,
-      warningDays
+      warningDays,
+      reminderState: reminderKey
     };
 
     await db.$transaction(async (tx) => {
