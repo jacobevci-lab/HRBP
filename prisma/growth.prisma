@@ -211,15 +211,16 @@ model SuccessionPlan {
 }
 
 model SuccessionCandidate {
-  id             String @id @default(cuid())
-  tenantId       String
-  planId         String
-  employmentId   String
-  readiness      SuccessionReadiness
-  rank           Int?
-  developmentGap String?
-  addedAt        DateTime @default(now())
-  plan           SuccessionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  id                  String @id @default(cuid())
+  tenantId            String
+  planId              String
+  employmentId        String
+  readiness           SuccessionReadiness
+  rank                Int?
+  developmentGap      String?
+  addedAt             DateTime @default(now())
+  plan                SuccessionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  learningAssignments LearningAssignment[] @relation("SuccessionCandidateDevelopment")
 
   @@unique([planId, employmentId])
   @@index([tenantId, employmentId])
@@ -227,14 +228,15 @@ model SuccessionCandidate {
 }
 
 model Skill {
-  id          String @id @default(cuid())
-  tenantId    String
-  code        String
-  name        String
-  category    String?
-  critical    Boolean @default(false)
-  active      Boolean @default(true)
-  employments EmploymentSkill[]
+  id                     String @id @default(cuid())
+  tenantId               String
+  code                   String
+  name                   String
+  category               String?
+  critical               Boolean @default(false)
+  active                 Boolean @default(true)
+  employments            EmploymentSkill[]
+  developmentAssignments LearningAssignment[] @relation("LearningDevelopmentSkill")
 
   @@unique([tenantId, code])
   @@index([tenantId, active, category])
@@ -272,19 +274,26 @@ model LearningCourse {
 }
 
 model LearningAssignment {
-  id                   String @id @default(cuid())
-  tenantId             String
-  employmentId         String
-  courseId             String
-  status               LearningAssignmentStatus @default(ASSIGNED)
-  assignedAt           DateTime @default(now())
-  dueAt                DateTime?
-  completedAt          DateTime?
-  score                Decimal? @db.Decimal(5,2)
-  certificateReference String?
-  course               LearningCourse @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  id                    String @id @default(cuid())
+  tenantId              String
+  employmentId          String
+  courseId              String
+  successionCandidateId String?
+  developmentSkillId    String?
+  targetProficiency     SkillProficiency?
+  status                LearningAssignmentStatus @default(ASSIGNED)
+  assignedAt            DateTime @default(now())
+  dueAt                 DateTime?
+  completedAt           DateTime?
+  score                 Decimal? @db.Decimal(5,2)
+  certificateReference  String?
+  course                LearningCourse @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  successionCandidate   SuccessionCandidate? @relation("SuccessionCandidateDevelopment", fields: [successionCandidateId], references: [id], onDelete: SetNull)
+  developmentSkill      Skill? @relation("LearningDevelopmentSkill", fields: [developmentSkillId], references: [id], onDelete: SetNull)
 
   @@unique([employmentId, courseId, assignedAt])
   @@index([tenantId, employmentId])
   @@index([tenantId, status, dueAt])
+  @@index([tenantId, successionCandidateId, status])
+  @@index([tenantId, developmentSkillId, targetProficiency])
 }
