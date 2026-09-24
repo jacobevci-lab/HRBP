@@ -32,7 +32,7 @@ export async function getAuditLiveData(tenantId: string, filter: AuditFilter = {
     } : {})
   };
 
-  const [rows, total, last24h, classifications, resources, actors, integrity] = await Promise.all([
+  const [rows, total, last24h, classifications, resourceGroups, actorGroups, integrity] = await Promise.all([
     db.auditEvent.findMany({
       where,
       orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
@@ -46,11 +46,13 @@ export async function getAuditLiveData(tenantId: string, filter: AuditFilter = {
     db.auditEvent.count({ where }),
     db.auditEvent.count({ where: { tenantId, occurredAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) } } }),
     db.auditEvent.groupBy({ by: ["classification"], where: { tenantId, occurredAt: { gte: since } }, _count: { _all: true } }),
-    db.auditEvent.groupBy({ by: ["resourceType"], where: { tenantId, occurredAt: { gte: since } }, _count: { _all: true }, orderBy: { _count: { resourceType: "desc" } }, take: 20 }),
-    db.auditEvent.groupBy({ by: ["actorId"], where: { tenantId, occurredAt: { gte: since } }, _count: { _all: true }, orderBy: { _count: { actorId: "desc" } }, take: 50 }),
+    db.auditEvent.groupBy({ by: ["resourceType"], where: { tenantId, occurredAt: { gte: since } }, _count: { _all: true } }),
+    db.auditEvent.groupBy({ by: ["actorId"], where: { tenantId, occurredAt: { gte: since } }, _count: { _all: true } }),
     verifyAuditIntegrity(tenantId, 1500)
   ]);
 
+  const resources = [...resourceGroups].sort((left, right) => right._count._all - left._count._all).slice(0, 20);
+  const actors = [...actorGroups].sort((left, right) => right._count._all - left._count._all).slice(0, 50);
   const actorIds = Array.from(new Set([...rows.map((row) => row.actorId), ...actors.map((row) => row.actorId)])).filter((id) => !id.startsWith("system:"));
   const users = actorIds.length ? await db.userAccount.findMany({
     where: { tenantId, id: { in: actorIds } },
@@ -64,7 +66,7 @@ export async function getAuditLiveData(tenantId: string, filter: AuditFilter = {
     total,
     last24h,
     integrity,
-    classificationCounts: Object.fromEntries(classifications.map((row) => [row.classification, row._count._all])) as Record<DataClassification, number>,
+    classificationCounts: Object.fromEntries(classifications.map((row) => [row.classification, row._count._all])) as Partial<Record<DataClassification, number>>,
     resourceOptions: resources.map((row) => ({ value: row.resourceType, count: row._count._all })),
     actorOptions: actors.map((row) => ({
       value: row.actorId,
