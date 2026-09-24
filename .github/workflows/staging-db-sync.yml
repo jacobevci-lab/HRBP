@@ -36,6 +36,8 @@ jobs:
         run: node scripts/seed-access-staging.mjs
       - name: Seed growth and talent domains
         run: node scripts/seed-growth-staging.mjs
+      - name: Connect succession development to learning and skills
+        run: node scripts/seed-connected-growth-staging.mjs
       - name: Seed employee-services domains
         run: node scripts/seed-services-staging.mjs
       - name: Seed service queue and policy governance controls
@@ -62,7 +64,7 @@ jobs:
             accessGrants, jurisdictions, goals, reviews, serviceRequests, serviceQueues, queueMembers,
             policies, policyExceptions, workflows,
             campaigns, scenarios, metrics, metricSnapshots, processing, dsrs,
-            notificationOutbox, invalidMetricScopes
+            connectedGrowthAssignments, notificationOutbox, invalidMetricScopes
           ] = await Promise.all([
             db.tenant.count(),
             db.person.count(),
@@ -88,6 +90,13 @@ jobs:
             db.metricSnapshot.count(),
             db.processingActivity.count(),
             db.dataSubjectRequest.count(),
+            db.learningAssignment.count({
+              where: {
+                successionCandidateId: { not: null },
+                developmentSkillId: { not: null },
+                targetProficiency: { not: null }
+              }
+            }),
             db.notificationOutbox.count(),
             db.metricSnapshot.count({
               where: {
@@ -103,7 +112,8 @@ jobs:
             timeEntries, leaveRequests, compChanges, payrollRuns, payrollResults,
             accessGrants, jurisdictions, goals, reviews, serviceRequests, serviceQueues, queueMembers,
             policies, policyExceptions, workflows,
-            campaigns, scenarios, metrics, metricSnapshots, processing, dsrs
+            campaigns, scenarios, metrics, metricSnapshots, processing, dsrs,
+            connectedGrowthAssignments
           };
           console.log({ ...counts, notificationOutbox, invalidMetricScopes });
           if (Object.values(counts).some((value) => value < 1)) process.exit(1);
