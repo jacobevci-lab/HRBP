@@ -65,6 +65,8 @@ expect(requisitionStatusPath, requisitionStatus, /can\(ctx,\s*"recruiting:approv
 expect(requisitionStatusPath, requisitionStatus, /creatorAudit\?\.actorId\s*===\s*ctx\.actorId/, "requisition creator must not approve and open the same requisition");
 expect(requisitionStatusPath, requisitionStatus, /HIRING_MANAGER_REQUIRED/, "approved requisitions must have an accountable hiring manager before opening");
 expect(requisitionStatusPath, requisitionStatus, /TransactionIsolationLevel\.Serializable/, "requisition lifecycle decisions must use serializable isolation");
+expect(requisitionStatusPath, requisitionStatus, /enqueueRequisitionApprovalNotification/, "requisition approval requests must create durable notification intent");
+expect(requisitionStatusPath, requisitionStatus, /enqueueRequisitionDecisionNotification/, "requisition approval decisions must notify the creator");
 
 const candidateApiPath = "app/api/recruiting/candidates/route.ts";
 const candidateApi = await source(candidateApiPath);
@@ -79,6 +81,17 @@ expect(offerStatusPath, offerStatus, /requiresApprovalAuthority[\s\S]*OfferStatu
 expect(offerStatusPath, offerStatus, /can\(ctx,\s*"recruiting:approve"\)/, "sending an approval-stage offer must require recruiting approval authority");
 expect(offerStatusPath, offerStatus, /creatorAudit\?\.actorId\s*===\s*ctx\.actorId/, "offer creator must not approve and send the same offer");
 expect(offerStatusPath, offerStatus, /TransactionIsolationLevel\.Serializable/, "offer approval decisions must use serializable isolation");
+expect(offerStatusPath, offerStatus, /enqueueOfferApprovalNotification/, "offer approval requests must create durable notification intent");
+expect(offerStatusPath, offerStatus, /enqueueOfferDecisionNotification/, "offer approval decisions must notify the offer creator");
+
+const notificationsPath = "lib/recruiting-notifications.ts";
+const notifications = await source(notificationsPath);
+expect(notificationsPath, notifications, /RECRUITING_REQUISITION_APPROVAL_REQUIRED/, "requisition approval must have a dedicated notification event");
+expect(notificationsPath, notifications, /RECRUITING_OFFER_APPROVAL_REQUIRED/, "offer approval must have a dedicated notification event");
+expect(notificationsPath, notifications, /recipientRole:\s*"HR_OPERATIONS"/, "independent recruiting approval notifications must route to an HR operations decision queue");
+expect(notificationsPath, notifications, /recipientUserId:\s*input\.recipientUserId/, "approval results must return to the creating user");
+expect(notificationsPath, notifications, /DataClassification\.RESTRICTED/, "offer notification payloads must remain restricted");
+expect(notificationsPath, notifications, /dedupeKey:/, "recruiting notifications must be idempotent through dedupe keys");
 
 if (failures.length) {
   console.error("Recruiting/onboarding access contract validation failed:\n");
@@ -86,4 +99,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, authenticated failures remain protected, requisition and offer approvals are separated from preparation, four-eyes controls are enforced, and the UI respects approval authority.");
+console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, authenticated failures remain protected, requisition and offer approvals are separated from preparation, four-eyes controls are enforced, the UI respects approval authority, and approval workflows emit durable notification intent.");
