@@ -5,6 +5,14 @@ const failures = [];
 function expect(path, text, pattern, message) { if (!pattern.test(text)) failures.push(`${path}: ${message}`); }
 function expectAbsent(path, text, pattern, message) { if (pattern.test(text)) failures.push(`${path}: ${message}`); }
 
+const authPath = "lib/authorization.ts";
+const auth = await source(authPath);
+expect(authPath, auth, /"recruiting:approve"/, "recruiting approval must have a dedicated capability");
+const recruiterGrant = auth.match(/RECRUITER:\s*\[[\s\S]*?\],\n\s*TIME_ADMIN:/)?.[0] ?? "";
+expectAbsent(authPath, recruiterGrant, /"recruiting:approve"/, "recruiter preparation authority must not imply recruiting approval");
+expect(authPath, auth, /HRBP:[\s\S]*"recruiting:approve"/, "HRBP must be able to perform independent recruiting decisions");
+expect(authPath, auth, /HR_OPERATIONS:[\s\S]*"recruiting:approve"/, "HR operations must be able to perform independent recruiting decisions");
+
 const accessPath = "lib/recruiting-access.ts";
 const access = await source(accessPath);
 expect(accessPath, access, /hasTenantRecruitingVisibility[\s\S]*recruiting:write/, "tenant-wide recruiting visibility must require recruiting write authority");
@@ -40,6 +48,14 @@ const requisitionApiPath = "app/api/recruiting/requisitions/route.ts";
 const requisitionApi = await source(requisitionApiPath);
 expect(requisitionApiPath, requisitionApi, /where:\s*recruitingRequisitionReadFilter\(ctx\)/, "requisition API GET must enforce manager ownership scope");
 
+const requisitionStatusPath = "app/api/recruiting/requisitions/[id]/status/route.ts";
+const requisitionStatus = await source(requisitionStatusPath);
+expect(requisitionStatusPath, requisitionStatus, /requiresApprovalAuthority[\s\S]*RequisitionStatus\.APPROVAL[\s\S]*RequisitionStatus\.OPEN/, "requisition approval decisions must be identified explicitly");
+expect(requisitionStatusPath, requisitionStatus, /can\(ctx,\s*"recruiting:approve"\)/, "opening an approval-stage requisition must require recruiting approval authority");
+expect(requisitionStatusPath, requisitionStatus, /creatorAudit\?\.actorId\s*===\s*ctx\.actorId/, "requisition creator must not approve and open the same requisition");
+expect(requisitionStatusPath, requisitionStatus, /HIRING_MANAGER_REQUIRED/, "approved requisitions must have an accountable hiring manager before opening");
+expect(requisitionStatusPath, requisitionStatus, /TransactionIsolationLevel\.Serializable/, "requisition lifecycle decisions must use serializable isolation");
+
 const candidateApiPath = "app/api/recruiting/candidates/route.ts";
 const candidateApi = await source(candidateApiPath);
 expect(candidateApiPath, candidateApi, /where:\s*recruitingCandidateReadFilter\(ctx\)/, "candidate API GET must filter candidate identities by recruiting scope");
@@ -47,10 +63,17 @@ expect(candidateApiPath, candidateApi, /applications:\s*\{[\s\S]*where:\s*recrui
 expect(candidateApiPath, candidateApi, /const\s+privileged\s*=\s*hasTenantRecruitingVisibility\(ctx\)/, "candidate personal-data expansion must derive from tenant recruiting authority");
 expect(candidateApiPath, candidateApi, /\.\.\.\(privileged\s*\?\s*\{\s*email:\s*true,\s*retentionUntil:\s*true\s*\}\s*:\s*\{\}\)/, "candidate email and retention metadata must be omitted from read-only manager responses");
 
+const offerStatusPath = "app/api/recruiting/offers/[id]/status/route.ts";
+const offerStatus = await source(offerStatusPath);
+expect(offerStatusPath, offerStatus, /requiresApprovalAuthority[\s\S]*OfferStatus\.APPROVAL[\s\S]*OfferStatus\.SENT/, "offer approval decisions must be identified explicitly");
+expect(offerStatusPath, offerStatus, /can\(ctx,\s*"recruiting:approve"\)/, "sending an approval-stage offer must require recruiting approval authority");
+expect(offerStatusPath, offerStatus, /creatorAudit\?\.actorId\s*===\s*ctx\.actorId/, "offer creator must not approve and send the same offer");
+expect(offerStatusPath, offerStatus, /TransactionIsolationLevel\.Serializable/, "offer approval decisions must use serializable isolation");
+
 if (failures.length) {
   console.error("Recruiting/onboarding access contract validation failed:\n");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log("Validated recruiting/onboarding privacy contract: manager candidate visibility is requisition-owned, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, and tenant-wide identity lookups are minimized.");
+console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, requisition and offer approvals are separated from preparation, and four-eyes controls are enforced.");
