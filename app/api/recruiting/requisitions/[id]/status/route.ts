@@ -8,8 +8,14 @@ import { enqueueRequisitionApprovalNotification, enqueueRequisitionDecisionNotif
 import { canTransitionRequisition, parseRequisitionStatus } from "@/lib/recruiting-state";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
+const requisitionApprovalDecisions = new Set<RequisitionStatus>([
+  RequisitionStatus.OPEN,
+  RequisitionStatus.DRAFT,
+  RequisitionStatus.CANCELLED
+]);
+
 function requiresApprovalAuthority(from: RequisitionStatus, to: RequisitionStatus) {
-  return from === RequisitionStatus.APPROVAL && [RequisitionStatus.OPEN, RequisitionStatus.DRAFT, RequisitionStatus.CANCELLED].includes(to);
+  return from === RequisitionStatus.APPROVAL && requisitionApprovalDecisions.has(to);
 }
 
 function decisionFor(next: RequisitionStatus): "APPROVED" | "RETURNED" | "CANCELLED" | null {
