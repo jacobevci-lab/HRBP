@@ -8,11 +8,12 @@ const visibleSelfServiceStatuses = [PayrollRunStatus.APPROVED, PayrollRunStatus.
 export type PayrollPayslipData = Awaited<ReturnType<typeof getPayrollSelfServiceData>>;
 
 export async function getPayrollSelfServiceData(ctx: RequestContext) {
-  if (!ctx.employmentId) throw new Error("EMPLOYMENT_CONTEXT_REQUIRED");
+  const employmentId = ctx.employmentId;
+  if (!employmentId) throw new Error("EMPLOYMENT_CONTEXT_REQUIRED");
 
   return withDb((client) => client.$transaction(async (tx) => {
     const employment = await tx.employment.findFirst({
-      where: { id: ctx.employmentId, tenantId: ctx.tenantId },
+      where: { id: employmentId, tenantId: ctx.tenantId },
       select: {
         id: true,
         person: { select: { employeeNumber: true, givenName: true, familyName: true } },
@@ -24,7 +25,7 @@ export async function getPayrollSelfServiceData(ctx: RequestContext) {
     const rows = await tx.payrollResult.findMany({
       where: {
         tenantId: ctx.tenantId,
-        employmentId: ctx.employmentId,
+        employmentId,
         payrollRun: { status: { in: [...visibleSelfServiceStatuses] } }
       },
       orderBy: [{ calculatedAt: "desc" }, { id: "desc" }],
@@ -74,7 +75,7 @@ export async function getPayrollSelfServiceData(ctx: RequestContext) {
     await appendAudit(tx, ctx, {
       action: "payroll-payslip.self-viewed",
       resourceType: "Employment",
-      resourceId: ctx.employmentId,
+      resourceId: employmentId,
       classification: DataClassification.RESTRICTED,
       purpose: "Employee payroll statement self-service"
     });
