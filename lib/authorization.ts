@@ -6,7 +6,7 @@ export type Capability =
   | "organization:read" | "organization:write"
   | "positions:read" | "positions:write"
   | "documents:read" | "documents:write" | "documents:sign" | "documents:grant" | "documents:govern"
-  | "recruiting:read" | "recruiting:write"
+  | "recruiting:read" | "recruiting:write" | "recruiting:approve"
   | "onboarding:read" | "onboarding:write"
   | "offboarding:read" | "offboarding:write"
   | "time:read" | "time:write" | "time:self-entry" | "time:approve" | "time:lock" | "time:configure"
@@ -53,7 +53,7 @@ const grants: Record<PlatformRole, Capability[]> = {
   HRBP: [
     "people:read", "people:write", "organization:read", "positions:read",
     "documents:read", "documents:write", "documents:sign",
-    "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
+    "recruiting:read", "recruiting:write", "recruiting:approve", "onboarding:read", "onboarding:write",
     "offboarding:read", "offboarding:write",
     "time:read", "leave:read", "leave:write", "leave:self-request", "leave:approve",
     "compensation:read", "compensation:propose", "payroll:self-payslip", "benefits:read",
@@ -68,7 +68,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "people:read", "people:write", "organization:read", "organization:write",
     "positions:read", "positions:write",
     "documents:read", "documents:write", "documents:sign", "documents:grant", "documents:govern",
-    "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
+    "recruiting:read", "recruiting:write", "recruiting:approve", "onboarding:read", "onboarding:write",
     "offboarding:read", "offboarding:write",
     "time:read", "time:write", "time:self-entry", "time:approve", "time:lock", "time:configure",
     "leave:read", "leave:write", "leave:self-request", "leave:approve", "leave:configure", "compensation:read", "payroll:self-payslip", "benefits:read", "benefits:write",
@@ -124,7 +124,7 @@ const grants: Record<PlatformRole, Capability[]> = {
   TENANT_ADMIN: [
     "people:read", "people:write", "organization:read", "organization:write",
     "positions:read", "positions:write", "documents:read", "documents:write",
-    "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
+    "recruiting:read", "recruiting:write", "recruiting:approve", "onboarding:read", "onboarding:write",
     "offboarding:read", "time:read", "time:configure", "leave:read", "leave:write", "leave:self-request", "leave:approve", "leave:configure",
     "payroll:self-payslip", "benefits:read", "performance:read", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
     "talent:read", "succession:read", "learning:read", "learning:self-progress",
