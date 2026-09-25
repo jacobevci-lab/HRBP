@@ -13,7 +13,7 @@ expect(dataPath, data, /employmentPrimaryKeyFilter\(scope\)/, "history identity 
 expect(dataPath, data, /take:\s*100/, "terminal history must use a bounded process query");
 expect(dataPath, data, /includeAudit[\s\S]*auditEvent\.findMany/, "raw audit evidence must be capability-gated");
 expect(dataPath, data, /resourceType:\s*"SeparationProcess"[\s\S]*resourceType:\s*"Employment"/, "audit evidence must include process and final employment termination resources");
-expect(dataPath, data, /take:\s*1000/, "audit evidence query must remain bounded");
+expect(dataPath, data, /take:\s*1500/, "expanded process/employment/requisition audit evidence query must remain bounded");
 expect(dataPath, data, /cancellationReason[\s\S]*cancelledById[\s\S]*cancelledAt/, "cancelled processes must expose governed cancellation evidence");
 expect(dataPath, data, /finalSettlementPreparedAt[\s\S]*finalSettlementApprovedAt[\s\S]*finalSettlementSettledAt/, "history must reconstruct settlement evidence");
 expect(dataPath, data, /exitInterview[\s\S]*rehireDecisionAt/, "history must preserve interview and explicit human rehire decision evidence");

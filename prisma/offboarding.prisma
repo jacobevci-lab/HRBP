@@ -57,6 +57,11 @@ model SeparationProcess {
   rehireDecisionReason          String?
   rehireDecisionById            String?
   rehireDecisionAt              DateTime?
+  replacementRequired           Boolean?
+  replacementDecisionReason     String?
+  replacementDecisionById       String?
+  replacementDecisionAt         DateTime?
+  replacementRequisitionId      String?
   finalSettlementStatus         String?
   finalSettlementNote           String?
   finalSettlementPreparedById   String?
@@ -84,6 +89,7 @@ model SeparationProcess {
 
   @@index([tenantId, employmentId, status])
   @@index([tenantId, lastWorkingDate, status])
+  @@index([tenantId, replacementRequisitionId])
 }
 
 model SeparationScheduleAmendment {

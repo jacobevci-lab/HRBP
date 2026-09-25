@@ -47,6 +47,11 @@ export type OffboardingHistoryRow = {
   cancellationReason: string | null;
   cancelledById: string | null;
   cancelledAt: string | null;
+  replacementRequired: boolean | null;
+  replacementDecisionReason: string | null;
+  replacementDecisionById: string | null;
+  replacementDecisionAt: string | null;
+  replacementRequisitionId: string | null;
   finalSettlementStatus: string;
   finalSettlementReversalReason: string | null;
   finalSettlementReversedById: string | null;
@@ -105,6 +110,11 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
         cancellationReason: true,
         cancelledById: true,
         cancelledAt: true,
+        replacementRequired: true,
+        replacementDecisionReason: true,
+        replacementDecisionById: true,
+        replacementDecisionAt: true,
+        replacementRequisitionId: true,
         finalSettlementStatus: true,
         finalSettlementPreparedById: true,
         finalSettlementPreparedAt: true,
@@ -145,16 +155,18 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
     const employmentMap = new Map(employments.map((employment) => [employment.id, employment]));
 
     const processIds = processes.map((process) => process.id);
+    const replacementRequisitionIds = [...new Set(processes.flatMap((process) => process.replacementRequisitionId ? [process.replacementRequisitionId] : []))];
     const audit = includeAudit && processIds.length ? await db.auditEvent.findMany({
       where: {
         tenantId: ctx.tenantId,
         OR: [
           { resourceType: "SeparationProcess", resourceId: { in: processIds } },
-          ...(employmentIds.length ? [{ resourceType: "Employment", resourceId: { in: employmentIds } }] : [])
+          ...(employmentIds.length ? [{ resourceType: "Employment", resourceId: { in: employmentIds } }] : []),
+          ...(replacementRequisitionIds.length ? [{ resourceType: "Requisition", resourceId: { in: replacementRequisitionIds } }] : [])
         ]
       },
       orderBy: { occurredAt: "asc" },
-      take: 1000,
+      take: 1500,
       select: { action: true, resourceType: true, resourceId: true, actorId: true, purpose: true, occurredAt: true, hash: true, previousHash: true }
     }) : [];
 
@@ -180,6 +192,18 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
           actorId: amendment.changedById,
           occurredAt: amendment.changedAt.toISOString(),
           detail: `Notice ${amendment.previousNoticeDate?.toISOString() ?? "none"} -> ${amendment.newNoticeDate?.toISOString() ?? "none"}; last day ${amendment.previousLastWorkingDate.toISOString()} -> ${amendment.newLastWorkingDate.toISOString()} · ${amendment.reason}`
+        });
+      }
+      if (process.replacementDecisionAt) {
+        events.push({
+          key: `${process.id}:replacement`,
+          kind: "DECISION",
+          title: process.replacementRequired ? "Replacement approved and handed to Recruiting" : "No replacement required",
+          actorId: process.replacementDecisionById,
+          occurredAt: process.replacementDecisionAt.toISOString(),
+          detail: process.replacementRequired
+            ? `${process.replacementRequisitionId ? `Draft requisition ${process.replacementRequisitionId}` : "Backfill approved"}${process.replacementDecisionReason ? ` · ${process.replacementDecisionReason}` : ""}`
+            : process.replacementDecisionReason
         });
       }
       if (process.exitInterview) events.push({
@@ -240,7 +264,11 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
       });
       events.sort((a, b) => a.occurredAt.localeCompare(b.occurredAt));
 
-      const processAudit = audit.filter((item) => (item.resourceType === "SeparationProcess" && item.resourceId === process.id) || (item.resourceType === "Employment" && item.resourceId === process.employmentId));
+      const processAudit = audit.filter((item) =>
+        (item.resourceType === "SeparationProcess" && item.resourceId === process.id) ||
+        (item.resourceType === "Employment" && item.resourceId === process.employmentId) ||
+        (Boolean(process.replacementRequisitionId) && item.resourceType === "Requisition" && item.resourceId === process.replacementRequisitionId)
+      );
       const tasksCompleted = process.tasks.filter((task) => task.status === ExitTaskStatus.COMPLETED).length;
       const tasksWaived = process.tasks.filter((task) => task.status === ExitTaskStatus.WAIVED).length;
       const assetsReturned = process.assets.filter((asset) => asset.status === AssetReturnStatus.RETURNED).length;
@@ -264,6 +292,11 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
         cancellationReason: process.cancellationReason,
         cancelledById: process.cancelledById,
         cancelledAt: iso(process.cancelledAt),
+        replacementRequired: process.replacementRequired,
+        replacementDecisionReason: process.replacementDecisionReason,
+        replacementDecisionById: process.replacementDecisionById,
+        replacementDecisionAt: iso(process.replacementDecisionAt),
+        replacementRequisitionId: process.replacementRequisitionId,
         finalSettlementStatus: process.finalSettlementStatus ?? "NOT_STARTED",
         finalSettlementReversalReason: process.finalSettlementReversalReason,
         finalSettlementReversedById: process.finalSettlementReversedById,

@@ -20,7 +20,8 @@ const offboardingTitles: Record<string, { en: string; tr: string }> = {
   OFFBOARDING_READY_TO_CLOSE: { en: "Separation ready to close", tr: "Ayrılış kapatmaya hazır" },
   OFFBOARDING_FINAL_SETTLEMENT_APPROVAL_REQUIRED: { en: "Final settlement approval required", tr: "Nihai hesap onayı gerekiyor" },
   OFFBOARDING_FINAL_SETTLEMENT_PAYMENT_REQUIRED: { en: "Final settlement completion required", tr: "Nihai hesap tamamlama işlemi gerekiyor" },
-  OFFBOARDING_FINAL_SETTLEMENT_SETTLED: { en: "Final settlement cleared", tr: "Nihai hesap tamamlandı" }
+  OFFBOARDING_FINAL_SETTLEMENT_SETTLED: { en: "Final settlement cleared", tr: "Nihai hesap tamamlandı" },
+  OFFBOARDING_BACKFILL_DRAFT_CREATED: { en: "Backfill requisition drafted", tr: "Yedek kadro işe alım talebi oluşturuldu" }
 };
 
 export function notificationDisplayTitle(eventType: string, locale: Locale) {
@@ -44,7 +45,12 @@ export function notificationDisplaySummary(payload: unknown, locale: Locale) {
     return `${employeeName} · ${taskName}${owner}${due ? ` · ${locale === "tr" ? "son tarih" : "due"} ${due}` : ""} · ${state}.`;
   }
 
-  const separationProcessId = text(data.separationProcessId); const domain = text(data.domain); const lastWorkingDate = text(data.lastWorkingDate);
+  const separationProcessId = text(data.separationProcessId); const domain = text(data.domain); const lastWorkingDate = text(data.lastWorkingDate); const replacementRequisitionId = text(data.replacementRequisitionId); const positionTitle = text(data.positionTitle); const targetHireDate = text(data.targetHireDate);
+  if (separationProcessId && replacementRequisitionId && reminderState === "backfill-draft") {
+    const target = targetHireDate ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(targetHireDate)) : null;
+    if (locale === "tr") return `${positionTitle ?? "Pozisyon"} için yedek kadro talebi Taslak olarak oluşturuldu${employeeName ? ` · kaynak ayrılış: ${employeeName}` : ""}${target ? ` · hedef: ${target}` : ""}. İşe Alım talebi incelemeli ve normal onay süreciyle açmalıdır.`;
+    return `A backfill requisition for ${positionTitle ?? "the position"} was created as Draft${employeeName ? ` · source separation: ${employeeName}` : ""}${target ? ` · target: ${target}` : ""}. Recruiting must review it and open it through the normal approval flow.`;
+  }
   if (separationProcessId && reminderState?.startsWith("final-settlement-") && lastWorkingDate) {
     const lastDay = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(lastWorkingDate));
     if (reminderState === "final-settlement-prepared") return locale === "tr" ? `Nihai hesap hazırlandı. Son çalışma günü ${lastDay}. Hazırlayan kişiden farklı bir bordro onaylayıcısının kararı gerekiyor.` : `Final settlement is prepared. Last working day ${lastDay}. An independent payroll approver must review it.`;
@@ -74,5 +80,6 @@ export function notificationDisplayResourceHref(resourceType: string, resourceId
   if (resourceType === "SeparationTask") return id ? `/module/offboarding?task=${encodeURIComponent(id)}` : "/module/offboarding";
   if (resourceType === "KnowledgeTransfer") return id ? `/module/offboarding?transfer=${encodeURIComponent(id)}` : "/module/offboarding";
   if (resourceType === "SeparationProcess") return id ? `/module/offboarding?process=${encodeURIComponent(id)}` : "/module/offboarding";
+  if (resourceType === "Requisition") return "/module/recruiting";
   return notificationResourceHref(resourceType, resourceId);
 }

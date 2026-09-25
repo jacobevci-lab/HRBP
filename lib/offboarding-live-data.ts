@@ -24,14 +24,15 @@ export type OffboardingAccessRow = { id: string; systemName: string; accountId: 
 export type OffboardingKnowledgeTransferRow = { id: string; title: string; description: string | null; recipientId: string | null; status: string; rawStatus: string; dueAt: string; dueAtIso: string | null; completedAt: string | null };
 
 export type OffboardingProcessRow = {
-  id: string; employmentId: string; personId: string | null; initiatedById: string; employee: string; employeeNumber: string; position: string; type: string; status: string; rawStatus: string;
+  id: string; employmentId: string; personId: string | null; positionId: string | null; initiatedById: string; employee: string; employeeNumber: string; position: string; type: string; status: string; rawStatus: string;
   noticeDate: string; noticeDateIso: string | null; lastWorkingDate: string; lastWorkingDateIso: string; completedTasks: number; taskCount: number; openBlockingTasks: number; overdueTasks: number; assetsOpen: number; accessOpen: number; openKnowledgeTransfers: number;
+  replacementRequired: boolean | null; replacementDecisionReason: string | null; replacementDecisionById: string | null; replacementDecisionAt: string | null; replacementRequisitionId: string | null;
   finalSettlementStatus: string; finalSettlementNote: string | null; finalSettlementPreparedById: string | null; finalSettlementPreparedAt: string | null; finalSettlementApprovedById: string | null; finalSettlementApprovedAt: string | null; finalSettlementSettledById: string | null; finalSettlementSettledAt: string | null; finalSettlementReversalReason: string | null; finalSettlementReversedById: string | null; finalSettlementReversedAt: string | null; finalSettlementClear: boolean;
   controlsClear: boolean; readyToClose: boolean; exitRisk: boolean; tasks: OffboardingTaskRow[]; assets: OffboardingAssetRow[]; accessControls: OffboardingAccessRow[]; knowledgeTransfers: OffboardingKnowledgeTransferRow[];
 };
 
 export type OffboardingEligibleEmployment = { id: string; personId: string; employee: string; employeeNumber: string; position: string; department: string };
-export type OffboardingWorkspaceData = { openSeparations: number; leavingThisWeek: number; blockingTasks: number; overdueTasks: number; exitRiskProcesses: number; readyToClose: number; finalPayReview: number; processes: OffboardingProcessRow[]; eligibleEmployments: OffboardingEligibleEmployment[] };
+export type OffboardingWorkspaceData = { openSeparations: number; leavingThisWeek: number; blockingTasks: number; overdueTasks: number; exitRiskProcesses: number; readyToClose: number; finalPayReview: number; replacementDecisionsPending: number; backfillDrafts: number; processes: OffboardingProcessRow[]; eligibleEmployments: OffboardingEligibleEmployment[] };
 
 export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEligible = false): Promise<OffboardingWorkspaceData> {
   return withDb(async (db) => {
@@ -42,6 +43,7 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
       take: 150,
       select: {
         id: true, employmentId: true, initiatedById: true, type: true, status: true, noticeDate: true, lastWorkingDate: true,
+        replacementRequired: true, replacementDecisionReason: true, replacementDecisionById: true, replacementDecisionAt: true, replacementRequisitionId: true,
         finalSettlementStatus: true, finalSettlementNote: true, finalSettlementPreparedById: true, finalSettlementPreparedAt: true,
         finalSettlementApprovedById: true, finalSettlementApprovedAt: true, finalSettlementSettledById: true, finalSettlementSettledAt: true,
         finalSettlementReversalReason: true, finalSettlementReversedById: true, finalSettlementReversedAt: true,
@@ -55,7 +57,7 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
     const employmentIds = [...new Set(processes.map((process) => process.employmentId))];
     const processEmployments = employmentIds.length ? await db.employment.findMany({
       where: { tenantId: ctx.tenantId, id: { in: employmentIds }, ...employmentPrimaryKeyFilter(scope) },
-      select: { id: true, personId: true, person: { select: { employeeNumber: true, givenName: true, familyName: true } }, position: { select: { title: true, orgUnit: { select: { name: true } } } } }
+      select: { id: true, personId: true, person: { select: { employeeNumber: true, givenName: true, familyName: true } }, position: { select: { id: true, title: true, orgUnit: { select: { name: true } } } } }
     }) : [];
     const employmentMap = new Map(processEmployments.map((employment) => [employment.id, employment]));
 
@@ -84,10 +86,11 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
       const readyToClose = controlsClear && finalSettlementClear && process.status === SeparationStatus.READY_TO_CLOSE;
       const exitRisk = !readyToClose && process.lastWorkingDate <= exitRiskEnd;
       return {
-        id: process.id, employmentId: process.employmentId, personId: employment?.personId ?? null, initiatedById: process.initiatedById,
+        id: process.id, employmentId: process.employmentId, personId: employment?.personId ?? null, positionId: employment?.position?.id ?? null, initiatedById: process.initiatedById,
         employee: employment ? `${employment.person.givenName} ${employment.person.familyName}` : "Employment record",
         employeeNumber: employment?.person.employeeNumber ?? "—", position: employment?.position?.title ?? "Position unavailable", type: label(process.type), status: label(process.status), rawStatus: process.status,
         noticeDate: formatDate(process.noticeDate), noticeDateIso: process.noticeDate?.toISOString() ?? null, lastWorkingDate: formatDate(process.lastWorkingDate), lastWorkingDateIso: process.lastWorkingDate.toISOString(), completedTasks, taskCount: process.tasks.length, openBlockingTasks, overdueTasks, assetsOpen, accessOpen, openKnowledgeTransfers,
+        replacementRequired: process.replacementRequired, replacementDecisionReason: process.replacementDecisionReason, replacementDecisionById: process.replacementDecisionById, replacementDecisionAt: process.replacementDecisionAt?.toISOString() ?? null, replacementRequisitionId: process.replacementRequisitionId,
         finalSettlementStatus, finalSettlementNote: process.finalSettlementNote, finalSettlementPreparedById: process.finalSettlementPreparedById, finalSettlementPreparedAt: process.finalSettlementPreparedAt?.toISOString() ?? null,
         finalSettlementApprovedById: process.finalSettlementApprovedById, finalSettlementApprovedAt: process.finalSettlementApprovedAt?.toISOString() ?? null,
         finalSettlementSettledById: process.finalSettlementSettledById, finalSettlementSettledAt: process.finalSettlementSettledAt?.toISOString() ?? null,
@@ -108,6 +111,8 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
       exitRiskProcesses: rows.filter((row) => row.exitRisk).length,
       readyToClose: rows.filter((row) => row.readyToClose).length,
       finalPayReview: rows.filter((row) => row.rawStatus === SeparationStatus.FINAL_PAY_REVIEW || (row.controlsClear && !row.finalSettlementClear)).length,
+      replacementDecisionsPending: rows.filter((row) => row.replacementRequired === null).length,
+      backfillDrafts: rows.filter((row) => Boolean(row.replacementRequisitionId)).length,
       processes: rows,
       eligibleEmployments: eligible.map((employment) => ({ id: employment.id, personId: employment.personId, employee: `${employment.person.givenName} ${employment.person.familyName}`, employeeNumber: employment.person.employeeNumber ?? "—", position: employment.position?.title ?? "Unassigned", department: employment.position?.orgUnit.name ?? "Unassigned" }))
     };
