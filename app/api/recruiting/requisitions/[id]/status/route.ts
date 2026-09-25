@@ -1,4 +1,4 @@
-import { DataClassification, Prisma, RequisitionStatus } from "@prisma/client";
+import { DataClassification, PositionStatus, Prisma, RequisitionStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
@@ -47,8 +47,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!current) throw new Error("REQUISITION_NOT_FOUND");
       if (!canTransitionRequisition(current.status, next)) throw new Error("INVALID_TRANSITION");
       if (requiresApprovalAuthority(current.status, next) && !can(ctx, "recruiting:approve")) throw new Error("APPROVAL_AUTHORITY_REQUIRED");
-      if (next === RequisitionStatus.OPEN && !current.positionId) throw new Error("POSITION_REQUIRED");
-      if (next === RequisitionStatus.OPEN && !current.hiringManagerId) throw new Error("HIRING_MANAGER_REQUIRED");
+
+      if (next === RequisitionStatus.OPEN) {
+        if (!current.positionId) throw new Error("POSITION_REQUIRED");
+        if (!current.hiringManagerId) throw new Error("HIRING_MANAGER_REQUIRED");
+        if (current.openings !== 1) throw new Error("POSITION_CAPACITY_MISMATCH");
+
+        const position = await tx.position.findFirst({
+          where: { id: current.positionId, tenantId: ctx.tenantId },
+          select: { id: true, status: true }
+        });
+        if (!position) throw new Error("POSITION_NOT_FOUND");
+        if (position.status !== PositionStatus.OPEN) throw new Error("POSITION_NOT_OPEN");
+
+        const competing = await tx.requisition.findFirst({
+          where: {
+            tenantId: ctx.tenantId,
+            id: { not: current.id },
+            positionId: position.id,
+            status: { in: [RequisitionStatus.OPEN, RequisitionStatus.ON_HOLD] }
+          },
+          select: { id: true }
+        });
+        if (competing) throw new Error("POSITION_REQUISITION_CONFLICT");
+      }
 
       const approvalDecision = requiresApprovalAuthority(current.status, next);
       const creatorAudit = approvalDecision ? await tx.auditEvent.findFirst({
@@ -119,6 +141,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (code === "SELF_APPROVAL_BLOCKED") return forbidden("The requisition creator cannot approve and open the same requisition.");
     if (code === "POSITION_REQUIRED") return Response.json({ error: "A requisition must be linked to a position before it can be opened." }, { status: 409 });
     if (code === "HIRING_MANAGER_REQUIRED") return Response.json({ error: "A requisition must have a hiring manager before it can be opened." }, { status: 409 });
+    if (code === "POSITION_CAPACITY_MISMATCH") return Response.json({ error: "A position-backed requisition represents one authorized headcount position and must have exactly one opening." }, { status: 409 });
+    if (code === "POSITION_NOT_FOUND") return Response.json({ error: "The requisition position was not found in this tenant." }, { status: 409 });
+    if (code === "POSITION_NOT_OPEN") return Response.json({ error: "The requisition position is not open for hiring." }, { status: 409 });
+    if (code === "POSITION_REQUISITION_CONFLICT") return Response.json({ error: "Another active requisition already owns this position." }, { status: 409 });
     if (code === "STATE_CONFLICT") return Response.json({ error: "The requisition changed concurrently. Refresh and try again." }, { status: 409 });
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") return Response.json({ error: "The requisition changed concurrently. Refresh and try again." }, { status: 409 });
     console.error("Requisition status transition failed", error);
