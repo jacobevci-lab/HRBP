@@ -128,7 +128,8 @@ expect(modulePath, modulePage, /!ctx\.employmentId/, "payroll self-service must 
 
 const payslipPath = "lib/payroll-payslip-data.ts";
 const payslip = await source(payslipPath);
-expect(payslipPath, payslip, /employmentId:\s*ctx\.employmentId/, "self-service payroll result queries must be pinned to the signed employment id");
+expect(payslipPath, payslip, /const\s+employmentId\s*=\s*ctx\.employmentId/, "self-service payroll reads must pin the signed employment id before async database callbacks");
+expect(payslipPath, payslip, /tenantId:\s*ctx\.tenantId,[\s\S]*employmentId,[\s\S]*payrollRun:/, "self-service payroll result queries must use the pinned signed employment id");
 expect(payslipPath, payslip, /PayrollRunStatus\.APPROVED[\s\S]*PayrollRunStatus\.PAID/, "self-service must expose only released payroll states");
 expect(payslipPath, payslip, /lineItems:/, "employee statements must retain the governed payroll line ledger");
 expect(payslipPath, payslip, /payroll-payslip\.self-viewed/, "restricted payroll self-service reads must emit audit evidence");
