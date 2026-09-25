@@ -42,47 +42,66 @@ enum AccessRevocationStatus {
 }
 
 model SeparationProcess {
-  id                           String @id @default(cuid())
-  tenantId                     String
-  employmentId                 String
-  type                         SeparationType
-  status                       SeparationStatus @default(DRAFT)
-  noticeDate                   DateTime?
-  lastWorkingDate              DateTime
-  reasonCode                   String?
-  employeeReason               String?
-  initiatedById                String
-  managerEmploymentId          String?
-  rehireEligible               Boolean?
-  rehireDecisionReason         String?
-  rehireDecisionById           String?
-  rehireDecisionAt             DateTime?
-  finalSettlementStatus        String?
-  finalSettlementNote          String?
-  finalSettlementPreparedById  String?
-  finalSettlementPreparedAt    DateTime?
-  finalSettlementApprovedById  String?
-  finalSettlementApprovedAt    DateTime?
-  finalSettlementSettledById   String?
-  finalSettlementSettledAt     DateTime?
+  id                            String @id @default(cuid())
+  tenantId                      String
+  employmentId                  String
+  type                          SeparationType
+  status                        SeparationStatus @default(DRAFT)
+  noticeDate                    DateTime?
+  lastWorkingDate               DateTime
+  reasonCode                    String?
+  employeeReason                String?
+  initiatedById                 String
+  managerEmploymentId           String?
+  rehireEligible                Boolean?
+  rehireDecisionReason          String?
+  rehireDecisionById            String?
+  rehireDecisionAt              DateTime?
+  finalSettlementStatus         String?
+  finalSettlementNote           String?
+  finalSettlementPreparedById   String?
+  finalSettlementPreparedAt     DateTime?
+  finalSettlementApprovedById   String?
+  finalSettlementApprovedAt     DateTime?
+  finalSettlementSettledById    String?
+  finalSettlementSettledAt      DateTime?
   finalSettlementReversalReason String?
-  finalSettlementReversedById  String?
-  finalSettlementReversedAt    DateTime?
-  cancellationReason           String?
-  cancelledById                String?
-  cancelledAt                  DateTime?
-  classification               DataClassification @default(RESTRICTED)
-  createdAt                    DateTime @default(now())
-  updatedAt                    DateTime @updatedAt
-  completedAt                  DateTime?
-  tasks                        SeparationTask[]
-  assets                       AssetReturn[]
-  accessRevocations            AccessRevocation[]
-  exitInterview                ExitInterview?
-  knowledgeTransfers           KnowledgeTransfer[]
+  finalSettlementReversedById   String?
+  finalSettlementReversedAt     DateTime?
+  cancellationReason            String?
+  cancelledById                 String?
+  cancelledAt                   DateTime?
+  classification                DataClassification @default(RESTRICTED)
+  createdAt                     DateTime @default(now())
+  updatedAt                     DateTime @updatedAt
+  completedAt                   DateTime?
+  tasks                         SeparationTask[]
+  assets                        AssetReturn[]
+  accessRevocations             AccessRevocation[]
+  exitInterview                 ExitInterview?
+  knowledgeTransfers            KnowledgeTransfer[]
+  scheduleAmendments            SeparationScheduleAmendment[]
 
   @@index([tenantId, employmentId, status])
   @@index([tenantId, lastWorkingDate, status])
+}
+
+model SeparationScheduleAmendment {
+  id                      String @id @default(cuid())
+  tenantId                String
+  processId               String
+  previousNoticeDate      DateTime?
+  newNoticeDate           DateTime?
+  previousLastWorkingDate DateTime
+  newLastWorkingDate      DateTime
+  reason                  String
+  changedById             String
+  changedAt               DateTime @default(now())
+  classification          DataClassification @default(RESTRICTED)
+  process                 SeparationProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, processId, changedAt])
+  @@index([tenantId, changedAt])
 }
 
 model SeparationTask {
