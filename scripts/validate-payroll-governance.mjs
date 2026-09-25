@@ -7,11 +7,15 @@ function expectAbsent(path, text, pattern, message) { if (pattern.test(text)) fa
 
 const authPath = "lib/authorization.ts";
 const auth = await source(authPath);
+expect(authPath, auth, /"payroll:self-payslip"/, "employee payroll statements must have a dedicated self-service capability");
+expect(authPath, auth, /EMPLOYEE:[\s\S]*"payroll:self-payslip"/, "employees must receive self-service payslip access without payroll operations authority");
 expect(authPath, auth, /"payroll:prepare"/, "payroll preparation must have a dedicated capability");
 expect(authPath, auth, /"payroll:approve"/, "payroll approval must have a dedicated capability");
 expect(authPath, auth, /"payroll:pay"/, "payroll payment must have a dedicated capability");
 expect(authPath, auth, /"payroll:configure"/, "payroll configuration must have a dedicated capability");
 expect(authPath, auth, /PAYROLL_ADMIN:[\s\S]*"payroll:prepare"[\s\S]*"payroll:approve"[\s\S]*"payroll:pay"[\s\S]*"payroll:configure"/, "payroll administrators must receive the separated payroll capabilities");
+const employeeGrant = auth.match(/EMPLOYEE:\s*\[[\s\S]*?\],\n\s*MANAGER:/)?.[0] ?? "";
+expectAbsent(authPath, employeeGrant, /"payroll:read"|"payroll:prepare"|"payroll:approve"|"payroll:pay"|"payroll:configure"/, "employee self-service must not imply payroll operations authority");
 const tenantAdminGrant = auth.match(/TENANT_ADMIN:\s*\[[\s\S]*?\]\n\};/)?.[0] ?? "";
 expectAbsent(authPath, tenantAdminGrant, /"payroll:approve"|"payroll:pay"/, "broad tenant administration must not imply payroll approval or payment authority");
 
@@ -112,10 +116,35 @@ expect(workspacePath, workspace, /can\(ctx,\s*"payroll:configure"\)/, "payroll w
 expect(workspacePath, workspace, /Input fingerprint protected/, "payroll workspace must disclose locked-input integrity");
 expect(workspacePath, workspace, /Payment separation/, "payroll workspace must disclose approval/payment separation");
 
+const navPath = "lib/navigation.ts";
+const nav = await source(navPath);
+expect(navPath, nav, /slug:"payroll"[\s\S]*requiredCapability:"payroll:self-payslip"/, "payroll navigation must be discoverable through self-service authority rather than broad payroll read access");
+
+const modulePath = "components/work-pay-module-page.tsx";
+const modulePage = await source(modulePath);
+expect(modulePath, modulePage, /return\s+"payroll:self-payslip"/, "payroll module entry must use the self-service capability boundary");
+expect(modulePath, modulePage, /slug\s*===\s*"payroll"[\s\S]*!can\(ctx,\s*"payroll:read"\)[\s\S]*PayrollPayslipWorkspace/, "non-payroll operators must route to employee self-service instead of the operations workspace");
+expect(modulePath, modulePage, /!ctx\.employmentId/, "payroll self-service must refuse sessions without a signed employment identity");
+
+const payslipPath = "lib/payroll-payslip-data.ts";
+const payslip = await source(payslipPath);
+expect(payslipPath, payslip, /employmentId:\s*ctx\.employmentId/, "self-service payroll result queries must be pinned to the signed employment id");
+expect(payslipPath, payslip, /PayrollRunStatus\.APPROVED[\s\S]*PayrollRunStatus\.PAID/, "self-service must expose only released payroll states");
+expect(payslipPath, payslip, /lineItems:/, "employee statements must retain the governed payroll line ledger");
+expect(payslipPath, payslip, /payroll-payslip\.self-viewed/, "restricted payroll self-service reads must emit audit evidence");
+expect(payslipPath, payslip, /DataClassification\.RESTRICTED/, "payroll self-service audit evidence must remain restricted");
+expectAbsent(payslipPath, payslip, /employmentIdFilter\(|resolveEmploymentScope\(/, "employee payroll self-service must never broaden into relationship-scoped workforce payroll access");
+
+const payslipApiPath = "app/api/payroll/payslips/route.ts";
+const payslipApi = await source(payslipApiPath);
+expect(payslipApiPath, payslipApi, /can\(ctx,\s*"payroll:self-payslip"\)/, "payslip API must require the dedicated self-service capability");
+expect(payslipApiPath, payslipApi, /!ctx\.employmentId/, "payslip API must reject sessions without employment identity");
+expectAbsent(payslipApiPath, payslipApi, /payroll:read/, "self-service API must not accept broad payroll-read authority as a substitute for employment-bound access");
+
 if (failures.length) {
   console.error("Payroll governance contract validation failed:\n");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log("Validated payroll governance contract: granular authority, controlled period setup, server-owned ledger totals, input readiness and fingerprint locking, four-eyes approval, payment separation, state-aware lifecycle, operator controls and durable notifications are enforced.");
+console.log("Validated payroll governance contract: employee-bound payslip self-service, granular authority, controlled period setup, server-owned ledger totals, input readiness and fingerprint locking, four-eyes approval, payment separation, state-aware lifecycle, operator controls and durable notifications are enforced.");
