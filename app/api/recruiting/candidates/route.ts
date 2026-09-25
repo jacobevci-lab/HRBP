@@ -2,6 +2,7 @@ import { ApplicationStage, DataClassification, RequisitionStatus } from "@prisma
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { recruitingApplicationRelationFilter, recruitingCandidateReadFilter } from "@/lib/recruiting-access";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
@@ -10,12 +11,15 @@ export async function GET(request: Request) {
   if (!can(ctx, "recruiting:read")) return forbidden();
 
   const data = await withDb((db) => db.candidate.findMany({
-    where: { tenantId: ctx.tenantId },
+    where: recruitingCandidateReadFilter(ctx),
     orderBy: { updatedAt: "desc" },
     take: 200,
     select: {
       id: true, givenName: true, familyName: true, email: true, source: true, retentionUntil: true, classification: true,
-      applications: { select: { id: true, stage: true, requisition: { select: { id: true, title: true } }, offer: { select: { id: true, status: true, startDate: true } } } }
+      applications: {
+        where: recruitingApplicationRelationFilter(ctx),
+        select: { id: true, stage: true, requisition: { select: { id: true, title: true } }, offer: { select: { id: true, status: true, startDate: true } } }
+      }
     }
   }));
   return Response.json({ data });
