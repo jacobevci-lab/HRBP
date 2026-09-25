@@ -55,7 +55,7 @@ expectAbsent(reminderPath, reminder, /data:\s*\{\s*status:\s*OnboardingTaskStatu
 const maintenancePath = "app/api/internal/maintenance/route.ts";
 const maintenance = await source(maintenancePath);
 expect(maintenancePath, maintenance, /queueOnboardingReadinessReminders/, "operational maintenance must include onboarding readiness monitoring");
-expect(maintenancePath, maintenance, /const onboardingReadiness = await queueOnboardingReadinessReminders\(\);[\s\S]*Promise\.all/, "audited onboarding readiness work must run serially before parallel non-state reminder work");
+expect(maintenancePath, maintenance, /(?:const onboardingReadiness = await queueOnboardingReadinessReminders\(\);|const onboardingReadiness = await capture\("onboarding-readiness",\s*queueOnboardingReadinessReminders,\s*failures\);)[\s\S]*Promise\.all/, "audited onboarding readiness work must run serially before parallel non-state reminder work");
 
 const displayPath = "lib/notification-display.ts";
 const display = await source(displayPath);
