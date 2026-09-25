@@ -1,4 +1,4 @@
-import { DataClassification, PlatformRole, ServiceVisibility } from "@prisma/client";
+import { DataClassification, PlatformRole, ServiceRequestStatus, ServiceVisibility } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
@@ -6,6 +6,8 @@ import { hrServiceRequestWhere, isHRServiceSelfServiceRole } from "@/lib/hr-serv
 import { asEnumValue, asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
+
+const commentTerminalStatuses = new Set<ServiceRequestStatus>([ServiceRequestStatus.CLOSED, ServiceRequestStatus.CANCELLED]);
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
@@ -50,6 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         select: { id: true, requestNumber: true, requestorId: true, assigneeId: true, firstResponseAt: true, status: true }
       });
       if (!ticket) throw new Error("NOT_FOUND");
+      if (commentTerminalStatuses.has(ticket.status)) throw new Error("TERMINAL");
 
       const selfService = isHRServiceSelfServiceRole(ctx.role);
       const visibility = selfService ? ServiceVisibility.REQUESTOR : requestedVisibility ?? ServiceVisibility.REQUESTOR;
@@ -104,7 +107,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return Response.json({ data }, { status: 201 });
   } catch (error) {
-    if (error instanceof Error && error.message === "NOT_FOUND") return Response.json({ error: "Request not found." }, { status: 404 });
+    const code = error instanceof Error ? error.message : "UNKNOWN";
+    if (code === "NOT_FOUND") return Response.json({ error: "Request not found." }, { status: 404 });
+    if (code === "TERMINAL") return Response.json({ error: "Closed or cancelled requests are read-only. Reopen a resolved request before continuing work." }, { status: 409 });
     console.error("HR service comment creation failed", error);
     return Response.json({ error: "Comment could not be added." }, { status: 500 });
   }
