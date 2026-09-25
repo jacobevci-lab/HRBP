@@ -11,6 +11,18 @@ expect(requisitionPath, requisition, /position\.status\s*!==\s*PositionStatus\.O
 expect(requisitionPath, requisition, /status:\s*\{\s*in:\s*\[RequisitionStatus\.OPEN,\s*RequisitionStatus\.ON_HOLD\]\s*\}/, "a position must not be owned by another active requisition");
 expect(requisitionPath, requisition, /TransactionIsolationLevel\.Serializable/, "requisition activation must remain serializable");
 
+const offerCreatePath = "app/api/recruiting/applications/[id]/offer/route.ts";
+const offerCreate = await source(offerCreatePath);
+expect(offerCreatePath, offerCreate, /readJsonObject\(request\)/, "offer preparation must use bounded JSON-object input parsing");
+expect(offerCreatePath, offerCreate, /OFFER_CREATION_STAGES[\s\S]*ApplicationStage\.INTERVIEW[\s\S]*ApplicationStage\.ASSESSMENT[\s\S]*ApplicationStage\.OFFER/, "offer preparation must be restricted to offer-eligible application stages");
+expect(offerCreatePath, offerCreate, /application\.requisition\.status\s*!==\s*RequisitionStatus\.OPEN/, "offer drafts must only be prepared for open requisitions");
+expect(offerCreatePath, offerCreate, /!application\.requisition\.positionId/, "offer preparation must require an authorized position");
+expect(offerCreatePath, offerCreate, /expiresAt\s*&&\s*expiresAt\s*<=\s*now/, "new offers must reject already-expired deadlines");
+expect(offerCreatePath, offerCreate, /expiresAt\s*&&\s*expiresAt\s*>=\s*startDate/, "offer response deadlines must precede the proposed employment start date");
+expect(offerCreatePath, offerCreate, /tx\.application\.updateMany[\s\S]*stage:\s*application\.stage[\s\S]*updated\.count\s*!==\s*1/, "offer preparation must synchronize application state with an optimistic guard");
+expect(offerCreatePath, offerCreate, /TransactionIsolationLevel\.Serializable/, "offer preparation must use serializable transaction isolation");
+expect(offerCreatePath, offerCreate, /error\.code\s*===\s*"P2034"[\s\S]*error\.code\s*===\s*"P2002"/, "offer creation concurrency and uniqueness conflicts must fail safely");
+
 const applicationPath = "app/api/recruiting/applications/[id]/stage/route.ts";
 const application = await source(applicationPath);
 expect(applicationPath, application, /ACTIVE_OFFER_STATUSES[\s\S]*OfferStatus\.APPROVAL[\s\S]*OfferStatus\.SENT[\s\S]*OfferStatus\.ACCEPTED/, "active offer states must lock manual application drift");
@@ -64,4 +76,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated recruiting lifecycle integrity: position capacity, application-offer coupling, expiry and requisition guards, accepted-offer hire state, tenant identity uniqueness, optimistic writes, serializable conversion, onboarding deadlines, automated offer expiry and audit chain-of-custody are enforced.");
+console.log("Validated recruiting lifecycle integrity: governed offer preparation, position capacity, application-offer coupling, expiry and requisition guards, accepted-offer hire state, tenant identity uniqueness, optimistic writes, serializable conversion, onboarding deadlines, automated offer expiry and audit chain-of-custody are enforced.");
