@@ -47,12 +47,25 @@ expect(workspacePath, workspace, /canApprove=\{can\(ctx,\s*"recruiting:approve"\
 expect(workspacePath, workspace, /return\s*<ProtectedLiveFailure\s+domain=\{c\(locale,"Recruiting","İşe Alım"\)\}/, "authenticated recruiting failures must not substitute synthetic demo data");
 expect(workspacePath, workspace, /return\s*<ProtectedLiveFailure\s+domain=\{c\(locale,"Onboarding","İşe Başlatma"\)\}/, "authenticated onboarding failures must not substitute synthetic demo data");
 
+const approvalApiPath = "app/api/recruiting/approvals/route.ts";
+const approvalApi = await source(approvalApiPath);
+expect(approvalApiPath, approvalApi, /can\(ctx,\s*"recruiting:write"\)/, "approval queue visibility must require recruiting operations authority");
+expect(approvalApiPath, approvalApi, /status:\s*RequisitionStatus\.APPROVAL/, "approval queue must include requisitions awaiting decision");
+expect(approvalApiPath, approvalApi, /status:\s*OfferStatus\.APPROVAL/, "approval queue must include offers awaiting decision");
+expect(approvalApiPath, approvalApi, /REQUISITION_CREATED[\s\S]*OFFER_CREATED/, "approval queue must derive preparer identity from immutable audit events");
+expect(approvalApiPath, approvalApi, /selfPrepared:\s*creator\?\.actorId\s*===\s*ctx\.actorId/, "approval queue must identify decisions prepared by the current actor");
+expect(approvalApiPath, approvalApi, /queue\.sort\([\s\S]*submittedAt/, "approval queue must prioritize older submitted decisions first");
+
 const opsPath = "components/recruiting-operations-console.tsx";
 const ops = await source(opsPath);
 expect(opsPath, ops, /canApprove:\s*boolean/, "recruiting console must model approval access explicitly");
-expect(opsPath, ops, /requisition\.status\s*===\s*"APPROVAL"\s*&&\s*!canApprove\s*\?\s*\[\]/, "requisition approval controls must be hidden without approval authority");
-expect(opsPath, ops, /application\.offer\.status\s*===\s*"APPROVAL"\s*&&\s*!canApprove\s*\?\s*\[\]/, "offer approval controls must be hidden without approval authority");
-expect(opsPath, ops, /Independent approver required/, "UI must explain the independent approval boundary");
+expect(opsPath, ops, /fetch\("\/api\/recruiting\/approvals"/, "recruiting console must load the governed approval queue");
+expect(opsPath, ops, /if\s*\(item\.selfPrepared\)[\s\S]*four-eyes control requires another approver/, "the preparer must never receive approval actions for their own queue item");
+expect(opsPath, ops, /if\s*\(!canApprove\)[\s\S]*Independent approver required/, "users without approval authority must not receive queue decision actions");
+expect(opsPath, ops, /requisition\.status\s*===\s*"APPROVAL"\s*\?\s*\[\]/, "requisition approval decisions must be centralized in the approval queue");
+expect(opsPath, ops, /application\.offer\.status\s*===\s*"APPROVAL"\s*\?\s*\[\]/, "offer approval decisions must be centralized in the approval queue");
+expect(opsPath, ops, /offerLocksApplication\.has\(application\.offer\.status\)/, "application stage actions must be hidden while approval, sent or accepted offer state owns the lifecycle");
+expect(opsPath, ops, /setApprovalRefreshToken\(\(value\)\s*=>\s*value\s*\+\s*1\)/, "approval queue must refresh after governed mutations");
 
 const requisitionApiPath = "app/api/recruiting/requisitions/route.ts";
 const requisitionApi = await source(requisitionApiPath);
@@ -99,4 +112,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, authenticated failures remain protected, requisition and offer approvals are separated from preparation, four-eyes controls are enforced, the UI respects approval authority, and approval workflows emit durable notification intent.");
+console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, authenticated failures remain protected, requisition and offer approvals are centralized, preparers are four-eyes locked from their own decisions, application actions respect active-offer ownership, and approval workflows emit durable notification intent.");
