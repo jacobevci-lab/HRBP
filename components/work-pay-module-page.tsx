@@ -21,8 +21,8 @@ const copy: Record<Slug, { en: { title: string; description: string }; tr: { tit
     tr: { title: "Ücretlendirme", description: "Onay ayrımı ve değiştirilemez ücret geçmişiyle kısıtlı, tarih-etkin ücret değişikliklerini yönetin." }
   },
   payroll: {
-    en: { title: "Payroll", description: "Operate restricted country-pack payroll periods, controlled run states and auditable results from the HR system of record." },
-    tr: { title: "Bordro", description: "İK kayıt sisteminden kısıtlı ülke paketi bordro dönemlerini, kontrollü run durumlarını ve denetlenebilir sonuçları yönetin." }
+    en: { title: "Payroll", description: "Access released employee payroll statements or, with separated payroll authority, operate country-pack periods, controlled runs and auditable results." },
+    tr: { title: "Bordro", description: "Yayınlanmış çalışan bordro dökümlerine erişin veya ayrıştırılmış bordro yetkisiyle ülke paketi dönemlerini, kontrollü run'ları ve denetlenebilir sonuçları yönetin." }
   }
 };
 
@@ -30,7 +30,7 @@ function capabilityFor(slug: Slug): Capability {
   if (slug === "time-attendance") return "time:read";
   if (slug === "leave") return "leave:read";
   if (slug === "compensation") return "compensation:read";
-  return "payroll:read";
+  return "payroll:self-payslip";
 }
 
 function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
@@ -60,10 +60,27 @@ export async function WorkPayModulePage({ slug }: { slug: Slug }) {
     </AppShell>;
   }
 
+  if (slug === "payroll" && !can(ctx, "payroll:read") && !ctx.employmentId) {
+    return <AppShell>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div></section>
+      <section className="card module-table"><div className="empty-state"><ShieldCheck size={24}/><h3>{c(locale, "Employment identity required", "İstihdam kimliği gerekli")}</h3><p>{c(locale, "Payroll self-service is bound to the employment identity inside your signed session. No payroll statement can be opened without that relationship.", "Bordro self-servis, imzalı oturumunuzdaki istihdam kimliğine bağlıdır. Bu ilişki olmadan hiçbir bordro dökümü açılamaz.")}</p></div></section>
+    </AppShell>;
+  }
+
   try {
-    const content = slug === "compensation"
-      ? await (await import("@/components/compensation-live-workspace")).CompensationLiveWorkspace()
-      : await (await import("@/components/work-pay-live-workspace")).WorkPayLiveWorkspace({ slug });
+    let content: React.ReactNode;
+    if (slug === "compensation") {
+      content = await (await import("@/components/compensation-live-workspace")).CompensationLiveWorkspace();
+    } else if (slug === "payroll" && !can(ctx, "payroll:read")) {
+      const [{ PayrollPayslipWorkspace }, { getPayrollSelfServiceData }] = await Promise.all([
+        import("@/components/payroll-payslip-workspace"),
+        import("@/lib/payroll-payslip-data")
+      ]);
+      const data = await getPayrollSelfServiceData(ctx);
+      content = <PayrollPayslipWorkspace data={data}/>;
+    } else {
+      content = await (await import("@/components/work-pay-live-workspace")).WorkPayLiveWorkspace({ slug: slug as "time-attendance" | "leave" | "payroll" });
+    }
     let participant: React.ReactNode = null;
 
     if (slug === "time-attendance" && ctx.employmentId && can(ctx, "time:self-entry")) {
