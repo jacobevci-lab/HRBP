@@ -21,11 +21,12 @@ const ACTIVE_EMPLOYMENTS: EmploymentStatus[] = [EmploymentStatus.ACTIVE, Employm
 export type OffboardingTaskRow = { id: string; domain: string; title: string; status: string; rawStatus: string; blocking: boolean; dueAt: string; dueAtIso: string | null };
 export type OffboardingAssetRow = { id: string; assetTag: string; assetType: string; serialNumber: string | null; status: string; rawStatus: string; returnedAt: string | null; conditionNote: string | null };
 export type OffboardingAccessRow = { id: string; systemName: string; accountId: string | null; status: string; rawStatus: string; scheduledAt: string | null; revokedAt: string | null; exceptionReason: string | null };
+export type OffboardingKnowledgeTransferRow = { id: string; title: string; description: string | null; recipientId: string | null; status: string; rawStatus: string; dueAt: string; dueAtIso: string | null; completedAt: string | null };
 
 export type OffboardingProcessRow = {
   id: string; employmentId: string; personId: string | null; initiatedById: string; employee: string; employeeNumber: string; position: string; type: string; status: string; rawStatus: string;
-  lastWorkingDate: string; lastWorkingDateIso: string; completedTasks: number; taskCount: number; openBlockingTasks: number; overdueTasks: number; assetsOpen: number; accessOpen: number;
-  controlsClear: boolean; readyToClose: boolean; exitRisk: boolean; tasks: OffboardingTaskRow[]; assets: OffboardingAssetRow[]; accessControls: OffboardingAccessRow[];
+  lastWorkingDate: string; lastWorkingDateIso: string; completedTasks: number; taskCount: number; openBlockingTasks: number; overdueTasks: number; assetsOpen: number; accessOpen: number; openKnowledgeTransfers: number;
+  controlsClear: boolean; readyToClose: boolean; exitRisk: boolean; tasks: OffboardingTaskRow[]; assets: OffboardingAssetRow[]; accessControls: OffboardingAccessRow[]; knowledgeTransfers: OffboardingKnowledgeTransferRow[];
 };
 
 export type OffboardingEligibleEmployment = { id: string; personId: string; employee: string; employeeNumber: string; position: string; department: string };
@@ -42,7 +43,8 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
         id: true, employmentId: true, initiatedById: true, type: true, status: true, lastWorkingDate: true,
         tasks: { orderBy: [{ blocking: "desc" }, { createdAt: "asc" }], select: { id: true, domain: true, title: true, status: true, blocking: true, dueAt: true } },
         assets: { orderBy: { assetTag: "asc" }, select: { id: true, assetTag: true, assetType: true, serialNumber: true, status: true, returnedAt: true, conditionNote: true } },
-        accessRevocations: { orderBy: { systemName: "asc" }, select: { id: true, systemName: true, accountId: true, status: true, scheduledAt: true, revokedAt: true, exceptionReason: true } }
+        accessRevocations: { orderBy: { systemName: "asc" }, select: { id: true, systemName: true, accountId: true, status: true, scheduledAt: true, revokedAt: true, exceptionReason: true } },
+        knowledgeTransfers: { orderBy: [{ dueAt: "asc" }, { title: "asc" }], select: { id: true, title: true, description: true, recipientId: true, status: true, dueAt: true, completedAt: true } }
       }
     });
 
@@ -71,24 +73,26 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
       const overdueTasks = process.tasks.filter((task) => !TERMINAL_TASK_STATUSES.includes(task.status) && task.dueAt && task.dueAt < now).length;
       const assetsOpen = process.assets.filter((asset) => !TERMINAL_ASSET_STATUSES.includes(asset.status)).length;
       const accessOpen = process.accessRevocations.filter((access) => !TERMINAL_ACCESS_STATUSES.includes(access.status)).length;
-      const controlsClear = openBlockingTasks === 0 && assetsOpen === 0 && accessOpen === 0;
+      const openKnowledgeTransfers = process.knowledgeTransfers.filter((transfer) => !TERMINAL_TASK_STATUSES.includes(transfer.status)).length;
+      const controlsClear = openBlockingTasks === 0 && assetsOpen === 0 && accessOpen === 0 && openKnowledgeTransfers === 0;
       const readyToClose = controlsClear && process.status === SeparationStatus.READY_TO_CLOSE;
       const exitRisk = !readyToClose && process.lastWorkingDate <= exitRiskEnd;
       return {
         id: process.id, employmentId: process.employmentId, personId: employment?.personId ?? null, initiatedById: process.initiatedById,
         employee: employment ? `${employment.person.givenName} ${employment.person.familyName}` : "Employment record",
         employeeNumber: employment?.person.employeeNumber ?? "—", position: employment?.position?.title ?? "Position unavailable", type: label(process.type), status: label(process.status), rawStatus: process.status,
-        lastWorkingDate: formatDate(process.lastWorkingDate), lastWorkingDateIso: process.lastWorkingDate.toISOString(), completedTasks, taskCount: process.tasks.length, openBlockingTasks, overdueTasks, assetsOpen, accessOpen, controlsClear, readyToClose, exitRisk,
+        lastWorkingDate: formatDate(process.lastWorkingDate), lastWorkingDateIso: process.lastWorkingDate.toISOString(), completedTasks, taskCount: process.tasks.length, openBlockingTasks, overdueTasks, assetsOpen, accessOpen, openKnowledgeTransfers, controlsClear, readyToClose, exitRisk,
         tasks: process.tasks.map((task) => ({ id: task.id, domain: task.domain, title: task.title, status: label(task.status), rawStatus: task.status, blocking: task.blocking, dueAt: formatDate(task.dueAt), dueAtIso: task.dueAt?.toISOString() ?? null })),
         assets: process.assets.map((asset) => ({ id: asset.id, assetTag: asset.assetTag, assetType: asset.assetType, serialNumber: asset.serialNumber, status: label(asset.status), rawStatus: asset.status, returnedAt: asset.returnedAt?.toISOString() ?? null, conditionNote: asset.conditionNote })),
-        accessControls: process.accessRevocations.map((access) => ({ id: access.id, systemName: access.systemName, accountId: access.accountId, status: label(access.status), rawStatus: access.status, scheduledAt: access.scheduledAt?.toISOString() ?? null, revokedAt: access.revokedAt?.toISOString() ?? null, exceptionReason: access.exceptionReason }))
+        accessControls: process.accessRevocations.map((access) => ({ id: access.id, systemName: access.systemName, accountId: access.accountId, status: label(access.status), rawStatus: access.status, scheduledAt: access.scheduledAt?.toISOString() ?? null, revokedAt: access.revokedAt?.toISOString() ?? null, exceptionReason: access.exceptionReason })),
+        knowledgeTransfers: process.knowledgeTransfers.map((transfer) => ({ id: transfer.id, title: transfer.title, description: transfer.description, recipientId: transfer.recipientId, status: label(transfer.status), rawStatus: transfer.status, dueAt: formatDate(transfer.dueAt), dueAtIso: transfer.dueAt?.toISOString() ?? null, completedAt: transfer.completedAt?.toISOString() ?? null }))
       };
     });
 
     return {
       openSeparations: rows.length,
       leavingThisWeek: processes.filter((process) => process.lastWorkingDate >= now && process.lastWorkingDate <= weekEnd).length,
-      blockingTasks: rows.reduce((sum, row) => sum + row.openBlockingTasks, 0),
+      blockingTasks: rows.reduce((sum, row) => sum + row.openBlockingTasks + row.openKnowledgeTransfers, 0),
       overdueTasks: rows.reduce((sum, row) => sum + row.overdueTasks, 0),
       exitRiskProcesses: rows.filter((row) => row.exitRisk).length,
       readyToClose: rows.filter((row) => row.readyToClose).length,

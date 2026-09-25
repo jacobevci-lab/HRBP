@@ -47,8 +47,8 @@ export function notificationDisplaySummary(payload: unknown, locale: Locale) {
     return locale === "tr" ? `Tüm çıkış kontrolleri tamamlandı. Ayrılış ${lastDay} tarihinde veya sonrasında bağımsız bir İK operasyon kullanıcısı tarafından kapatılabilir.` : `All exit controls are clear. The separation can be closed by an independent HR operations user on or after ${lastDay}.`;
   }
   if (separationProcessId && reminderState === "exit-risk" && lastWorkingDate) {
-    const lastDay = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(lastWorkingDate)); const tasks = numberValue(data.openBlockingTasks) ?? 0; const assets = numberValue(data.openAssets) ?? 0; const access = numberValue(data.openAccess) ?? 0;
-    return locale === "tr" ? `Son çalışma günü ${lastDay} · ${tasks} açık bloke görev · ${assets} varlık · ${access} erişim kontrolü açık.` : `Last working day ${lastDay} · ${tasks} blocking task${tasks === 1 ? "" : "s"} · ${assets} asset${assets === 1 ? "" : "s"} · ${access} access control${access === 1 ? "" : "s"} open.`;
+    const lastDay = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(lastWorkingDate)); const tasks = numberValue(data.openBlockingTasks) ?? 0; const assets = numberValue(data.openAssets) ?? 0; const access = numberValue(data.openAccess) ?? 0; const handover = numberValue(data.openKnowledgeTransfers) ?? 0;
+    return locale === "tr" ? `Son çalışma günü ${lastDay} · ${tasks} açık bloke görev · ${handover} bilgi devri · ${assets} varlık · ${access} erişim kontrolü açık.` : `Last working day ${lastDay} · ${tasks} blocking task${tasks === 1 ? "" : "s"} · ${handover} handover item${handover === 1 ? "" : "s"} · ${assets} asset${assets === 1 ? "" : "s"} · ${access} access control${access === 1 ? "" : "s"} open.`;
   }
   if (separationProcessId && taskName && reminderState) {
     const due = dueAt ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(dueAt)) : null;
@@ -63,6 +63,7 @@ export function notificationDisplayResourceHref(resourceType: string, resourceId
   if (resourceType === "OnboardingTask") return id ? `/module/onboarding?task=${encodeURIComponent(id)}` : "/module/onboarding";
   if (resourceType === "OnboardingPlan") return id ? `/module/onboarding?plan=${encodeURIComponent(id)}` : "/module/onboarding";
   if (resourceType === "SeparationTask") return id ? `/module/offboarding?task=${encodeURIComponent(id)}` : "/module/offboarding";
+  if (resourceType === "KnowledgeTransfer") return id ? `/module/offboarding?transfer=${encodeURIComponent(id)}` : "/module/offboarding";
   if (resourceType === "SeparationProcess") return id ? `/module/offboarding?process=${encodeURIComponent(id)}` : "/module/offboarding";
   return notificationResourceHref(resourceType, resourceId);
 }

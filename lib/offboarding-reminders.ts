@@ -139,7 +139,8 @@ export async function queueOffboardingReadinessReminders(now = new Date()) {
       lastWorkingDate: true,
       tasks: { select: { status: true, blocking: true } },
       assets: { select: { status: true } },
-      accessRevocations: { select: { status: true } }
+      accessRevocations: { select: { status: true } },
+      knowledgeTransfers: { select: { status: true } }
     }
   });
 
@@ -148,7 +149,8 @@ export async function queueOffboardingReadinessReminders(now = new Date()) {
     const openBlockingTasks = process.tasks.filter((task) => task.blocking && !TERMINAL_TASK_STATUSES.includes(task.status)).length;
     const openAssets = process.assets.filter((asset) => asset.status !== AssetReturnStatus.RETURNED && asset.status !== AssetReturnStatus.WRITTEN_OFF).length;
     const openAccess = process.accessRevocations.filter((access) => access.status !== AccessRevocationStatus.REVOKED && access.status !== AccessRevocationStatus.EXCEPTION).length;
-    if (openBlockingTasks === 0 && openAssets === 0 && openAccess === 0) continue;
+    const openKnowledgeTransfers = process.knowledgeTransfers.filter((transfer) => !TERMINAL_TASK_STATUSES.includes(transfer.status)).length;
+    if (openBlockingTasks === 0 && openAssets === 0 && openAccess === 0 && openKnowledgeTransfers === 0) continue;
 
     const dedupeKey = `offboarding-process:${process.id}:exit-risk:${today}`;
     const queued = await db.$transaction(async (tx) => {
@@ -175,7 +177,8 @@ export async function queueOffboardingReadinessReminders(now = new Date()) {
           lastWorkingDate: process.lastWorkingDate.toISOString(),
           openBlockingTasks,
           openAssets,
-          openAccess
+          openAccess,
+          openKnowledgeTransfers
         }
       });
       await appendAudit(tx, systemContext(process.tenantId), {

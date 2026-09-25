@@ -28,15 +28,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const now = new Date();
       if (process.lastWorkingDate > now) throw new Error("LAST_DAY_NOT_REACHED");
 
-      const [blockingTasks, assets, access, employment] = await Promise.all([
+      const [blockingTasks, assets, access, knowledgeTransfers, employment] = await Promise.all([
         tx.separationTask.count({ where: { tenantId: ctx.tenantId, processId: id, blocking: true, status: { notIn: [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED] } } }),
         tx.assetReturn.count({ where: { tenantId: ctx.tenantId, processId: id, status: { notIn: [AssetReturnStatus.RETURNED, AssetReturnStatus.WRITTEN_OFF] } } }),
         tx.accessRevocation.count({ where: { tenantId: ctx.tenantId, processId: id, status: { notIn: [AccessRevocationStatus.REVOKED, AccessRevocationStatus.EXCEPTION] } } }),
+        tx.knowledgeTransfer.count({ where: { tenantId: ctx.tenantId, processId: id, status: { notIn: [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED] } } }),
         tx.employment.findFirst({ where: { id: process.employmentId, tenantId: ctx.tenantId }, select: { id: true, personId: true, status: true, positionId: true } })
       ]);
       if (!employment) throw new Error("EMPLOYMENT");
       if (!terminableEmploymentStatuses.includes(employment.status)) throw new Error("EMPLOYMENT_STATE");
-      if (blockingTasks || assets || access) throw new Error(`BLOCKED:${blockingTasks}:${assets}:${access}`);
+      if (blockingTasks || assets || access || knowledgeTransfers) throw new Error(`BLOCKED:${blockingTasks}:${assets}:${access}:${knowledgeTransfers}`);
 
       const employmentUpdate = await tx.employment.updateMany({ where: { id: employment.id, tenantId: ctx.tenantId, status: employment.status }, data: { status: EmploymentStatus.TERMINATED, endDate: process.lastWorkingDate } });
       if (employmentUpdate.count !== 1) throw new Error("STATE_CONFLICT");
@@ -55,7 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       await tx.employeeLifecycleEvent.create({ data: { tenantId: ctx.tenantId, personId: employment.personId, employmentId: employment.id, type: LifecycleEventType.TERMINATED, effectiveAt: process.lastWorkingDate, summary: `Separation completed (${process.type})`, actorId: ctx.actorId } });
       await appendAudit(tx, ctx, { action: "employment.exit-terminated", resourceType: "Employment", resourceId: employment.id, classification: DataClassification.RESTRICTED, purpose: "Human-confirmed employment termination after governed exit readiness" });
-      await appendAudit(tx, ctx, { action: "offboarding.process-closed", resourceType: "SeparationProcess", resourceId: id, classification: DataClassification.RESTRICTED, purpose: "Four-eyes separation closure after task, asset, access and last-working-date gates cleared" });
+      await appendAudit(tx, ctx, { action: "offboarding.process-closed", resourceType: "SeparationProcess", resourceId: id, classification: DataClassification.RESTRICTED, purpose: "Four-eyes separation closure after task, knowledge transfer, asset, access and last-working-date gates cleared" });
       return { id, status: SeparationStatus.CLOSED, employmentStatus: EmploymentStatus.TERMINATED, endDate: process.lastWorkingDate };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return Response.json({ data });
@@ -69,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (code === "EMPLOYMENT") return Response.json({ error: "Employment record not found." }, { status: 409 });
     if (code === "EMPLOYMENT_STATE") return Response.json({ error: "Employment is not in a state that can be terminated by this separation." }, { status: 409 });
     if (code === "STATE_CONFLICT") return Response.json({ error: "Separation or employment state changed concurrently. Refresh and try again." }, { status: 409 });
-    if (code.startsWith("BLOCKED:")) { const [, tasks, assets, access] = code.split(":"); return Response.json({ error: "Clearance is incomplete.", open: { tasks: Number(tasks), assets: Number(assets), access: Number(access) } }, { status: 409 }); }
+    if (code.startsWith("BLOCKED:")) { const [, tasks, assets, access, knowledgeTransfers] = code.split(":"); return Response.json({ error: "Clearance is incomplete.", open: { tasks: Number(tasks), assets: Number(assets), access: Number(access), knowledgeTransfers: Number(knowledgeTransfers) } }, { status: 409 }); }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") return Response.json({ error: "Separation changed concurrently. Refresh and try again." }, { status: 409 });
     console.error("Offboarding close failed", error);
     return Response.json({ error: "Separation could not be closed." }, { status: 500 });
