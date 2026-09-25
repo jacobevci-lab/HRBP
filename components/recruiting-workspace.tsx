@@ -31,6 +31,10 @@ function RestrictedNotice({ domain, locale }: { domain: string; locale: Locale }
   return <div className="card employee-restricted-card" style={{ marginBottom: 14 }}><LockKeyhole size={22}/><div><h3>{c(locale,`${domain} data is protected`,`${domain} verisi korumalıdır`)}</h3><p>{c(locale,"The public staging experience uses synthetic records. Sign in with an authorized enterprise role to load restricted live records from PostgreSQL.","Genel staging deneyimi sentetik kayıtlar kullanır. PostgreSQL'deki kısıtlı canlı kayıtları yüklemek için yetkili kurumsal rolle giriş yapın.")}</p></div></div>;
 }
 
+function ProtectedLiveFailure({ domain, locale }: { domain: string; locale: Locale }) {
+  return <section className="card module-table"><div className="empty-state"><CircleAlert size={24}/><h3>{c(locale,`${domain} is temporarily unavailable`,`${domain} geçici olarak kullanılamıyor`)}</h3><p>{c(locale,"The governed live data plane could not initialize. No synthetic records are substituted into an authenticated session and no protected mutation was attempted.","Yönetişimli canlı veri katmanı başlatılamadı. Kimliği doğrulanmış oturuma sentetik kayıt konulmadı ve hiçbir korumalı değişiklik işlemi denenmedi.")}</p></div></section>;
+}
+
 function DemoRecruiting({ locale }: { locale: Locale }) {
   return <>
     <RestrictedNotice domain={c(locale,"Recruiting","İşe Alım")} locale={locale}/>
@@ -68,7 +72,7 @@ export async function RecruitingWorkspace({ slug }: { slug:string }) {
       </>;
     } catch (error) {
       console.error("[HRBP] Recruiting live data failed", error);
-      return <DemoRecruiting locale={locale}/>;
+      return <ProtectedLiveFailure domain={c(locale,"Recruiting","İşe Alım")} locale={locale}/>;
     }
   }
 
@@ -86,7 +90,7 @@ export async function RecruitingWorkspace({ slug }: { slug:string }) {
       </>;
     } catch (error) {
       console.error("[HRBP] Onboarding live data failed", error);
-      return <DemoOnboarding locale={locale}/>;
+      return <ProtectedLiveFailure domain={c(locale,"Onboarding","İşe Başlatma")} locale={locale}/>;
     }
   }
   return null;
