@@ -10,6 +10,18 @@ Readiness is derived from the underlying controls instead of being set manually.
 
 Closing a separation is intentionally stronger than completing a task. The last working date must have been reached, the process must still be `READY_TO_CLOSE`, the initiator cannot perform the final termination, and all clearance domains are rechecked inside the serializable closure transaction. Only then is the employment set to `TERMINATED` and lifecycle evidence written.
 
+## Governed schedule amendments
+
+Notice and last-working dates can change after a separation begins, but the change is treated as a governed lifecycle amendment rather than a direct field edit. Amendments require `offboarding:write`, same-origin protection, tenant and employment-scope authorization, valid date ordering and a human-entered reason of 10–2000 characters. The transition is serializable and optimistic-state protected.
+
+Every change creates a `SeparationScheduleAmendment` evidence record containing the previous and new notice dates, previous and new last-working dates, reason, actor and timestamp. Terminal offboarding history reconstructs these amendments in the evidence timeline even after the process is closed or cancelled.
+
+Open separation tasks and knowledge-transfer items whose deadlines were aligned to the previous last-working date move to the amended date. Custom deadlines remain untouched. Scheduled access-revocation controls preserve their relative offset from the last-working date; a shifted access schedule that would violate the governed exit boundary causes the amendment to fail instead of silently creating an invalid control state.
+
+Unread due-soon, overdue, blocked-task and exit-readiness notifications whose payloads contain the old schedule are retired so scheduled maintenance can regenerate current reminders. Exit readiness is recalculated after the dependent controls have been synchronized.
+
+A schedule cannot be amended while final settlement is `SETTLED`. The completed payment must first go through the governed settlement-reversal path. This prevents an exit date from changing while the system still represents a financial settlement calculated for the previous date as final.
+
 ## Governed cancellation
 
 An approved exit can change before termination. HRBP One therefore supports cancellation as a first-class terminal outcome rather than deleting the process or silently resetting it.
@@ -34,7 +46,7 @@ This reversal path is what makes cancellation after an accidental or superseded 
 
 `CLOSED` and `CANCELLED` separation records remain in a read-only terminal history rather than disappearing from the operational queue. The history is still constrained by tenant and employment relationship scope and intentionally exposes no mutation control.
 
-Each terminal record reconstructs the governed evidence that existed when the process ended: task completion and waiver counts, asset returns and write-offs, logical-access revocations and exceptions, knowledge-transfer state, final-settlement state and reversal evidence, exit-interview evidence, explicit human rehire decisions and the terminal outcome itself. A cancelled record clearly distinguishes process cancellation from employment termination and retains the cancellation reason, actor and timestamp.
+Each terminal record reconstructs the governed evidence that existed when the process ended: schedule amendments, task completion and waiver counts, asset returns and write-offs, logical-access revocations and exceptions, knowledge-transfer state, final-settlement state and reversal evidence, exit-interview evidence, explicit human rehire decisions and the terminal outcome itself. A cancelled record clearly distinguishes process cancellation from employment termination and retains the cancellation reason, actor and timestamp.
 
 Raw `AuditEvent` chain evidence is more privileged than ordinary offboarding history. It is included only when the viewing role also has `audit:read`; otherwise the domain evidence timeline remains visible while hashes and raw audit rows stay restricted. Where available, the history shows the process and employment audit chain including the current and previous hashes so an authorized reviewer can inspect immutable transition evidence without opening a mutation surface.
 
@@ -42,8 +54,8 @@ Terminal-history queries are bounded and failure-isolated from the active exit w
 
 ## Human decision boundaries
 
-Exit-interview feedback and rehire eligibility are separate records. Interview recommendations never convert automatically into rehire eligibility. Rehire eligibility remains an explicit human decision with a documented rationale. AI or scoring logic must not autonomously terminate employment, cancel a separation, reverse payroll settlement or determine rehire eligibility.
+Exit-interview feedback and rehire eligibility are separate records. Interview recommendations never convert automatically into rehire eligibility. Rehire eligibility remains an explicit human decision with a documented rationale. AI or scoring logic must not autonomously terminate employment, cancel a separation, amend the exit schedule, reverse payroll settlement or determine rehire eligibility.
 
 ## Evidence and audit
 
-Material transitions append restricted audit events. Cancellation uses `offboarding.process-cancelled`; settlement reversal uses `offboarding.final-settlement-reversed`; closure records both employment termination and process closure. Operational controls record their own state transitions, verifier identities and exception reasons. The aggregate evidence therefore remains reconstructable even after the separation reaches a terminal outcome.
+Material transitions append restricted audit events. Schedule amendments use `offboarding.schedule-amended`; cancellation uses `offboarding.process-cancelled`; settlement reversal uses `offboarding.final-settlement-reversed`; closure records both employment termination and process closure. Operational controls record their own state transitions, verifier identities and exception reasons. The aggregate evidence therefore remains reconstructable even after the separation reaches a terminal outcome.

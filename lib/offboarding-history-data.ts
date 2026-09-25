@@ -24,7 +24,7 @@ export type OffboardingHistoryAuditEvidence = {
 
 export type OffboardingHistoryEvent = {
   key: string;
-  kind: "PROCESS" | "INTERVIEW" | "SETTLEMENT" | "DECISION" | "TERMINAL";
+  kind: "PROCESS" | "SCHEDULE" | "INTERVIEW" | "SETTLEMENT" | "DECISION" | "TERMINAL";
   title: string;
   actorId: string | null;
   occurredAt: string;
@@ -70,6 +70,7 @@ export type OffboardingHistoryRow = {
   knowledgeTransferCount: number;
   knowledgeTransfersOpen: number;
   exitInterviewRecorded: boolean;
+  scheduleAmendmentCount: number;
   events: OffboardingHistoryEvent[];
   auditEvidence: OffboardingHistoryAuditEvidence[];
 };
@@ -122,6 +123,11 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
         assets: { select: { status: true } },
         accessRevocations: { select: { status: true } },
         knowledgeTransfers: { select: { status: true } },
+        scheduleAmendments: {
+          orderBy: { changedAt: "asc" },
+          take: 100,
+          select: { id: true, previousNoticeDate: true, newNoticeDate: true, previousLastWorkingDate: true, newLastWorkingDate: true, reason: true, changedById: true, changedAt: true }
+        },
         exitInterview: { select: { interviewerId: true, conductedAt: true, wouldRecommend: true } }
       }
     });
@@ -166,6 +172,16 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
           detail: null
         }
       ];
+      for (const amendment of process.scheduleAmendments) {
+        events.push({
+          key: `${process.id}:schedule:${amendment.id}`,
+          kind: "SCHEDULE",
+          title: "Exit schedule amended",
+          actorId: amendment.changedById,
+          occurredAt: amendment.changedAt.toISOString(),
+          detail: `Notice ${amendment.previousNoticeDate?.toISOString() ?? "none"} -> ${amendment.newNoticeDate?.toISOString() ?? "none"}; last day ${amendment.previousLastWorkingDate.toISOString()} -> ${amendment.newLastWorkingDate.toISOString()} · ${amendment.reason}`
+        });
+      }
       if (process.exitInterview) events.push({
         key: `${process.id}:interview`,
         kind: "INTERVIEW",
@@ -271,6 +287,7 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
         knowledgeTransferCount: process.knowledgeTransfers.length,
         knowledgeTransfersOpen: process.knowledgeTransfers.filter((transfer) => !TASK_TERMINAL.includes(transfer.status)).length,
         exitInterviewRecorded: Boolean(process.exitInterview),
+        scheduleAmendmentCount: process.scheduleAmendments.length,
         events,
         auditEvidence: processAudit.map((item) => ({
           action: item.action,

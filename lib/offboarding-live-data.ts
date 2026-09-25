@@ -25,7 +25,7 @@ export type OffboardingKnowledgeTransferRow = { id: string; title: string; descr
 
 export type OffboardingProcessRow = {
   id: string; employmentId: string; personId: string | null; initiatedById: string; employee: string; employeeNumber: string; position: string; type: string; status: string; rawStatus: string;
-  lastWorkingDate: string; lastWorkingDateIso: string; completedTasks: number; taskCount: number; openBlockingTasks: number; overdueTasks: number; assetsOpen: number; accessOpen: number; openKnowledgeTransfers: number;
+  noticeDate: string; noticeDateIso: string | null; lastWorkingDate: string; lastWorkingDateIso: string; completedTasks: number; taskCount: number; openBlockingTasks: number; overdueTasks: number; assetsOpen: number; accessOpen: number; openKnowledgeTransfers: number;
   finalSettlementStatus: string; finalSettlementNote: string | null; finalSettlementPreparedById: string | null; finalSettlementPreparedAt: string | null; finalSettlementApprovedById: string | null; finalSettlementApprovedAt: string | null; finalSettlementSettledById: string | null; finalSettlementSettledAt: string | null; finalSettlementReversalReason: string | null; finalSettlementReversedById: string | null; finalSettlementReversedAt: string | null; finalSettlementClear: boolean;
   controlsClear: boolean; readyToClose: boolean; exitRisk: boolean; tasks: OffboardingTaskRow[]; assets: OffboardingAssetRow[]; accessControls: OffboardingAccessRow[]; knowledgeTransfers: OffboardingKnowledgeTransferRow[];
 };
@@ -41,7 +41,7 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
       orderBy: [{ lastWorkingDate: "asc" }, { createdAt: "desc" }],
       take: 150,
       select: {
-        id: true, employmentId: true, initiatedById: true, type: true, status: true, lastWorkingDate: true,
+        id: true, employmentId: true, initiatedById: true, type: true, status: true, noticeDate: true, lastWorkingDate: true,
         finalSettlementStatus: true, finalSettlementNote: true, finalSettlementPreparedById: true, finalSettlementPreparedAt: true,
         finalSettlementApprovedById: true, finalSettlementApprovedAt: true, finalSettlementSettledById: true, finalSettlementSettledAt: true,
         finalSettlementReversalReason: true, finalSettlementReversedById: true, finalSettlementReversedAt: true,
@@ -87,7 +87,7 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
         id: process.id, employmentId: process.employmentId, personId: employment?.personId ?? null, initiatedById: process.initiatedById,
         employee: employment ? `${employment.person.givenName} ${employment.person.familyName}` : "Employment record",
         employeeNumber: employment?.person.employeeNumber ?? "—", position: employment?.position?.title ?? "Position unavailable", type: label(process.type), status: label(process.status), rawStatus: process.status,
-        lastWorkingDate: formatDate(process.lastWorkingDate), lastWorkingDateIso: process.lastWorkingDate.toISOString(), completedTasks, taskCount: process.tasks.length, openBlockingTasks, overdueTasks, assetsOpen, accessOpen, openKnowledgeTransfers,
+        noticeDate: formatDate(process.noticeDate), noticeDateIso: process.noticeDate?.toISOString() ?? null, lastWorkingDate: formatDate(process.lastWorkingDate), lastWorkingDateIso: process.lastWorkingDate.toISOString(), completedTasks, taskCount: process.tasks.length, openBlockingTasks, overdueTasks, assetsOpen, accessOpen, openKnowledgeTransfers,
         finalSettlementStatus, finalSettlementNote: process.finalSettlementNote, finalSettlementPreparedById: process.finalSettlementPreparedById, finalSettlementPreparedAt: process.finalSettlementPreparedAt?.toISOString() ?? null,
         finalSettlementApprovedById: process.finalSettlementApprovedById, finalSettlementApprovedAt: process.finalSettlementApprovedAt?.toISOString() ?? null,
         finalSettlementSettledById: process.finalSettlementSettledById, finalSettlementSettledAt: process.finalSettlementSettledAt?.toISOString() ?? null,
