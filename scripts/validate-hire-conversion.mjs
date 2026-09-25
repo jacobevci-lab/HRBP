@@ -63,7 +63,12 @@ expect(maintenancePath, maintenance, /status:\s*OfferStatus\.SENT[\s\S]*expiresA
 expect(maintenancePath, maintenance, /tx\.offer\.updateMany[\s\S]*status:\s*OfferStatus\.SENT[\s\S]*data:\s*\{\s*status:\s*OfferStatus\.EXPIRED\s*\}/, "automatic expiry must use an idempotent guarded update");
 expect(maintenancePath, maintenance, /OFFER_STATUS_SENT_TO_EXPIRED/, "automatic expiry must be audit logged");
 expect(maintenancePath, maintenance, /RECRUITING_OFFER_EXPIRED/, "automatic expiry must create durable notification intent");
-expect(maintenancePath, maintenance, /dedupeKey:\s*`offer:\$\{candidate\.id\}:expired`/, "automatic expiry notifications must be idempotent");
+expect(maintenancePath, maintenance, /dedupeKey:\s*`offer:\$\{offer\.id\}:expired`/, "automatic expiry notifications must be idempotent");
+expect(maintenancePath, maintenance, /RETENTION_TERMINAL_STAGES[\s\S]*ApplicationStage\.REJECTED[\s\S]*ApplicationStage\.WITHDRAWN/, "candidate retention must only treat rejected and withdrawn applications as terminal erasure states");
+expect(maintenancePath, maintenance, /hiredPersonId:\s*null[\s\S]*retentionUntil:\s*\{\s*not:\s*null,\s*lte:\s*now\s*\}[\s\S]*every:\s*\{\s*stage:\s*\{\s*in:\s*RETENTION_TERMINAL_STAGES/, "candidate erasure must require non-hired status, elapsed retention and only terminal applications");
+expect(maintenancePath, maintenance, /givenName:\s*"Erased"[\s\S]*familyName:\s*"Candidate"[\s\S]*email:\s*`erased\+\$\{candidate\.id\}@retained\.invalid`/, "candidate PII must be replaced with deterministic non-routable placeholders");
+expect(maintenancePath, maintenance, /phone:\s*null[\s\S]*source:\s*null[\s\S]*retentionUntil:\s*null[\s\S]*classification:\s*DataClassification\.INTERNAL/, "candidate direct/contact metadata must be minimized after retention expiry");
+expect(maintenancePath, maintenance, /CANDIDATE_PII_ERASED_RETENTION/, "candidate retention erasure must be audit logged");
 
 const maintenanceRoutePath = "app/api/internal/maintenance/route.ts";
 const maintenanceRoute = await source(maintenanceRoutePath);
@@ -76,4 +81,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated recruiting lifecycle integrity: governed offer preparation, position capacity, application-offer coupling, expiry and requisition guards, accepted-offer hire state, tenant identity uniqueness, optimistic writes, serializable conversion, onboarding deadlines, automated offer expiry and audit chain-of-custody are enforced.");
+console.log("Validated recruiting lifecycle integrity: governed offer preparation, position capacity, application-offer coupling, expiry and requisition guards, accepted-offer hire state, tenant identity uniqueness, optimistic writes, serializable conversion, onboarding deadlines, automated offer expiry, candidate retention minimization and audit chain-of-custody are enforced.");
