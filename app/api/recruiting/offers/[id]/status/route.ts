@@ -1,4 +1,4 @@
-import { ApplicationStage, DataClassification, OfferStatus } from "@prisma/client";
+import { ApplicationStage, DataClassification, OfferStatus, Prisma } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
@@ -8,6 +8,10 @@ import { canTransitionOffer, parseOfferStatus } from "@/lib/recruiting-state";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 const OFFER_PIPELINE_STATUSES: OfferStatus[] = [OfferStatus.APPROVAL, OfferStatus.SENT, OfferStatus.ACCEPTED];
+
+function requiresApprovalAuthority(from: OfferStatus, to: OfferStatus) {
+  return from === OfferStatus.APPROVAL && [OfferStatus.DRAFT, OfferStatus.SENT, OfferStatus.WITHDRAWN].includes(to);
+}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
@@ -30,7 +34,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
       if (!current) throw new Error("OFFER_NOT_FOUND");
       if (!canTransitionOffer(current.status, next)) throw new Error("INVALID_TRANSITION");
+      if (requiresApprovalAuthority(current.status, next) && !can(ctx, "recruiting:approve")) throw new Error("APPROVAL_AUTHORITY_REQUIRED");
       if (next === OfferStatus.SENT && current.expiresAt && current.expiresAt <= new Date()) throw new Error("OFFER_EXPIRED");
+
+      if (current.status === OfferStatus.APPROVAL && next === OfferStatus.SENT) {
+        const creatorAudit = await tx.auditEvent.findFirst({
+          where: {
+            tenantId: ctx.tenantId,
+            resourceType: "Offer",
+            resourceId: current.id,
+            action: "OFFER_CREATED"
+          },
+          orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
+          select: { actorId: true }
+        });
+        if (creatorAudit?.actorId === ctx.actorId) throw new Error("SELF_APPROVAL_BLOCKED");
+      }
 
       try {
         await tx.offer.update({
@@ -51,18 +70,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         resourceType: "Offer",
         resourceId: current.id,
         classification: DataClassification.RESTRICTED,
-        purpose: "Candidate offer lifecycle"
+        purpose: requiresApprovalAuthority(current.status, next) ? "Independent candidate offer decision" : "Candidate offer lifecycle"
       });
 
       return { id: current.id, status: next };
-    }));
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     return Response.json({ data });
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
     if (code === "OFFER_NOT_FOUND") return Response.json({ error: "Offer was not found in this tenant." }, { status: 404 });
     if (code === "INVALID_TRANSITION") return Response.json({ error: "The requested offer-status transition is not allowed." }, { status: 409 });
+    if (code === "APPROVAL_AUTHORITY_REQUIRED") return forbidden("Independent recruiting approval authority is required for this offer decision.");
+    if (code === "SELF_APPROVAL_BLOCKED") return forbidden("The offer creator cannot approve and send the same offer.");
     if (code === "OFFER_EXPIRED") return Response.json({ error: "This offer is already past its expiry date." }, { status: 409 });
     if (code === "STATE_CONFLICT") return Response.json({ error: "The offer changed concurrently. Refresh and try again." }, { status: 409 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") return Response.json({ error: "The offer changed concurrently. Refresh and try again." }, { status: 409 });
     console.error("Offer status transition failed", error);
     return Response.json({ error: "Offer status could not be changed." }, { status: 500 });
   }
