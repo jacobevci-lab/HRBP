@@ -5,6 +5,7 @@ import { ConnectionLifecyclePanel } from "@/components/connection-lifecycle-pane
 import { GovernancePlanningModulePage } from "@/components/governance-planning-module-page";
 import { GrowthModulePage } from "@/components/growth-module-page";
 import { HRServiceEscalationPanel } from "@/components/hr-service-escalation-panel";
+import { HRServiceLifecyclePanel } from "@/components/hr-service-lifecycle-panel";
 import { ModuleLanding } from "@/components/module-landing";
 import { NotificationsModulePage } from "@/components/notifications-module-page";
 import { OffboardingClearanceLoader } from "@/components/offboarding-clearance-loader";
@@ -55,6 +56,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
       {slug === "workflows" ? <WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId}/> : null}
       {slug !== "workflows" || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/> : null}
       {slug === "offboarding" && can(ctx, "offboarding:write") ? <OffboardingClearanceLoader/> : null}
+      {slug === "hr-service" ? <HRServiceLifecyclePanel/> : null}
       {slug === "hr-service" ? <HRServiceEscalationPanel filterValue={escalation}/> : null}
     </AppShell>
   );
