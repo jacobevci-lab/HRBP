@@ -9,9 +9,14 @@ import { canTransitionOffer, parseOfferStatus } from "@/lib/recruiting-state";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 const OFFER_PIPELINE_STATUSES: OfferStatus[] = [OfferStatus.APPROVAL, OfferStatus.SENT, OfferStatus.ACCEPTED];
+const offerApprovalDecisions = new Set<OfferStatus>([
+  OfferStatus.DRAFT,
+  OfferStatus.SENT,
+  OfferStatus.WITHDRAWN
+]);
 
 function requiresApprovalAuthority(from: OfferStatus, to: OfferStatus) {
-  return from === OfferStatus.APPROVAL && [OfferStatus.DRAFT, OfferStatus.SENT, OfferStatus.WITHDRAWN].includes(to);
+  return from === OfferStatus.APPROVAL && offerApprovalDecisions.has(to);
 }
 
 function decisionFor(next: OfferStatus): "APPROVED" | "RETURNED" | "WITHDRAWN" | null {
