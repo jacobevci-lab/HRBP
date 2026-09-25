@@ -65,6 +65,9 @@ model SeparationProcess {
   finalSettlementApprovedAt    DateTime?
   finalSettlementSettledById   String?
   finalSettlementSettledAt     DateTime?
+  cancellationReason           String?
+  cancelledById                String?
+  cancelledAt                  DateTime?
   classification               DataClassification @default(RESTRICTED)
   createdAt                    DateTime @default(now())
   updatedAt                    DateTime @updatedAt
