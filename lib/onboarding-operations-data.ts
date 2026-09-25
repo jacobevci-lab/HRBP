@@ -1,5 +1,7 @@
 import { OnboardingStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
+import { onboardingPlanPopulationFilter, resolveOnboardingPopulationScope } from "@/lib/onboarding-access";
+import type { RequestContext } from "@/lib/request-context";
 
 export type OnboardingTaskOperation = {
   id: string;
@@ -14,10 +16,15 @@ export type OnboardingTaskOperation = {
   sensitive: boolean;
 };
 
-export async function getOnboardingOperationsData(tenantId: string): Promise<OnboardingTaskOperation[]> {
+export async function getOnboardingOperationsData(ctx: RequestContext): Promise<OnboardingTaskOperation[]> {
   return withDb(async (db) => {
+    const scope = await resolveOnboardingPopulationScope(db, ctx);
     const plans = await db.onboardingPlan.findMany({
-      where: { tenantId, status: { not: OnboardingStatus.COMPLETED } },
+      where: {
+        tenantId: ctx.tenantId,
+        status: { not: OnboardingStatus.COMPLETED },
+        ...onboardingPlanPopulationFilter(scope)
+      },
       orderBy: { targetStartDate: "asc" },
       take: 100,
       select: {
