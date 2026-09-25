@@ -43,6 +43,16 @@ expect(workspacePath, workspace, /getRecruitingWorkspaceData\(ctx\)/, "recruitin
 expect(workspacePath, workspace, /getOnboardingWorkspaceData\(ctx\)/, "onboarding workspace must pass signed request context to live data");
 expect(workspacePath, workspace, /getOnboardingOperationsData\(ctx\)/, "onboarding operations console must use the same signed scope");
 expectAbsent(workspacePath, workspace, /getRecruitingWorkspaceData\(ctx\.tenantId\)|getOnboardingWorkspaceData\(ctx\.tenantId\)|getOnboardingOperationsData\(ctx\.tenantId\)/, "live read helpers must never be called with tenant id alone");
+expect(workspacePath, workspace, /canApprove=\{can\(ctx,\s*"recruiting:approve"\)\}/, "recruiting operations UI must receive explicit approval authority");
+expect(workspacePath, workspace, /return\s*<ProtectedLiveFailure\s+domain=\{c\(locale,"Recruiting","İşe Alım"\)\}/, "authenticated recruiting failures must not substitute synthetic demo data");
+expect(workspacePath, workspace, /return\s*<ProtectedLiveFailure\s+domain=\{c\(locale,"Onboarding","İşe Başlatma"\)\}/, "authenticated onboarding failures must not substitute synthetic demo data");
+
+const opsPath = "components/recruiting-operations-console.tsx";
+const ops = await source(opsPath);
+expect(opsPath, ops, /canApprove:\s*boolean/, "recruiting console must model approval access explicitly");
+expect(opsPath, ops, /requisition\.status\s*===\s*"APPROVAL"\s*&&\s*!canApprove\s*\?\s*\[\]/, "requisition approval controls must be hidden without approval authority");
+expect(opsPath, ops, /application\.offer\.status\s*===\s*"APPROVAL"\s*&&\s*!canApprove\s*\?\s*\[\]/, "offer approval controls must be hidden without approval authority");
+expect(opsPath, ops, /Independent approver required/, "UI must explain the independent approval boundary");
 
 const requisitionApiPath = "app/api/recruiting/requisitions/route.ts";
 const requisitionApi = await source(requisitionApiPath);
@@ -76,4 +86,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, requisition and offer approvals are separated from preparation, and four-eyes controls are enforced.");
+console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, authenticated failures remain protected, requisition and offer approvals are separated from preparation, four-eyes controls are enforced, and the UI respects approval authority.");
