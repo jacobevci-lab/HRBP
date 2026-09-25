@@ -123,7 +123,7 @@ expect(clearancePath, clearance, /offboarding-access-\$\{access\.id\}/, "access 
 const workspacePath = "components/offboarding-workspace.tsx";
 const workspace = await source(workspacePath);
 expect(workspacePath, workspace, /actorId=\{ctx\.actorId\}/, "workspace must pass actor identity to four-eyes console");
-expect(workspacePath, workspace, /OffboardingClearanceConsole\s+processes=\{data\.processes\}/, "workspace must mount operational asset and access clearance");
+expectAbsent(workspacePath, workspace, /OffboardingClearanceConsole/, "workspace must not duplicate the page-level clearance mutation surface");
 expect(workspacePath, workspace, /data\.overdueTasks/, "workspace metrics must surface overdue exit controls");
 expect(workspacePath, workspace, /data\.exitRiskProcesses/, "workspace metrics must surface exit-date risk");
 

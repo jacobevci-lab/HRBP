@@ -59,8 +59,10 @@ expect(dataPath, data, /accessControls:[\s\S]*systemName:[\s\S]*exceptionReason:
 
 const consolePath = "components/offboarding-clearance-console.tsx";
 const consoleSource = await source(consolePath);
-expect(consolePath, consoleSource, /\/assets\/\$\{id\}\/status|\/assets\/\$\{process\.id\}/, "clearance UI must call governed asset endpoints");
-expect(consolePath, consoleSource, /\/access\/\$\{id\}\/status|\/access\/\$\{process\.id\}/, "clearance UI must call governed access endpoints");
+expect(consolePath, consoleSource, /\/api\/offboarding\/processes\/\$\{encodeURIComponent\(process\.id\)\}\/assets/, "clearance UI must call governed asset endpoints");
+expect(consolePath, consoleSource, /\/assets\/\$\{encodeURIComponent\(assetId\)\}\/status/, "clearance UI must call governed asset transition endpoints");
+expect(consolePath, consoleSource, /\/api\/offboarding\/processes\/\$\{encodeURIComponent\(process\.id\)\}\/access/, "clearance UI must call governed access endpoints");
+expect(consolePath, consoleSource, /\/access\/\$\{encodeURIComponent\(accessId\)\}\/status/, "clearance UI must call governed access transition endpoints");
 expect(consolePath, consoleSource, /WRITTEN_OFF/, "clearance UI must expose explicit asset write-off flow");
 expect(consolePath, consoleSource, /EXCEPTION/, "clearance UI must expose explicit access exception flow");
 expect(consolePath, consoleSource, /datetime-local/, "clearance UI must capture scheduled revocation time");
