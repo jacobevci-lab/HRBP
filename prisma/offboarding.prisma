@@ -42,31 +42,38 @@ enum AccessRevocationStatus {
 }
 
 model SeparationProcess {
-  id                    String @id @default(cuid())
-  tenantId              String
-  employmentId          String
-  type                  SeparationType
-  status                SeparationStatus @default(DRAFT)
-  noticeDate            DateTime?
-  lastWorkingDate       DateTime
-  reasonCode            String?
-  employeeReason        String?
-  initiatedById         String
-  managerEmploymentId   String?
-  rehireEligible        Boolean?
-  rehireDecisionReason  String?
-  rehireDecisionById    String?
-  rehireDecisionAt      DateTime?
-  finalSettlementStatus String?
-  classification        DataClassification @default(RESTRICTED)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
-  completedAt           DateTime?
-  tasks                 SeparationTask[]
-  assets                AssetReturn[]
-  accessRevocations     AccessRevocation[]
-  exitInterview         ExitInterview?
-  knowledgeTransfers    KnowledgeTransfer[]
+  id                           String @id @default(cuid())
+  tenantId                     String
+  employmentId                 String
+  type                         SeparationType
+  status                       SeparationStatus @default(DRAFT)
+  noticeDate                   DateTime?
+  lastWorkingDate              DateTime
+  reasonCode                   String?
+  employeeReason               String?
+  initiatedById                String
+  managerEmploymentId          String?
+  rehireEligible               Boolean?
+  rehireDecisionReason         String?
+  rehireDecisionById           String?
+  rehireDecisionAt             DateTime?
+  finalSettlementStatus        String?
+  finalSettlementNote          String?
+  finalSettlementPreparedById  String?
+  finalSettlementPreparedAt    DateTime?
+  finalSettlementApprovedById  String?
+  finalSettlementApprovedAt    DateTime?
+  finalSettlementSettledById   String?
+  finalSettlementSettledAt     DateTime?
+  classification               DataClassification @default(RESTRICTED)
+  createdAt                    DateTime @default(now())
+  updatedAt                    DateTime @updatedAt
+  completedAt                  DateTime?
+  tasks                        SeparationTask[]
+  assets                       AssetReturn[]
+  accessRevocations            AccessRevocation[]
+  exitInterview                ExitInterview?
+  knowledgeTransfers           KnowledgeTransfer[]
 
   @@index([tenantId, employmentId, status])
   @@index([tenantId, lastWorkingDate, status])
@@ -110,17 +117,17 @@ model AssetReturn {
 }
 
 model AccessRevocation {
-  id           String @id @default(cuid())
-  tenantId     String
-  processId    String
-  systemName   String
-  accountId    String?
-  scheduledAt  DateTime?
-  revokedAt    DateTime?
-  status       AccessRevocationStatus @default(PENDING)
-  verifiedById String?
+  id              String @id @default(cuid())
+  tenantId        String
+  processId       String
+  systemName      String
+  accountId       String?
+  scheduledAt     DateTime?
+  revokedAt       DateTime?
+  status          AccessRevocationStatus @default(PENDING)
+  verifiedById    String?
   exceptionReason String?
-  process      SeparationProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+  process         SeparationProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
 
   @@unique([processId, systemName, accountId])
   @@index([tenantId, processId, status])

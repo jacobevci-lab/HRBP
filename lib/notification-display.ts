@@ -17,7 +17,10 @@ const offboardingTitles: Record<string, { en: string; tr: string }> = {
   OFFBOARDING_TASK_DUE_SOON: { en: "Exit task due soon", tr: "İşten ayrılış görevinin süresi yaklaşıyor" },
   OFFBOARDING_TASK_OVERDUE: { en: "Exit task overdue", tr: "İşten ayrılış görevi gecikti" },
   OFFBOARDING_EXIT_READINESS_RISK: { en: "Exit readiness at risk", tr: "İşten ayrılış hazırlığı risk altında" },
-  OFFBOARDING_READY_TO_CLOSE: { en: "Separation ready to close", tr: "Ayrılış kapatmaya hazır" }
+  OFFBOARDING_READY_TO_CLOSE: { en: "Separation ready to close", tr: "Ayrılış kapatmaya hazır" },
+  OFFBOARDING_FINAL_SETTLEMENT_APPROVAL_REQUIRED: { en: "Final settlement approval required", tr: "Nihai hesap onayı gerekiyor" },
+  OFFBOARDING_FINAL_SETTLEMENT_PAYMENT_REQUIRED: { en: "Final settlement completion required", tr: "Nihai hesap tamamlama işlemi gerekiyor" },
+  OFFBOARDING_FINAL_SETTLEMENT_SETTLED: { en: "Final settlement cleared", tr: "Nihai hesap tamamlandı" }
 };
 
 export function notificationDisplayTitle(eventType: string, locale: Locale) {
@@ -42,9 +45,15 @@ export function notificationDisplaySummary(payload: unknown, locale: Locale) {
   }
 
   const separationProcessId = text(data.separationProcessId); const domain = text(data.domain); const lastWorkingDate = text(data.lastWorkingDate);
+  if (separationProcessId && reminderState?.startsWith("final-settlement-") && lastWorkingDate) {
+    const lastDay = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(lastWorkingDate));
+    if (reminderState === "final-settlement-prepared") return locale === "tr" ? `Nihai hesap hazırlandı. Son çalışma günü ${lastDay}. Hazırlayan kişiden farklı bir bordro onaylayıcısının kararı gerekiyor.` : `Final settlement is prepared. Last working day ${lastDay}. An independent payroll approver must review it.`;
+    if (reminderState === "final-settlement-approved") return locale === "tr" ? `Nihai hesap bağımsız olarak onaylandı. Son çalışma günü ${lastDay}. Onaylayandan farklı bir ödeme yetkilisinin tamamlama teyidi gerekiyor.` : `Final settlement was independently approved. Last working day ${lastDay}. A different payroll payment authority must confirm completion.`;
+    if (reminderState === "final-settlement-settled") return locale === "tr" ? `Nihai hesap tamamlandı. Son çalışma günü ${lastDay}. Diğer çıkış kontrolleri de temizse ayrılış kapanışa ilerleyebilir.` : `Final settlement is cleared. Last working day ${lastDay}. The separation can advance when the remaining exit controls are clear.`;
+  }
   if (separationProcessId && reminderState === "ready-to-close" && lastWorkingDate) {
     const lastDay = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(lastWorkingDate));
-    return locale === "tr" ? `Tüm çıkış kontrolleri tamamlandı. Ayrılış ${lastDay} tarihinde veya sonrasında bağımsız bir İK operasyon kullanıcısı tarafından kapatılabilir.` : `All exit controls are clear. The separation can be closed by an independent HR operations user on or after ${lastDay}.`;
+    return locale === "tr" ? `Tüm çıkış kontrolleri ve nihai hesap tamamlandı. Ayrılış ${lastDay} tarihinde veya sonrasında bağımsız bir İK operasyon kullanıcısı tarafından kapatılabilir.` : `All exit controls and final settlement are clear. The separation can be closed by an independent HR operations user on or after ${lastDay}.`;
   }
   if (separationProcessId && reminderState === "exit-risk" && lastWorkingDate) {
     const lastDay = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(lastWorkingDate)); const tasks = numberValue(data.openBlockingTasks) ?? 0; const assets = numberValue(data.openAssets) ?? 0; const access = numberValue(data.openAccess) ?? 0; const handover = numberValue(data.openKnowledgeTransfers) ?? 0;

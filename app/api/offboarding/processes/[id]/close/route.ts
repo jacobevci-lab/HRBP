@@ -19,9 +19,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   try {
     const data = await db.$transaction(async (tx) => {
-      const process = await tx.separationProcess.findFirst({ where: { id, tenantId: ctx.tenantId }, select: { id: true, status: true, employmentId: true, initiatedById: true, lastWorkingDate: true, type: true, completedAt: true } });
+      const process = await tx.separationProcess.findFirst({
+        where: { id, tenantId: ctx.tenantId },
+        select: { id: true, status: true, employmentId: true, initiatedById: true, lastWorkingDate: true, type: true, completedAt: true, finalSettlementStatus: true }
+      });
       if (!process) throw new Error("NOT_FOUND");
       if (process.status !== SeparationStatus.READY_TO_CLOSE || process.completedAt) throw new Error("NOT_READY");
+      if (process.finalSettlementStatus !== "SETTLED") throw new Error("FINAL_SETTLEMENT");
       if (process.initiatedById === ctx.actorId) throw new Error("FOUR_EYES");
       const scope = await resolveEmploymentScope(tx, ctx);
       if (!canActOnEmployment(scope, process.employmentId)) throw new Error("OUT_OF_SCOPE");
@@ -41,11 +45,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       const employmentUpdate = await tx.employment.updateMany({ where: { id: employment.id, tenantId: ctx.tenantId, status: employment.status }, data: { status: EmploymentStatus.TERMINATED, endDate: process.lastWorkingDate } });
       if (employmentUpdate.count !== 1) throw new Error("STATE_CONFLICT");
-      const processUpdate = await tx.separationProcess.updateMany({ where: { id: process.id, tenantId: ctx.tenantId, status: SeparationStatus.READY_TO_CLOSE, completedAt: null }, data: { status: SeparationStatus.CLOSED, completedAt: now } });
+      const processUpdate = await tx.separationProcess.updateMany({ where: { id: process.id, tenantId: ctx.tenantId, status: SeparationStatus.READY_TO_CLOSE, completedAt: null, finalSettlementStatus: "SETTLED" }, data: { status: SeparationStatus.CLOSED, completedAt: now } });
       if (processUpdate.count !== 1) throw new Error("STATE_CONFLICT");
 
       await tx.notificationOutbox.updateMany({
-        where: { tenantId: ctx.tenantId, resourceType: "SeparationProcess", resourceId: process.id, eventType: { in: ["OFFBOARDING_READY_TO_CLOSE", "OFFBOARDING_EXIT_READINESS_RISK"] }, readAt: null },
+        where: {
+          tenantId: ctx.tenantId,
+          resourceType: "SeparationProcess",
+          resourceId: process.id,
+          eventType: { in: ["OFFBOARDING_READY_TO_CLOSE", "OFFBOARDING_EXIT_READINESS_RISK", "OFFBOARDING_FINAL_SETTLEMENT_SETTLED"] },
+          readAt: null
+        },
         data: { readAt: now }
       });
 
@@ -55,8 +65,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
 
       await tx.employeeLifecycleEvent.create({ data: { tenantId: ctx.tenantId, personId: employment.personId, employmentId: employment.id, type: LifecycleEventType.TERMINATED, effectiveAt: process.lastWorkingDate, summary: `Separation completed (${process.type})`, actorId: ctx.actorId } });
-      await appendAudit(tx, ctx, { action: "employment.exit-terminated", resourceType: "Employment", resourceId: employment.id, classification: DataClassification.RESTRICTED, purpose: "Human-confirmed employment termination after governed exit readiness" });
-      await appendAudit(tx, ctx, { action: "offboarding.process-closed", resourceType: "SeparationProcess", resourceId: id, classification: DataClassification.RESTRICTED, purpose: "Four-eyes separation closure after task, knowledge transfer, asset, access and last-working-date gates cleared" });
+      await appendAudit(tx, ctx, { action: "employment.exit-terminated", resourceType: "Employment", resourceId: employment.id, classification: DataClassification.RESTRICTED, purpose: "Human-confirmed employment termination after governed exit readiness and settled final pay" });
+      await appendAudit(tx, ctx, { action: "offboarding.process-closed", resourceType: "SeparationProcess", resourceId: id, classification: DataClassification.RESTRICTED, purpose: "Four-eyes separation closure after task, knowledge transfer, asset, access, final settlement and last-working-date gates cleared" });
       return { id, status: SeparationStatus.CLOSED, employmentStatus: EmploymentStatus.TERMINATED, endDate: process.lastWorkingDate };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return Response.json({ data });
@@ -65,6 +75,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (code === "NOT_FOUND") return Response.json({ error: "Separation process not found." }, { status: 404 });
     if (code === "OUT_OF_SCOPE") return forbidden("Separation process is outside your authorized relationship scope.");
     if (code === "NOT_READY") return Response.json({ error: "Separation must be in Ready to Close state before employment can be terminated." }, { status: 409 });
+    if (code === "FINAL_SETTLEMENT") return Response.json({ error: "Final settlement must be independently approved and settled before employment termination." }, { status: 409 });
     if (code === "FOUR_EYES") return Response.json({ error: "The person who initiated the separation cannot perform the final employment termination." }, { status: 409 });
     if (code === "LAST_DAY_NOT_REACHED") return Response.json({ error: "Employment cannot be terminated before the governed last working date." }, { status: 409 });
     if (code === "EMPLOYMENT") return Response.json({ error: "Employment record not found." }, { status: 409 });

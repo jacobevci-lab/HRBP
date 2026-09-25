@@ -7,11 +7,12 @@ export const terminalExitTaskStatuses: ExitTaskStatus[] = [ExitTaskStatus.COMPLE
 export const terminalKnowledgeTransferStatuses: ExitTaskStatus[] = [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED];
 export const terminalAssetReturnStatuses: AssetReturnStatus[] = [AssetReturnStatus.RETURNED, AssetReturnStatus.WRITTEN_OFF];
 export const terminalAccessRevocationStatuses: AccessRevocationStatus[] = [AccessRevocationStatus.REVOKED, AccessRevocationStatus.EXCEPTION];
+export const settledFinalSettlementStatus = "SETTLED" as const;
 
 export async function recalculateSeparationReadiness(tx: Prisma.TransactionClient, ctx: RequestContext, processId: string) {
   const process = await tx.separationProcess.findFirst({
     where: { id: processId, tenantId: ctx.tenantId },
-    select: { id: true, status: true, lastWorkingDate: true }
+    select: { id: true, status: true, lastWorkingDate: true, finalSettlementStatus: true }
   });
   if (!process) throw new Error("PROCESS_NOT_FOUND");
   if (process.status === SeparationStatus.CLOSED || process.status === SeparationStatus.CANCELLED) throw new Error("PROCESS_CLOSED");
@@ -26,9 +27,12 @@ export async function recalculateSeparationReadiness(tx: Prisma.TransactionClien
   const openBlocking = tasks.filter((item) => item.blocking && !terminalExitTaskStatuses.includes(item.status));
   const payrollBlocking = openBlocking.filter((item) => item.domain.trim().toUpperCase() === "PAYROLL");
   const nonPayrollBlocking = openBlocking.filter((item) => item.domain.trim().toUpperCase() !== "PAYROLL");
-  const nextStatus = openBlocking.length === 0 && assetsOpen === 0 && accessOpen === 0 && knowledgeTransfersOpen === 0
+  const operationalClear = nonPayrollBlocking.length === 0 && assetsOpen === 0 && accessOpen === 0 && knowledgeTransfersOpen === 0;
+  const settlementClear = process.finalSettlementStatus === settledFinalSettlementStatus;
+  const payrollClear = payrollBlocking.length === 0 && settlementClear;
+  const nextStatus = operationalClear && payrollClear
     ? SeparationStatus.READY_TO_CLOSE
-    : payrollBlocking.length > 0 && nonPayrollBlocking.length === 0 && assetsOpen === 0 && accessOpen === 0 && knowledgeTransfersOpen === 0
+    : operationalClear
       ? SeparationStatus.FINAL_PAY_REVIEW
       : SeparationStatus.CLEARANCE;
 
@@ -40,7 +44,11 @@ export async function recalculateSeparationReadiness(tx: Prisma.TransactionClien
       resourceType: "SeparationProcess",
       resourceId: process.id,
       classification: DataClassification.RESTRICTED,
-      purpose: nextStatus === SeparationStatus.READY_TO_CLOSE ? "Exit readiness gate cleared: blocking tasks, knowledge transfer, assets and access controls are complete" : "Separation stage recalculated from governed exit controls"
+      purpose: nextStatus === SeparationStatus.READY_TO_CLOSE
+        ? "Exit readiness gate cleared: blocking tasks, knowledge transfer, assets, access controls and final settlement are complete"
+        : nextStatus === SeparationStatus.FINAL_PAY_REVIEW
+          ? "Operational clearance is complete; governed final settlement remains open"
+          : "Separation stage recalculated from governed exit controls"
     });
 
     if (nextStatus === SeparationStatus.READY_TO_CLOSE) {
@@ -58,10 +66,19 @@ export async function recalculateSeparationReadiness(tx: Prisma.TransactionClien
         resourceId: process.id,
         dedupeKey: `offboarding-process:${process.id}:ready-to-close:${process.lastWorkingDate.toISOString().slice(0, 10)}`,
         classification: DataClassification.RESTRICTED,
-        payload: { separationProcessId: process.id, reminderState: "ready-to-close", lastWorkingDate: process.lastWorkingDate.toISOString() }
+        payload: { separationProcessId: process.id, reminderState: "ready-to-close", lastWorkingDate: process.lastWorkingDate.toISOString(), finalSettlementStatus: process.finalSettlementStatus }
       });
     }
   }
 
-  return { processStatus: nextStatus, openBlockingTasks: openBlocking.length, openAssets: assetsOpen, openAccess: accessOpen, openKnowledgeTransfers: knowledgeTransfersOpen };
+  return {
+    processStatus: nextStatus,
+    openBlockingTasks: openBlocking.length,
+    openPayrollTasks: payrollBlocking.length,
+    openAssets: assetsOpen,
+    openAccess: accessOpen,
+    openKnowledgeTransfers: knowledgeTransfersOpen,
+    finalSettlementStatus: process.finalSettlementStatus ?? "NOT_STARTED",
+    finalSettlementClear: settlementClear
+  };
 }
