@@ -36,6 +36,48 @@ expect(taskPath, task, /TransactionIsolationLevel\.Serializable/, "task lifecycl
 expect(taskPath, task, /P2034/, "task serialization conflicts must be controlled");
 expectAbsent(taskPath, task, /assetReturn\.count/, "task route must not duplicate asset readiness logic");
 
+const assetCreatePath = "app/api/offboarding/processes/[id]/assets/route.ts";
+const assetCreate = await source(assetCreatePath);
+expect(assetCreatePath, assetCreate, /asText\(body\.assetTag,\s*100\)/, "asset tag must be bounded");
+expect(assetCreatePath, assetCreate, /asText\(body\.assetType,\s*120\)/, "asset type must be bounded");
+expect(assetCreatePath, assetCreate, /canActOnEmployment/, "asset registration must respect relationship scope");
+expect(assetCreatePath, assetCreate, /recalculateSeparationReadiness/, "asset registration must recalculate readiness");
+expect(assetCreatePath, assetCreate, /TransactionIsolationLevel\.Serializable/, "asset registration must serialize readiness changes");
+expect(assetCreatePath, assetCreate, /offboarding\.asset-registered/, "asset registration must be audited");
+
+const assetStatusPath = "app/api/offboarding/processes/[id]/assets/[assetId]/status/route.ts";
+const assetStatus = await source(assetStatusPath);
+expect(assetStatusPath, assetStatus, /Record<AssetReturnStatus,\s*AssetReturnStatus\[\]>/, "asset custody must use an explicit lifecycle map");
+expect(assetStatusPath, assetStatus, /DAMAGED[\s\S]*LOST[\s\S]*WRITTEN_OFF/, "asset exception states must be governed");
+expect(assetStatusPath, assetStatus, /asOptionalText\(body\.conditionNote,\s*500\)/, "asset condition reason must be bounded");
+expect(assetStatusPath, assetStatus, /requiresReason\(next\)/, "damaged, lost and written-off assets must require a reason");
+expect(assetStatusPath, assetStatus, /assetReturn\.updateMany\([\s\S]*status:\s*asset\.status/, "asset transition must be state-aware");
+expect(assetStatusPath, assetStatus, /verifiedById:\s*terminal\s*\?\s*ctx\.actorId/, "terminal asset custody must record verifier identity");
+expect(assetStatusPath, assetStatus, /recalculateSeparationReadiness/, "asset transition must feed readiness");
+expect(assetStatusPath, assetStatus, /TransactionIsolationLevel\.Serializable/, "asset transition must serialize readiness changes");
+
+const accessCreatePath = "app/api/offboarding/processes/[id]/access/route.ts";
+const accessCreate = await source(accessCreatePath);
+expect(accessCreatePath, accessCreate, /asText\(body\.systemName,\s*160\)/, "access system name must be bounded");
+expect(accessCreatePath, accessCreate, /asOptionalText\(body\.accountId,\s*240\)/, "access identity must be bounded");
+expect(accessCreatePath, accessCreate, /canActOnEmployment/, "access registration must respect relationship scope");
+expect(accessCreatePath, accessCreate, /recalculateSeparationReadiness/, "access registration must recalculate readiness");
+expect(accessCreatePath, accessCreate, /TransactionIsolationLevel\.Serializable/, "access registration must serialize readiness changes");
+expect(accessCreatePath, accessCreate, /offboarding\.access-registered/, "access registration must be audited");
+
+const accessStatusPath = "app/api/offboarding/processes/[id]/access/[accessId]/status/route.ts";
+const accessStatus = await source(accessStatusPath);
+expect(accessStatusPath, accessStatus, /Record<AccessRevocationStatus,\s*AccessRevocationStatus\[\]>/, "access revocation must use an explicit lifecycle map");
+expect(accessStatusPath, accessStatus, /SCHEDULED[\s\S]*REVOKED[\s\S]*EXCEPTION/, "access lifecycle must govern scheduling, revocation and exceptions");
+expect(accessStatusPath, accessStatus, /asOptionalText\(body\.exceptionReason,\s*1000\)/, "access exception reason must be bounded");
+expect(accessStatusPath, accessStatus, /next\s*===\s*AccessRevocationStatus\.SCHEDULED[\s\S]*scheduledAt/, "scheduled revocation must require a time");
+expect(accessStatusPath, accessStatus, /next\s*===\s*AccessRevocationStatus\.EXCEPTION[\s\S]*exceptionReason/, "access exception must require a reason");
+expect(accessStatusPath, accessStatus, /SCHEDULE_AFTER_EXIT/, "revocation scheduling must be bounded by the governed exit date");
+expect(accessStatusPath, accessStatus, /accessRevocation\.updateMany\([\s\S]*status:\s*access\.status/, "access transition must be state-aware");
+expect(accessStatusPath, accessStatus, /verifiedById:\s*terminal\s*\?\s*ctx\.actorId/, "terminal access controls must record verifier identity");
+expect(accessStatusPath, accessStatus, /recalculateSeparationReadiness/, "access transition must feed readiness");
+expect(accessStatusPath, accessStatus, /TransactionIsolationLevel\.Serializable/, "access transition must serialize readiness changes");
+
 const closePath = "app/api/offboarding/processes/[id]/close/route.ts";
 const close = await source(closePath);
 expect(closePath, close, /process\.status\s*!==\s*SeparationStatus\.READY_TO_CLOSE/, "final termination must require ready-to-close");
@@ -64,9 +106,24 @@ expect(consolePath, consoleSource, /maxLength=\{500\}/, "UI reason must mirror s
 expect(consolePath, consoleSource, /initiatedById!==actorId/, "UI must surface four-eyes closure");
 expect(consolePath, consoleSource, /offboarding-process-\$\{process\.id\}[\s\S]*offboarding-task-\$\{task\.id\}/, "UI must expose notification deep-link anchors");
 
+const clearancePath = "components/offboarding-clearance-console.tsx";
+const clearance = await source(clearancePath);
+expect(clearancePath, clearance, /\/assets`/, "clearance console must register exit assets");
+expect(clearancePath, clearance, /\/assets\/\$\{encodeURIComponent\(assetId\)\}\/status/, "clearance console must operate asset custody lifecycle");
+expect(clearancePath, clearance, /\/access`/, "clearance console must register logical access controls");
+expect(clearancePath, clearance, /\/access\/\$\{encodeURIComponent\(accessId\)\}\/status/, "clearance console must operate access lifecycle");
+expect(clearancePath, clearance, /assetReasonStatuses\.has\(status\)/, "asset exception UI must capture a reason before mutation");
+expect(clearancePath, clearance, /status\s*===\s*\"SCHEDULED\"\s*\|\|\s*status\s*===\s*\"EXCEPTION\"/, "access scheduling and exceptions must use explicit editors");
+expect(clearancePath, clearance, /maxLength=\{500\}/, "asset reason UI must mirror the server bound");
+expect(clearancePath, clearance, /maxLength=\{1000\}/, "access exception UI must mirror the server bound");
+expect(clearancePath, clearance, /type=\"datetime-local\"/, "scheduled revocation must capture an explicit date/time");
+expect(clearancePath, clearance, /offboarding-asset-\$\{asset\.id\}/, "asset rows must expose deep-link anchors");
+expect(clearancePath, clearance, /offboarding-access-\$\{access\.id\}/, "access rows must expose deep-link anchors");
+
 const workspacePath = "components/offboarding-workspace.tsx";
 const workspace = await source(workspacePath);
 expect(workspacePath, workspace, /actorId=\{ctx\.actorId\}/, "workspace must pass actor identity to four-eyes console");
+expect(workspacePath, workspace, /OffboardingClearanceConsole\s+processes=\{data\.processes\}/, "workspace must mount operational asset and access clearance");
 expect(workspacePath, workspace, /data\.overdueTasks/, "workspace metrics must surface overdue exit controls");
 expect(workspacePath, workspace, /data\.exitRiskProcesses/, "workspace metrics must surface exit-date risk");
 
