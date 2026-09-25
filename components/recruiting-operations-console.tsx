@@ -21,6 +21,7 @@ type Props = {
   users: UserOption[];
   requisitions: RequisitionOption[];
   applications: ApplicationOperation[];
+  canApprove: boolean;
 };
 
 const applicationTransitions: Record<string, string[]> = {
@@ -59,7 +60,7 @@ function label(value: string, locale: "en" | "tr") {
   return value.toLowerCase().split("_").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
 }
 
-export function RecruitingOperationsConsole({ positions, users, requisitions, applications }: Props) {
+export function RecruitingOperationsConsole({ positions, users, requisitions, applications, canApprove }: Props) {
   const router = useRouter();
   const { locale } = useLocale();
   const c = (en:string,tr:string) => locale === "tr" ? tr : en;
@@ -120,8 +121,8 @@ export function RecruitingOperationsConsole({ positions, users, requisitions, ap
 
   return <section className="ats-console card">
     <div className="ats-console-head">
-      <div><span className="section-kicker">{c("Governed ATS transactions","Yönetişimli ATS işlemleri")}</span><h3>{c("Recruiting operations console","İşe alım operasyon konsolu")}</h3><p>{c("Every mutation is tenant-scoped, state-validated and audit logged. Hire conversion creates the employee, employment, lifecycle event and onboarding plan in one transaction.","Her değişiklik tenant kapsamlıdır, durum doğrulamasından geçer ve denetim kaydı üretir. İşe alım dönüşümü çalışanı, istihdamı, yaşam döngüsü olayını ve işe başlatma planını tek işlemde oluşturur.")}</p></div>
-      <div className="ats-console-health"><CheckCircle2 size={16}/><span>{c("Write controls active","Yazma kontrolleri aktif")}</span></div>
+      <div><span className="section-kicker">{c("Governed ATS transactions","Yönetişimli ATS işlemleri")}</span><h3>{c("Recruiting operations console","İşe alım operasyon konsolu")}</h3><p>{c("Preparation and independent approval are separated. Every mutation is tenant-scoped, state-validated and audit logged. Hire conversion creates the employee, employment, lifecycle event and onboarding plan in one transaction.","Hazırlama ve bağımsız onay ayrılmıştır. Her değişiklik tenant kapsamlıdır, durum doğrulamasından geçer ve denetim kaydı üretir. İşe alım dönüşümü çalışanı, istihdamı, yaşam döngüsü olayını ve işe başlatma planını tek işlemde oluşturur.")}</p></div>
+      <div className="ats-console-health"><CheckCircle2 size={16}/><span>{canApprove ? c("Write + approval controls active","Yazma + onay kontrolleri aktif") : c("Preparation controls active","Hazırlama kontrolleri aktif")}</span></div>
     </div>
 
     {notice ? <div className={`ats-notice ${notice.tone}`}><span>{notice.tone === "ok" ? <CheckCircle2 size={15}/> : <CircleAlert size={15}/>}</span>{notice.text}</div> : null}
@@ -150,18 +151,21 @@ export function RecruitingOperationsConsole({ positions, users, requisitions, ap
     <div className="ats-ops-grid">
       <div className="ats-ops-panel">
         <div className="ats-panel-title"><UsersRound size={16}/><div><strong>{c("Application lifecycle","Başvuru yaşam döngüsü")}</strong><small>{applications.length} {c("active applications","aktif başvuru")}</small></div></div>
-        <div className="ats-operation-list">{applications.length ? applications.map((application) => <ApplicationOperation key={application.id} application={application} pending={pending} post={post}/>) : <p className="ats-empty">{c("No active applications.","Aktif başvuru yok.")}</p>}</div>
+        <div className="ats-operation-list">{applications.length ? applications.map((application) => <ApplicationOperation key={application.id} application={application} pending={pending} post={post} canApprove={canApprove}/>) : <p className="ats-empty">{c("No active applications.","Aktif başvuru yok.")}</p>}</div>
       </div>
 
       <div className="ats-ops-panel">
         <div className="ats-panel-title"><FileCheck2 size={16}/><div><strong>{c("Requisition approvals","İşe alım talebi onayları")}</strong><small>{requisitions.length} {c("governed requisitions","yönetişimli talep")}</small></div></div>
-        <div className="ats-operation-list">{requisitions.map((requisition) => <div className="ats-operation" key={requisition.id}><div className="ats-operation-main"><strong>{requisition.title}</strong><small>{requisition.position}</small><em className={`pill ${requisition.status.toLowerCase().replaceAll("_", "-")}`}>{label(requisition.status,locale)}</em></div><div className="ats-actions">{(requisitionTransitions[requisition.status] ?? []).map((next) => <button type="button" key={next} disabled={pending !== null} onClick={() => void post(`req-${requisition.id}-${next}`, `/api/recruiting/requisitions/${requisition.id}/status`, { status: next })}>{pending === `req-${requisition.id}-${next}` ? "…" : label(next,locale)}</button>)}</div></div>)}</div>
+        <div className="ats-operation-list">{requisitions.map((requisition) => {
+          const transitions = requisition.status === "APPROVAL" && !canApprove ? [] : (requisitionTransitions[requisition.status] ?? []);
+          return <div className="ats-operation" key={requisition.id}><div className="ats-operation-main"><strong>{requisition.title}</strong><small>{requisition.position}</small><em className={`pill ${requisition.status.toLowerCase().replaceAll("_", "-")}`}>{label(requisition.status,locale)}</em></div><div className="ats-actions">{transitions.map((next) => <button type="button" key={next} disabled={pending !== null} onClick={() => void post(`req-${requisition.id}-${next}`, `/api/recruiting/requisitions/${requisition.id}/status`, { status: next })}>{pending === `req-${requisition.id}-${next}` ? "…" : label(next,locale)}</button>)}{requisition.status === "APPROVAL" && !canApprove ? <small>{c("Independent approver required","Bağımsız onaylayıcı gerekli")}</small> : null}</div></div>;
+        })}</div>
       </div>
     </div>
   </section>;
 }
 
-function ApplicationOperation({ application, pending, post }: { application: ApplicationOperation; pending: string | null; post: (key: string, url: string, payload: Record<string, unknown>) => Promise<boolean> }) {
+function ApplicationOperation({ application, pending, post, canApprove }: { application: ApplicationOperation; pending: string | null; post: (key: string, url: string, payload: Record<string, unknown>) => Promise<boolean>; canApprove: boolean }) {
   const { locale } = useLocale();
   const c = (en:string,tr:string) => locale === "tr" ? tr : en;
   const [offerOpen, setOfferOpen] = useState(false);
@@ -174,7 +178,7 @@ function ApplicationOperation({ application, pending, post }: { application: App
 
     {offerOpen ? <form className="ats-inline-form" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); void post(`offer-${application.id}`, `/api/recruiting/applications/${application.id}/offer`, { currency: data.get("currency"), annualBase: Number(data.get("annualBase")), startDate: data.get("startDate"), expiresAt: data.get("expiresAt") || null }).then((ok) => { if (ok) setOfferOpen(false); }); }}><input name="currency" defaultValue="EUR" maxLength={3} required/><input name="annualBase" type="number" min="1" placeholder={c("Annual base","Yıllık baz ücret")} required/><input name="startDate" type="date" required/><input name="expiresAt" type="date"/><button disabled={pending !== null}>{c("Save offer","Teklifi kaydet")}</button></form> : null}
 
-    {application.offer ? <div className="ats-offer-line"><span>{application.offer.currency} {Number(application.offer.annualBase).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} · {c("Start","Başlangıç")} {new Date(application.offer.startDate).toLocaleDateString(locale === "tr" ? "tr-TR" : "en-GB")}</span><div className="ats-actions">{(offerTransitions[application.offer.status] ?? []).map((next) => <button type="button" key={next} disabled={pending !== null} onClick={() => void post(`offer-status-${application.offer?.id}-${next}`, `/api/recruiting/offers/${application.offer?.id}/status`, { status: next })}>{label(next,locale)}</button>)}{application.offer.status === "ACCEPTED" ? <button type="button" className="primary-mini" onClick={() => setHireOpen((value) => !value)}>{c("Convert to employee","Çalışana dönüştür")}</button> : null}</div></div> : null}
+    {application.offer ? <div className="ats-offer-line"><span>{application.offer.currency} {Number(application.offer.annualBase).toLocaleString(locale === "tr" ? "tr-TR" : "en-US")} · {c("Start","Başlangıç")} {new Date(application.offer.startDate).toLocaleDateString(locale === "tr" ? "tr-TR" : "en-GB")}</span><div className="ats-actions">{(application.offer.status === "APPROVAL" && !canApprove ? [] : (offerTransitions[application.offer.status] ?? [])).map((next) => <button type="button" key={next} disabled={pending !== null} onClick={() => void post(`offer-status-${application.offer?.id}-${next}`, `/api/recruiting/offers/${application.offer?.id}/status`, { status: next })}>{label(next,locale)}</button>)}{application.offer.status === "APPROVAL" && !canApprove ? <small>{c("Independent approver required","Bağımsız onaylayıcı gerekli")}</small> : null}{application.offer.status === "ACCEPTED" ? <button type="button" className="primary-mini" onClick={() => setHireOpen((value) => !value)}>{c("Convert to employee","Çalışana dönüştür")}</button> : null}</div></div> : null}
 
     {hireOpen ? <form className="ats-inline-form hire" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); void post(`hire-${application.id}`, "/api/recruiting/hire", { applicationId: application.id, employeeNumber: data.get("employeeNumber"), workEmail: data.get("workEmail") }).then((ok) => { if (ok) setHireOpen(false); }); }}><input name="employeeNumber" placeholder={c("Employee no","Çalışan no")} required/><input name="workEmail" type="email" placeholder={c("Work email","İş e-postası")}/><button disabled={pending !== null}>{c("Hire & start onboarding","İşe al & işe başlatmayı başlat")}</button></form> : null}
   </div>;
