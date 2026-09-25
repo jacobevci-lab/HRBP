@@ -12,7 +12,7 @@ export const settledFinalSettlementStatus = "SETTLED" as const;
 export async function recalculateSeparationReadiness(tx: Prisma.TransactionClient, ctx: RequestContext, processId: string) {
   const process = await tx.separationProcess.findFirst({
     where: { id: processId, tenantId: ctx.tenantId },
-    select: { id: true, status: true, lastWorkingDate: true, finalSettlementStatus: true }
+    select: { id: true, status: true, updatedAt: true, lastWorkingDate: true, finalSettlementStatus: true }
   });
   if (!process) throw new Error("PROCESS_NOT_FOUND");
   if (process.status === SeparationStatus.CLOSED || process.status === SeparationStatus.CANCELLED) throw new Error("PROCESS_CLOSED");
@@ -51,8 +51,15 @@ export async function recalculateSeparationReadiness(tx: Prisma.TransactionClien
           : "Separation stage recalculated from governed exit controls"
     });
 
+    const now = new Date();
+    if (nextStatus !== SeparationStatus.READY_TO_CLOSE) {
+      await tx.notificationOutbox.updateMany({
+        where: { tenantId: ctx.tenantId, resourceType: "SeparationProcess", resourceId: process.id, eventType: "OFFBOARDING_READY_TO_CLOSE", readAt: null },
+        data: { readAt: now }
+      });
+    }
+
     if (nextStatus === SeparationStatus.READY_TO_CLOSE) {
-      const now = new Date();
       await tx.notificationOutbox.updateMany({
         where: { tenantId: ctx.tenantId, resourceType: "SeparationProcess", resourceId: process.id, eventType: "OFFBOARDING_EXIT_READINESS_RISK", readAt: null },
         data: { readAt: now }
@@ -64,7 +71,7 @@ export async function recalculateSeparationReadiness(tx: Prisma.TransactionClien
         templateKey: "offboarding.ready-to-close",
         resourceType: "SeparationProcess",
         resourceId: process.id,
-        dedupeKey: `offboarding-process:${process.id}:ready-to-close:${process.lastWorkingDate.toISOString().slice(0, 10)}`,
+        dedupeKey: `offboarding-process:${process.id}:ready-to-close:${process.updatedAt.toISOString()}`,
         classification: DataClassification.RESTRICTED,
         payload: { separationProcessId: process.id, reminderState: "ready-to-close", lastWorkingDate: process.lastWorkingDate.toISOString(), finalSettlementStatus: process.finalSettlementStatus }
       });

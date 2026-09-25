@@ -26,7 +26,7 @@ export type OffboardingKnowledgeTransferRow = { id: string; title: string; descr
 export type OffboardingProcessRow = {
   id: string; employmentId: string; personId: string | null; initiatedById: string; employee: string; employeeNumber: string; position: string; type: string; status: string; rawStatus: string;
   lastWorkingDate: string; lastWorkingDateIso: string; completedTasks: number; taskCount: number; openBlockingTasks: number; overdueTasks: number; assetsOpen: number; accessOpen: number; openKnowledgeTransfers: number;
-  finalSettlementStatus: string; finalSettlementNote: string | null; finalSettlementPreparedById: string | null; finalSettlementPreparedAt: string | null; finalSettlementApprovedById: string | null; finalSettlementApprovedAt: string | null; finalSettlementSettledById: string | null; finalSettlementSettledAt: string | null; finalSettlementClear: boolean;
+  finalSettlementStatus: string; finalSettlementNote: string | null; finalSettlementPreparedById: string | null; finalSettlementPreparedAt: string | null; finalSettlementApprovedById: string | null; finalSettlementApprovedAt: string | null; finalSettlementSettledById: string | null; finalSettlementSettledAt: string | null; finalSettlementReversalReason: string | null; finalSettlementReversedById: string | null; finalSettlementReversedAt: string | null; finalSettlementClear: boolean;
   controlsClear: boolean; readyToClose: boolean; exitRisk: boolean; tasks: OffboardingTaskRow[]; assets: OffboardingAssetRow[]; accessControls: OffboardingAccessRow[]; knowledgeTransfers: OffboardingKnowledgeTransferRow[];
 };
 
@@ -44,6 +44,7 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
         id: true, employmentId: true, initiatedById: true, type: true, status: true, lastWorkingDate: true,
         finalSettlementStatus: true, finalSettlementNote: true, finalSettlementPreparedById: true, finalSettlementPreparedAt: true,
         finalSettlementApprovedById: true, finalSettlementApprovedAt: true, finalSettlementSettledById: true, finalSettlementSettledAt: true,
+        finalSettlementReversalReason: true, finalSettlementReversedById: true, finalSettlementReversedAt: true,
         tasks: { orderBy: [{ blocking: "desc" }, { createdAt: "asc" }], select: { id: true, domain: true, title: true, status: true, blocking: true, dueAt: true } },
         assets: { orderBy: { assetTag: "asc" }, select: { id: true, assetTag: true, assetType: true, serialNumber: true, status: true, returnedAt: true, conditionNote: true } },
         accessRevocations: { orderBy: { systemName: "asc" }, select: { id: true, systemName: true, accountId: true, status: true, scheduledAt: true, revokedAt: true, exceptionReason: true } },
@@ -89,7 +90,8 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
         lastWorkingDate: formatDate(process.lastWorkingDate), lastWorkingDateIso: process.lastWorkingDate.toISOString(), completedTasks, taskCount: process.tasks.length, openBlockingTasks, overdueTasks, assetsOpen, accessOpen, openKnowledgeTransfers,
         finalSettlementStatus, finalSettlementNote: process.finalSettlementNote, finalSettlementPreparedById: process.finalSettlementPreparedById, finalSettlementPreparedAt: process.finalSettlementPreparedAt?.toISOString() ?? null,
         finalSettlementApprovedById: process.finalSettlementApprovedById, finalSettlementApprovedAt: process.finalSettlementApprovedAt?.toISOString() ?? null,
-        finalSettlementSettledById: process.finalSettlementSettledById, finalSettlementSettledAt: process.finalSettlementSettledAt?.toISOString() ?? null, finalSettlementClear,
+        finalSettlementSettledById: process.finalSettlementSettledById, finalSettlementSettledAt: process.finalSettlementSettledAt?.toISOString() ?? null,
+        finalSettlementReversalReason: process.finalSettlementReversalReason, finalSettlementReversedById: process.finalSettlementReversedById, finalSettlementReversedAt: process.finalSettlementReversedAt?.toISOString() ?? null, finalSettlementClear,
         controlsClear, readyToClose, exitRisk,
         tasks: process.tasks.map((task) => ({ id: task.id, domain: task.domain, title: task.title, status: label(task.status), rawStatus: task.status, blocking: task.blocking, dueAt: formatDate(task.dueAt), dueAtIso: task.dueAt?.toISOString() ?? null })),
         assets: process.assets.map((asset) => ({ id: asset.id, assetTag: asset.assetTag, assetType: asset.assetType, serialNumber: asset.serialNumber, status: label(asset.status), rawStatus: asset.status, returnedAt: asset.returnedAt?.toISOString() ?? null, conditionNote: asset.conditionNote })),

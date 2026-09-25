@@ -65,6 +65,9 @@ model SeparationProcess {
   finalSettlementApprovedAt    DateTime?
   finalSettlementSettledById   String?
   finalSettlementSettledAt     DateTime?
+  finalSettlementReversalReason String?
+  finalSettlementReversedById  String?
+  finalSettlementReversedAt    DateTime?
   cancellationReason           String?
   cancelledById                String?
   cancelledAt                  DateTime?

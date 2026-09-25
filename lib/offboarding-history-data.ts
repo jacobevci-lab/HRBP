@@ -48,6 +48,9 @@ export type OffboardingHistoryRow = {
   cancelledById: string | null;
   cancelledAt: string | null;
   finalSettlementStatus: string;
+  finalSettlementReversalReason: string | null;
+  finalSettlementReversedById: string | null;
+  finalSettlementReversedAt: string | null;
   rehireEligible: boolean | null;
   rehireDecisionReason: string | null;
   rehireDecisionById: string | null;
@@ -108,6 +111,9 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
         finalSettlementApprovedAt: true,
         finalSettlementSettledById: true,
         finalSettlementSettledAt: true,
+        finalSettlementReversalReason: true,
+        finalSettlementReversedById: true,
+        finalSettlementReversedAt: true,
         rehireEligible: true,
         rehireDecisionReason: true,
         rehireDecisionById: true,
@@ -200,6 +206,14 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
         occurredAt: process.finalSettlementSettledAt.toISOString(),
         detail: null
       });
+      if (process.finalSettlementReversedAt) events.push({
+        key: `${process.id}:settlement-reversed`,
+        kind: "SETTLEMENT",
+        title: "Final settlement reversed under four-eyes control",
+        actorId: process.finalSettlementReversedById,
+        occurredAt: process.finalSettlementReversedAt.toISOString(),
+        detail: process.finalSettlementReversalReason
+      });
       events.push({
         key: `${process.id}:terminal`,
         kind: "TERMINAL",
@@ -235,6 +249,9 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
         cancelledById: process.cancelledById,
         cancelledAt: iso(process.cancelledAt),
         finalSettlementStatus: process.finalSettlementStatus ?? "NOT_STARTED",
+        finalSettlementReversalReason: process.finalSettlementReversalReason,
+        finalSettlementReversedById: process.finalSettlementReversedById,
+        finalSettlementReversedAt: iso(process.finalSettlementReversedAt),
         rehireEligible: process.rehireEligible,
         rehireDecisionReason: process.rehireDecisionReason,
         rehireDecisionById: process.rehireDecisionById,
