@@ -1,10 +1,13 @@
-import { AccessRevocationStatus, AssetReturnStatus, DataClassification, EmploymentStatus, ExitTaskStatus, LifecycleEventType, PositionStatus, SeparationStatus } from "@prisma/client";
+import { AccessRevocationStatus, AssetReturnStatus, DataClassification, EmploymentStatus, ExitTaskStatus, LifecycleEventType, PositionStatus, Prisma, SeparationStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { asIdentifier } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
+
+const terminableEmploymentStatuses = [EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE, EmploymentStatus.SUSPENDED];
+const incumbentStatuses = [EmploymentStatus.PREBOARDING, EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE, EmploymentStatus.SUSPENDED];
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
@@ -15,66 +18,128 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const id = asIdentifier((await params).id);
   if (!id) return Response.json({ error: "A valid separation process id is required." }, { status: 400 });
 
-  const data = await db.$transaction(async (tx) => {
-    const process = await tx.separationProcess.findFirst({
-      where: { id, tenantId: ctx.tenantId, status: { notIn: [SeparationStatus.CLOSED, SeparationStatus.CANCELLED] } }
-    });
-    if (!process) throw new Error("NOT_FOUND");
-    const scope = await resolveEmploymentScope(tx, ctx);
-    if (!canActOnEmployment(scope, process.employmentId)) throw new Error("OUT_OF_SCOPE");
-
-    const [blockingTasks, assets, access, employment] = await Promise.all([
-      tx.separationTask.count({ where: { tenantId: ctx.tenantId, processId: id, blocking: true, status: { notIn: [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED] } } }),
-      tx.assetReturn.count({ where: { tenantId: ctx.tenantId, processId: id, status: { notIn: [AssetReturnStatus.RETURNED, AssetReturnStatus.WRITTEN_OFF] } } }),
-      tx.accessRevocation.count({ where: { tenantId: ctx.tenantId, processId: id, status: { notIn: [AccessRevocationStatus.REVOKED, AccessRevocationStatus.EXCEPTION] } } }),
-      tx.employment.findFirst({ where: { id: process.employmentId, tenantId: ctx.tenantId }, select: { id: true, personId: true, status: true, positionId: true } })
-    ]);
-
-    if (!employment) throw new Error("EMPLOYMENT");
-    if (blockingTasks || assets || access) throw new Error(`BLOCKED:${blockingTasks}:${assets}:${access}`);
-
-    const now = new Date();
-    await tx.separationProcess.update({
-      where: { id: process.id, tenantId: ctx.tenantId },
-      data: { status: SeparationStatus.CLOSED, completedAt: now }
-    });
-    await tx.employment.update({
-      where: { id: employment.id, tenantId: ctx.tenantId },
-      data: { status: EmploymentStatus.TERMINATED, endDate: process.lastWorkingDate }
-    });
-    if (employment.positionId) {
-      await tx.position.update({
-        where: { id: employment.positionId, tenantId: ctx.tenantId },
-        data: { status: PositionStatus.OPEN }
+  try {
+    const data = await db.$transaction(async (tx) => {
+      const process = await tx.separationProcess.findFirst({
+        where: { id, tenantId: ctx.tenantId },
+        select: {
+          id: true,
+          status: true,
+          employmentId: true,
+          initiatedById: true,
+          lastWorkingDate: true,
+          type: true,
+          completedAt: true
+        }
       });
-    }
-    await tx.employeeLifecycleEvent.create({
-      data: {
-        tenantId: ctx.tenantId,
-        personId: employment.personId,
-        employmentId: employment.id,
-        type: LifecycleEventType.TERMINATED,
-        effectiveAt: process.lastWorkingDate,
-        summary: `Separation completed (${process.type})`,
-        actorId: ctx.actorId
-      }
-    });
-    await appendAudit(tx, ctx, {
-      action: "offboarding.process-closed",
-      resourceType: "SeparationProcess",
-      resourceId: id,
-      classification: DataClassification.RESTRICTED,
-      purpose: "Governed separation closure"
-    });
-    return { id, status: SeparationStatus.CLOSED, employmentStatus: EmploymentStatus.TERMINATED, endDate: process.lastWorkingDate };
-  }).catch((error) => error instanceof Error && (error.message === "NOT_FOUND" || error.message === "EMPLOYMENT" || error.message === "OUT_OF_SCOPE" || error.message.startsWith("BLOCKED:")) ? error.message : Promise.reject(error));
+      if (!process) throw new Error("NOT_FOUND");
+      if (process.status !== SeparationStatus.READY_TO_CLOSE || process.completedAt) throw new Error("NOT_READY");
+      if (process.initiatedById === ctx.actorId) throw new Error("FOUR_EYES");
 
-  if (data === "NOT_FOUND") return Response.json({ error: "Open separation process not found." }, { status: 404 });
-  if (data === "OUT_OF_SCOPE") return forbidden("Separation process is outside your authorized relationship scope.");
-  if (data === "EMPLOYMENT") return Response.json({ error: "Employment record not found." }, { status: 409 });
-  if (typeof data === "string" && data.startsWith("BLOCKED:")) {
-    const [, tasks, assets, access] = data.split(":");
-    return Response.json({ error: "Clearance is incomplete.", open: { tasks: Number(tasks), assets: Number(assets), access: Number(access) } }, { status: 409 });
+      const scope = await resolveEmploymentScope(tx, ctx);
+      if (!canActOnEmployment(scope, process.employmentId)) throw new Error("OUT_OF_SCOPE");
+
+      const now = new Date();
+      if (process.lastWorkingDate > now) throw new Error("LAST_DAY_NOT_REACHED");
+
+      const [blockingTasks, assets, access, employment] = await Promise.all([
+        tx.separationTask.count({
+          where: { tenantId: ctx.tenantId, processId: id, blocking: true, status: { notIn: [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED] } }
+        }),
+        tx.assetReturn.count({
+          where: { tenantId: ctx.tenantId, processId: id, status: { notIn: [AssetReturnStatus.RETURNED, AssetReturnStatus.WRITTEN_OFF] } }
+        }),
+        tx.accessRevocation.count({
+          where: { tenantId: ctx.tenantId, processId: id, status: { notIn: [AccessRevocationStatus.REVOKED, AccessRevocationStatus.EXCEPTION] } }
+        }),
+        tx.employment.findFirst({
+          where: { id: process.employmentId, tenantId: ctx.tenantId },
+          select: { id: true, personId: true, status: true, positionId: true }
+        })
+      ]);
+
+      if (!employment) throw new Error("EMPLOYMENT");
+      if (!terminableEmploymentStatuses.includes(employment.status)) throw new Error("EMPLOYMENT_STATE");
+      if (blockingTasks || assets || access) throw new Error(`BLOCKED:${blockingTasks}:${assets}:${access}`);
+
+      const employmentUpdate = await tx.employment.updateMany({
+        where: { id: employment.id, tenantId: ctx.tenantId, status: employment.status },
+        data: { status: EmploymentStatus.TERMINATED, endDate: process.lastWorkingDate }
+      });
+      if (employmentUpdate.count !== 1) throw new Error("STATE_CONFLICT");
+
+      const processUpdate = await tx.separationProcess.updateMany({
+        where: { id: process.id, tenantId: ctx.tenantId, status: SeparationStatus.READY_TO_CLOSE, completedAt: null },
+        data: { status: SeparationStatus.CLOSED, completedAt: now }
+      });
+      if (processUpdate.count !== 1) throw new Error("STATE_CONFLICT");
+
+      if (employment.positionId) {
+        const remainingIncumbents = await tx.employment.count({
+          where: {
+            tenantId: ctx.tenantId,
+            positionId: employment.positionId,
+            id: { not: employment.id },
+            status: { in: incumbentStatuses }
+          }
+        });
+        if (remainingIncumbents === 0) {
+          await tx.position.updateMany({
+            where: { id: employment.positionId, tenantId: ctx.tenantId, status: PositionStatus.FILLED },
+            data: { status: PositionStatus.OPEN }
+          });
+        }
+      }
+
+      await tx.employeeLifecycleEvent.create({
+        data: {
+          tenantId: ctx.tenantId,
+          personId: employment.personId,
+          employmentId: employment.id,
+          type: LifecycleEventType.TERMINATED,
+          effectiveAt: process.lastWorkingDate,
+          summary: `Separation completed (${process.type})`,
+          actorId: ctx.actorId
+        }
+      });
+
+      await appendAudit(tx, ctx, {
+        action: "employment.exit-terminated",
+        resourceType: "Employment",
+        resourceId: employment.id,
+        classification: DataClassification.RESTRICTED,
+        purpose: "Human-confirmed employment termination after governed exit readiness"
+      });
+      await appendAudit(tx, ctx, {
+        action: "offboarding.process-closed",
+        resourceType: "SeparationProcess",
+        resourceId: id,
+        classification: DataClassification.RESTRICTED,
+        purpose: "Four-eyes separation closure after task, asset, access and last-working-date gates cleared"
+      });
+
+      return { id, status: SeparationStatus.CLOSED, employmentStatus: EmploymentStatus.TERMINATED, endDate: process.lastWorkingDate };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    return Response.json({ data });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "UNKNOWN";
+    if (code === "NOT_FOUND") return Response.json({ error: "Separation process not found." }, { status: 404 });
+    if (code === "OUT_OF_SCOPE") return forbidden("Separation process is outside your authorized relationship scope.");
+    if (code === "NOT_READY") return Response.json({ error: "Separation must be in Ready to Close state before employment can be terminated." }, { status: 409 });
+    if (code === "FOUR_EYES") return Response.json({ error: "The person who initiated the separation cannot perform the final employment termination." }, { status: 409 });
+    if (code === "LAST_DAY_NOT_REACHED") return Response.json({ error: "Employment cannot be terminated before the governed last working date." }, { status: 409 });
+    if (code === "EMPLOYMENT") return Response.json({ error: "Employment record not found." }, { status: 409 });
+    if (code === "EMPLOYMENT_STATE") return Response.json({ error: "Employment is not in a state that can be terminated by this separation." }, { status: 409 });
+    if (code === "STATE_CONFLICT") return Response.json({ error: "Separation or employment state changed concurrently. Refresh and try again." }, { status: 409 });
+    if (typeof code === "string" && code.startsWith("BLOCKED:")) {
+      const [, tasks, assets, access] = code.split(":");
+      return Response.json({ error: "Clearance is incomplete.", open: { tasks: Number(tasks), assets: Number(assets), access: Number(access) } }, { status: 409 });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+      return Response.json({ error: "Separation changed concurrently. Refresh and try again." }, { status: 409 });
+    }
+    console.error("Offboarding close failed", error);
+    return Response.json({ error: "Separation could not be closed." }, { status: 500 });
   }
-  return Response.json({ data });
 }

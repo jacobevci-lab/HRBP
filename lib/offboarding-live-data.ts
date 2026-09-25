@@ -19,7 +19,7 @@ const OPEN_STATUSES = [
   SeparationStatus.FINAL_PAY_REVIEW,
   SeparationStatus.READY_TO_CLOSE
 ];
-
+const TERMINAL_TASK_STATUSES = [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED];
 const ACTIVE_EMPLOYMENTS = [EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE, EmploymentStatus.SUSPENDED];
 
 export type OffboardingTaskRow = {
@@ -30,12 +30,14 @@ export type OffboardingTaskRow = {
   rawStatus: string;
   blocking: boolean;
   dueAt: string;
+  dueAtIso: string | null;
 };
 
 export type OffboardingProcessRow = {
   id: string;
   employmentId: string;
   personId: string | null;
+  initiatedById: string;
   employee: string;
   employeeNumber: string;
   position: string;
@@ -43,12 +45,16 @@ export type OffboardingProcessRow = {
   status: string;
   rawStatus: string;
   lastWorkingDate: string;
+  lastWorkingDateIso: string;
   completedTasks: number;
   taskCount: number;
   openBlockingTasks: number;
+  overdueTasks: number;
   assetsOpen: number;
   accessOpen: number;
+  controlsClear: boolean;
   readyToClose: boolean;
+  exitRisk: boolean;
   tasks: OffboardingTaskRow[];
 };
 
@@ -65,6 +71,8 @@ export type OffboardingWorkspaceData = {
   openSeparations: number;
   leavingThisWeek: number;
   blockingTasks: number;
+  overdueTasks: number;
+  exitRiskProcesses: number;
   readyToClose: number;
   processes: OffboardingProcessRow[];
   eligibleEmployments: OffboardingEligibleEmployment[];
@@ -80,6 +88,7 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
       select: {
         id: true,
         employmentId: true,
+        initiatedById: true,
         type: true,
         status: true,
         lastWorkingDate: true,
@@ -121,17 +130,23 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
     const now = new Date();
     const weekEnd = new Date(now);
     weekEnd.setDate(weekEnd.getDate() + 7);
+    const exitRiskEnd = new Date(now.getTime() + 72 * 60 * 60 * 1000);
 
     const rows = processes.map<OffboardingProcessRow>((process) => {
       const employment = employmentMap.get(process.employmentId);
-      const completedTasks = process.tasks.filter((task) => task.status === ExitTaskStatus.COMPLETED || task.status === ExitTaskStatus.WAIVED).length;
-      const openBlockingTasks = process.tasks.filter((task) => task.blocking && task.status !== ExitTaskStatus.COMPLETED && task.status !== ExitTaskStatus.WAIVED).length;
+      const completedTasks = process.tasks.filter((task) => TERMINAL_TASK_STATUSES.includes(task.status)).length;
+      const openBlockingTasks = process.tasks.filter((task) => task.blocking && !TERMINAL_TASK_STATUSES.includes(task.status)).length;
+      const overdueTasks = process.tasks.filter((task) => !TERMINAL_TASK_STATUSES.includes(task.status) && task.dueAt && task.dueAt < now).length;
       const assetsOpen = process.assets.filter((asset) => asset.status !== "RETURNED" && asset.status !== "WRITTEN_OFF").length;
       const accessOpen = process.accessRevocations.filter((access) => access.status !== "REVOKED" && access.status !== "EXCEPTION").length;
+      const controlsClear = openBlockingTasks === 0 && assetsOpen === 0 && accessOpen === 0;
+      const readyToClose = controlsClear && process.status === SeparationStatus.READY_TO_CLOSE;
+      const exitRisk = !readyToClose && process.lastWorkingDate <= exitRiskEnd;
       return {
         id: process.id,
         employmentId: process.employmentId,
         personId: employment?.personId ?? null,
+        initiatedById: process.initiatedById,
         employee: employment ? `${employment.person.givenName} ${employment.person.familyName}` : "Employment record",
         employeeNumber: employment?.person.employeeNumber ?? "—",
         position: employment?.position?.title ?? "Position unavailable",
@@ -139,13 +154,26 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
         status: label(process.status),
         rawStatus: process.status,
         lastWorkingDate: formatDate(process.lastWorkingDate),
+        lastWorkingDateIso: process.lastWorkingDate.toISOString(),
         completedTasks,
         taskCount: process.tasks.length,
         openBlockingTasks,
+        overdueTasks,
         assetsOpen,
         accessOpen,
-        readyToClose: openBlockingTasks === 0 && assetsOpen === 0 && accessOpen === 0,
-        tasks: process.tasks.map((task) => ({ id: task.id, domain: task.domain, title: task.title, status: label(task.status), rawStatus: task.status, blocking: task.blocking, dueAt: formatDate(task.dueAt) }))
+        controlsClear,
+        readyToClose,
+        exitRisk,
+        tasks: process.tasks.map((task) => ({
+          id: task.id,
+          domain: task.domain,
+          title: task.title,
+          status: label(task.status),
+          rawStatus: task.status,
+          blocking: task.blocking,
+          dueAt: formatDate(task.dueAt),
+          dueAtIso: task.dueAt?.toISOString() ?? null
+        }))
       };
     });
 
@@ -153,6 +181,8 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
       openSeparations: rows.length,
       leavingThisWeek: processes.filter((process) => process.lastWorkingDate >= now && process.lastWorkingDate <= weekEnd).length,
       blockingTasks: rows.reduce((sum, row) => sum + row.openBlockingTasks, 0),
+      overdueTasks: rows.reduce((sum, row) => sum + row.overdueTasks, 0),
+      exitRiskProcesses: rows.filter((row) => row.exitRisk).length,
       readyToClose: rows.filter((row) => row.readyToClose).length,
       processes: rows,
       eligibleEmployments: eligible.map((employment) => ({
