@@ -4,6 +4,7 @@ import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
 import { asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { isPrismaRecordNotFound } from "@/lib/prisma-safety";
+import { enqueueOfferApprovalNotification, enqueueOfferDecisionNotification } from "@/lib/recruiting-notifications";
 import { canTransitionOffer, parseOfferStatus } from "@/lib/recruiting-state";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -11,6 +12,13 @@ const OFFER_PIPELINE_STATUSES: OfferStatus[] = [OfferStatus.APPROVAL, OfferStatu
 
 function requiresApprovalAuthority(from: OfferStatus, to: OfferStatus) {
   return from === OfferStatus.APPROVAL && [OfferStatus.DRAFT, OfferStatus.SENT, OfferStatus.WITHDRAWN].includes(to);
+}
+
+function decisionFor(next: OfferStatus): "APPROVED" | "RETURNED" | "WITHDRAWN" | null {
+  if (next === OfferStatus.SENT) return "APPROVED";
+  if (next === OfferStatus.DRAFT) return "RETURNED";
+  if (next === OfferStatus.WITHDRAWN) return "WITHDRAWN";
+  return null;
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -30,25 +38,41 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const data = await withDb((db) => db.$transaction(async (tx) => {
       const current = await tx.offer.findFirst({
         where: { id, tenantId: ctx.tenantId },
-        select: { id: true, status: true, expiresAt: true, applicationId: true }
+        select: {
+          id: true,
+          status: true,
+          expiresAt: true,
+          applicationId: true,
+          currency: true,
+          annualBase: true,
+          startDate: true,
+          application: {
+            select: {
+              candidate: { select: { givenName: true, familyName: true } },
+              requisition: { select: { title: true } }
+            }
+          }
+        }
       });
       if (!current) throw new Error("OFFER_NOT_FOUND");
       if (!canTransitionOffer(current.status, next)) throw new Error("INVALID_TRANSITION");
       if (requiresApprovalAuthority(current.status, next) && !can(ctx, "recruiting:approve")) throw new Error("APPROVAL_AUTHORITY_REQUIRED");
       if (next === OfferStatus.SENT && current.expiresAt && current.expiresAt <= new Date()) throw new Error("OFFER_EXPIRED");
 
-      if (current.status === OfferStatus.APPROVAL && next === OfferStatus.SENT) {
-        const creatorAudit = await tx.auditEvent.findFirst({
-          where: {
-            tenantId: ctx.tenantId,
-            resourceType: "Offer",
-            resourceId: current.id,
-            action: "OFFER_CREATED"
-          },
-          orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
-          select: { actorId: true }
-        });
-        if (creatorAudit?.actorId === ctx.actorId) throw new Error("SELF_APPROVAL_BLOCKED");
+      const approvalDecision = requiresApprovalAuthority(current.status, next);
+      const creatorAudit = approvalDecision ? await tx.auditEvent.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          resourceType: "Offer",
+          resourceId: current.id,
+          action: "OFFER_CREATED"
+        },
+        orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
+        select: { actorId: true }
+      }) : null;
+
+      if (current.status === OfferStatus.APPROVAL && next === OfferStatus.SENT && creatorAudit?.actorId === ctx.actorId) {
+        throw new Error("SELF_APPROVAL_BLOCKED");
       }
 
       try {
@@ -70,8 +94,36 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         resourceType: "Offer",
         resourceId: current.id,
         classification: DataClassification.RESTRICTED,
-        purpose: requiresApprovalAuthority(current.status, next) ? "Independent candidate offer decision" : "Candidate offer lifecycle"
+        purpose: approvalDecision ? "Independent candidate offer decision" : "Candidate offer lifecycle"
       });
+
+      const candidateName = `${current.application.candidate.givenName} ${current.application.candidate.familyName}`;
+      if (current.status === OfferStatus.DRAFT && next === OfferStatus.APPROVAL) {
+        await enqueueOfferApprovalNotification(tx, {
+          tenantId: ctx.tenantId,
+          offerId: current.id,
+          candidateName,
+          requisitionTitle: current.application.requisition.title,
+          currency: current.currency,
+          annualBase: current.annualBase.toString(),
+          startDate: current.startDate
+        });
+      }
+
+      const decision = approvalDecision ? decisionFor(next) : null;
+      if (decision && creatorAudit?.actorId) {
+        await enqueueOfferDecisionNotification(tx, {
+          tenantId: ctx.tenantId,
+          recipientUserId: creatorAudit.actorId,
+          offerId: current.id,
+          candidateName,
+          requisitionTitle: current.application.requisition.title,
+          currency: current.currency,
+          annualBase: current.annualBase.toString(),
+          startDate: current.startDate,
+          decision
+        });
+      }
 
       return { id: current.id, status: next };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
