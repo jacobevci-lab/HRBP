@@ -45,10 +45,23 @@ expect(hirePath, hire, /APPLICATION_CONVERTED_TO_EMPLOYEE/, "recruiting-to-onboa
 expect(hirePath, hire, /TransactionIsolationLevel\.Serializable/, "hire conversion must use serializable transaction isolation");
 expect(hirePath, hire, /error\.code\s*===\s*"P2034"[\s\S]*error\.code\s*===\s*"P2002"/, "serialization and uniqueness conflicts must return a safe retryable conflict response");
 
+const maintenancePath = "lib/recruiting-maintenance.ts";
+const maintenance = await source(maintenancePath);
+expect(maintenancePath, maintenance, /status:\s*OfferStatus\.SENT[\s\S]*expiresAt:\s*\{\s*not:\s*null,\s*lte:\s*now\s*\}/, "maintenance must discover only sent offers whose expiry has elapsed");
+expect(maintenancePath, maintenance, /tx\.offer\.updateMany[\s\S]*status:\s*OfferStatus\.SENT[\s\S]*data:\s*\{\s*status:\s*OfferStatus\.EXPIRED\s*\}/, "automatic expiry must use an idempotent guarded update");
+expect(maintenancePath, maintenance, /OFFER_STATUS_SENT_TO_EXPIRED/, "automatic expiry must be audit logged");
+expect(maintenancePath, maintenance, /RECRUITING_OFFER_EXPIRED/, "automatic expiry must create durable notification intent");
+expect(maintenancePath, maintenance, /dedupeKey:\s*`offer:\$\{candidate\.id\}:expired`/, "automatic expiry notifications must be idempotent");
+
+const maintenanceRoutePath = "app/api/internal/maintenance/route.ts";
+const maintenanceRoute = await source(maintenanceRoutePath);
+expect(maintenanceRoutePath, maintenanceRoute, /runRecruitingMaintenance\(\)/, "internal maintenance must execute recruiting lifecycle normalization");
+expect(maintenanceRoutePath, maintenanceRoute, /recruitingLifecycle/, "maintenance response must expose recruiting lifecycle results");
+
 if (failures.length) {
   console.error("Recruiting lifecycle integrity validation failed:\n");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log("Validated recruiting lifecycle integrity: position capacity, application-offer coupling, expiry and requisition guards, accepted-offer hire state, tenant identity uniqueness, optimistic writes, serializable conversion, onboarding deadlines and audit chain-of-custody are enforced.");
+console.log("Validated recruiting lifecycle integrity: position capacity, application-offer coupling, expiry and requisition guards, accepted-offer hire state, tenant identity uniqueness, optimistic writes, serializable conversion, onboarding deadlines, automated offer expiry and audit chain-of-custody are enforced.");
