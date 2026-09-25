@@ -4,6 +4,16 @@ import { notificationResourceHref, notificationSummary, notificationTitle } from
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function text(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : undefined; }
 function numberValue(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? value : undefined; }
+function serviceStatus(value: string | undefined, locale: Locale) {
+  if (!value) return "—";
+  const normalized = value.toUpperCase();
+  if (locale !== "tr") return normalized.toLowerCase().split("_").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
+  const map: Record<string, string> = {
+    OPEN: "Açık", TRIAGE: "Triyaj", IN_PROGRESS: "Devam ediyor", WAITING_EMPLOYEE: "Çalışan bekleniyor",
+    WAITING_THIRD_PARTY: "Üçüncü taraf bekleniyor", RESOLVED: "Çözüldü", CLOSED: "Kapalı", CANCELLED: "İptal edildi"
+  };
+  return map[normalized] ?? normalized;
+}
 
 const onboardingTitles: Record<string, { en: string; tr: string }> = {
   ONBOARDING_TASK_BLOCKED: { en: "Onboarding task blocked", tr: "İşe başlatma görevi engellendi" },
@@ -23,9 +33,17 @@ const offboardingTitles: Record<string, { en: string; tr: string }> = {
   OFFBOARDING_FINAL_SETTLEMENT_SETTLED: { en: "Final settlement cleared", tr: "Nihai hesap tamamlandı" },
   OFFBOARDING_BACKFILL_DRAFT_CREATED: { en: "Backfill requisition drafted", tr: "Yedek kadro işe alım talebi oluşturuldu" }
 };
+const hrServiceTitles: Record<string, { en: string; tr: string }> = {
+  HR_SERVICE_REQUEST_CREATED: { en: "HR service request received", tr: "İK hizmet talebi alındı" },
+  HR_SERVICE_STATUS_CHANGED: { en: "HR service request updated", tr: "İK hizmet talebi güncellendi" },
+  HR_SERVICE_ASSIGNED: { en: "HR service request assigned", tr: "İK hizmet talebi atandı" },
+  HR_SERVICE_REQUESTOR_REPLIED: { en: "Requestor replied", tr: "Talep sahibi yanıtladı" },
+  HR_SERVICE_STAFF_REPLIED: { en: "HR replied to your request", tr: "İK talebinize yanıt verdi" },
+  HR_SERVICE_ESCALATED: { en: "HR service SLA escalation", tr: "İK hizmeti SLA eskalasyonu" }
+};
 
 export function notificationDisplayTitle(eventType: string, locale: Locale) {
-  return onboardingTitles[eventType]?.[locale] ?? offboardingTitles[eventType]?.[locale] ?? notificationTitle(eventType, locale);
+  return onboardingTitles[eventType]?.[locale] ?? offboardingTitles[eventType]?.[locale] ?? hrServiceTitles[eventType]?.[locale] ?? notificationTitle(eventType, locale);
 }
 
 export function notificationDisplaySummary(payload: unknown, locale: Locale) {
@@ -43,6 +61,30 @@ export function notificationDisplaySummary(payload: unknown, locale: Locale) {
     const due = dueAt ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(dueAt)) : null; const owner = ownerType ? ` · ${ownerType}` : "";
     const state = reminderState === "blocked" ? (locale === "tr" ? "engel çözümü gerekiyor" : "blocker resolution required") : reminderState === "overdue" ? (locale === "tr" ? "gecikmiş" : "overdue") : (locale === "tr" ? "son tarih yaklaşıyor" : "due soon");
     return `${employeeName} · ${taskName}${owner}${due ? ` · ${locale === "tr" ? "son tarih" : "due"} ${due}` : ""} · ${state}.`;
+  }
+
+  const requestNumber = text(data.requestNumber); const notificationState = text(data.notificationState); const fromStatus = text(data.fromStatus); const toStatus = text(data.toStatus); const serviceReason = text(data.reason); const serviceQueue = text(data.queue); const serviceTitle = text(data.title); const escalationLevel = numberValue(data.escalationLevel); const escalationReason = text(data.escalationReason); const slaDueAt = text(data.slaDueAt);
+  if (requestNumber && notificationState === "created") {
+    return locale === "tr"
+      ? `${requestNumber}${serviceTitle ? ` · ${serviceTitle}` : ""}${serviceQueue ? ` · ${serviceQueue}` : ""}. Talep yönlendirme ve triyaj için kaydedildi.`
+      : `${requestNumber}${serviceTitle ? ` · ${serviceTitle}` : ""}${serviceQueue ? ` · ${serviceQueue}` : ""}. The request is recorded for routing and triage.`;
+  }
+  if (requestNumber && notificationState === "status-changed" && toStatus) {
+    const transition = `${serviceStatus(fromStatus, locale)} → ${serviceStatus(toStatus, locale)}`;
+    return locale === "tr" ? `${requestNumber} · ${transition}${serviceReason ? ` · ${serviceReason}` : ""}.` : `${requestNumber} · ${transition}${serviceReason ? ` · ${serviceReason}` : ""}.`;
+  }
+  if (requestNumber && notificationState === "assigned") {
+    return locale === "tr" ? `${requestNumber}${serviceQueue ? ` · ${serviceQueue}` : ""} size atandı.` : `${requestNumber}${serviceQueue ? ` · ${serviceQueue}` : ""} was assigned to you.`;
+  }
+  if (requestNumber && notificationState === "requestor-replied") {
+    return locale === "tr" ? `${requestNumber} talebinin sahibi yeni bir yanıt ekledi.` : `The requestor added a new reply to ${requestNumber}.`;
+  }
+  if (requestNumber && notificationState === "staff-replied") {
+    return locale === "tr" ? `${requestNumber} talebinize İK tarafından yeni bir yanıt eklendi.` : `HR added a new reply to your request ${requestNumber}.`;
+  }
+  if (requestNumber && escalationLevel !== undefined) {
+    const due = slaDueAt ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(slaDueAt)) : null;
+    return locale === "tr" ? `${requestNumber} · eskalasyon seviye ${escalationLevel}${serviceQueue ? ` · ${serviceQueue}` : ""}${due ? ` · SLA ${due}` : ""}${escalationReason ? ` · ${escalationReason}` : ""}.` : `${requestNumber} · escalation level ${escalationLevel}${serviceQueue ? ` · ${serviceQueue}` : ""}${due ? ` · SLA ${due}` : ""}${escalationReason ? ` · ${escalationReason}` : ""}.`;
   }
 
   const separationProcessId = text(data.separationProcessId); const domain = text(data.domain); const lastWorkingDate = text(data.lastWorkingDate); const replacementRequisitionId = text(data.replacementRequisitionId); const positionTitle = text(data.positionTitle); const targetHireDate = text(data.targetHireDate);
@@ -81,5 +123,6 @@ export function notificationDisplayResourceHref(resourceType: string, resourceId
   if (resourceType === "KnowledgeTransfer") return id ? `/module/offboarding?transfer=${encodeURIComponent(id)}` : "/module/offboarding";
   if (resourceType === "SeparationProcess") return id ? `/module/offboarding?process=${encodeURIComponent(id)}` : "/module/offboarding";
   if (resourceType === "Requisition") return "/module/recruiting";
+  if (resourceType === "HRServiceRequest") return id ? `/module/hr-service?request=${encodeURIComponent(id)}` : "/module/hr-service";
   return notificationResourceHref(resourceType, resourceId);
 }

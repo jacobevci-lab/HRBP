@@ -1,0 +1,33 @@
+model HRServiceStatusTransition {
+  id           String @id @default(cuid())
+  tenantId     String
+  requestId    String
+  fromStatus   ServiceRequestStatus
+  toStatus     ServiceRequestStatus
+  reason       String?
+  actorId      String
+  queue        String?
+  assigneeId   String?
+  occurredAt   DateTime @default(now())
+  classification DataClassification @default(CONFIDENTIAL)
+
+  @@index([tenantId, requestId, occurredAt])
+  @@index([tenantId, toStatus, occurredAt])
+}
+
+model HRServiceSlaPause {
+  id               String @id @default(cuid())
+  tenantId         String
+  requestId        String
+  pausedFromStatus ServiceRequestStatus
+  reason           String
+  pausedById       String
+  pausedAt         DateTime @default(now())
+  resumedById      String?
+  resumedAt        DateTime?
+  remainingMinutes Int?
+  classification   DataClassification @default(CONFIDENTIAL)
+
+  @@index([tenantId, requestId, resumedAt])
+  @@index([tenantId, pausedAt])
+}
