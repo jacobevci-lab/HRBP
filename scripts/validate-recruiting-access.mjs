@@ -81,6 +81,13 @@ expect(opsPath, ops, /requisition\.status\s*===\s*"APPROVAL"\s*\?\s*\[\]/, "requ
 expect(opsPath, ops, /application\.offer\.status\s*===\s*"APPROVAL"\s*\?\s*\[\]/, "offer approval decisions must be centralized in the approval queue");
 expect(opsPath, ops, /offerLocksApplication\.has\(application\.offer\.status\)/, "application stage actions must be hidden while approval, sent or accepted offer state owns the lifecycle");
 expect(opsPath, ops, /setApprovalRefreshToken\(\(value\)\s*=>\s*value\s*\+\s*1\)/, "approval queue must refresh after governed mutations");
+expect(opsPath, ops, /new URLSearchParams\(window\.location\.search\)/, "recruiting console must consume notification deep-link query context");
+expect(opsPath, ops, /data-recruiting-requisition/, "requisition records must expose stable deep-link anchors");
+expect(opsPath, ops, /data-recruiting-application/, "application records must expose stable deep-link anchors");
+expect(opsPath, ops, /data-recruiting-offer/, "offer records must expose stable deep-link anchors");
+expect(opsPath, ops, /scrollIntoView\(\{\s*behavior:\s*"smooth",\s*block:\s*"center"\s*\}\)/, "resolved notification records must be scrolled into view");
+expect(opsPath, ops, /Notification context[\s\S]*Bildirim bağlamı/, "notification-driven navigation must visibly explain the highlighted recruiting record");
+expect(opsPath, ops, /fetch\("\/api\/recruiting\/candidates"/, "candidate and offer deep links must resolve through the already-authorized recruiting read API");
 
 const requisitionApiPath = "app/api/recruiting/requisitions/route.ts";
 const requisitionApi = await source(requisitionApiPath);
@@ -139,4 +146,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, recruiting assignment selectors are minimized, positions cannot be reused across active requisitions, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, primary live reads are isolated from optional write-console failures, authenticated failures remain protected, requisition and offer approvals are centralized, preparers are four-eyes locked from their own decisions, application actions respect active-offer ownership, approval workflows emit durable notification intent, and recruiting notifications are localized and deep-linked.");
+console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, recruiting assignment selectors are minimized, positions cannot be reused across active requisitions, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, primary live reads are isolated from optional write-console failures, authenticated failures remain protected, requisition and offer approvals are centralized, preparers are four-eyes locked from their own decisions, application actions respect active-offer ownership, approval workflows emit durable notification intent, notification deep links resolve to visible governed records, and recruiting notifications are localized and deep-linked.");
