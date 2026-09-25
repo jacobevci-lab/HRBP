@@ -86,6 +86,7 @@ model SeparationProcess {
   exitInterview                 ExitInterview?
   knowledgeTransfers            KnowledgeTransfer[]
   scheduleAmendments            SeparationScheduleAmendment[]
+  managerReassignments          SeparationManagerReassignment[]
 
   @@index([tenantId, employmentId, status])
   @@index([tenantId, lastWorkingDate, status])
@@ -108,6 +109,24 @@ model SeparationScheduleAmendment {
 
   @@index([tenantId, processId, changedAt])
   @@index([tenantId, changedAt])
+}
+
+model SeparationManagerReassignment {
+  id                          String @id @default(cuid())
+  tenantId                    String
+  processId                   String
+  reportEmploymentId          String
+  previousManagerEmploymentId String
+  newManagerEmploymentId      String
+  reason                      String
+  changedById                 String
+  changedAt                   DateTime @default(now())
+  classification              DataClassification @default(RESTRICTED)
+  process                     SeparationProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, processId, changedAt])
+  @@index([tenantId, reportEmploymentId, changedAt])
+  @@index([tenantId, newManagerEmploymentId, changedAt])
 }
 
 model SeparationTask {
