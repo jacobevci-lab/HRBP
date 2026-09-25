@@ -1,8 +1,9 @@
-import { DataClassification, OnboardingStatus, OnboardingTaskStatus, Prisma } from "@prisma/client";
+import { DataClassification, OnboardingStatus, OnboardingTaskStatus, PlatformRole, Prisma } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
 import { asEnumValue, asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
+import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { canAccessOnboardingPlan, resolveOnboardingPopulationScope } from "@/lib/onboarding-access";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -27,6 +28,10 @@ function derivePlanStatus(statuses: OnboardingTaskStatus[]): OnboardingStatus {
 
 function transitionRequiresReason(status: OnboardingTaskStatus) {
   return status === OnboardingTaskStatus.BLOCKED || status === OnboardingTaskStatus.WAIVED;
+}
+
+function terminal(status: OnboardingTaskStatus) {
+  return status === OnboardingTaskStatus.COMPLETED || status === OnboardingTaskStatus.WAIVED;
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -57,7 +62,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           status: true,
           title: true,
           sensitive: true,
-          plan: { select: { status: true, employmentId: true, personId: true } }
+          plan: {
+            select: {
+              status: true,
+              employmentId: true,
+              personId: true,
+              ownerId: true,
+              targetStartDate: true,
+              person: { select: { givenName: true, familyName: true } }
+            }
+          }
         }
       });
       if (!task) throw new Error("TASK_NOT_FOUND");
@@ -85,6 +99,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         if (updatedPlan.count !== 1) throw new Error("STATE_CONFLICT");
       }
 
+      const transitionAt = new Date();
       await appendAudit(tx, ctx, {
         action: `ONBOARDING_TASK_${task.status}_TO_${next}`,
         resourceType: "OnboardingTask",
@@ -92,6 +107,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         classification: task.sensitive ? DataClassification.RESTRICTED : DataClassification.CONFIDENTIAL,
         purpose: note ? `Employee onboarding execution; ${note}` : "Employee onboarding execution"
       });
+
+      if (terminal(next)) {
+        await tx.notificationOutbox.updateMany({
+          where: { tenantId: ctx.tenantId, resourceType: "OnboardingTask", resourceId: task.id, readAt: null },
+          data: { readAt: transitionAt }
+        });
+      }
 
       if (planStatus !== task.plan.status) {
         await appendAudit(tx, ctx, {
@@ -102,6 +124,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           purpose: planStatus === OnboardingStatus.COMPLETED
             ? "Day-one readiness gate cleared: all onboarding tasks are completed or explicitly waived"
             : "Onboarding plan status recalculated from governed task states"
+        });
+      }
+
+      if (planStatus === OnboardingStatus.COMPLETED && task.plan.status !== OnboardingStatus.COMPLETED) {
+        await tx.notificationOutbox.updateMany({
+          where: { tenantId: ctx.tenantId, resourceType: "OnboardingPlan", resourceId: task.planId, readAt: null },
+          data: { readAt: transitionAt }
+        });
+        await enqueueNotificationOutbox(tx, {
+          tenantId: ctx.tenantId,
+          eventType: "ONBOARDING_READY_FOR_ACTIVATION",
+          recipientUserId: task.plan.ownerId,
+          recipientRole: task.plan.ownerId ? null : PlatformRole.HR_OPERATIONS,
+          templateKey: "onboarding.ready-for-activation",
+          resourceType: "OnboardingPlan",
+          resourceId: task.planId,
+          dedupeKey: `onboarding-plan:${task.planId}:ready-for-activation`,
+          classification: DataClassification.CONFIDENTIAL,
+          payload: {
+            onboardingPlanId: task.planId,
+            employeeName: `${task.plan.person.givenName} ${task.plan.person.familyName}`,
+            targetStartDate: task.plan.targetStartDate.toISOString(),
+            reminderState: "activation-ready"
+          }
         });
       }
 

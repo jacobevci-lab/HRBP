@@ -76,11 +76,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         purpose: "Human-confirmed handoff from completed onboarding to active employment"
       });
 
+      const resolvedNotifications = await tx.notificationOutbox.updateMany({
+        where: {
+          tenantId: ctx.tenantId,
+          resourceType: "OnboardingPlan",
+          resourceId: plan.id,
+          readAt: null
+        },
+        data: { readAt: now }
+      });
+
       return {
         planId: plan.id,
         employmentId: plan.employment.id,
         employmentStatus: EmploymentStatus.ACTIVE,
-        activatedAt: now.toISOString()
+        activatedAt: now.toISOString(),
+        resolvedNotifications: resolvedNotifications.count
       };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 

@@ -17,7 +17,8 @@ const onboardingTitles: Record<string, { en: string; tr: string }> = {
   ONBOARDING_TASK_BLOCKED: { en: "Onboarding task blocked", tr: "İşe başlatma görevi engellendi" },
   ONBOARDING_TASK_DUE_SOON: { en: "Onboarding task due soon", tr: "İşe başlatma görevinin süresi yaklaşıyor" },
   ONBOARDING_TASK_OVERDUE: { en: "Onboarding task overdue", tr: "İşe başlatma görevi gecikti" },
-  ONBOARDING_START_READINESS_RISK: { en: "Day-one readiness at risk", tr: "İlk gün hazırlığı risk altında" }
+  ONBOARDING_START_READINESS_RISK: { en: "Day-one readiness at risk", tr: "İlk gün hazırlığı risk altında" },
+  ONBOARDING_READY_FOR_ACTIVATION: { en: "Onboarding ready for activation", tr: "İşe başlatma aktivasyona hazır" }
 };
 
 export function notificationDisplayTitle(eventType: string, locale: Locale) {
@@ -35,6 +36,13 @@ export function notificationDisplaySummary(payload: unknown, locale: Locale) {
   const targetStartDate = text(data.targetStartDate);
   const outstandingTaskCount = numberValue(data.outstandingTaskCount);
   const blockedTaskCount = numberValue(data.blockedTaskCount);
+
+  if (planId && employeeName && reminderState === "activation-ready" && targetStartDate) {
+    const start = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(targetStartDate));
+    return locale === "tr"
+      ? `${employeeName} için tüm onboarding kontrolleri tamamlandı. İstihdam ${start} tarihinde veya sonrasında aktifleştirilebilir.`
+      : `All onboarding controls are clear for ${employeeName}. Employment can be activated on or after ${start}.`;
+  }
 
   if (planId && employeeName && reminderState === "start-risk" && targetStartDate) {
     const start = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(targetStartDate));

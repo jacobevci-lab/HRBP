@@ -14,6 +14,11 @@ expect(transitionPath, transition, /onboardingPlan\.updateMany\([\s\S]*status:\s
 expect(transitionPath, transition, /every\(\(status\)\s*=>\s*status\s*===\s*OnboardingTaskStatus\.COMPLETED\s*\|\|\s*status\s*===\s*OnboardingTaskStatus\.WAIVED\)/, "plan completion must require every task to be completed or explicitly waived");
 expect(transitionPath, transition, /ONBOARDING_PLAN_\$\{task\.plan\.status\}_TO_\$\{planStatus\}/, "plan lifecycle changes must have a dedicated audit event");
 expect(transitionPath, transition, /Day-one readiness gate cleared/, "plan completion audit must record readiness-gate clearance");
+expect(transitionPath, transition, /terminal\(next\)[\s\S]*notificationOutbox\.updateMany\([\s\S]*resourceType:\s*"OnboardingTask"/, "terminal task transitions must close resolved task reminders");
+expect(transitionPath, transition, /ONBOARDING_READY_FOR_ACTIVATION/, "readiness completion must notify the onboarding owner that activation is available");
+expect(transitionPath, transition, /recipientRole:\s*task\.plan\.ownerId\s*\?\s*null\s*:\s*PlatformRole\.HR_OPERATIONS/, "readiness completion must fall back to HR operations when the plan has no direct owner");
+expect(transitionPath, transition, /dedupeKey:\s*`onboarding-plan:\$\{task\.planId\}:ready-for-activation`/, "readiness notification must be idempotent");
+expect(transitionPath, transition, /reminderState:\s*"activation-ready"/, "readiness notification payload must identify the activation-ready state");
 expect(transitionPath, transition, /TransactionIsolationLevel\.Serializable/, "task and plan transitions must use serializable isolation");
 expect(transitionPath, transition, /P2034/, "serialization conflicts must return a controlled conflict response");
 expectAbsent(transitionPath, transition, /data:\s*\{\s*status:\s*OnboardingStatus\.COMPLETED\s*\}/, "plan completion must never be written unconditionally");
@@ -29,6 +34,7 @@ expect(activationPath, activation, /onboardingTask\.count\([\s\S]*notIn:\s*\[Onb
 expect(activationPath, activation, /employment\.updateMany\([\s\S]*status:\s*EmploymentStatus\.PREBOARDING[\s\S]*data:\s*\{\s*status:\s*EmploymentStatus\.ACTIVE\s*\}/, "employment activation must be a state-aware PREBOARDING to ACTIVE mutation");
 expect(activationPath, activation, /EMPLOYMENT_PREBOARDING_TO_ACTIVE/, "employment activation must write immutable audit evidence");
 expect(activationPath, activation, /ONBOARDING_HANDOFF_TO_ACTIVE_EMPLOYMENT/, "onboarding handoff must be separately auditable");
+expect(activationPath, activation, /notificationOutbox\.updateMany\([\s\S]*resourceType:\s*"OnboardingPlan"[\s\S]*readAt:\s*null[\s\S]*data:\s*\{\s*readAt:\s*now\s*\}/, "activation must close plan notifications that no longer require action");
 expect(activationPath, activation, /TransactionIsolationLevel\.Serializable/, "employment activation must use serializable isolation");
 expect(activationPath, activation, /P2034/, "activation serialization conflicts must return a controlled conflict response");
 
@@ -55,6 +61,8 @@ const displayPath = "lib/notification-display.ts";
 const display = await source(displayPath);
 expect(displayPath, display, /ONBOARDING_TASK_BLOCKED/, "notification UI must localize blocked onboarding alerts");
 expect(displayPath, display, /ONBOARDING_START_READINESS_RISK/, "notification UI must localize day-one readiness alerts");
+expect(displayPath, display, /ONBOARDING_READY_FOR_ACTIVATION/, "notification UI must localize activation-ready onboarding alerts");
+expect(displayPath, display, /reminderState === "activation-ready"/, "notification summary must explain activation-ready onboarding state");
 expect(displayPath, display, /resourceType === "OnboardingTask"[\s\S]*\/module\/onboarding\?task=/, "task notifications must deep-link to the onboarding task");
 expect(displayPath, display, /resourceType === "OnboardingPlan"[\s\S]*\/module\/onboarding\?plan=/, "plan notifications must deep-link to the onboarding plan");
 
