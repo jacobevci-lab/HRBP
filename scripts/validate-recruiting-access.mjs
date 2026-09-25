@@ -53,6 +53,14 @@ expectAbsent(workspacePath, workspace, /getRecruitingWorkspaceData\(ctx\.tenantI
 expect(workspacePath, workspace, /canApprove=\{can\(ctx,\s*"recruiting:approve"\)\}/, "recruiting operations UI must receive explicit approval authority");
 expect(workspacePath, workspace, /return\s*<ProtectedLiveFailure\s+domain=\{c\(locale,"Recruiting","İşe Alım"\)\}/, "authenticated recruiting failures must not substitute synthetic demo data");
 expect(workspacePath, workspace, /return\s*<ProtectedLiveFailure\s+domain=\{c\(locale,"Onboarding","İşe Başlatma"\)\}/, "authenticated onboarding failures must not substitute synthetic demo data");
+expectAbsent(workspacePath, workspace, /Promise\.all\(\[[\s\S]*getRecruitingWorkspaceData\(ctx\)[\s\S]*getRecruitingOperationsData/, "recruiting primary read data must not share a failure boundary with the write console");
+expectAbsent(workspacePath, workspace, /Promise\.all\(\[[\s\S]*getOnboardingWorkspaceData\(ctx\)[\s\S]*getOnboardingOperationsData/, "onboarding primary read data must not share a failure boundary with the write console");
+expect(workspacePath, workspace, /data\s*=\s*await getRecruitingWorkspaceData\(ctx\)/, "recruiting live read data must initialize independently before optional operations data");
+expect(workspacePath, workspace, /data\s*=\s*await getOnboardingWorkspaceData\(ctx\)/, "onboarding live read data must initialize independently before optional operations data");
+expect(workspacePath, workspace, /Recruiting operations data failed; live read view remains available/, "recruiting operations failure must preserve the authenticated live read view");
+expect(workspacePath, workspace, /Onboarding operations data failed; live read view remains available/, "onboarding operations failure must preserve the authenticated live read view");
+expect(workspacePath, workspace, /operationsUnavailable\s*\?\s*<OperationsUnavailableNotice\s+domain=\{c\(locale,"Recruiting","İşe Alım"\)\}/, "recruiting must surface a read-only warning when write-console data is unavailable");
+expect(workspacePath, workspace, /operationsUnavailable\s*\?\s*<OperationsUnavailableNotice\s+domain=\{c\(locale,"Onboarding","İşe Başlatma"\)\}/, "onboarding must surface a read-only warning when write-console data is unavailable");
 
 const approvalApiPath = "app/api/recruiting/approvals/route.ts";
 const approvalApi = await source(approvalApiPath);
@@ -131,4 +139,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, recruiting assignment selectors are minimized, positions cannot be reused across active requisitions, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, authenticated failures remain protected, requisition and offer approvals are centralized, preparers are four-eyes locked from their own decisions, application actions respect active-offer ownership, approval workflows emit durable notification intent, and recruiting notifications are localized and deep-linked.");
+console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, recruiting assignment selectors are minimized, positions cannot be reused across active requisitions, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, primary live reads are isolated from optional write-console failures, authenticated failures remain protected, requisition and offer approvals are centralized, preparers are four-eyes locked from their own decisions, application actions respect active-offer ownership, approval workflows emit durable notification intent, and recruiting notifications are localized and deep-linked.");
