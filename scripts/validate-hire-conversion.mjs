@@ -11,6 +11,22 @@ expect(requisitionPath, requisition, /position\.status\s*!==\s*PositionStatus\.O
 expect(requisitionPath, requisition, /status:\s*\{\s*in:\s*\[RequisitionStatus\.OPEN,\s*RequisitionStatus\.ON_HOLD\]\s*\}/, "a position must not be owned by another active requisition");
 expect(requisitionPath, requisition, /TransactionIsolationLevel\.Serializable/, "requisition activation must remain serializable");
 
+const applicationPath = "app/api/recruiting/applications/[id]/stage/route.ts";
+const application = await source(applicationPath);
+expect(applicationPath, application, /ACTIVE_OFFER_STATUSES[\s\S]*OfferStatus\.APPROVAL[\s\S]*OfferStatus\.SENT[\s\S]*OfferStatus\.ACCEPTED/, "active offer states must lock manual application drift");
+expect(applicationPath, application, /ACTIVE_OFFER_STATUSES\.has\(current\.offer\.status\)[\s\S]*next\s*!==\s*ApplicationStage\.OFFER/, "application must stay in offer stage while an active offer exists");
+expect(applicationPath, application, /ACCEPTED_OFFER_LOCKS_APPLICATION/, "accepted offers must only proceed through the controlled hire transition");
+expect(applicationPath, application, /TransactionIsolationLevel\.Serializable/, "application stage changes must be serializable with offer state");
+
+const offerPath = "app/api/recruiting/offers/[id]/status/route.ts";
+const offer = await source(offerPath);
+expect(offerPath, offer, /OFFER_PIPELINE_STATUSES[\s\S]*OfferStatus\.APPROVAL[\s\S]*OfferStatus\.SENT[\s\S]*OfferStatus\.ACCEPTED/, "offer pipeline targets must be modeled explicitly");
+expect(offerPath, offer, /OFFER_APPLICATION_STAGES[\s\S]*ApplicationStage\.INTERVIEW[\s\S]*ApplicationStage\.ASSESSMENT[\s\S]*ApplicationStage\.OFFER/, "offer activation must require an offer-eligible application stage");
+expect(offerPath, offer, /current\.application\.requisition\.status\s*!==\s*RequisitionStatus\.OPEN/, "offers must not enter approval, be sent or be accepted for a non-open requisition");
+expect(offerPath, offer, /current\.expiresAt\s*&&\s*current\.expiresAt\s*<=\s*now/, "expired offers must be blocked before approval, send or acceptance");
+expect(offerPath, offer, /tx\.application\.updateMany[\s\S]*stage:\s*current\.application\.stage[\s\S]*applicationUpdate\.count\s*!==\s*1/, "offer activation must synchronize application stage with an optimistic guard");
+expect(offerPath, offer, /TransactionIsolationLevel\.Serializable/, "offer lifecycle must remain serializable");
+
 const hirePath = "app/api/recruiting/hire/route.ts";
 const hire = await source(hirePath);
 expect(hirePath, hire, /can\(ctx,\s*"recruiting:write"\)[\s\S]*can\(ctx,\s*"onboarding:write"\)/, "hire conversion must require both recruiting and onboarding authority");
@@ -30,9 +46,9 @@ expect(hirePath, hire, /TransactionIsolationLevel\.Serializable/, "hire conversi
 expect(hirePath, hire, /error\.code\s*===\s*"P2034"[\s\S]*error\.code\s*===\s*"P2002"/, "serialization and uniqueness conflicts must return a safe retryable conflict response");
 
 if (failures.length) {
-  console.error("Hire conversion integrity validation failed:\n");
+  console.error("Recruiting lifecycle integrity validation failed:\n");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log("Validated hire conversion integrity: authorized position capacity, accepted-offer state, tenant identity uniqueness, optimistic writes, serializable conversion, onboarding deadlines and audit chain-of-custody are enforced.");
+console.log("Validated recruiting lifecycle integrity: position capacity, application-offer coupling, expiry and requisition guards, accepted-offer hire state, tenant identity uniqueness, optimistic writes, serializable conversion, onboarding deadlines and audit chain-of-custody are enforced.");
