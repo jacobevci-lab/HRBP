@@ -5,6 +5,18 @@ const failures = [];
 function expect(path, text, pattern, message) { if (!pattern.test(text)) failures.push(`${path}: ${message}`); }
 function expectAbsent(path, text, pattern, message) { if (pattern.test(text)) failures.push(`${path}: ${message}`); }
 
+const processPath = "app/api/offboarding/processes/route.ts";
+const processSource = await source(processPath);
+expect(processPath, processSource, /readJsonObject\(request\)/, "separation creation must use the bounded JSON-object parser");
+expect(processPath, processSource, /asEnumValue\(body\.type,\s*Object\.values\(SeparationType\)\)/, "separation type must be server-validated");
+expect(processPath, processSource, /asOptionalText\(body\.reasonCode,\s*120\)/, "reason code must be bounded");
+expect(processPath, processSource, /asOptionalText\(body\.employeeReason,\s*2000\)/, "employee-provided separation reason must be bounded");
+expect(processPath, processSource, /managerEmploymentId\s*===\s*employment\.id/, "an employment must not be assigned as its own separation manager");
+expect(processPath, processSource, /separationProcess\.findFirst\([\s\S]*status:\s*\{\s*notIn:\s*\[SeparationStatus\.CLOSED,\s*SeparationStatus\.CANCELLED\]\s*\}/, "creation must reject a second open separation for the same employment");
+expect(processPath, processSource, /TransactionIsolationLevel\.Serializable/, "separation creation must use serializable isolation");
+expect(processPath, processSource, /P2034/, "concurrent separation creation conflicts must be controlled");
+expect(processPath, processSource, /Governed separation initiation with cross-functional clearance controls/, "creation audit must record the governed clearance purpose");
+
 const taskPath = "app/api/offboarding/processes/[id]/tasks/[taskId]/complete/route.ts";
 const task = await source(taskPath);
 expect(taskPath, task, /const transitions:[\s\S]*Record<ExitTaskStatus/, "exit tasks must use an explicit lifecycle transition map");
@@ -85,6 +97,12 @@ expect(displayPath, display, /OFFBOARDING_TASK_BLOCKED/, "notification UI must l
 expect(displayPath, display, /OFFBOARDING_EXIT_READINESS_RISK/, "notification UI must localize exit-readiness risk");
 expect(displayPath, display, /resourceType === \"SeparationTask\"[\s\S]*\/module\/offboarding\?task=/, "task notifications must deep-link to the exit task");
 expect(displayPath, display, /resourceType === \"SeparationProcess\"[\s\S]*\/module\/offboarding\?process=/, "process notifications must deep-link to the separation process");
+
+const envPath = ".env.example";
+const env = await source(envPath);
+expect(envPath, env, /HRBP_OFFBOARDING_DUE_SOON_HOURS=48/, "offboarding due-soon window must be documented");
+expect(envPath, env, /HRBP_OFFBOARDING_EXIT_RISK_HOURS=72/, "offboarding exit-risk window must be documented");
+expect(envPath, env, /HRBP_OFFBOARDING_REMINDER_BATCH_SIZE=250/, "offboarding reminder batch size must be documented");
 
 if (failures.length) {
   console.error("Offboarding governance validation failed:\n- " + failures.join("\n- "));
