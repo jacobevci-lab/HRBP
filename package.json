@@ -2,12 +2,10 @@
   "name": "hrbp-one",
   "version": "0.1.0",
   "private": true,
-  "prisma": {
-    "schema": "./prisma"
-  },
+  "prisma": { "schema": "./prisma" },
   "scripts": {
     "dev": "npm run db:generate && next dev",
-    "prebuild": "npm run routes:validate && npm run ui:validate && npm run staging:validate && npm run performance:validate && npm run growth:validate && npm run growth-automation:validate && npm run talent-learning:validate && npm run benefits:validate && npm run connected-growth:validate && npm run development-plan:validate && npm run leave:validate && npm run time:validate && npm run compensation:validate && npm run payroll:validate && npm run recruiting-access:validate && npm run onboarding-readiness:validate && npm run onboarding-observability:validate && npm run offboarding:validate && npm run hire:validate",
+    "prebuild": "npm run routes:validate && npm run ui:validate && npm run staging:validate && npm run performance:validate && npm run growth:validate && npm run growth-automation:validate && npm run talent-learning:validate && npm run benefits:validate && npm run connected-growth:validate && npm run development-plan:validate && npm run leave:validate && npm run time:validate && npm run compensation:validate && npm run payroll:validate && npm run recruiting-access:validate && npm run onboarding-readiness:validate && npm run onboarding-observability:validate && npm run offboarding:validate && npm run offboarding-clearance:validate && npm run hire:validate",
     "build": "npm run db:generate && next build",
     "start": "next start",
     "lint": "eslint .",
@@ -29,6 +27,7 @@
     "onboarding-readiness:validate": "node scripts/validate-onboarding-readiness.mjs",
     "onboarding-observability:validate": "node scripts/validate-onboarding-observability.mjs",
     "offboarding:validate": "node scripts/validate-offboarding-governance.mjs",
+    "offboarding-clearance:validate": "node scripts/validate-offboarding-clearance.mjs",
     "hire:validate": "node scripts/validate-hire-conversion.mjs",
     "typecheck": "npm run db:generate && tsc --noEmit",
     "security:audit:prod": "npm audit --omit=dev --audit-level=high",
@@ -64,10 +63,7 @@
     "typescript": "^5.7.2",
     "wrangler": "4.136.3"
   },
-  "overrides": {
-    "postcss": "^8.5.23",
-    "deepmerge-ts": "^8.0.1"
-  },
+  "overrides": { "postcss": "^8.5.23", "deepmerge-ts": "^8.0.1" },
   "overridesRationale": {
     "postcss": "Security override for GHSA-qx2v-qp2m-jg93, GHSA-6g55-p6wh-862q, GHSA-fxqj-rqcc-2cmp and GHSA-r28c-9q8g-f849 while remaining on the validated Next.js 15 line.",
     "deepmerge-ts": "Security override for GHSA-ggr8-5vv4-36mx in Prisma config; Prisma config uses the plain deepmerge API and upstream tracks the same >=8.0.0 remediation."
