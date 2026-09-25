@@ -15,7 +15,7 @@ const transitions: Record<ExitTaskStatus, ExitTaskStatus[]> = {
   WAIVED: []
 };
 
-const terminalTaskStatuses = [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED];
+const terminalTaskStatuses: ExitTaskStatus[] = [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED];
 
 function transitionRequiresReason(status: ExitTaskStatus) {
   return status === ExitTaskStatus.BLOCKED || status === ExitTaskStatus.WAIVED;

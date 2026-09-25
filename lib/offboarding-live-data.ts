@@ -19,7 +19,7 @@ const OPEN_STATUSES = [
   SeparationStatus.FINAL_PAY_REVIEW,
   SeparationStatus.READY_TO_CLOSE
 ];
-const TERMINAL_TASK_STATUSES = [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED];
+const TERMINAL_TASK_STATUSES: ExitTaskStatus[] = [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED];
 const ACTIVE_EMPLOYMENTS = [EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE, EmploymentStatus.SUSPENDED];
 
 export type OffboardingTaskRow = {

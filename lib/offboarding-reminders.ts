@@ -5,9 +5,9 @@ import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import type { RequestContext } from "@/lib/request-context";
 import { runtimeNumber } from "@/lib/runtime-env";
 
-const OPEN_TASK_STATUSES = [ExitTaskStatus.NOT_STARTED, ExitTaskStatus.IN_PROGRESS, ExitTaskStatus.BLOCKED];
-const TERMINAL_TASK_STATUSES = [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED];
-const TERMINAL_PROCESS_STATUSES = [SeparationStatus.CLOSED, SeparationStatus.CANCELLED];
+const OPEN_TASK_STATUSES: ExitTaskStatus[] = [ExitTaskStatus.NOT_STARTED, ExitTaskStatus.IN_PROGRESS, ExitTaskStatus.BLOCKED];
+const TERMINAL_TASK_STATUSES: ExitTaskStatus[] = [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED];
+const TERMINAL_PROCESS_STATUSES: SeparationStatus[] = [SeparationStatus.CLOSED, SeparationStatus.CANCELLED];
 
 function systemContext(tenantId: string): RequestContext {
   return {
