@@ -18,6 +18,20 @@ expect(transitionPath, transition, /TransactionIsolationLevel\.Serializable/, "t
 expect(transitionPath, transition, /P2034/, "serialization conflicts must return a controlled conflict response");
 expectAbsent(transitionPath, transition, /data:\s*\{\s*status:\s*OnboardingStatus\.COMPLETED\s*\}/, "plan completion must never be written unconditionally");
 
+const activationPath = "app/api/onboarding/plans/[id]/activate/route.ts";
+const activation = await source(activationPath);
+expect(activationPath, activation, /can\(ctx,\s*"onboarding:write"\)[\s\S]*can\(ctx,\s*"people:write"\)/, "employment activation must require onboarding and people write authority");
+expect(activationPath, activation, /canAccessOnboardingPlan\(population,\s*plan\)/, "activation must enforce the governed onboarding population scope");
+expect(activationPath, activation, /plan\.status\s*!==\s*OnboardingStatus\.COMPLETED/, "activation must require a completed onboarding plan");
+expect(activationPath, activation, /employment\.status\s*!==\s*EmploymentStatus\.PREBOARDING/, "activation must only transition a preboarding employment");
+expect(activationPath, activation, /targetStartDate\s*>\s*now[\s\S]*employment\.startDate\s*>\s*now/, "activation must reject handoff before the governed start date");
+expect(activationPath, activation, /onboardingTask\.count\([\s\S]*notIn:\s*\[OnboardingTaskStatus\.COMPLETED,\s*OnboardingTaskStatus\.WAIVED\]/, "activation must recheck task readiness instead of trusting plan status alone");
+expect(activationPath, activation, /employment\.updateMany\([\s\S]*status:\s*EmploymentStatus\.PREBOARDING[\s\S]*data:\s*\{\s*status:\s*EmploymentStatus\.ACTIVE\s*\}/, "employment activation must be a state-aware PREBOARDING to ACTIVE mutation");
+expect(activationPath, activation, /EMPLOYMENT_PREBOARDING_TO_ACTIVE/, "employment activation must write immutable audit evidence");
+expect(activationPath, activation, /ONBOARDING_HANDOFF_TO_ACTIVE_EMPLOYMENT/, "onboarding handoff must be separately auditable");
+expect(activationPath, activation, /TransactionIsolationLevel\.Serializable/, "employment activation must use serializable isolation");
+expect(activationPath, activation, /P2034/, "activation serialization conflicts must return a controlled conflict response");
+
 const reminderPath = "lib/onboarding-reminders.ts";
 const reminder = await source(reminderPath);
 expect(reminderPath, reminder, /OPEN_TASK_STATUSES[\s\S]*NOT_STARTED[\s\S]*IN_PROGRESS[\s\S]*BLOCKED/, "readiness monitoring must scan all non-terminal onboarding task states");
@@ -55,12 +69,18 @@ const dataPath = "lib/onboarding-operations-data.ts";
 const data = await source(dataPath);
 expect(dataPath, data, /targetStartDate:\s*true/, "operations data must expose the target start date for readiness context");
 expect(dataPath, data, /targetStartDate:\s*plan\.targetStartDate\.toISOString\(\)/, "target start date must be serialized for the client console");
+expect(dataPath, data, /EmploymentStatus\.PREBOARDING/, "completed onboarding must remain in the operations queue while employment is still preboarding");
+expect(dataPath, data, /employmentStatus:\s*plan\.employment\?\.status\s*\?\?\s*null/, "operations data must expose governed employment state for handoff controls");
 
 const consolePath = "components/onboarding-operations-console.tsx";
 const consoleSource = await source(consolePath);
 expect(consolePath, consoleSource, /targetStartDate:\s*string/, "console contract must include target start date");
+expect(consolePath, consoleSource, /employmentStatus:\s*string\s*\|\s*null/, "console contract must include employment state");
 expect(consolePath, consoleSource, /status === "BLOCKED" \|\| status === "WAIVED"/, "block and waive actions must open the reason capture flow");
 expect(consolePath, consoleSource, /JSON\.stringify\(\{ status, \.\.\.\(note \? \{ note \} : \{\}\) \}\)/, "captured transition reason must be sent to the API");
+expect(consolePath, consoleSource, /fetch\(`\/api\/onboarding\/plans\/\$\{planId\}\/activate`/, "completed onboarding must expose the governed activation endpoint");
+expect(consolePath, consoleSource, /readyForActivation\s*=\s*planStatus\s*===\s*"COMPLETED"\s*&&\s*employmentStatus\s*===\s*"PREBOARDING"/, "activation UI must only appear for a completed preboarding handoff");
+expect(consolePath, consoleSource, /disabled=\{pending !== null \|\| !startDateReached\}/, "activation control must stay disabled before the governed start date");
 expect(consolePath, consoleSource, /new URLSearchParams\(window\.location\.search\)/, "onboarding console must consume notification deep-link query context");
 expect(consolePath, consoleSource, /onboarding-task-\$\{task\.id\}/, "onboarding tasks must expose stable deep-link anchors");
 expect(consolePath, consoleSource, /onboarding-plan-\$\{planId\}/, "onboarding plans must expose stable deep-link anchors");

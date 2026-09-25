@@ -1,4 +1,4 @@
-import { OnboardingStatus } from "@prisma/client";
+import { EmploymentStatus, OnboardingStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
 import { onboardingPlanPopulationFilter, resolveOnboardingPopulationScope } from "@/lib/onboarding-access";
 import type { RequestContext } from "@/lib/request-context";
@@ -9,6 +9,7 @@ export type OnboardingTaskOperation = {
   person: string;
   employeeNumber: string;
   planStatus: string;
+  employmentStatus: string | null;
   targetStartDate: string;
   title: string;
   ownerType: string;
@@ -23,7 +24,10 @@ export async function getOnboardingOperationsData(ctx: RequestContext): Promise<
     const plans = await db.onboardingPlan.findMany({
       where: {
         tenantId: ctx.tenantId,
-        status: { not: OnboardingStatus.COMPLETED },
+        OR: [
+          { status: { not: OnboardingStatus.COMPLETED } },
+          { status: OnboardingStatus.COMPLETED, employment: { is: { status: EmploymentStatus.PREBOARDING } } }
+        ],
         ...onboardingPlanPopulationFilter(scope)
       },
       orderBy: { targetStartDate: "asc" },
@@ -33,6 +37,7 @@ export async function getOnboardingOperationsData(ctx: RequestContext): Promise<
         status: true,
         targetStartDate: true,
         person: { select: { givenName: true, familyName: true, employeeNumber: true } },
+        employment: { select: { status: true } },
         tasks: {
           orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
           select: { id: true, title: true, ownerType: true, status: true, dueDate: true, sensitive: true }
@@ -46,6 +51,7 @@ export async function getOnboardingOperationsData(ctx: RequestContext): Promise<
       person: `${plan.person.givenName} ${plan.person.familyName}`,
       employeeNumber: plan.person.employeeNumber ?? "—",
       planStatus: plan.status,
+      employmentStatus: plan.employment?.status ?? null,
       targetStartDate: plan.targetStartDate.toISOString(),
       title: task.title,
       ownerType: task.ownerType,
