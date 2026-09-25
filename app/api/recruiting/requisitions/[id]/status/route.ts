@@ -4,11 +4,19 @@ import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
 import { asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { isPrismaRecordNotFound } from "@/lib/prisma-safety";
+import { enqueueRequisitionApprovalNotification, enqueueRequisitionDecisionNotification } from "@/lib/recruiting-notifications";
 import { canTransitionRequisition, parseRequisitionStatus } from "@/lib/recruiting-state";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 function requiresApprovalAuthority(from: RequisitionStatus, to: RequisitionStatus) {
   return from === RequisitionStatus.APPROVAL && [RequisitionStatus.OPEN, RequisitionStatus.DRAFT, RequisitionStatus.CANCELLED].includes(to);
+}
+
+function decisionFor(next: RequisitionStatus): "APPROVED" | "RETURNED" | "CANCELLED" | null {
+  if (next === RequisitionStatus.OPEN) return "APPROVED";
+  if (next === RequisitionStatus.DRAFT) return "RETURNED";
+  if (next === RequisitionStatus.CANCELLED) return "CANCELLED";
+  return null;
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -28,7 +36,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const data = await withDb((db) => db.$transaction(async (tx) => {
       const current = await tx.requisition.findFirst({
         where: { id, tenantId: ctx.tenantId },
-        select: { id: true, status: true, positionId: true, hiringManagerId: true, openings: true, openedAt: true }
+        select: { id: true, title: true, status: true, positionId: true, hiringManagerId: true, openings: true, openedAt: true }
       });
       if (!current) throw new Error("REQUISITION_NOT_FOUND");
       if (!canTransitionRequisition(current.status, next)) throw new Error("INVALID_TRANSITION");
@@ -36,18 +44,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (next === RequisitionStatus.OPEN && !current.positionId) throw new Error("POSITION_REQUIRED");
       if (next === RequisitionStatus.OPEN && !current.hiringManagerId) throw new Error("HIRING_MANAGER_REQUIRED");
 
-      if (current.status === RequisitionStatus.APPROVAL && next === RequisitionStatus.OPEN) {
-        const creatorAudit = await tx.auditEvent.findFirst({
-          where: {
-            tenantId: ctx.tenantId,
-            resourceType: "Requisition",
-            resourceId: current.id,
-            action: "REQUISITION_CREATED"
-          },
-          orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
-          select: { actorId: true }
-        });
-        if (creatorAudit?.actorId === ctx.actorId) throw new Error("SELF_APPROVAL_BLOCKED");
+      const approvalDecision = requiresApprovalAuthority(current.status, next);
+      const creatorAudit = approvalDecision ? await tx.auditEvent.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          resourceType: "Requisition",
+          resourceId: current.id,
+          action: "REQUISITION_CREATED"
+        },
+        orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
+        select: { actorId: true }
+      }) : null;
+
+      if (current.status === RequisitionStatus.APPROVAL && next === RequisitionStatus.OPEN && creatorAudit?.actorId === ctx.actorId) {
+        throw new Error("SELF_APPROVAL_BLOCKED");
       }
 
       try {
@@ -68,8 +78,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         resourceType: "Requisition",
         resourceId: current.id,
         classification: DataClassification.CONFIDENTIAL,
-        purpose: requiresApprovalAuthority(current.status, next) ? "Independent hiring requisition decision" : "Hiring requisition lifecycle"
+        purpose: approvalDecision ? "Independent hiring requisition decision" : "Hiring requisition lifecycle"
       });
+
+      if (current.status === RequisitionStatus.DRAFT && next === RequisitionStatus.APPROVAL) {
+        await enqueueRequisitionApprovalNotification(tx, {
+          tenantId: ctx.tenantId,
+          requisitionId: current.id,
+          title: current.title,
+          openings: current.openings
+        });
+      }
+
+      const decision = approvalDecision ? decisionFor(next) : null;
+      if (decision && creatorAudit?.actorId) {
+        await enqueueRequisitionDecisionNotification(tx, {
+          tenantId: ctx.tenantId,
+          recipientUserId: creatorAudit.actorId,
+          requisitionId: current.id,
+          title: current.title,
+          openings: current.openings,
+          decision
+        });
+      }
 
       return { id: current.id, status: next };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
