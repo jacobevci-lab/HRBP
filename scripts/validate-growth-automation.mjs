@@ -34,9 +34,9 @@ expect(successionReminderPath, successionReminders, /enqueueNotificationOutbox/,
 
 const maintenancePath = "app/api/internal/maintenance/route.ts";
 const maintenance = await source(maintenancePath);
-expect(maintenancePath, maintenance, /await runLearningMaintenance\(\)/, "learning lifecycle normalization must run before reminder classification");
-expect(maintenancePath, maintenance, /queueLearningReminders\(\)/, "internal maintenance must queue learning reminders");
-expect(maintenancePath, maintenance, /queueSuccessionReviewReminders\(\)/, "internal maintenance must queue succession reminders");
+expect(maintenancePath, maintenance, /(?:await runLearningMaintenance\(\)|capture\("learning-lifecycle",\s*runLearningMaintenance,\s*failures\))/, "learning lifecycle normalization must run before reminder classification");
+expect(maintenancePath, maintenance, /(?:queueLearningReminders\(\)|capture\("learning-reminders",\s*queueLearningReminders,\s*failures\))/, "internal maintenance must queue learning reminders");
+expect(maintenancePath, maintenance, /(?:queueSuccessionReviewReminders\(\)|capture\("succession-reminders",\s*queueSuccessionReviewReminders,\s*failures\))/, "internal maintenance must queue succession reminders");
 expect(maintenancePath, maintenance, /learningLifecycle/, "maintenance response must expose learning lifecycle results");
 expect(maintenancePath, maintenance, /learningReminders/, "maintenance response must expose learning reminder results");
 expect(maintenancePath, maintenance, /successionReminders/, "maintenance response must expose succession reminder results");
