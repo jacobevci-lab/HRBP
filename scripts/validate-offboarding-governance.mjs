@@ -61,6 +61,31 @@ expect(workspacePath, workspace, /actorId=\{ctx\.actorId\}/, "offboarding worksp
 expect(workspacePath, workspace, /data\.overdueTasks/, "workspace metrics must surface overdue exit controls");
 expect(workspacePath, workspace, /data\.exitRiskProcesses/, "workspace metrics must surface exit-date risk");
 
+const reminderPath = "lib/offboarding-reminders.ts";
+const reminder = await source(reminderPath);
+expect(reminderPath, reminder, /OPEN_TASK_STATUSES[\s\S]*NOT_STARTED[\s\S]*IN_PROGRESS[\s\S]*BLOCKED/, "readiness monitoring must scan all open exit task states");
+expect(reminderPath, reminder, /HRBP_OFFBOARDING_DUE_SOON_HOURS/, "exit task due-soon window must be runtime configurable");
+expect(reminderPath, reminder, /HRBP_OFFBOARDING_EXIT_RISK_HOURS/, "exit-date risk window must be runtime configurable");
+expect(reminderPath, reminder, /OFFBOARDING_TASK_BLOCKED[\s\S]*OFFBOARDING_TASK_OVERDUE[\s\S]*OFFBOARDING_TASK_DUE_SOON/, "maintenance must distinguish blocked, overdue and due-soon exit task events");
+expect(reminderPath, reminder, /OFFBOARDING_EXIT_READINESS_RISK/, "maintenance must raise a process-level exit-readiness event");
+expect(reminderPath, reminder, /tenantId_dedupeKey/, "exit reminders must be idempotent");
+expect(reminderPath, reminder, /recipientRoleForDomain/, "unowned exit tasks must route to a governed operational role");
+expect(reminderPath, reminder, /appendAudit[\s\S]*offboarding-task\.\$\{reminderState\}/, "task readiness escalations must be auditable");
+expect(reminderPath, reminder, /offboarding-process\.exit-readiness-risk/, "process readiness escalation must be auditable");
+expectAbsent(reminderPath, reminder, /data:\s*\{\s*status:\s*ExitTaskStatus\./, "maintenance must not silently mutate human-owned exit task states");
+
+const maintenancePath = "app/api/internal/maintenance/route.ts";
+const maintenance = await source(maintenancePath);
+expect(maintenancePath, maintenance, /queueOffboardingReadinessReminders/, "scheduled maintenance must include offboarding readiness monitoring");
+expect(maintenancePath, maintenance, /const onboardingReadiness = await queueOnboardingReadinessReminders\(\);[\s\S]*const offboardingReadiness = await queueOffboardingReadinessReminders\(\);[\s\S]*Promise\.all/, "audited onboarding and offboarding readiness work must stay serialized before parallel reminders");
+
+const displayPath = "lib/notification-display.ts";
+const display = await source(displayPath);
+expect(displayPath, display, /OFFBOARDING_TASK_BLOCKED/, "notification UI must localize blocked exit alerts");
+expect(displayPath, display, /OFFBOARDING_EXIT_READINESS_RISK/, "notification UI must localize exit-readiness risk");
+expect(displayPath, display, /resourceType === \"SeparationTask\"[\s\S]*\/module\/offboarding\?task=/, "task notifications must deep-link to the exit task");
+expect(displayPath, display, /resourceType === \"SeparationProcess\"[\s\S]*\/module\/offboarding\?process=/, "process notifications must deep-link to the separation process");
+
 if (failures.length) {
   console.error("Offboarding governance validation failed:\n- " + failures.join("\n- "));
   process.exit(1);

@@ -21,8 +21,15 @@ const onboardingTitles: Record<string, { en: string; tr: string }> = {
   ONBOARDING_READY_FOR_ACTIVATION: { en: "Onboarding ready for activation", tr: "İşe başlatma aktivasyona hazır" }
 };
 
+const offboardingTitles: Record<string, { en: string; tr: string }> = {
+  OFFBOARDING_TASK_BLOCKED: { en: "Exit task blocked", tr: "İşten ayrılış görevi engellendi" },
+  OFFBOARDING_TASK_DUE_SOON: { en: "Exit task due soon", tr: "İşten ayrılış görevinin süresi yaklaşıyor" },
+  OFFBOARDING_TASK_OVERDUE: { en: "Exit task overdue", tr: "İşten ayrılış görevi gecikti" },
+  OFFBOARDING_EXIT_READINESS_RISK: { en: "Exit readiness at risk", tr: "İşten ayrılış hazırlığı risk altında" }
+};
+
 export function notificationDisplayTitle(eventType: string, locale: Locale) {
-  return onboardingTitles[eventType]?.[locale] ?? notificationTitle(eventType, locale);
+  return onboardingTitles[eventType]?.[locale] ?? offboardingTitles[eventType]?.[locale] ?? notificationTitle(eventType, locale);
 }
 
 export function notificationDisplaySummary(payload: unknown, locale: Locale) {
@@ -64,6 +71,29 @@ export function notificationDisplaySummary(payload: unknown, locale: Locale) {
     return `${employeeName} · ${taskName}${owner}${due ? ` · ${locale === "tr" ? "son tarih" : "due"} ${due}` : ""} · ${state}.`;
   }
 
+  const separationProcessId = text(data.separationProcessId);
+  const domain = text(data.domain);
+  const lastWorkingDate = text(data.lastWorkingDate);
+  if (separationProcessId && reminderState === "exit-risk" && lastWorkingDate) {
+    const lastDay = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(lastWorkingDate));
+    const tasks = numberValue(data.openBlockingTasks) ?? 0;
+    const assets = numberValue(data.openAssets) ?? 0;
+    const access = numberValue(data.openAccess) ?? 0;
+    return locale === "tr"
+      ? `Son çalışma günü ${lastDay} · ${tasks} açık bloke görev · ${assets} varlık · ${access} erişim kontrolü açık.`
+      : `Last working day ${lastDay} · ${tasks} blocking task${tasks === 1 ? "" : "s"} · ${assets} asset${assets === 1 ? "" : "s"} · ${access} access control${access === 1 ? "" : "s"} open.`;
+  }
+
+  if (separationProcessId && taskName && reminderState) {
+    const due = dueAt ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(dueAt)) : null;
+    const state = reminderState === "blocked"
+      ? (locale === "tr" ? "engel çözümü gerekiyor" : "blocker resolution required")
+      : reminderState === "overdue"
+        ? (locale === "tr" ? "gecikmiş" : "overdue")
+        : (locale === "tr" ? "son tarih yaklaşıyor" : "due soon");
+    return `${taskName}${domain ? ` · ${domain}` : ""}${due ? ` · ${locale === "tr" ? "son tarih" : "due"} ${due}` : ""} · ${state}.`;
+  }
+
   return notificationSummary(payload, locale);
 }
 
@@ -71,5 +101,7 @@ export function notificationDisplayResourceHref(resourceType: string, resourceId
   const id = resourceId?.trim();
   if (resourceType === "OnboardingTask") return id ? `/module/onboarding?task=${encodeURIComponent(id)}` : "/module/onboarding";
   if (resourceType === "OnboardingPlan") return id ? `/module/onboarding?plan=${encodeURIComponent(id)}` : "/module/onboarding";
+  if (resourceType === "SeparationTask") return id ? `/module/offboarding?task=${encodeURIComponent(id)}` : "/module/offboarding";
+  if (resourceType === "SeparationProcess") return id ? `/module/offboarding?process=${encodeURIComponent(id)}` : "/module/offboarding";
   return notificationResourceHref(resourceType, resourceId);
 }
