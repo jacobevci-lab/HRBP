@@ -1,9 +1,12 @@
-import { ApplicationStage, DataClassification, RequisitionStatus } from "@prisma/client";
+import { ApplicationStage, DataClassification, Prisma, RequisitionStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { asDate, asIdentifier, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
 import { hasTenantRecruitingVisibility, recruitingApplicationRelationFilter, recruitingCandidateReadFilter } from "@/lib/recruiting-access";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function GET(request: Request) {
   const ctx = getRequestContext(request);
@@ -37,15 +40,26 @@ export async function POST(request: Request) {
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "recruiting:write")) return forbidden();
 
-  const body = await request.json() as Record<string, unknown>;
-  const givenName = String(body.givenName ?? "").trim();
-  const familyName = String(body.familyName ?? "").trim();
-  const email = String(body.email ?? "").trim().toLowerCase();
-  const requisitionId = String(body.requisitionId ?? "").trim();
-  const retentionUntil = body.retentionUntil ? new Date(String(body.retentionUntil)) : null;
-  if (!givenName || !familyName || !email || !requisitionId) return Response.json({ error: "givenName, familyName, email and requisitionId are required." }, { status: 400 });
-  if (!email.includes("@")) return Response.json({ error: "A valid candidate email is required." }, { status: 400 });
-  if (retentionUntil && Number.isNaN(retentionUntil.getTime())) return Response.json({ error: "retentionUntil must be a valid date." }, { status: 400 });
+  const body = await readJsonObject(request);
+  if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
+
+  const givenName = asText(body.givenName, 120);
+  const familyName = asText(body.familyName, 120);
+  const emailValue = asText(body.email, 254);
+  const email = emailValue?.toLowerCase() ?? null;
+  const requisitionId = asIdentifier(body.requisitionId);
+  const phone = asOptionalText(body.phone, 64);
+  const source = asOptionalText(body.source, 120);
+  const privacyNoticeVersion = asOptionalText(body.privacyNoticeVersion, 64);
+  const retentionUntil = body.retentionUntil ? asDate(body.retentionUntil) : null;
+
+  if (!givenName || !familyName || !email || !requisitionId) return Response.json({ error: "givenName, familyName, email and a valid requisitionId are required." }, { status: 400 });
+  if (!EMAIL_PATTERN.test(email)) return Response.json({ error: "A valid candidate email is required." }, { status: 400 });
+  if (phone === null) return Response.json({ error: "phone is too long or invalid." }, { status: 400 });
+  if (source === null) return Response.json({ error: "source is too long or invalid." }, { status: 400 });
+  if (privacyNoticeVersion === null) return Response.json({ error: "privacyNoticeVersion is too long or invalid." }, { status: 400 });
+  if (body.retentionUntil && !retentionUntil) return Response.json({ error: "retentionUntil must be a valid date." }, { status: 400 });
+  if (retentionUntil && retentionUntil <= new Date()) return Response.json({ error: "retentionUntil must be in the future." }, { status: 400 });
 
   try {
     const data = await withDb((db) => db.$transaction(async (tx) => {
@@ -73,10 +87,10 @@ export async function POST(request: Request) {
           data: {
             givenName,
             familyName,
-            phone: String(body.phone ?? "").trim() || undefined,
-            source: String(body.source ?? "").trim() || undefined,
-            privacyNoticeVersion: String(body.privacyNoticeVersion ?? "").trim() || undefined,
-            retentionUntil: retentionUntil ?? undefined
+            ...(phone === undefined ? {} : { phone }),
+            ...(source === undefined ? {} : { source }),
+            ...(privacyNoticeVersion === undefined ? {} : { privacyNoticeVersion }),
+            ...(retentionUntil ? { retentionUntil } : {})
           }
         });
       } else {
@@ -86,9 +100,9 @@ export async function POST(request: Request) {
             givenName,
             familyName,
             email,
-            phone: String(body.phone ?? "").trim() || null,
-            source: String(body.source ?? "").trim() || null,
-            privacyNoticeVersion: String(body.privacyNoticeVersion ?? "").trim() || null,
+            phone: phone ?? null,
+            source: source ?? null,
+            privacyNoticeVersion: privacyNoticeVersion ?? null,
             retentionUntil,
             classification: DataClassification.RESTRICTED
           },
@@ -102,7 +116,7 @@ export async function POST(request: Request) {
           candidateId: candidate.id,
           requisitionId,
           stage: ApplicationStage.APPLIED,
-          source: String(body.source ?? "").trim() || null
+          source: source ?? null
         },
         select: { id: true, stage: true }
       });
@@ -116,7 +130,7 @@ export async function POST(request: Request) {
       });
 
       return { candidateId: candidate.id, applicationId: application.id, stage: application.stage };
-    }));
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
     return Response.json({ data }, { status: 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
@@ -124,6 +138,8 @@ export async function POST(request: Request) {
     if (code === "REQUISITION_NOT_OPEN") return Response.json({ error: "Candidates can only be added to an open requisition." }, { status: 409 });
     if (code === "CANDIDATE_ALREADY_HIRED") return Response.json({ error: "This candidate has already been converted to an employee." }, { status: 409 });
     if (code === "APPLICATION_EXISTS") return Response.json({ error: "This candidate already has an application for the requisition." }, { status: 409 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return Response.json({ error: "The candidate or application already exists. Refresh and try again." }, { status: 409 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") return Response.json({ error: "The recruiting record changed concurrently. Refresh and try again." }, { status: 409 });
     console.error("Candidate application creation failed", error);
     return Response.json({ error: "Candidate application could not be created." }, { status: 500 });
   }

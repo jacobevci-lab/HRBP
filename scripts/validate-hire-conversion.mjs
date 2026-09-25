@@ -11,6 +11,16 @@ expect(requisitionPath, requisition, /position\.status\s*!==\s*PositionStatus\.O
 expect(requisitionPath, requisition, /status:\s*\{\s*in:\s*\[RequisitionStatus\.OPEN,\s*RequisitionStatus\.ON_HOLD\]\s*\}/, "a position must not be owned by another active requisition");
 expect(requisitionPath, requisition, /TransactionIsolationLevel\.Serializable/, "requisition activation must remain serializable");
 
+const candidatePath = "app/api/recruiting/candidates/route.ts";
+const candidate = await source(candidatePath);
+expect(candidatePath, candidate, /readJsonObject\(request\)/, "candidate creation must reject malformed or non-object JSON bodies");
+expect(candidatePath, candidate, /asText\(body\.givenName,\s*120\)[\s\S]*asText\(body\.familyName,\s*120\)[\s\S]*asText\(body\.email,\s*254\)/, "candidate direct identifiers must have explicit length bounds");
+expect(candidatePath, candidate, /asIdentifier\(body\.requisitionId\)/, "candidate requisition references must use identifier validation");
+expect(candidatePath, candidate, /retentionUntil\s*&&\s*retentionUntil\s*<=\s*new Date\(\)/, "candidate retention deadlines must be future-dated at collection time");
+expect(candidatePath, candidate, /requisition\.status\s*!==\s*RequisitionStatus\.OPEN/, "candidate applications must only attach to open requisitions");
+expect(candidatePath, candidate, /TransactionIsolationLevel\.Serializable/, "candidate reuse and application creation must be serialized");
+expect(candidatePath, candidate, /error\.code\s*===\s*"P2002"[\s\S]*error\.code\s*===\s*"P2034"/, "candidate duplicate and serialization races must return controlled conflicts");
+
 const offerCreatePath = "app/api/recruiting/applications/[id]/offer/route.ts";
 const offerCreate = await source(offerCreatePath);
 expect(offerCreatePath, offerCreate, /readJsonObject\(request\)/, "offer preparation must use bounded JSON-object input parsing");
@@ -81,4 +91,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated recruiting lifecycle integrity: governed offer preparation, position capacity, application-offer coupling, expiry and requisition guards, accepted-offer hire state, tenant identity uniqueness, optimistic writes, serializable conversion, onboarding deadlines, automated offer expiry, candidate retention minimization and audit chain-of-custody are enforced.");
+console.log("Validated recruiting lifecycle integrity: bounded candidate intake, governed offer preparation, position capacity, application-offer coupling, expiry and requisition guards, accepted-offer hire state, tenant identity uniqueness, optimistic writes, serializable conversion, onboarding deadlines, automated offer expiry, candidate retention minimization and audit chain-of-custody are enforced.");
