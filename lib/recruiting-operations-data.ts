@@ -1,5 +1,19 @@
-import { ApplicationStage, PositionStatus, RequisitionStatus } from "@prisma/client";
+import { ApplicationStage, PlatformRole, PositionStatus, RequisitionStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
+
+const ACTIVE_REQUISITION_STATUSES = [
+  RequisitionStatus.DRAFT,
+  RequisitionStatus.APPROVAL,
+  RequisitionStatus.OPEN,
+  RequisitionStatus.ON_HOLD
+];
+
+const RECRUITING_ASSIGNABLE_ROLES = [
+  PlatformRole.MANAGER,
+  PlatformRole.RECRUITER,
+  PlatformRole.HRBP,
+  PlatformRole.HR_OPERATIONS
+];
 
 export type RecruitingPositionOption = {
   id: string;
@@ -48,7 +62,12 @@ export async function getRecruitingOperationsData(tenantId: string): Promise<Rec
   return withDb(async (db) => {
     const [positions, users, requisitions, applications] = await Promise.all([
       db.position.findMany({
-        where: { tenantId, validTo: null, status: PositionStatus.OPEN },
+        where: {
+          tenantId,
+          validTo: null,
+          status: PositionStatus.OPEN,
+          requisitions: { none: { status: { in: ACTIVE_REQUISITION_STATUSES } } }
+        },
         orderBy: [{ critical: "desc" }, { positionCode: "asc" }],
         take: 200,
         select: {
@@ -60,13 +79,17 @@ export async function getRecruitingOperationsData(tenantId: string): Promise<Rec
         }
       }),
       db.userAccount.findMany({
-        where: { tenantId, active: true },
+        where: {
+          tenantId,
+          active: true,
+          role: { in: RECRUITING_ASSIGNABLE_ROLES }
+        },
         orderBy: { displayName: "asc" },
         take: 250,
         select: { id: true, displayName: true, role: true }
       }),
       db.requisition.findMany({
-        where: { tenantId, status: { in: [RequisitionStatus.DRAFT, RequisitionStatus.APPROVAL, RequisitionStatus.OPEN, RequisitionStatus.ON_HOLD] } },
+        where: { tenantId, status: { in: ACTIVE_REQUISITION_STATUSES } },
         orderBy: { createdAt: "desc" },
         take: 200,
         select: {

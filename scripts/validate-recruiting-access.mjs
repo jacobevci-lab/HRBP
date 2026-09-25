@@ -31,6 +31,13 @@ expect(livePath, live, /resolveOnboardingPopulationScope\(db,\s*ctx\)/, "onboard
 expect(livePath, live, /onboardingPlanPopulationFilter\(scope\)/, "onboarding plans must apply the same population filter as onboarding APIs");
 expect(livePath, live, /id:\s*\{\s*in:\s*ownerIds\s*\}/, "onboarding owner identities must be limited to visible plans");
 
+const recruitingOpsPath = "lib/recruiting-operations-data.ts";
+const recruitingOps = await source(recruitingOpsPath);
+expect(recruitingOpsPath, recruitingOps, /ACTIVE_REQUISITION_STATUSES[\s\S]*RequisitionStatus\.DRAFT[\s\S]*RequisitionStatus\.APPROVAL[\s\S]*RequisitionStatus\.OPEN[\s\S]*RequisitionStatus\.ON_HOLD/, "recruiting operations must share one definition of active requisition ownership");
+expect(recruitingOpsPath, recruitingOps, /requisitions:\s*\{\s*none:\s*\{\s*status:\s*\{\s*in:\s*ACTIVE_REQUISITION_STATUSES/, "new requisitions must only offer positions not already owned by another active requisition");
+expect(recruitingOpsPath, recruitingOps, /RECRUITING_ASSIGNABLE_ROLES[\s\S]*PlatformRole\.MANAGER[\s\S]*PlatformRole\.RECRUITER[\s\S]*PlatformRole\.HRBP[\s\S]*PlatformRole\.HR_OPERATIONS/, "recruiting user selectors must be limited to operationally relevant roles");
+expect(recruitingOpsPath, recruitingOps, /role:\s*\{\s*in:\s*RECRUITING_ASSIGNABLE_ROLES\s*\}/, "recruiting operations must not expose all active tenant identities in assignment selectors");
+
 const onboardingOpsPath = "lib/onboarding-operations-data.ts";
 const onboardingOps = await source(onboardingOpsPath);
 expect(onboardingOpsPath, onboardingOps, /getOnboardingOperationsData\(ctx:\s*RequestContext\)/, "onboarding operations must receive request context");
@@ -112,4 +119,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, authenticated failures remain protected, requisition and offer approvals are centralized, preparers are four-eyes locked from their own decisions, application actions respect active-offer ownership, and approval workflows emit durable notification intent.");
+console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, recruiting assignment selectors are minimized, positions cannot be reused across active requisitions, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, authenticated failures remain protected, requisition and offer approvals are centralized, preparers are four-eyes locked from their own decisions, application actions respect active-offer ownership, and approval workflows emit durable notification intent.");
