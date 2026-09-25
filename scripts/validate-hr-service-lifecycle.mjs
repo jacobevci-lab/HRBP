@@ -9,7 +9,7 @@ const schema = await source(schemaPath);
 expect(schemaPath, schema, /model HRServiceStatusTransition/, "status transitions must have first-class evidence");
 expect(schemaPath, schema, /fromStatus\s+ServiceRequestStatus[\s\S]*toStatus\s+ServiceRequestStatus[\s\S]*actorId\s+String[\s\S]*occurredAt\s+DateTime/, "transition evidence must retain before/after state, actor and time");
 expect(schemaPath, schema, /model HRServiceSlaPause/, "SLA pauses must have first-class evidence");
-expect(schemaPath, schema, /remainingMinutes\s+Int\?[\s\S]*resumedById\s+String\?[\s\S]*resumedAt\s+DateTime\?/, "SLA pause evidence must retain remaining time and resume provenance");
+expect(schemaPath, schema, /resumedById\s+String\?[\s\S]*resumedAt\s+DateTime\?[\s\S]*remainingMinutes\s+Int\?/, "SLA pause evidence must retain remaining time and resume provenance");
 
 const statusPath = "app/api/hr-service/requests/[id]/status/route.ts";
 const status = await source(statusPath);
