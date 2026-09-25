@@ -7,6 +7,11 @@ const waitingStatuses = new Set<ServiceRequestStatus>([
   ServiceRequestStatus.WAITING_EMPLOYEE,
   ServiceRequestStatus.WAITING_THIRD_PARTY
 ]);
+const completedStatuses = new Set<ServiceRequestStatus>([
+  ServiceRequestStatus.RESOLVED,
+  ServiceRequestStatus.CLOSED,
+  ServiceRequestStatus.CANCELLED
+]);
 
 function label(value: string) {
   return value.toLowerCase().split("_").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
@@ -26,6 +31,7 @@ function dateTime(value: Date | null | undefined) {
 
 function sla(value: Date | null, status: ServiceRequestStatus, now: Date) {
   if (waitingStatuses.has(status)) return "Paused";
+  if (completedStatuses.has(status)) return "Completed";
   if (!value) return "No SLA";
   const minutes = Math.floor((value.getTime() - now.getTime()) / 60_000);
   if (minutes < 0) {
@@ -118,7 +124,7 @@ export async function getHRServiceLifecycleLiveData(ctx: RequestContext): Promis
       return {
         schemaReady: true,
         selfService,
-        active: requests.filter((request) => ![ServiceRequestStatus.RESOLVED, ServiceRequestStatus.CLOSED, ServiceRequestStatus.CANCELLED].includes(request.status)).length,
+        active: requests.filter((request) => !completedStatuses.has(request.status)).length,
         waiting: requests.filter((request) => waitingStatuses.has(request.status)).length,
         resolved: requests.filter((request) => request.status === ServiceRequestStatus.RESOLVED).length,
         transitions: transitions.length,
