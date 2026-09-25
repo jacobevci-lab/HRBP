@@ -44,6 +44,8 @@ const candidateApiPath = "app/api/recruiting/candidates/route.ts";
 const candidateApi = await source(candidateApiPath);
 expect(candidateApiPath, candidateApi, /where:\s*recruitingCandidateReadFilter\(ctx\)/, "candidate API GET must filter candidate identities by recruiting scope");
 expect(candidateApiPath, candidateApi, /applications:\s*\{[\s\S]*where:\s*recruitingApplicationRelationFilter\(ctx\)/, "nested candidate applications must not disclose other requisitions");
+expect(candidateApiPath, candidateApi, /const\s+privileged\s*=\s*hasTenantRecruitingVisibility\(ctx\)/, "candidate personal-data expansion must derive from tenant recruiting authority");
+expect(candidateApiPath, candidateApi, /\.\.\.\(privileged\s*\?\s*\{\s*email:\s*true,\s*retentionUntil:\s*true\s*\}\s*:\s*\{\}\)/, "candidate email and retention metadata must be omitted from read-only manager responses");
 
 if (failures.length) {
   console.error("Recruiting/onboarding access contract validation failed:\n");
@@ -51,4 +53,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated recruiting/onboarding privacy contract: manager candidate visibility is requisition-owned, onboarding reads and operations are employment-scoped, and tenant-wide identity lookups are minimized.");
+console.log("Validated recruiting/onboarding privacy contract: manager candidate visibility is requisition-owned, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, and tenant-wide identity lookups are minimized.");
