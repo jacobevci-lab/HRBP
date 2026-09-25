@@ -12,7 +12,7 @@ export type Capability =
   | "time:read" | "time:write" | "time:self-entry" | "time:approve" | "time:lock" | "time:configure"
   | "leave:read" | "leave:write" | "leave:self-request" | "leave:approve" | "leave:configure"
   | "compensation:read" | "compensation:write" | "compensation:propose" | "compensation:approve" | "compensation:apply"
-  | "payroll:read" | "payroll:write" | "payroll:prepare" | "payroll:approve" | "payroll:pay" | "payroll:configure"
+  | "payroll:read" | "payroll:write" | "payroll:self-payslip" | "payroll:prepare" | "payroll:approve" | "payroll:pay" | "payroll:configure"
   | "benefits:read" | "benefits:write"
   | "performance:read" | "performance:write" | "performance:self-submit" | "performance:manager-review" | "performance:goal-progress"
   | "talent:read" | "talent:write"
@@ -34,6 +34,7 @@ const grants: Record<PlatformRole, Capability[]> = {
   EMPLOYEE: [
     "people:read", "documents:read", "onboarding:read",
     "time:read", "time:self-entry", "leave:read", "leave:self-request",
+    "payroll:self-payslip",
     "performance:read", "performance:self-submit", "performance:goal-progress",
     "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write",
@@ -43,6 +44,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "people:read", "organization:read", "positions:read", "documents:read",
     "recruiting:read", "onboarding:read", "offboarding:read",
     "time:read", "time:self-entry", "time:approve", "leave:read", "leave:self-request", "leave:approve",
+    "payroll:self-payslip",
     "performance:read", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
     "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write",
@@ -54,7 +56,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
     "offboarding:read", "offboarding:write",
     "time:read", "leave:read", "leave:write", "leave:self-request", "leave:approve",
-    "compensation:read", "compensation:propose", "benefits:read",
+    "compensation:read", "compensation:propose", "payroll:self-payslip", "benefits:read",
     "performance:read", "performance:write", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
     "talent:read", "talent:write", "succession:read", "succession:write", "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write", "policies:read",
@@ -69,7 +71,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
     "offboarding:read", "offboarding:write",
     "time:read", "time:write", "time:self-entry", "time:approve", "time:lock", "time:configure",
-    "leave:read", "leave:write", "leave:self-request", "leave:approve", "leave:configure", "compensation:read", "benefits:read", "benefits:write",
+    "leave:read", "leave:write", "leave:self-request", "leave:approve", "leave:configure", "compensation:read", "payroll:self-payslip", "benefits:read", "benefits:write",
     "performance:read", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
     "learning:read", "learning:write", "learning:self-progress",
     "hr-service:read", "hr-service:write",
@@ -80,49 +82,51 @@ const grants: Record<PlatformRole, Capability[]> = {
   ],
   RECRUITER: [
     "people:read", "organization:read", "positions:read", "documents:read",
-    "recruiting:read", "recruiting:write", "onboarding:read", "policies:read", "ai:use"
+    "recruiting:read", "recruiting:write", "onboarding:read", "payroll:self-payslip", "policies:read", "ai:use"
   ],
   TIME_ADMIN: [
     "people:read", "organization:read",
     "time:read", "time:write", "time:self-entry", "time:approve", "time:lock", "time:configure",
-    "leave:read", "leave:write", "leave:self-request", "leave:approve", "leave:configure", "policies:read"
+    "leave:read", "leave:write", "leave:self-request", "leave:approve", "leave:configure", "payroll:self-payslip", "policies:read"
   ],
   TALENT_ADMIN: [
     "people:read", "organization:read", "positions:read",
+    "payroll:self-payslip",
     "performance:read", "performance:write", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
     "talent:read", "talent:write", "succession:read", "succession:write", "learning:read", "learning:write", "learning:self-progress",
     "policies:read", "engagement:read", "engagement:write", "analytics:read", "ai:use"
   ],
   COMPENSATION_ADMIN: [
     "people:read", "organization:read", "positions:read",
-    "compensation:read", "compensation:propose", "compensation:approve", "compensation:apply", "payroll:read", "benefits:read",
+    "compensation:read", "compensation:propose", "compensation:approve", "compensation:apply", "payroll:read", "payroll:self-payslip", "benefits:read",
     "policies:read", "analytics:read"
   ],
   PAYROLL_ADMIN: [
     "people:read", "organization:read", "time:read", "leave:read",
-    "compensation:read", "payroll:read", "payroll:prepare", "payroll:approve", "payroll:pay", "payroll:configure",
+    "compensation:read", "payroll:read", "payroll:self-payslip", "payroll:prepare", "payroll:approve", "payroll:pay", "payroll:configure",
     "benefits:read", "offboarding:read", "policies:read"
   ],
   ER_INVESTIGATOR: [
-    "people:read", "cases:read", "cases:write", "documents:read", "documents:write", "policies:read"
+    "people:read", "cases:read", "cases:write", "documents:read", "documents:write", "payroll:self-payslip", "policies:read"
   ],
   LEGAL: [
     "people:read", "cases:read",
     "documents:read", "documents:write", "documents:sign", "documents:grant", "documents:govern",
+    "payroll:self-payslip",
     "policies:read", "policies:write", "policies:approve",
     "privacy:read", "audit:read"
   ],
   PRIVACY_OFFICER: [
-    "people:read", "cases:read", "documents:read", "policies:read",
+    "people:read", "cases:read", "documents:read", "payroll:self-payslip", "policies:read",
     "privacy:read", "privacy:write", "audit:read"
   ],
-  SECURITY_AUDITOR: ["settings:read", "audit:read"],
+  SECURITY_AUDITOR: ["payroll:self-payslip", "settings:read", "audit:read"],
   TENANT_ADMIN: [
     "people:read", "people:write", "organization:read", "organization:write",
     "positions:read", "positions:write", "documents:read", "documents:write",
     "recruiting:read", "recruiting:write", "onboarding:read", "onboarding:write",
     "offboarding:read", "time:read", "time:configure", "leave:read", "leave:write", "leave:self-request", "leave:approve", "leave:configure",
-    "benefits:read", "performance:read", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
+    "payroll:self-payslip", "benefits:read", "performance:read", "performance:self-submit", "performance:manager-review", "performance:goal-progress",
     "talent:read", "succession:read", "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write", "policies:read", "engagement:read",
     "workforce-plan:read", "analytics:read", "ai:use",
