@@ -27,6 +27,7 @@ export async function listCaseWallCases(ctx: RequestContext, client: CaseWallCli
       ]
     },
     orderBy: { openedAt: "desc" },
+    take: 200,
     include: {
       subject: { select: { id: true, employeeNumber: true, givenName: true, familyName: true } },
       assignments: { select: { assignedAt: true, user: { select: { displayName: true, role: true, subject: true } } } }
