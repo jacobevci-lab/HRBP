@@ -1,10 +1,13 @@
-import { DataClassification, Prisma, SeparationStatus } from "@prisma/client";
+import { DataClassification, Prisma, RequisitionStatus, SeparationStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
+
+const autoCancelableReplacementStatuses: RequisitionStatus[] = [RequisitionStatus.DRAFT, RequisitionStatus.APPROVAL];
+const committedReplacementStatuses: RequisitionStatus[] = [RequisitionStatus.OPEN, RequisitionStatus.ON_HOLD, RequisitionStatus.CLOSED];
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
@@ -32,7 +35,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           employmentId: true,
           status: true,
           finalSettlementStatus: true,
-          completedAt: true
+          completedAt: true,
+          replacementRequisitionId: true
         }
       });
       if (!process) throw new Error("NOT_FOUND");
@@ -43,13 +47,43 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (process.finalSettlementStatus === "SETTLED") throw new Error("SETTLED");
 
       const now = new Date();
+      let replacementAutoCancelled = false;
+      if (process.replacementRequisitionId) {
+        const requisition = await tx.requisition.findFirst({
+          where: { id: process.replacementRequisitionId, tenantId: ctx.tenantId },
+          select: { id: true, status: true }
+        });
+        if (requisition && requisition.status !== RequisitionStatus.CANCELLED && !can(ctx, "recruiting:write")) throw new Error("RECRUITING_WRITE_REQUIRED");
+        if (requisition && committedReplacementStatuses.includes(requisition.status)) throw new Error("REPLACEMENT_COMMITTED");
+        if (requisition && autoCancelableReplacementStatuses.includes(requisition.status)) {
+          const cancelled = await tx.requisition.updateMany({
+            where: { id: requisition.id, tenantId: ctx.tenantId, status: requisition.status },
+            data: { status: RequisitionStatus.CANCELLED }
+          });
+          if (cancelled.count !== 1) throw new Error("STATE_CONFLICT");
+          replacementAutoCancelled = true;
+          await tx.notificationOutbox.updateMany({
+            where: { tenantId: ctx.tenantId, resourceType: "Requisition", resourceId: requisition.id, readAt: null },
+            data: { readAt: now }
+          });
+          await appendAudit(tx, ctx, {
+            action: "REQUISITION_CANCELLED_FROM_OFFBOARDING",
+            resourceType: "Requisition",
+            resourceId: requisition.id,
+            classification: DataClassification.CONFIDENTIAL,
+            purpose: "Draft or approval-stage backfill requisition retired because the source separation was cancelled"
+          });
+        }
+      }
+
       const updated = await tx.separationProcess.updateMany({
         where: {
           id: process.id,
           tenantId: ctx.tenantId,
           status: process.status,
           completedAt: null,
-          finalSettlementStatus: process.finalSettlementStatus
+          finalSettlementStatus: process.finalSettlementStatus,
+          replacementRequisitionId: process.replacementRequisitionId
         },
         data: {
           status: SeparationStatus.CANCELLED,
@@ -90,7 +124,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         status: SeparationStatus.CANCELLED,
         cancelledAt: now,
         cancelledById: ctx.actorId,
-        cancellationReason: reason
+        cancellationReason: reason,
+        replacementRequisitionId: process.replacementRequisitionId,
+        replacementAutoCancelled
       };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
@@ -101,6 +137,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (code === "OUT_OF_SCOPE") return forbidden("Separation process is outside your authorized relationship scope.");
     if (code === "TERMINAL") return Response.json({ error: "Closed or already-cancelled separation processes cannot be cancelled." }, { status: 409 });
     if (code === "SETTLED") return Response.json({ error: "A settled final payment must be formally reversed before the separation process can be cancelled." }, { status: 409 });
+    if (code === "RECRUITING_WRITE_REQUIRED") return forbidden("The linked recruiting handoff requires recruiting:write before the source separation can be cancelled.");
+    if (code === "REPLACEMENT_COMMITTED") return Response.json({ error: "The linked backfill requisition has already advanced beyond the uncommitted draft/approval stages. Resolve or cancel it in Recruiting before cancelling the source separation." }, { status: 409 });
     if (code === "STATE_CONFLICT" || (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034")) {
       return Response.json({ error: "The separation changed concurrently. Refresh and try again." }, { status: 409 });
     }

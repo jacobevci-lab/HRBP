@@ -41,6 +41,12 @@ function compactHash(value: string) {
   return value.length <= 22 ? value : `${value.slice(0, 12)}…${value.slice(-8)}`;
 }
 
+function replacementLabel(locale: Locale, required: boolean | null, requisitionId: string | null) {
+  if (required === null) return c(locale, "Not recorded", "Kaydedilmedi");
+  if (!required) return c(locale, "No replacement", "Yedekleme yok");
+  return requisitionId ? `${c(locale, "Backfill", "Yedek kadro")} · ${requisitionId.slice(0, 10)}` : c(locale, "Backfill approved", "Yedek kadro onaylandı");
+}
+
 export function OffboardingHistory({ data, locale }: { data: OffboardingHistoryData; locale: Locale }) {
   return <section className="card off-panel">
     <div className="off-head">
@@ -77,6 +83,7 @@ export function OffboardingHistory({ data, locale }: { data: OffboardingHistoryD
           <span>{c(locale, "Tasks", "Görevler")} <b>{row.tasksCompleted} {c(locale, "done", "tamam")} · {row.tasksWaived} {c(locale, "waived", "muaf")} · {row.tasksOpen} {c(locale, "open", "açık")}</b></span>
           <span>{c(locale, "Assets", "Varlıklar")} <b>{row.assetsReturned} {c(locale, "returned", "iade")} · {row.assetsWrittenOff} {c(locale, "written off", "düşüm")} · {row.assetsOpen} {c(locale, "open", "açık")}</b></span>
           <span>{c(locale, "Access", "Erişim")} <b>{row.accessRevoked} {c(locale, "revoked", "iptal")} · {row.accessExceptions} {c(locale, "exceptions", "istisna")} · {row.accessOpen} {c(locale, "open", "açık")}</b></span>
+          <span>{c(locale, "Replacement", "Yedekleme")} <b>{replacementLabel(locale, row.replacementRequired, row.replacementRequisitionId)}</b></span>
           <span>{c(locale, "Final settlement", "Nihai hesap")} <b>{label(locale, row.finalSettlementStatus)}</b></span>
         </div>
 
