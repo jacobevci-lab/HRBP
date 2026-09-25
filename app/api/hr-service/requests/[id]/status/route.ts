@@ -10,6 +10,7 @@ import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/re
 const staffOnly = new Set<PlatformRole>([PlatformRole.HRBP, PlatformRole.HR_OPERATIONS, PlatformRole.TENANT_ADMIN]);
 const waitingStatuses = new Set<ServiceRequestStatus>([ServiceRequestStatus.WAITING_EMPLOYEE, ServiceRequestStatus.WAITING_THIRD_PARTY]);
 const terminalStatuses = new Set<ServiceRequestStatus>([ServiceRequestStatus.RESOLVED, ServiceRequestStatus.CLOSED, ServiceRequestStatus.CANCELLED]);
+const firstResponseStatuses = new Set<ServiceRequestStatus>([ServiceRequestStatus.WAITING_EMPLOYEE, ServiceRequestStatus.RESOLVED, ServiceRequestStatus.CLOSED, ServiceRequestStatus.CANCELLED]);
 const fallbackSlaMinutes: Record<string, number> = { LOW: 4320, MEDIUM: 1440, HIGH: 480, CRITICAL: 240 };
 const transitions: Record<ServiceRequestStatus, ServiceRequestStatus[]> = {
   OPEN: [ServiceRequestStatus.TRIAGE, ServiceRequestStatus.CANCELLED],
@@ -144,7 +145,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
 
       const shouldResetEscalation = enteringWait || reopening || terminalStatuses.has(nextStatus);
-      const establishesFirstResponse = [ServiceRequestStatus.WAITING_EMPLOYEE, ServiceRequestStatus.RESOLVED, ServiceRequestStatus.CLOSED, ServiceRequestStatus.CANCELLED].includes(nextStatus);
+      const establishesFirstResponse = firstResponseStatuses.has(nextStatus);
       const updated = await tx.hRServiceRequest.updateMany({
         where: { id: current.id, tenantId: ctx.tenantId, status: current.status, updatedAt: current.updatedAt },
         data: {
