@@ -15,11 +15,11 @@ const statuses = {
   settled: "SETTLED"
 } as const;
 
-type SettlementAction = "PREPARE" | "APPROVE" | "SETTLE";
+type SettlementAction = "PREPARE" | "APPROVE" | "SETTLE" | "REVERSE";
 
 function normalizeAction(value: unknown): SettlementAction | null {
   const action = asText(value, 20)?.toUpperCase();
-  return action === "PREPARE" || action === "APPROVE" || action === "SETTLE" ? action : null;
+  return action === "PREPARE" || action === "APPROVE" || action === "SETTLE" || action === "REVERSE" ? action : null;
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -32,14 +32,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
   const action = normalizeAction(body.action);
-  if (!action) return Response.json({ error: "action must be PREPARE, APPROVE or SETTLE." }, { status: 400 });
+  if (!action) return Response.json({ error: "action must be PREPARE, APPROVE, SETTLE or REVERSE." }, { status: 400 });
   const note = asOptionalText(body.note, 2000);
   if (note === null) return Response.json({ error: "note must be 2000 characters or fewer." }, { status: 400 });
   if (action === "PREPARE" && (!note || note.length < 5)) return Response.json({ error: "Preparing final settlement requires a note or evidence reference of at least 5 characters." }, { status: 400 });
+  if (action === "REVERSE" && (!note || note.length < 10)) return Response.json({ error: "Reversing a settled final payment requires a reason of at least 10 characters." }, { status: 400 });
 
   if (action === "PREPARE" && !can(ctx, "payroll:prepare")) return forbidden("Final settlement preparation requires payroll preparation authority.");
   if (action === "APPROVE" && !can(ctx, "payroll:approve")) return forbidden("Final settlement approval requires payroll approval authority.");
-  if (action === "SETTLE" && !can(ctx, "payroll:pay")) return forbidden("Final settlement completion requires payroll payment authority.");
+  if ((action === "SETTLE" || action === "REVERSE") && !can(ctx, "payroll:pay")) return forbidden("Final settlement payment or reversal requires payroll payment authority.");
 
   try {
     const data = await db.$transaction(async (tx) => {
@@ -53,7 +54,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           lastWorkingDate: true,
           finalSettlementStatus: true,
           finalSettlementPreparedById: true,
-          finalSettlementApprovedById: true
+          finalSettlementApprovedById: true,
+          finalSettlementSettledById: true
         }
       });
       if (!process) throw new Error("PROCESS_NOT_FOUND");
@@ -69,6 +71,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       let recipientRole: PlatformRole;
       let templateKey: string;
       let auditAction: string;
+      let dedupeKey: string;
 
       if (action === "PREPARE") {
         if (current !== statuses.notStarted) throw new Error("INVALID_TRANSITION");
@@ -81,12 +84,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           finalSettlementApprovedById: null,
           finalSettlementApprovedAt: null,
           finalSettlementSettledById: null,
-          finalSettlementSettledAt: null
+          finalSettlementSettledAt: null,
+          finalSettlementReversalReason: null,
+          finalSettlementReversedById: null,
+          finalSettlementReversedAt: null
         };
         eventType = "OFFBOARDING_FINAL_SETTLEMENT_APPROVAL_REQUIRED";
         recipientRole = PlatformRole.PAYROLL_ADMIN;
         templateKey = "offboarding.final-settlement-approval";
         auditAction = "offboarding.final-settlement-prepared";
+        dedupeKey = `offboarding-process:${process.id}:final-settlement:${next.toLowerCase()}`;
       } else if (action === "APPROVE") {
         if (current !== statuses.prepared) throw new Error("INVALID_TRANSITION");
         if (process.finalSettlementPreparedById === ctx.actorId) throw new Error("FOUR_EYES_APPROVAL");
@@ -96,11 +103,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         recipientRole = PlatformRole.PAYROLL_ADMIN;
         templateKey = "offboarding.final-settlement-payment";
         auditAction = "offboarding.final-settlement-approved";
+        dedupeKey = `offboarding-process:${process.id}:final-settlement:${next.toLowerCase()}`;
         await tx.notificationOutbox.updateMany({
           where: { tenantId: ctx.tenantId, resourceType: "SeparationProcess", resourceId: process.id, eventType: "OFFBOARDING_FINAL_SETTLEMENT_APPROVAL_REQUIRED", readAt: null },
           data: { readAt: now }
         });
-      } else {
+      } else if (action === "SETTLE") {
         if (current !== statuses.approved) throw new Error("INVALID_TRANSITION");
         if (process.finalSettlementApprovedById === ctx.actorId) throw new Error("FOUR_EYES_PAYMENT");
         next = statuses.settled;
@@ -109,8 +117,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         recipientRole = PlatformRole.HR_OPERATIONS;
         templateKey = "offboarding.final-settlement-settled";
         auditAction = "offboarding.final-settlement-settled";
+        dedupeKey = `offboarding-process:${process.id}:final-settlement:settled:${now.toISOString()}`;
         await tx.notificationOutbox.updateMany({
           where: { tenantId: ctx.tenantId, resourceType: "SeparationProcess", resourceId: process.id, eventType: "OFFBOARDING_FINAL_SETTLEMENT_PAYMENT_REQUIRED", readAt: null },
+          data: { readAt: now }
+        });
+      } else {
+        if (current !== statuses.settled) throw new Error("INVALID_TRANSITION");
+        if (process.finalSettlementSettledById === ctx.actorId) throw new Error("FOUR_EYES_REVERSAL");
+        next = statuses.approved;
+        update = {
+          finalSettlementStatus: next,
+          finalSettlementReversalReason: note,
+          finalSettlementReversedById: ctx.actorId,
+          finalSettlementReversedAt: now
+        };
+        eventType = "OFFBOARDING_FINAL_SETTLEMENT_PAYMENT_REQUIRED";
+        recipientRole = PlatformRole.PAYROLL_ADMIN;
+        templateKey = "offboarding.final-settlement-payment";
+        auditAction = "offboarding.final-settlement-reversed";
+        dedupeKey = `offboarding-process:${process.id}:final-settlement:repayment:${now.toISOString()}`;
+        await tx.notificationOutbox.updateMany({
+          where: {
+            tenantId: ctx.tenantId,
+            resourceType: "SeparationProcess",
+            resourceId: process.id,
+            eventType: { in: ["OFFBOARDING_FINAL_SETTLEMENT_SETTLED", "OFFBOARDING_READY_TO_CLOSE"] },
+            readAt: null
+          },
           data: { readAt: now }
         });
       }
@@ -127,7 +161,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         resourceType: "SeparationProcess",
         resourceId: process.id,
         classification: DataClassification.RESTRICTED,
-        purpose: `Governed final settlement transition ${current} -> ${next}; payroll authority=${action.toLowerCase()}`
+        purpose: action === "REVERSE"
+          ? `Governed final settlement reversal ${current} -> ${next}; reason=${note}; payroll authority=reverse`
+          : `Governed final settlement transition ${current} -> ${next}; payroll authority=${action.toLowerCase()}`
       });
       await enqueueNotificationOutbox(tx, {
         tenantId: ctx.tenantId,
@@ -136,17 +172,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         templateKey,
         resourceType: "SeparationProcess",
         resourceId: process.id,
-        dedupeKey: `offboarding-process:${process.id}:final-settlement:${next.toLowerCase()}`,
+        dedupeKey,
         classification: DataClassification.RESTRICTED,
         payload: {
           separationProcessId: process.id,
-          reminderState: `final-settlement-${next.toLowerCase()}`,
+          reminderState: action === "REVERSE" ? "final-settlement-repayment-required" : `final-settlement-${next.toLowerCase()}`,
           finalSettlementStatus: next,
-          lastWorkingDate: process.lastWorkingDate.toISOString()
+          lastWorkingDate: process.lastWorkingDate.toISOString(),
+          ...(action === "REVERSE" ? { reversalReason: note, reversedAt: now.toISOString() } : {})
         }
       });
 
-      return { id: process.id, finalSettlementStatus: next, processStatus: readiness.processStatus };
+      return { id: process.id, finalSettlementStatus: next, processStatus: readiness.processStatus, reversed: action === "REVERSE" };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return Response.json({ data });
   } catch (error) {
@@ -157,6 +194,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (code === "INVALID_TRANSITION") return Response.json({ error: "The requested final settlement transition is not allowed from the current state." }, { status: 409 });
     if (code === "FOUR_EYES_APPROVAL") return Response.json({ error: "The payroll user who prepared final settlement cannot approve the same settlement." }, { status: 409 });
     if (code === "FOUR_EYES_PAYMENT") return Response.json({ error: "The payroll user who approved final settlement cannot mark the same settlement as settled." }, { status: 409 });
+    if (code === "FOUR_EYES_REVERSAL") return Response.json({ error: "The payroll user who marked final settlement as settled cannot reverse the same settlement." }, { status: 409 });
     if (code === "STATE_CONFLICT") return Response.json({ error: "Final settlement or separation state changed concurrently. Refresh and try again." }, { status: 409 });
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") return Response.json({ error: "A concurrent final settlement change was detected. Refresh and try again." }, { status: 409 });
     console.error("Offboarding final settlement transition failed", error);
