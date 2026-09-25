@@ -2,6 +2,7 @@ import { DataClassification, RequisitionStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { recruitingRequisitionReadFilter } from "@/lib/recruiting-access";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
@@ -10,7 +11,7 @@ export async function GET(request: Request) {
   if (!can(ctx, "recruiting:read")) return forbidden();
 
   const data = await withDb((db) => db.requisition.findMany({
-    where: { tenantId: ctx.tenantId },
+    where: recruitingRequisitionReadFilter(ctx),
     orderBy: { createdAt: "desc" },
     include: {
       position: { select: { id: true, positionCode: true, title: true, location: true, orgUnit: { select: { id: true, name: true } } } },
