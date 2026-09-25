@@ -53,7 +53,8 @@ const dataPath = "lib/offboarding-live-data.ts";
 const data = await source(dataPath);
 expect(dataPath, data, /initiatedById:\s*true/, "offboarding data must expose initiator for four-eyes UI");
 expect(dataPath, data, /lastWorkingDateIso/, "offboarding data must expose machine-readable last day");
-expect(dataPath, data, /overdueTasks[\s\S]*exitRiskProcesses/, "workspace must surface overdue and exit-date risk");
+expect(dataPath, data, /overdueTasks/, "workspace must surface overdue task risk");
+expect(dataPath, data, /exitRiskProcesses/, "workspace must surface exit-date risk");
 expect(dataPath, data, /assets:[\s\S]*accessControls:/, "workspace data must expose asset and access controls");
 
 const consolePath = "components/offboarding-operations-console.tsx";
@@ -66,7 +67,8 @@ expect(consolePath, consoleSource, /offboarding-process-\$\{process\.id\}[\s\S]*
 const workspacePath = "components/offboarding-workspace.tsx";
 const workspace = await source(workspacePath);
 expect(workspacePath, workspace, /actorId=\{ctx\.actorId\}/, "workspace must pass actor identity to four-eyes console");
-expect(workspacePath, workspace, /data\.overdueTasks[\s\S]*data\.exitRiskProcesses/, "workspace metrics must surface exit risk");
+expect(workspacePath, workspace, /data\.overdueTasks/, "workspace metrics must surface overdue exit controls");
+expect(workspacePath, workspace, /data\.exitRiskProcesses/, "workspace metrics must surface exit-date risk");
 
 const reminderPath = "lib/offboarding-reminders.ts";
 const reminder = await source(reminderPath);
