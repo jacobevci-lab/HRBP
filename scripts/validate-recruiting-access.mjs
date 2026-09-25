@@ -113,10 +113,22 @@ expect(notificationsPath, notifications, /recipientUserId:\s*input\.recipientUse
 expect(notificationsPath, notifications, /DataClassification\.RESTRICTED/, "offer notification payloads must remain restricted");
 expect(notificationsPath, notifications, /dedupeKey:/, "recruiting notifications must be idempotent through dedupe keys");
 
+const presentationPath = "lib/notification-presentation.ts";
+const presentation = await source(presentationPath);
+expect(presentationPath, presentation, /RECRUITING_REQUISITION_APPROVAL_REQUIRED:[\s\S]*İşe alım talebi onayı gerekiyor/, "recruiting requisition approvals must have localized notification titles");
+expect(presentationPath, presentation, /RECRUITING_OFFER_APPROVAL_REQUIRED:[\s\S]*Teklif onayı gerekiyor/, "recruiting offer approvals must have localized notification titles");
+expect(presentationPath, presentation, /RECRUITING_OFFER_EXPIRED:[\s\S]*Teklifin süresi doldu/, "expired offers must have a localized notification title");
+expect(presentationPath, presentation, /const recruitingRecordType = text\(data\.recruitingRecordType\)/, "notification summaries must recognize recruiting record metadata");
+expect(presentationPath, presentation, /const recruitingDecision = text\(data\.recruitingDecision\)/, "notification summaries must render recruiting decision outcomes");
+expect(presentationPath, presentation, /resourceType === "Requisition"[\s\S]*\/module\/recruiting\?requisition=/, "requisition notifications must navigate back to recruiting");
+expect(presentationPath, presentation, /resourceType === "Offer"[\s\S]*\/module\/recruiting\?offer=/, "offer notifications must navigate back to recruiting");
+expect(presentationPath, presentation, /resourceType === "Candidate"[\s\S]*\/module\/recruiting\?candidate=/, "candidate notifications must navigate back to recruiting");
+expect(presentationPath, presentation, /resourceType === "Application"[\s\S]*\/module\/recruiting\?application=/, "application notifications must navigate back to recruiting");
+
 if (failures.length) {
   console.error("Recruiting/onboarding access contract validation failed:\n");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, recruiting assignment selectors are minimized, positions cannot be reused across active requisitions, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, authenticated failures remain protected, requisition and offer approvals are centralized, preparers are four-eyes locked from their own decisions, application actions respect active-offer ownership, and approval workflows emit durable notification intent.");
+console.log("Validated recruiting/onboarding governance contract: manager candidate visibility is requisition-owned, recruiting assignment selectors are minimized, positions cannot be reused across active requisitions, read-only candidate personal data is minimized, onboarding reads and operations are employment-scoped, authenticated failures remain protected, requisition and offer approvals are centralized, preparers are four-eyes locked from their own decisions, application actions respect active-offer ownership, approval workflows emit durable notification intent, and recruiting notifications are localized and deep-linked.");

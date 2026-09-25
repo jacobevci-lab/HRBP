@@ -34,6 +34,15 @@ export function notificationTitle(eventType: string, locale: Locale) {
     LEAVE_APPROVAL_REQUIRED: { en: "Leave approval required", tr: "İzin onayı gerekiyor" },
     LEAVE_REQUEST_APPROVED: { en: "Leave request approved", tr: "İzin talebi onaylandı" },
     LEAVE_REQUEST_REJECTED: { en: "Leave request rejected", tr: "İzin talebi reddedildi" },
+    RECRUITING_REQUISITION_APPROVAL_REQUIRED: { en: "Requisition approval required", tr: "İşe alım talebi onayı gerekiyor" },
+    RECRUITING_REQUISITION_APPROVED: { en: "Requisition approved", tr: "İşe alım talebi onaylandı" },
+    RECRUITING_REQUISITION_RETURNED: { en: "Requisition returned", tr: "İşe alım talebi geri gönderildi" },
+    RECRUITING_REQUISITION_CANCELLED: { en: "Requisition cancelled", tr: "İşe alım talebi iptal edildi" },
+    RECRUITING_OFFER_APPROVAL_REQUIRED: { en: "Offer approval required", tr: "Teklif onayı gerekiyor" },
+    RECRUITING_OFFER_APPROVED: { en: "Offer approved", tr: "Teklif onaylandı" },
+    RECRUITING_OFFER_RETURNED: { en: "Offer returned", tr: "Teklif geri gönderildi" },
+    RECRUITING_OFFER_WITHDRAWN: { en: "Offer withdrawn", tr: "Teklif geri çekildi" },
+    RECRUITING_OFFER_EXPIRED: { en: "Offer expired", tr: "Teklifin süresi doldu" },
     PERFORMANCE_SELF_REVIEW_READY: { en: "Self review ready", tr: "Öz değerlendirme hazır" },
     PERFORMANCE_MANAGER_REVIEW_READY: { en: "Manager review ready", tr: "Yönetici değerlendirmesi hazır" },
     LEARNING_ASSIGNMENT_READY: { en: "Learning assignment ready", tr: "Eğitim ataması hazır" },
@@ -95,6 +104,15 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const leaveEndsAt = text(data.endsAt);
   const leaveUnits = text(data.units);
   const leaveDecision = text(data.decision);
+  const recruitingRecordType = text(data.recruitingRecordType);
+  const recruitingTitle = text(data.recruitingTitle);
+  const recruitingOpenings = numberValue(data.recruitingOpenings);
+  const recruitingCandidateName = text(data.recruitingCandidateName);
+  const recruitingCurrency = text(data.recruitingCurrency);
+  const recruitingAnnualBase = text(data.recruitingAnnualBase);
+  const recruitingStartDate = text(data.recruitingStartDate);
+  const recruitingExpiresAt = text(data.recruitingExpiresAt);
+  const recruitingDecision = text(data.recruitingDecision);
   const positionCode = text(data.positionCode);
   const positionTitle = text(data.positionTitle);
   const reviewDueAt = text(data.reviewDueAt);
@@ -113,6 +131,32 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   if (brokenEventId) {
     const detail = integrityReason ?? (locale === "tr" ? "Hash-zinciri doğrulaması başarısız oldu." : "Hash-chain verification failed.");
     return `${brokenEventId}: ${detail}`;
+  }
+  if (recruitingRecordType && recruitingTitle) {
+    if (recruitingRecordType === "REQUISITION") {
+      const openingText = recruitingOpenings !== undefined ? (locale === "tr" ? `${recruitingOpenings} kadro` : `${recruitingOpenings} opening${recruitingOpenings === 1 ? "" : "s"}`) : null;
+      const base = `${recruitingTitle}${openingText ? ` · ${openingText}` : ""}`;
+      if (recruitingDecision === "APPROVED") return locale === "tr" ? `${base} · bağımsız onay tamamlandı ve talep açıldı.` : `${base} · independently approved and opened.`;
+      if (recruitingDecision === "RETURNED") return locale === "tr" ? `${base} · düzeltme için taslağa geri gönderildi.` : `${base} · returned to draft for revision.`;
+      if (recruitingDecision === "CANCELLED") return locale === "tr" ? `${base} · iptal edildi.` : `${base} · cancelled.`;
+      return locale === "tr" ? `${base} · bağımsız onay bekliyor.` : `${base} · waiting for independent approval.`;
+    }
+
+    const candidate = recruitingCandidateName ? `${recruitingCandidateName} · ` : "";
+    let amount = recruitingAnnualBase && recruitingCurrency ? `${recruitingCurrency} ${recruitingAnnualBase}` : null;
+    if (recruitingAnnualBase && recruitingCurrency) {
+      try {
+        amount = new Intl.NumberFormat(locale === "tr" ? "tr-TR" : "en-US", { style: "currency", currency: recruitingCurrency, maximumFractionDigits: 0 }).format(Number(recruitingAnnualBase));
+      } catch {}
+    }
+    const start = recruitingStartDate ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(recruitingStartDate)) : null;
+    const expiry = recruitingExpiresAt ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(recruitingExpiresAt)) : null;
+    const base = `${candidate}${recruitingTitle}${amount ? ` · ${amount}` : ""}${start ? ` · ${locale === "tr" ? "başlangıç" : "start"} ${start}` : ""}`;
+    if (recruitingDecision === "APPROVED") return locale === "tr" ? `${base} · bağımsız onay tamamlandı ve gönderime hazırlandı.` : `${base} · independently approved and released for sending.`;
+    if (recruitingDecision === "RETURNED") return locale === "tr" ? `${base} · düzeltme için taslağa geri gönderildi.` : `${base} · returned to draft for revision.`;
+    if (recruitingDecision === "WITHDRAWN") return locale === "tr" ? `${base} · geri çekildi.` : `${base} · withdrawn.`;
+    if (recruitingDecision === "EXPIRED") return locale === "tr" ? `${base}${expiry ? ` · son tarih ${expiry}` : ""} · teklifin süresi doldu.` : `${base}${expiry ? ` · expired ${expiry}` : ""} · offer expired.`;
+    return locale === "tr" ? `${base} · bağımsız onay bekliyor.` : `${base} · waiting for independent approval.`;
   }
   if (payrollPeriodCode && payrollCountryCode && payrollRunNumber !== undefined) {
     const payDate = payrollPayDate ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium" }).format(new Date(payrollPayDate)) : null;
@@ -236,6 +280,10 @@ export function notificationResourceHref(resourceType: string, resourceId?: stri
   if (resourceType === "CompensationChange") return id ? `/module/compensation?change=${encodeURIComponent(id)}` : "/module/compensation";
   if (resourceType === "PayrollRun") return id ? `/module/payroll?run=${encodeURIComponent(id)}` : "/module/payroll";
   if (resourceType === "LeaveRequest") return id ? `/module/leave?request=${encodeURIComponent(id)}` : "/module/leave";
+  if (resourceType === "Requisition") return id ? `/module/recruiting?requisition=${encodeURIComponent(id)}` : "/module/recruiting";
+  if (resourceType === "Offer") return id ? `/module/recruiting?offer=${encodeURIComponent(id)}` : "/module/recruiting";
+  if (resourceType === "Candidate") return id ? `/module/recruiting?candidate=${encodeURIComponent(id)}` : "/module/recruiting";
+  if (resourceType === "Application") return id ? `/module/recruiting?application=${encodeURIComponent(id)}` : "/module/recruiting";
   if (resourceType === "PerformanceReview") return id ? `/module/performance?review=${encodeURIComponent(id)}` : "/module/performance";
   if (resourceType === "LearningAssignment") return id ? `/module/learning?assignment=${encodeURIComponent(id)}` : "/module/learning";
   if (resourceType === "SuccessionPlan") return id ? `/module/succession?plan=${encodeURIComponent(id)}` : "/module/succession";
