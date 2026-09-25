@@ -4,6 +4,7 @@ import { queueDevelopmentPlanReminders } from "@/lib/development-plan-reminders"
 import { internalBearerAuthorized } from "@/lib/internal-auth";
 import { runLearningMaintenance } from "@/lib/learning-maintenance";
 import { queueLearningReminders } from "@/lib/learning-reminders";
+import { queueOnboardingReadinessReminders } from "@/lib/onboarding-reminders";
 import { runOperationalMaintenance } from "@/lib/operational-maintenance";
 import { runRecruitingMaintenance } from "@/lib/recruiting-maintenance";
 import { queueSuccessionReviewReminders } from "@/lib/succession-reminders";
@@ -14,11 +15,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "Valid internal maintenance credentials are required." }, { status: 401 });
   }
 
-  // Audited lifecycle normalizers run serially so their hash-chain writes never
-  // race each other for the same tenant ledger head.
+  // Audited lifecycle normalizers and onboarding readiness escalation run
+  // serially so their hash-chain writes never race each other for the same
+  // tenant ledger head.
   const benefitsLifecycle = await runBenefitsMaintenance();
   const learningLifecycle = await runLearningMaintenance();
   const recruitingLifecycle = await runRecruitingMaintenance();
+  const onboardingReadiness = await queueOnboardingReadinessReminders();
   const [workflowReminders, learningReminders, successionReminders, developmentPlanReminders, auditIntegrity] = await Promise.all([
     queueWorkflowReminders(),
     queueLearningReminders(),
@@ -27,5 +30,5 @@ export async function POST(request: Request) {
     monitorAuditIntegrity()
   ]);
   const data = await runOperationalMaintenance();
-  return Response.json({ data: { ...data, benefitsLifecycle, learningLifecycle, recruitingLifecycle, workflowReminders, learningReminders, successionReminders, developmentPlanReminders, auditIntegrity } });
+  return Response.json({ data: { ...data, benefitsLifecycle, learningLifecycle, recruitingLifecycle, onboardingReadiness, workflowReminders, learningReminders, successionReminders, developmentPlanReminders, auditIntegrity } });
 }

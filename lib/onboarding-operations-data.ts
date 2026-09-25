@@ -9,6 +9,7 @@ export type OnboardingTaskOperation = {
   person: string;
   employeeNumber: string;
   planStatus: string;
+  targetStartDate: string;
   title: string;
   ownerType: string;
   status: string;
@@ -30,6 +31,7 @@ export async function getOnboardingOperationsData(ctx: RequestContext): Promise<
       select: {
         id: true,
         status: true,
+        targetStartDate: true,
         person: { select: { givenName: true, familyName: true, employeeNumber: true } },
         tasks: {
           orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
@@ -44,6 +46,7 @@ export async function getOnboardingOperationsData(ctx: RequestContext): Promise<
       person: `${plan.person.givenName} ${plan.person.familyName}`,
       employeeNumber: plan.person.employeeNumber ?? "—",
       planStatus: plan.status,
+      targetStartDate: plan.targetStartDate.toISOString(),
       title: task.title,
       ownerType: task.ownerType,
       status: task.status,

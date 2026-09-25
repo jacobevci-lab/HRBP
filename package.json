@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "npm run db:generate && next dev",
-    "prebuild": "npm run routes:validate && npm run ui:validate && npm run staging:validate && npm run performance:validate && npm run growth:validate && npm run growth-automation:validate && npm run talent-learning:validate && npm run benefits:validate && npm run connected-growth:validate && npm run development-plan:validate && npm run leave:validate && npm run time:validate && npm run compensation:validate && npm run payroll:validate && npm run recruiting-access:validate && npm run hire:validate",
+    "prebuild": "npm run routes:validate && npm run ui:validate && npm run staging:validate && npm run performance:validate && npm run growth:validate && npm run growth-automation:validate && npm run talent-learning:validate && npm run benefits:validate && npm run connected-growth:validate && npm run development-plan:validate && npm run leave:validate && npm run time:validate && npm run compensation:validate && npm run payroll:validate && npm run recruiting-access:validate && npm run onboarding-readiness:validate && npm run hire:validate",
     "build": "npm run db:generate && next build",
     "start": "next start",
     "lint": "eslint .",
@@ -26,6 +26,7 @@
     "compensation:validate": "node scripts/validate-compensation-governance.mjs",
     "payroll:validate": "node scripts/validate-payroll-governance.mjs",
     "recruiting-access:validate": "node scripts/validate-recruiting-access.mjs",
+    "onboarding-readiness:validate": "node scripts/validate-onboarding-readiness.mjs",
     "hire:validate": "node scripts/validate-hire-conversion.mjs",
     "typecheck": "npm run db:generate && tsc --noEmit",
     "security:audit:prod": "npm audit --omit=dev --audit-level=high",

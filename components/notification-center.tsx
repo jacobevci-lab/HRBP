@@ -5,7 +5,7 @@ import { Bell, CheckCheck } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 import { useSessionContext } from "@/components/session-provider";
-import { notificationResourceHref, notificationSummary, notificationTitle } from "@/lib/notification-presentation";
+import { notificationDisplayResourceHref, notificationDisplaySummary, notificationDisplayTitle } from "@/lib/notification-display";
 
 type NotificationItem = {
   id: string;
@@ -153,7 +153,7 @@ export function NotificationCenter() {
               <Link
                 key={item.id}
                 className={`notification-menu-item ${item.readAt ? "" : "unread"}`}
-                href={notificationResourceHref(item.resourceType, item.resourceId)}
+                href={notificationDisplayResourceHref(item.resourceType, item.resourceId)}
                 onClick={() => {
                   setOpen(false);
                   if (!item.readAt) void markRead(item.id);
@@ -161,8 +161,8 @@ export function NotificationCenter() {
               >
                 <span className="notification-menu-indicator"/>
                 <span className="notification-menu-copy">
-                  <strong>{notificationTitle(item.eventType, locale)}</strong>
-                  <span>{notificationSummary(item.payload, locale)}</span>
+                  <strong>{notificationDisplayTitle(item.eventType, locale)}</strong>
+                  <span>{notificationDisplaySummary(item.payload, locale)}</span>
                   <time>{timeLabel(item.deliveredAt, item.createdAt)}</time>
                 </span>
               </Link>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Bell, CheckCheck, Circle, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
-import { notificationResourceHref, notificationSummary, notificationTitle } from "@/lib/notification-presentation";
+import { notificationDisplayResourceHref, notificationDisplaySummary, notificationDisplayTitle } from "@/lib/notification-display";
 
 type NotificationItem = {
   id: string;
@@ -133,10 +133,10 @@ export function NotificationsModulePage() {
             <div className="notification-row-icon"><Bell size={17}/></div>
             <div className="notification-row-main">
               <div className="notification-row-title">
-                <strong>{notificationTitle(item.eventType, locale)}</strong>
+                <strong>{notificationDisplayTitle(item.eventType, locale)}</strong>
                 {!item.readAt ? <span><Circle size={7} fill="currentColor"/>{locale === "tr" ? "Yeni" : "New"}</span> : null}
               </div>
-              <p>{notificationSummary(item.payload, locale)}</p>
+              <p>{notificationDisplaySummary(item.payload, locale)}</p>
               <div className="notification-row-meta">
                 <time>{formatDate(item)}</time>
                 <span>{item.classification.replaceAll("_", " ")}</span>
@@ -149,7 +149,7 @@ export function NotificationsModulePage() {
                   ? (locale === "tr" ? "Okunmadı yap" : "Mark unread")
                   : (locale === "tr" ? "Okundu yap" : "Mark read")}
               </button>
-              <Link href={notificationResourceHref(item.resourceType, item.resourceId)} onClick={() => !item.readAt && void updateRead(item.id, true)}>
+              <Link href={notificationDisplayResourceHref(item.resourceType, item.resourceId)} onClick={() => !item.readAt && void updateRead(item.id, true)}>
                 {locale === "tr" ? "Kaydı aç" : "Open record"}
               </Link>
             </div>
