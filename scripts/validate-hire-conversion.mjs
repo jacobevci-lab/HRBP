@@ -82,7 +82,7 @@ expect(maintenancePath, maintenance, /CANDIDATE_PII_ERASED_RETENTION/, "candidat
 
 const maintenanceRoutePath = "app/api/internal/maintenance/route.ts";
 const maintenanceRoute = await source(maintenanceRoutePath);
-expect(maintenanceRoutePath, maintenanceRoute, /runRecruitingMaintenance\(\)/, "internal maintenance must execute recruiting lifecycle normalization");
+expect(maintenanceRoutePath, maintenanceRoute, /(?:runRecruitingMaintenance\(\)|capture\("recruiting-lifecycle",\s*runRecruitingMaintenance,\s*failures\))/, "internal maintenance must execute recruiting lifecycle normalization");
 expect(maintenanceRoutePath, maintenanceRoute, /recruitingLifecycle/, "maintenance response must expose recruiting lifecycle results");
 
 if (failures.length) {
