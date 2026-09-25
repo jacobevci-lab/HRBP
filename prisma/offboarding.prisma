@@ -54,6 +54,7 @@ model SeparationProcess {
   initiatedById         String
   managerEmploymentId   String?
   rehireEligible        Boolean?
+  rehireDecisionReason  String?
   rehireDecisionById    String?
   rehireDecisionAt      DateTime?
   finalSettlementStatus String?
