@@ -12,25 +12,19 @@ const transitions: Record<ExitTaskStatus, ExitTaskStatus[]> = {
   NOT_STARTED: [ExitTaskStatus.IN_PROGRESS, ExitTaskStatus.BLOCKED, ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED],
   IN_PROGRESS: [ExitTaskStatus.BLOCKED, ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED],
   BLOCKED: [ExitTaskStatus.IN_PROGRESS, ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED],
-  COMPLETED: [],
-  WAIVED: []
+  COMPLETED: [], WAIVED: []
 };
-
-function transitionRequiresReason(status: ExitTaskStatus) {
-  return status === ExitTaskStatus.BLOCKED || status === ExitTaskStatus.WAIVED;
-}
+const taskReminderEvents = ["OFFBOARDING_TASK_BLOCKED", "OFFBOARDING_TASK_OVERDUE", "OFFBOARDING_TASK_DUE_SOON"];
+function transitionRequiresReason(status: ExitTaskStatus) { return status === ExitTaskStatus.BLOCKED || status === ExitTaskStatus.WAIVED; }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; taskId: string }> }) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "offboarding:write")) return forbidden();
-
   const routeParams = await params;
-  const id = asIdentifier(routeParams.id);
-  const taskId = asIdentifier(routeParams.taskId);
+  const id = asIdentifier(routeParams.id); const taskId = asIdentifier(routeParams.taskId);
   if (!id || !taskId) return Response.json({ error: "Valid separation process and task ids are required." }, { status: 400 });
-
   const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
   const requested = body.status ?? (body.waive ? ExitTaskStatus.WAIVED : ExitTaskStatus.COMPLETED);
@@ -38,51 +32,33 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!next) return Response.json({ error: "A valid exit task status is required." }, { status: 400 });
   const note = asOptionalText(body.note, 500);
   if (note === null) return Response.json({ error: "The transition reason must be 500 characters or fewer." }, { status: 400 });
-  if (transitionRequiresReason(next) && !note) {
-    return Response.json({ error: next === ExitTaskStatus.WAIVED ? "A waiver reason is required." : "A blocker reason is required." }, { status: 400 });
-  }
+  if (transitionRequiresReason(next) && !note) return Response.json({ error: next === ExitTaskStatus.WAIVED ? "A waiver reason is required." : "A blocker reason is required." }, { status: 400 });
   const evidenceDocumentId = body.evidenceDocumentId === undefined ? undefined : asIdentifier(body.evidenceDocumentId);
   if (body.evidenceDocumentId !== undefined && !evidenceDocumentId) return Response.json({ error: "A valid evidence document id is required." }, { status: 400 });
 
   try {
     const data = await db.$transaction(async (tx) => {
-      const process = await tx.separationProcess.findFirst({
-        where: { id, tenantId: ctx.tenantId },
-        select: { id: true, status: true, employmentId: true }
-      });
+      const process = await tx.separationProcess.findFirst({ where: { id, tenantId: ctx.tenantId }, select: { id: true, status: true, employmentId: true } });
       if (!process) throw new Error("NOT_FOUND");
       if (process.status === SeparationStatus.CLOSED || process.status === SeparationStatus.CANCELLED) throw new Error("PROCESS_CLOSED");
       const scope = await resolveEmploymentScope(tx, ctx);
       if (!canActOnEmployment(scope, process.employmentId)) throw new Error("OUT_OF_SCOPE");
-
-      const task = await tx.separationTask.findFirst({
-        where: { id: taskId, tenantId: ctx.tenantId, processId: id },
-        select: { id: true, status: true, title: true }
-      });
+      const task = await tx.separationTask.findFirst({ where: { id: taskId, tenantId: ctx.tenantId, processId: id }, select: { id: true, status: true, title: true } });
       if (!task) throw new Error("TASK_NOT_FOUND");
       if (!transitions[task.status].includes(next)) throw new Error("INVALID_TRANSITION");
       if (evidenceDocumentId && !await getVisibleDocument(tx, ctx, evidenceDocumentId)) throw new Error("DOCUMENT");
 
-      const terminal = terminalExitTaskStatuses.includes(next);
-      const updated = await tx.separationTask.updateMany({
-        where: { id: task.id, tenantId: ctx.tenantId, processId: id, status: task.status },
-        data: {
-          status: next,
-          ...(evidenceDocumentId !== undefined ? { evidenceDocumentId } : {}),
-          completedAt: terminal ? new Date() : null,
-          completedById: terminal ? ctx.actorId : null
-        }
-      });
+      const terminal = terminalExitTaskStatuses.includes(next); const now = new Date();
+      const updated = await tx.separationTask.updateMany({ where: { id: task.id, tenantId: ctx.tenantId, processId: id, status: task.status }, data: { status: next, ...(evidenceDocumentId !== undefined ? { evidenceDocumentId } : {}), completedAt: terminal ? now : null, completedById: terminal ? ctx.actorId : null } });
       if (updated.count !== 1) throw new Error("STATE_CONFLICT");
 
+      const resolvedEvents = terminal ? taskReminderEvents : next === ExitTaskStatus.IN_PROGRESS && task.status === ExitTaskStatus.BLOCKED ? ["OFFBOARDING_TASK_BLOCKED"] : [];
+      if (resolvedEvents.length) {
+        await tx.notificationOutbox.updateMany({ where: { tenantId: ctx.tenantId, resourceType: "SeparationTask", resourceId: task.id, eventType: { in: resolvedEvents }, readAt: null }, data: { readAt: now } });
+      }
+
       const readiness = await recalculateSeparationReadiness(tx, ctx, process.id);
-      await appendAudit(tx, ctx, {
-        action: `offboarding.task-${task.status.toLowerCase()}-to-${next.toLowerCase()}`,
-        resourceType: "SeparationTask",
-        resourceId: task.id,
-        classification: DataClassification.RESTRICTED,
-        purpose: note ? `Separation clearance control; ${note}` : "Separation clearance control"
-      });
+      await appendAudit(tx, ctx, { action: `offboarding.task-${task.status.toLowerCase()}-to-${next.toLowerCase()}`, resourceType: "SeparationTask", resourceId: task.id, classification: DataClassification.RESTRICTED, purpose: note ? `Separation clearance control; ${note}` : "Separation clearance control" });
       return { id: task.id, status: next, processId: process.id, processStatus: readiness.processStatus };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return Response.json({ data });
