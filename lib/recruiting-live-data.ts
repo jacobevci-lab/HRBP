@@ -1,6 +1,8 @@
 import { ApplicationStage, OfferStatus, OnboardingStatus, OnboardingTaskStatus, RequisitionStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
-import { workspaceTenantId } from "@/lib/workspace";
+import { onboardingPlanPopulationFilter, resolveOnboardingPopulationScope } from "@/lib/onboarding-access";
+import { recruitingApplicationReadFilter, recruitingRequisitionReadFilter } from "@/lib/recruiting-access";
+import type { RequestContext } from "@/lib/request-context";
 
 function formatDate(date: Date | null | undefined) {
   if (!date) return "—";
@@ -53,51 +55,61 @@ function isActiveOffer(status: OfferStatus) {
   return status === OfferStatus.APPROVAL || status === OfferStatus.SENT || status === OfferStatus.ACCEPTED;
 }
 
-export async function getRecruitingWorkspaceData(tenantId = workspaceTenantId()): Promise<RecruitingWorkspaceData> {
+export async function getRecruitingWorkspaceData(ctx: RequestContext): Promise<RecruitingWorkspaceData> {
   return withDb(async (db) => {
-    const [applications, requisitions, offers, users] = await Promise.all([
-      db.application.findMany({
-        where: { tenantId },
-        orderBy: { appliedAt: "desc" },
-        take: 300,
-        select: {
-          id: true,
-          stage: true,
-          appliedAt: true,
-          candidate: { select: { givenName: true, familyName: true } },
-          requisition: { select: { id: true, title: true } }
-        }
-      }),
-      db.requisition.findMany({
-        where: { tenantId },
-        orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-        take: 150,
-        select: {
-          id: true,
-          title: true,
-          status: true,
-          targetHireDate: true,
-          hiringManagerId: true,
-          recruiterId: true,
-          position: { select: { location: true, orgUnit: { select: { name: true } } } },
-          _count: { select: { applications: true } }
-        }
-      }),
-      db.offer.findMany({ where: { tenantId }, select: { status: true } }),
-      db.userAccount.findMany({ where: { tenantId }, select: { id: true, displayName: true } })
-    ]);
+    const requisitions = await db.requisition.findMany({
+      where: recruitingRequisitionReadFilter(ctx),
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      take: 150,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        targetHireDate: true,
+        hiringManagerId: true,
+        recruiterId: true,
+        position: { select: { location: true, orgUnit: { select: { name: true } } } },
+        _count: { select: { applications: true } }
+      }
+    });
+
+    const requisitionIds = requisitions.map((row) => row.id);
+    const applications = requisitionIds.length ? await db.application.findMany({
+      where: {
+        ...recruitingApplicationReadFilter(ctx),
+        requisitionId: { in: requisitionIds }
+      },
+      orderBy: { appliedAt: "desc" },
+      take: 300,
+      select: {
+        id: true,
+        stage: true,
+        appliedAt: true,
+        candidateId: true,
+        candidate: { select: { givenName: true, familyName: true } },
+        requisition: { select: { id: true, title: true } },
+        offer: { select: { status: true } }
+      }
+    }) : [];
+
+    const userIds = [...new Set(requisitions.flatMap((row) => [row.hiringManagerId, row.recruiterId]).filter((value): value is string => Boolean(value)))];
+    const users = userIds.length ? await db.userAccount.findMany({
+      where: { tenantId: ctx.tenantId, id: { in: userIds } },
+      select: { id: true, displayName: true }
+    }) : [];
 
     const userName = new Map(users.map((user) => [user.id, user.displayName]));
     const activeApplications = applications.filter((application) => ACTIVE_APPLICATION_STAGES.includes(application.stage));
+    const visibleOffers = applications.flatMap((application) => application.offer ? [application.offer] : []);
     const stages: ApplicationStage[] = [ApplicationStage.APPLIED, ApplicationStage.SCREENING, ApplicationStage.INTERVIEW, ApplicationStage.ASSESSMENT, ApplicationStage.OFFER];
 
     return {
       openRequisitions: requisitions.filter((row) => row.status === RequisitionStatus.OPEN).length,
       approvalRequisitions: requisitions.filter((row) => row.status === RequisitionStatus.APPROVAL).length,
-      activeCandidates: new Set(activeApplications.map((row) => `${row.candidate.givenName}|${row.candidate.familyName}`)).size,
+      activeCandidates: new Set(activeApplications.map((row) => row.candidateId)).size,
       interviewPipeline: applications.filter((row) => row.stage === ApplicationStage.INTERVIEW || row.stage === ApplicationStage.ASSESSMENT).length,
-      activeOffers: offers.filter((offer) => isActiveOffer(offer.status)).length,
-      awaitingSignature: offers.filter((offer) => offer.status === OfferStatus.SENT).length,
+      activeOffers: visibleOffers.filter((offer) => isActiveOffer(offer.status)).length,
+      awaitingSignature: visibleOffers.filter((offer) => offer.status === OfferStatus.SENT).length,
       pipeline: stages.map((stage) => {
         const rows = applications.filter((application) => application.stage === stage);
         return {
@@ -156,25 +168,33 @@ export type OnboardingWorkspaceData = {
   controls: OnboardingTaskControl[];
 };
 
-export async function getOnboardingWorkspaceData(tenantId = workspaceTenantId()): Promise<OnboardingWorkspaceData> {
+export async function getOnboardingWorkspaceData(ctx: RequestContext): Promise<OnboardingWorkspaceData> {
   return withDb(async (db) => {
-    const [plans, users] = await Promise.all([
-      db.onboardingPlan.findMany({
-        where: { tenantId, status: { not: OnboardingStatus.COMPLETED } },
-        orderBy: { targetStartDate: "asc" },
-        take: 100,
-        select: {
-          id: true,
-          status: true,
-          targetStartDate: true,
-          ownerId: true,
-          person: { select: { givenName: true, familyName: true } },
-          employment: { select: { position: { select: { title: true } } } },
-          tasks: { select: { title: true, ownerType: true, status: true, dueDate: true } }
-        }
-      }),
-      db.userAccount.findMany({ where: { tenantId }, select: { id: true, displayName: true } })
-    ]);
+    const scope = await resolveOnboardingPopulationScope(db, ctx);
+    const plans = await db.onboardingPlan.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        status: { not: OnboardingStatus.COMPLETED },
+        ...onboardingPlanPopulationFilter(scope)
+      },
+      orderBy: { targetStartDate: "asc" },
+      take: 100,
+      select: {
+        id: true,
+        status: true,
+        targetStartDate: true,
+        ownerId: true,
+        person: { select: { givenName: true, familyName: true } },
+        employment: { select: { position: { select: { title: true } } } },
+        tasks: { select: { title: true, ownerType: true, status: true, dueDate: true } }
+      }
+    });
+
+    const ownerIds = [...new Set(plans.flatMap((plan) => plan.ownerId ? [plan.ownerId] : []))];
+    const users = ownerIds.length ? await db.userAccount.findMany({
+      where: { tenantId: ctx.tenantId, id: { in: ownerIds } },
+      select: { id: true, displayName: true }
+    }) : [];
 
     const userName = new Map(users.map((user) => [user.id, user.displayName]));
     const allTasks = plans.flatMap((plan) => plan.tasks);
