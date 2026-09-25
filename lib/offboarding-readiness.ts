@@ -1,4 +1,4 @@
-import { AccessRevocationStatus, AssetReturnStatus, DataClassification, ExitTaskStatus, PlatformRole, Prisma, SeparationStatus } from "@prisma/client";
+import { AccessRevocationStatus, AssetReturnStatus, DataClassification, EmploymentStatus, ExitTaskStatus, PlatformRole, Prisma, SeparationStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import type { RequestContext } from "@/lib/request-context";
@@ -7,27 +7,29 @@ export const terminalExitTaskStatuses: ExitTaskStatus[] = [ExitTaskStatus.COMPLE
 export const terminalKnowledgeTransferStatuses: ExitTaskStatus[] = [ExitTaskStatus.COMPLETED, ExitTaskStatus.WAIVED];
 export const terminalAssetReturnStatuses: AssetReturnStatus[] = [AssetReturnStatus.RETURNED, AssetReturnStatus.WRITTEN_OFF];
 export const terminalAccessRevocationStatuses: AccessRevocationStatus[] = [AccessRevocationStatus.REVOKED, AccessRevocationStatus.EXCEPTION];
+export const activeDirectReportStatuses: EmploymentStatus[] = [EmploymentStatus.PREBOARDING, EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE, EmploymentStatus.SUSPENDED];
 export const settledFinalSettlementStatus = "SETTLED" as const;
 
 export async function recalculateSeparationReadiness(tx: Prisma.TransactionClient, ctx: RequestContext, processId: string) {
   const process = await tx.separationProcess.findFirst({
     where: { id: processId, tenantId: ctx.tenantId },
-    select: { id: true, status: true, updatedAt: true, lastWorkingDate: true, finalSettlementStatus: true }
+    select: { id: true, employmentId: true, status: true, updatedAt: true, lastWorkingDate: true, finalSettlementStatus: true }
   });
   if (!process) throw new Error("PROCESS_NOT_FOUND");
   if (process.status === SeparationStatus.CLOSED || process.status === SeparationStatus.CANCELLED) throw new Error("PROCESS_CLOSED");
 
-  const [tasks, assetsOpen, accessOpen, knowledgeTransfersOpen] = await Promise.all([
+  const [tasks, assetsOpen, accessOpen, knowledgeTransfersOpen, directReportsOpen] = await Promise.all([
     tx.separationTask.findMany({ where: { tenantId: ctx.tenantId, processId }, select: { status: true, blocking: true, domain: true } }),
     tx.assetReturn.count({ where: { tenantId: ctx.tenantId, processId, status: { notIn: terminalAssetReturnStatuses } } }),
     tx.accessRevocation.count({ where: { tenantId: ctx.tenantId, processId, status: { notIn: terminalAccessRevocationStatuses } } }),
-    tx.knowledgeTransfer.count({ where: { tenantId: ctx.tenantId, processId, status: { notIn: terminalKnowledgeTransferStatuses } } })
+    tx.knowledgeTransfer.count({ where: { tenantId: ctx.tenantId, processId, status: { notIn: terminalKnowledgeTransferStatuses } } }),
+    tx.employment.count({ where: { tenantId: ctx.tenantId, managerEmploymentId: process.employmentId, status: { in: activeDirectReportStatuses } } })
   ]);
 
   const openBlocking = tasks.filter((item) => item.blocking && !terminalExitTaskStatuses.includes(item.status));
   const payrollBlocking = openBlocking.filter((item) => item.domain.trim().toUpperCase() === "PAYROLL");
   const nonPayrollBlocking = openBlocking.filter((item) => item.domain.trim().toUpperCase() !== "PAYROLL");
-  const operationalClear = nonPayrollBlocking.length === 0 && assetsOpen === 0 && accessOpen === 0 && knowledgeTransfersOpen === 0;
+  const operationalClear = nonPayrollBlocking.length === 0 && assetsOpen === 0 && accessOpen === 0 && knowledgeTransfersOpen === 0 && directReportsOpen === 0;
   const settlementClear = process.finalSettlementStatus === settledFinalSettlementStatus;
   const payrollClear = payrollBlocking.length === 0 && settlementClear;
   const nextStatus = operationalClear && payrollClear
@@ -45,9 +47,9 @@ export async function recalculateSeparationReadiness(tx: Prisma.TransactionClien
       resourceId: process.id,
       classification: DataClassification.RESTRICTED,
       purpose: nextStatus === SeparationStatus.READY_TO_CLOSE
-        ? "Exit readiness gate cleared: blocking tasks, knowledge transfer, assets, access controls and final settlement are complete"
+        ? "Exit readiness gate cleared: blocking tasks, manager handover, knowledge transfer, assets, access controls and final settlement are complete"
         : nextStatus === SeparationStatus.FINAL_PAY_REVIEW
-          ? "Operational clearance is complete; governed final settlement remains open"
+          ? "Operational clearance, including manager handover, is complete; governed final settlement remains open"
           : "Separation stage recalculated from governed exit controls"
     });
 
@@ -85,6 +87,7 @@ export async function recalculateSeparationReadiness(tx: Prisma.TransactionClien
     openAssets: assetsOpen,
     openAccess: accessOpen,
     openKnowledgeTransfers: knowledgeTransfersOpen,
+    openDirectReports: directReportsOpen,
     finalSettlementStatus: process.finalSettlementStatus ?? "NOT_STARTED",
     finalSettlementClear: settlementClear
   };

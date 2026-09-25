@@ -24,7 +24,7 @@ export type OffboardingHistoryAuditEvidence = {
 
 export type OffboardingHistoryEvent = {
   key: string;
-  kind: "PROCESS" | "SCHEDULE" | "INTERVIEW" | "SETTLEMENT" | "DECISION" | "TERMINAL";
+  kind: "PROCESS" | "SCHEDULE" | "MANAGER" | "INTERVIEW" | "SETTLEMENT" | "DECISION" | "TERMINAL";
   title: string;
   actorId: string | null;
   occurredAt: string;
@@ -76,6 +76,7 @@ export type OffboardingHistoryRow = {
   knowledgeTransfersOpen: number;
   exitInterviewRecorded: boolean;
   scheduleAmendmentCount: number;
+  managerReassignmentCount: number;
   events: OffboardingHistoryEvent[];
   auditEvidence: OffboardingHistoryAuditEvidence[];
 };
@@ -138,6 +139,11 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
           take: 100,
           select: { id: true, previousNoticeDate: true, newNoticeDate: true, previousLastWorkingDate: true, newLastWorkingDate: true, reason: true, changedById: true, changedAt: true }
         },
+        managerReassignments: {
+          orderBy: { changedAt: "asc" },
+          take: 300,
+          select: { id: true, reportEmploymentId: true, previousManagerEmploymentId: true, newManagerEmploymentId: true, reason: true, changedById: true, changedAt: true }
+        },
         exitInterview: { select: { interviewerId: true, conductedAt: true, wouldRecommend: true } }
       }
     });
@@ -194,6 +200,16 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
           detail: `Notice ${amendment.previousNoticeDate?.toISOString() ?? "none"} -> ${amendment.newNoticeDate?.toISOString() ?? "none"}; last day ${amendment.previousLastWorkingDate.toISOString()} -> ${amendment.newLastWorkingDate.toISOString()} · ${amendment.reason}`
         });
       }
+      for (const reassignment of process.managerReassignments) {
+        events.push({
+          key: `${process.id}:manager:${reassignment.id}`,
+          kind: "MANAGER",
+          title: "Direct report reassigned for manager continuity",
+          actorId: reassignment.changedById,
+          occurredAt: reassignment.changedAt.toISOString(),
+          detail: `Employment ${reassignment.reportEmploymentId} · ${reassignment.previousManagerEmploymentId} -> ${reassignment.newManagerEmploymentId} · ${reassignment.reason}`
+        });
+      }
       if (process.replacementDecisionAt) {
         events.push({
           key: `${process.id}:replacement`,
@@ -222,38 +238,10 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
         occurredAt: process.rehireDecisionAt.toISOString(),
         detail: process.rehireEligible === null ? process.rehireDecisionReason : `${process.rehireEligible ? "Eligible" : "Not eligible"}${process.rehireDecisionReason ? ` · ${process.rehireDecisionReason}` : ""}`
       });
-      if (process.finalSettlementPreparedAt) events.push({
-        key: `${process.id}:settlement-prepared`,
-        kind: "SETTLEMENT",
-        title: "Final settlement prepared",
-        actorId: process.finalSettlementPreparedById,
-        occurredAt: process.finalSettlementPreparedAt.toISOString(),
-        detail: null
-      });
-      if (process.finalSettlementApprovedAt) events.push({
-        key: `${process.id}:settlement-approved`,
-        kind: "SETTLEMENT",
-        title: "Final settlement independently approved",
-        actorId: process.finalSettlementApprovedById,
-        occurredAt: process.finalSettlementApprovedAt.toISOString(),
-        detail: null
-      });
-      if (process.finalSettlementSettledAt) events.push({
-        key: `${process.id}:settlement-settled`,
-        kind: "SETTLEMENT",
-        title: "Final settlement settled",
-        actorId: process.finalSettlementSettledById,
-        occurredAt: process.finalSettlementSettledAt.toISOString(),
-        detail: null
-      });
-      if (process.finalSettlementReversedAt) events.push({
-        key: `${process.id}:settlement-reversed`,
-        kind: "SETTLEMENT",
-        title: "Final settlement reversed under four-eyes control",
-        actorId: process.finalSettlementReversedById,
-        occurredAt: process.finalSettlementReversedAt.toISOString(),
-        detail: process.finalSettlementReversalReason
-      });
+      if (process.finalSettlementPreparedAt) events.push({ key: `${process.id}:settlement-prepared`, kind: "SETTLEMENT", title: "Final settlement prepared", actorId: process.finalSettlementPreparedById, occurredAt: process.finalSettlementPreparedAt.toISOString(), detail: null });
+      if (process.finalSettlementApprovedAt) events.push({ key: `${process.id}:settlement-approved`, kind: "SETTLEMENT", title: "Final settlement independently approved", actorId: process.finalSettlementApprovedById, occurredAt: process.finalSettlementApprovedAt.toISOString(), detail: null });
+      if (process.finalSettlementSettledAt) events.push({ key: `${process.id}:settlement-settled`, kind: "SETTLEMENT", title: "Final settlement settled", actorId: process.finalSettlementSettledById, occurredAt: process.finalSettlementSettledAt.toISOString(), detail: null });
+      if (process.finalSettlementReversedAt) events.push({ key: `${process.id}:settlement-reversed`, kind: "SETTLEMENT", title: "Final settlement reversed under four-eyes control", actorId: process.finalSettlementReversedById, occurredAt: process.finalSettlementReversedAt.toISOString(), detail: process.finalSettlementReversalReason });
       events.push({
         key: `${process.id}:terminal`,
         kind: "TERMINAL",
@@ -321,16 +309,9 @@ export async function getOffboardingHistoryData(ctx: RequestContext, includeAudi
         knowledgeTransfersOpen: process.knowledgeTransfers.filter((transfer) => !TASK_TERMINAL.includes(transfer.status)).length,
         exitInterviewRecorded: Boolean(process.exitInterview),
         scheduleAmendmentCount: process.scheduleAmendments.length,
+        managerReassignmentCount: process.managerReassignments.length,
         events,
-        auditEvidence: processAudit.map((item) => ({
-          action: item.action,
-          resourceType: item.resourceType,
-          actorId: item.actorId,
-          purpose: item.purpose,
-          occurredAt: item.occurredAt.toISOString(),
-          hash: item.hash,
-          previousHash: item.previousHash
-        }))
+        auditEvidence: processAudit.map((item) => ({ action: item.action, resourceType: item.resourceType, actorId: item.actorId, purpose: item.purpose, occurredAt: item.occurredAt.toISOString(), hash: item.hash, previousHash: item.previousHash }))
       };
     });
 

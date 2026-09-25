@@ -17,22 +17,26 @@ const TERMINAL_TASK_STATUSES: ExitTaskStatus[] = [ExitTaskStatus.COMPLETED, Exit
 const TERMINAL_ASSET_STATUSES: AssetReturnStatus[] = [AssetReturnStatus.RETURNED, AssetReturnStatus.WRITTEN_OFF];
 const TERMINAL_ACCESS_STATUSES: AccessRevocationStatus[] = [AccessRevocationStatus.REVOKED, AccessRevocationStatus.EXCEPTION];
 const ACTIVE_EMPLOYMENTS: EmploymentStatus[] = [EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE, EmploymentStatus.SUSPENDED];
+const ACTIVE_REPORT_STATUSES: EmploymentStatus[] = [EmploymentStatus.PREBOARDING, EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE, EmploymentStatus.SUSPENDED];
+const MANAGER_CANDIDATE_STATUSES: EmploymentStatus[] = [EmploymentStatus.ACTIVE, EmploymentStatus.LEAVE];
 
 export type OffboardingTaskRow = { id: string; domain: string; title: string; status: string; rawStatus: string; blocking: boolean; dueAt: string; dueAtIso: string | null };
 export type OffboardingAssetRow = { id: string; assetTag: string; assetType: string; serialNumber: string | null; status: string; rawStatus: string; returnedAt: string | null; conditionNote: string | null };
 export type OffboardingAccessRow = { id: string; systemName: string; accountId: string | null; status: string; rawStatus: string; scheduledAt: string | null; revokedAt: string | null; exceptionReason: string | null };
 export type OffboardingKnowledgeTransferRow = { id: string; title: string; description: string | null; recipientId: string | null; status: string; rawStatus: string; dueAt: string; dueAtIso: string | null; completedAt: string | null };
+export type OffboardingDirectReportRow = { id: string; personId: string; employee: string; employeeNumber: string; position: string; status: string; rawStatus: string };
+export type OffboardingManagerCandidate = { id: string; personId: string; employee: string; employeeNumber: string; position: string; department: string };
 
 export type OffboardingProcessRow = {
   id: string; employmentId: string; personId: string | null; positionId: string | null; initiatedById: string; employee: string; employeeNumber: string; position: string; type: string; status: string; rawStatus: string;
-  noticeDate: string; noticeDateIso: string | null; lastWorkingDate: string; lastWorkingDateIso: string; completedTasks: number; taskCount: number; openBlockingTasks: number; overdueTasks: number; assetsOpen: number; accessOpen: number; openKnowledgeTransfers: number;
+  noticeDate: string; noticeDateIso: string | null; lastWorkingDate: string; lastWorkingDateIso: string; completedTasks: number; taskCount: number; openBlockingTasks: number; overdueTasks: number; assetsOpen: number; accessOpen: number; openKnowledgeTransfers: number; directReportsOpen: number;
   replacementRequired: boolean | null; replacementDecisionReason: string | null; replacementDecisionById: string | null; replacementDecisionAt: string | null; replacementRequisitionId: string | null;
   finalSettlementStatus: string; finalSettlementNote: string | null; finalSettlementPreparedById: string | null; finalSettlementPreparedAt: string | null; finalSettlementApprovedById: string | null; finalSettlementApprovedAt: string | null; finalSettlementSettledById: string | null; finalSettlementSettledAt: string | null; finalSettlementReversalReason: string | null; finalSettlementReversedById: string | null; finalSettlementReversedAt: string | null; finalSettlementClear: boolean;
-  controlsClear: boolean; readyToClose: boolean; exitRisk: boolean; tasks: OffboardingTaskRow[]; assets: OffboardingAssetRow[]; accessControls: OffboardingAccessRow[]; knowledgeTransfers: OffboardingKnowledgeTransferRow[];
+  controlsClear: boolean; readyToClose: boolean; exitRisk: boolean; tasks: OffboardingTaskRow[]; assets: OffboardingAssetRow[]; accessControls: OffboardingAccessRow[]; knowledgeTransfers: OffboardingKnowledgeTransferRow[]; directReports: OffboardingDirectReportRow[];
 };
 
 export type OffboardingEligibleEmployment = { id: string; personId: string; employee: string; employeeNumber: string; position: string; department: string };
-export type OffboardingWorkspaceData = { openSeparations: number; leavingThisWeek: number; blockingTasks: number; overdueTasks: number; exitRiskProcesses: number; readyToClose: number; finalPayReview: number; replacementDecisionsPending: number; backfillDrafts: number; processes: OffboardingProcessRow[]; eligibleEmployments: OffboardingEligibleEmployment[] };
+export type OffboardingWorkspaceData = { openSeparations: number; leavingThisWeek: number; blockingTasks: number; overdueTasks: number; exitRiskProcesses: number; readyToClose: number; finalPayReview: number; replacementDecisionsPending: number; backfillDrafts: number; managerHandoverPending: number; processes: OffboardingProcessRow[]; eligibleEmployments: OffboardingEligibleEmployment[]; managerCandidates: OffboardingManagerCandidate[] };
 
 export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEligible = false): Promise<OffboardingWorkspaceData> {
   return withDb(async (db) => {
@@ -55,18 +59,39 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
     });
 
     const employmentIds = [...new Set(processes.map((process) => process.employmentId))];
-    const processEmployments = employmentIds.length ? await db.employment.findMany({
-      where: { tenantId: ctx.tenantId, id: { in: employmentIds }, ...employmentPrimaryKeyFilter(scope) },
-      select: { id: true, personId: true, person: { select: { employeeNumber: true, givenName: true, familyName: true } }, position: { select: { id: true, title: true, orgUnit: { select: { name: true } } } } }
-    }) : [];
-    const employmentMap = new Map(processEmployments.map((employment) => [employment.id, employment]));
+    const [processEmployments, directReports, eligible, managerCandidates] = await Promise.all([
+      employmentIds.length ? db.employment.findMany({
+        where: { tenantId: ctx.tenantId, id: { in: employmentIds }, ...employmentPrimaryKeyFilter(scope) },
+        select: { id: true, personId: true, person: { select: { employeeNumber: true, givenName: true, familyName: true } }, position: { select: { id: true, title: true, orgUnit: { select: { name: true } } } } }
+      }) : [],
+      employmentIds.length ? db.employment.findMany({
+        where: { tenantId: ctx.tenantId, managerEmploymentId: { in: employmentIds }, status: { in: ACTIVE_REPORT_STATUSES }, ...employmentPrimaryKeyFilter(scope) },
+        orderBy: [{ person: { familyName: "asc" } }, { person: { givenName: "asc" } }],
+        take: 500,
+        select: { id: true, personId: true, managerEmploymentId: true, status: true, person: { select: { employeeNumber: true, givenName: true, familyName: true } }, position: { select: { title: true } } }
+      }) : [],
+      includeEligible ? db.employment.findMany({
+        where: { tenantId: ctx.tenantId, status: { in: ACTIVE_EMPLOYMENTS }, ...employmentPrimaryKeyFilter(scope), NOT: { id: { in: employmentIds.length ? employmentIds : ["__none__"] } } },
+        orderBy: [{ person: { familyName: "asc" } }, { person: { givenName: "asc" } }],
+        take: 300,
+        select: { id: true, personId: true, person: { select: { employeeNumber: true, givenName: true, familyName: true } }, position: { select: { title: true, orgUnit: { select: { name: true } } } } }
+      }) : [],
+      includeEligible ? db.employment.findMany({
+        where: { tenantId: ctx.tenantId, status: { in: MANAGER_CANDIDATE_STATUSES }, ...employmentPrimaryKeyFilter(scope), NOT: { id: { in: employmentIds.length ? employmentIds : ["__none__"] } } },
+        orderBy: [{ person: { familyName: "asc" } }, { person: { givenName: "asc" } }],
+        take: 300,
+        select: { id: true, personId: true, person: { select: { employeeNumber: true, givenName: true, familyName: true } }, position: { select: { title: true, orgUnit: { select: { name: true } } } } }
+      }) : []
+    ]);
 
-    const eligible = includeEligible ? await db.employment.findMany({
-      where: { tenantId: ctx.tenantId, status: { in: ACTIVE_EMPLOYMENTS }, ...employmentPrimaryKeyFilter(scope), NOT: { id: { in: employmentIds.length ? employmentIds : ["__none__"] } } },
-      orderBy: [{ person: { familyName: "asc" } }, { person: { givenName: "asc" } }],
-      take: 300,
-      select: { id: true, personId: true, person: { select: { employeeNumber: true, givenName: true, familyName: true } }, position: { select: { title: true, orgUnit: { select: { name: true } } } } }
-    }) : [];
+    const employmentMap = new Map(processEmployments.map((employment) => [employment.id, employment]));
+    const directReportsByManager = new Map<string, typeof directReports>();
+    for (const report of directReports) {
+      if (!report.managerEmploymentId) continue;
+      const rows = directReportsByManager.get(report.managerEmploymentId) ?? [];
+      rows.push(report);
+      directReportsByManager.set(report.managerEmploymentId, rows);
+    }
 
     const now = new Date();
     const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7);
@@ -74,13 +99,15 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
 
     const rows = processes.map<OffboardingProcessRow>((process) => {
       const employment = employmentMap.get(process.employmentId);
+      const processDirectReports = directReportsByManager.get(process.employmentId) ?? [];
       const completedTasks = process.tasks.filter((task) => TERMINAL_TASK_STATUSES.includes(task.status)).length;
       const openBlockingTasks = process.tasks.filter((task) => task.blocking && !TERMINAL_TASK_STATUSES.includes(task.status)).length;
       const overdueTasks = process.tasks.filter((task) => !TERMINAL_TASK_STATUSES.includes(task.status) && task.dueAt && task.dueAt < now).length;
       const assetsOpen = process.assets.filter((asset) => !TERMINAL_ASSET_STATUSES.includes(asset.status)).length;
       const accessOpen = process.accessRevocations.filter((access) => !TERMINAL_ACCESS_STATUSES.includes(access.status)).length;
       const openKnowledgeTransfers = process.knowledgeTransfers.filter((transfer) => !TERMINAL_TASK_STATUSES.includes(transfer.status)).length;
-      const controlsClear = openBlockingTasks === 0 && assetsOpen === 0 && accessOpen === 0 && openKnowledgeTransfers === 0;
+      const directReportsOpen = processDirectReports.length;
+      const controlsClear = openBlockingTasks === 0 && assetsOpen === 0 && accessOpen === 0 && openKnowledgeTransfers === 0 && directReportsOpen === 0;
       const finalSettlementStatus = process.finalSettlementStatus ?? "NOT_STARTED";
       const finalSettlementClear = finalSettlementStatus === "SETTLED";
       const readyToClose = controlsClear && finalSettlementClear && process.status === SeparationStatus.READY_TO_CLOSE;
@@ -89,7 +116,7 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
         id: process.id, employmentId: process.employmentId, personId: employment?.personId ?? null, positionId: employment?.position?.id ?? null, initiatedById: process.initiatedById,
         employee: employment ? `${employment.person.givenName} ${employment.person.familyName}` : "Employment record",
         employeeNumber: employment?.person.employeeNumber ?? "—", position: employment?.position?.title ?? "Position unavailable", type: label(process.type), status: label(process.status), rawStatus: process.status,
-        noticeDate: formatDate(process.noticeDate), noticeDateIso: process.noticeDate?.toISOString() ?? null, lastWorkingDate: formatDate(process.lastWorkingDate), lastWorkingDateIso: process.lastWorkingDate.toISOString(), completedTasks, taskCount: process.tasks.length, openBlockingTasks, overdueTasks, assetsOpen, accessOpen, openKnowledgeTransfers,
+        noticeDate: formatDate(process.noticeDate), noticeDateIso: process.noticeDate?.toISOString() ?? null, lastWorkingDate: formatDate(process.lastWorkingDate), lastWorkingDateIso: process.lastWorkingDate.toISOString(), completedTasks, taskCount: process.tasks.length, openBlockingTasks, overdueTasks, assetsOpen, accessOpen, openKnowledgeTransfers, directReportsOpen,
         replacementRequired: process.replacementRequired, replacementDecisionReason: process.replacementDecisionReason, replacementDecisionById: process.replacementDecisionById, replacementDecisionAt: process.replacementDecisionAt?.toISOString() ?? null, replacementRequisitionId: process.replacementRequisitionId,
         finalSettlementStatus, finalSettlementNote: process.finalSettlementNote, finalSettlementPreparedById: process.finalSettlementPreparedById, finalSettlementPreparedAt: process.finalSettlementPreparedAt?.toISOString() ?? null,
         finalSettlementApprovedById: process.finalSettlementApprovedById, finalSettlementApprovedAt: process.finalSettlementApprovedAt?.toISOString() ?? null,
@@ -99,7 +126,8 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
         tasks: process.tasks.map((task) => ({ id: task.id, domain: task.domain, title: task.title, status: label(task.status), rawStatus: task.status, blocking: task.blocking, dueAt: formatDate(task.dueAt), dueAtIso: task.dueAt?.toISOString() ?? null })),
         assets: process.assets.map((asset) => ({ id: asset.id, assetTag: asset.assetTag, assetType: asset.assetType, serialNumber: asset.serialNumber, status: label(asset.status), rawStatus: asset.status, returnedAt: asset.returnedAt?.toISOString() ?? null, conditionNote: asset.conditionNote })),
         accessControls: process.accessRevocations.map((access) => ({ id: access.id, systemName: access.systemName, accountId: access.accountId, status: label(access.status), rawStatus: access.status, scheduledAt: access.scheduledAt?.toISOString() ?? null, revokedAt: access.revokedAt?.toISOString() ?? null, exceptionReason: access.exceptionReason })),
-        knowledgeTransfers: process.knowledgeTransfers.map((transfer) => ({ id: transfer.id, title: transfer.title, description: transfer.description, recipientId: transfer.recipientId, status: label(transfer.status), rawStatus: transfer.status, dueAt: formatDate(transfer.dueAt), dueAtIso: transfer.dueAt?.toISOString() ?? null, completedAt: transfer.completedAt?.toISOString() ?? null }))
+        knowledgeTransfers: process.knowledgeTransfers.map((transfer) => ({ id: transfer.id, title: transfer.title, description: transfer.description, recipientId: transfer.recipientId, status: label(transfer.status), rawStatus: transfer.status, dueAt: formatDate(transfer.dueAt), dueAtIso: transfer.dueAt?.toISOString() ?? null, completedAt: transfer.completedAt?.toISOString() ?? null })),
+        directReports: processDirectReports.map((report) => ({ id: report.id, personId: report.personId, employee: `${report.person.givenName} ${report.person.familyName}`, employeeNumber: report.person.employeeNumber ?? "—", position: report.position?.title ?? "Unassigned", status: label(report.status), rawStatus: report.status }))
       };
     });
 
@@ -113,8 +141,10 @@ export async function getOffboardingWorkspaceData(ctx: RequestContext, includeEl
       finalPayReview: rows.filter((row) => row.rawStatus === SeparationStatus.FINAL_PAY_REVIEW || (row.controlsClear && !row.finalSettlementClear)).length,
       replacementDecisionsPending: rows.filter((row) => row.replacementRequired === null).length,
       backfillDrafts: rows.filter((row) => Boolean(row.replacementRequisitionId)).length,
+      managerHandoverPending: rows.filter((row) => row.directReportsOpen > 0).length,
       processes: rows,
-      eligibleEmployments: eligible.map((employment) => ({ id: employment.id, personId: employment.personId, employee: `${employment.person.givenName} ${employment.person.familyName}`, employeeNumber: employment.person.employeeNumber ?? "—", position: employment.position?.title ?? "Unassigned", department: employment.position?.orgUnit.name ?? "Unassigned" }))
+      eligibleEmployments: eligible.map((employment) => ({ id: employment.id, personId: employment.personId, employee: `${employment.person.givenName} ${employment.person.familyName}`, employeeNumber: employment.person.employeeNumber ?? "—", position: employment.position?.title ?? "Unassigned", department: employment.position?.orgUnit.name ?? "Unassigned" })),
+      managerCandidates: managerCandidates.map((employment) => ({ id: employment.id, personId: employment.personId, employee: `${employment.person.givenName} ${employment.person.familyName}`, employeeNumber: employment.person.employeeNumber ?? "—", position: employment.position?.title ?? "Unassigned", department: employment.position?.orgUnit.name ?? "Unassigned" }))
     };
   });
 }

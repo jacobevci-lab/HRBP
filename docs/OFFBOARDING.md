@@ -6,7 +6,7 @@ HRBP One treats separation as a governed employment-lifecycle transaction rather
 
 Active separation states are `DRAFT`, `NOTICE_PERIOD`, `CLEARANCE`, `FINAL_PAY_REVIEW` and `READY_TO_CLOSE`. Terminal outcomes are `CLOSED` and `CANCELLED`.
 
-Readiness is derived from the underlying controls instead of being set manually. Blocking tasks, knowledge transfer, company assets and logical-access revocations must clear before operational clearance. Final settlement is independently prepared, approved and settled. A process becomes ready to close only when both operational clearance and final settlement are complete.
+Readiness is derived from the underlying controls instead of being set manually. Blocking tasks, manager continuity, knowledge transfer, company assets and logical-access revocations must clear before operational clearance. Final settlement is independently prepared, approved and settled. A process becomes ready to close only when both operational clearance and final settlement are complete.
 
 Closing a separation is intentionally stronger than completing a task. The last working date must have been reached, the process must still be `READY_TO_CLOSE`, the initiator cannot perform the final termination, and all clearance domains are rechecked inside the serializable closure transaction. Only then is the employment set to `TERMINATED` and lifecycle evidence written.
 
@@ -34,6 +34,16 @@ Cancellation coordinates with the linked recruiting demand. A linked `DRAFT` or 
 
 Terminal offboarding history reconstructs the replacement decision and, for viewers with `audit:read`, includes audit-chain evidence for the linked requisition as well as the separation and employment.
 
+## Manager continuity handover
+
+A manager separation cannot become operationally clear while active direct reports still reference the departing employment. `PREBOARDING`, `ACTIVE`, `LEAVE` and `SUSPENDED` reports therefore act as a first-class exit blocker alongside assets, logical access and knowledge transfer.
+
+HR can perform a governed batch handover from the separation workspace. The action requires `offboarding:write`, same-origin protection, tenant and employment-scope authorization and a 10–2000 character human rationale. The target manager must have an `ACTIVE` or `LEAVE` employment and must not be the departing employee or any employment inside the departing manager's reporting subtree. The server walks the current management chain before the mutation and rejects cyclic or excessively deep hierarchies instead of creating a reporting loop.
+
+All currently active direct reports are reassigned in one serializable transaction. The update is state-aware: every report must still point to the departing manager when the transaction commits. Each moved employment receives a `MANAGER_CHANGED` lifecycle event, while `SeparationManagerReassignment` records preserve the report employment, previous manager, new manager, reason, actor and timestamp for terminal evidence reconstruction. Exit readiness is recalculated in the same transaction.
+
+The manager handover does not choose a successor by score, performance data or AI. It only executes a human-selected organization decision and records the evidence. The final closure gate independently rechecks that no active direct reports remain on the departing employment before employment termination can commit.
+
 ## Governed cancellation
 
 An approved exit can change before termination. HRBP One therefore supports cancellation as a first-class terminal outcome rather than deleting the process or silently resetting it.
@@ -58,7 +68,7 @@ This reversal path is what makes cancellation after an accidental or superseded 
 
 `CLOSED` and `CANCELLED` separation records remain in a read-only terminal history rather than disappearing from the operational queue. The history is still constrained by tenant and employment relationship scope and intentionally exposes no mutation control.
 
-Each terminal record reconstructs the governed evidence that existed when the process ended: schedule amendments, replacement/backfill decisions, task completion and waiver counts, asset returns and write-offs, logical-access revocations and exceptions, knowledge-transfer state, final-settlement state and reversal evidence, exit-interview evidence, explicit human rehire decisions and the terminal outcome itself. A cancelled record clearly distinguishes process cancellation from employment termination and retains the cancellation reason, actor and timestamp.
+Each terminal record reconstructs the governed evidence that existed when the process ended: schedule amendments, manager-reporting-line handovers, replacement/backfill decisions, task completion and waiver counts, asset returns and write-offs, logical-access revocations and exceptions, knowledge-transfer state, final-settlement state and reversal evidence, exit-interview evidence, explicit human rehire decisions and the terminal outcome itself. A cancelled record clearly distinguishes process cancellation from employment termination and retains the cancellation reason, actor and timestamp.
 
 Raw `AuditEvent` chain evidence is more privileged than ordinary offboarding history. It is included only when the viewing role also has `audit:read`; otherwise the domain evidence timeline remains visible while hashes and raw audit rows stay restricted. Where available, the history shows the process, employment and linked replacement-requisition audit chain including the current and previous hashes so an authorized reviewer can inspect immutable transition evidence without opening a mutation surface.
 
@@ -66,8 +76,8 @@ Terminal-history queries are bounded and failure-isolated from the active exit w
 
 ## Human decision boundaries
 
-Exit-interview feedback and rehire eligibility are separate records. Interview recommendations never convert automatically into rehire eligibility. Rehire eligibility remains an explicit human decision with a documented rationale. Replacement need is also a human workforce decision: AI or scoring logic must not autonomously terminate employment, cancel a separation, amend the exit schedule, reverse payroll settlement, determine rehire eligibility, create/open replacement hiring demand or select a replacement candidate.
+Exit-interview feedback and rehire eligibility are separate records. Interview recommendations never convert automatically into rehire eligibility. Rehire eligibility remains an explicit human decision with a documented rationale. Replacement need and manager reassignment are also human workforce decisions: AI or scoring logic must not autonomously terminate employment, cancel a separation, amend the exit schedule, reverse payroll settlement, determine rehire eligibility, create/open replacement hiring demand, select a replacement candidate or choose a new manager.
 
 ## Evidence and audit
 
-Material transitions append restricted audit events. Schedule amendments use `offboarding.schedule-amended`; replacement decisions use `offboarding.replacement-required` or `offboarding.replacement-not-required`; a generated recruiting handoff uses `REQUISITION_CREATED_FROM_OFFBOARDING`; cancellation uses `offboarding.process-cancelled`; automatic retirement of an uncommitted linked backfill uses `REQUISITION_CANCELLED_FROM_OFFBOARDING`; settlement reversal uses `offboarding.final-settlement-reversed`; closure records both employment termination and process closure. Operational controls record their own state transitions, verifier identities and exception reasons. The aggregate evidence therefore remains reconstructable even after the separation reaches a terminal outcome.
+Material transitions append restricted audit events. Schedule amendments use `offboarding.schedule-amended`; manager continuity handover uses `offboarding.manager-handover-completed`; replacement decisions use `offboarding.replacement-required` or `offboarding.replacement-not-required`; a generated recruiting handoff uses `REQUISITION_CREATED_FROM_OFFBOARDING`; cancellation uses `offboarding.process-cancelled`; automatic retirement of an uncommitted linked backfill uses `REQUISITION_CANCELLED_FROM_OFFBOARDING`; settlement reversal uses `offboarding.final-settlement-reversed`; closure records both employment termination and process closure. Operational controls record their own state transitions, verifier identities and exception reasons. The aggregate evidence therefore remains reconstructable even after the separation reaches a terminal outcome.
