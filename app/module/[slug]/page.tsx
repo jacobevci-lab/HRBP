@@ -38,6 +38,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const escalation = typeof search.escalation === "string" ? search.escalation : undefined;
   const taskId = typeof search.task === "string" ? search.task : undefined;
   const instanceId = typeof search.instance === "string" ? search.instance : undefined;
+  const actionView = typeof search.view === "string" ? search.view : undefined;
 
   if (!ctx) return <AppShell><PublicModuleLanding slug={slug}/></AppShell>;
 
@@ -53,7 +54,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
 
   return (
     <AppShell>
-      {slug === "workflows" ? <WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId}/> : null}
+      {slug === "workflows" ? <WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId} initialFilter={actionView}/> : null}
       {slug !== "workflows" || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/> : null}
       {slug === "offboarding" && can(ctx, "offboarding:write") ? <OffboardingClearanceLoader/> : null}
       {slug === "hr-service" ? <HRServiceLifecyclePanel/> : null}
