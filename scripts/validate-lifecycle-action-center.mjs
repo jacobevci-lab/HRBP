@@ -1,0 +1,47 @@
+import { readFile } from "node:fs/promises";
+
+async function source(path) { return readFile(path, "utf8"); }
+const failures = [];
+function expect(path, text, pattern, message) { if (!pattern.test(text)) failures.push(`${path}: ${message}`); }
+function reject(path, text, pattern, message) { if (pattern.test(text)) failures.push(`${path}: ${message}`); }
+
+const dataPath = "lib/lifecycle-action-center.ts";
+const data = await source(dataPath);
+expect(dataPath, data, /tenantId:\s*ctx\.tenantId/, "every lifecycle source must remain tenant scoped");
+expect(dataPath, data, /hrServiceRequestWhere\(db,\s*ctx\)/, "HR Service signals must reuse the governed request visibility scope");
+expect(dataPath, data, /isHRServiceSelfServiceRole/, "employee and manager service signals must stay self-service aware");
+expect(dataPath, data, /visibleHRServiceQueueKeys/, "service operations signals must respect delegated queue membership");
+expect(dataPath, data, /ownerUserId:\s*ctx\.actorId[\s\S]*assignments:\s*\{\s*some:/, "Employee Relations signals must preserve Case Wall ownership or assignment scope");
+expect(dataPath, data, /ownerId:\s*ctx\.actorId/, "Employee Relations corrective actions must be owned by the current actor");
+expect(dataPath, data, /reviewerId:\s*ctx\.actorId/, "Employee Relations appeals must be explicitly assigned to the current reviewer");
+expect(dataPath, data, /CaseActionStatus\.OPEN[\s\S]*CaseActionStatus\.IN_PROGRESS/, "only active case actions may enter the queue");
+expect(dataPath, data, /ServiceRequestStatus\.WAITING_EMPLOYEE/, "self-service response blockers must surface in the queue");
+expect(dataPath, data, /ServicePriority\.HIGH[\s\S]*ServicePriority\.CRITICAL/, "high-risk service requests must be eligible for operational attention");
+expect(dataPath, data, /slice\(0,\s*250\)/, "the aggregate queue must be bounded");
+reject(dataPath, data, /HRServiceComment|PRIVATE_NOTE|comments:\s*\{/, "the action center must not load HR Service private-note content");
+reject(dataPath, data, /grounds:\s*true|decision:\s*true/, "the action center must not pull appeal narrative or decision content");
+
+const routePath = "app/api/action-center/route.ts";
+const route = await source(routePath);
+expect(routePath, route, /getRequestContext\(request\)/, "the action center API must require authenticated request context");
+expect(routePath, route, /getLifecycleActionCenterData\(ctx\)/, "the API must delegate to the scoped lifecycle aggregator");
+expect(routePath, route, /cache-control[\s\S]*no-store/, "personal action queues must never be shared-cached");
+
+const componentPath = "components/workflow-action-center.tsx";
+const component = await source(componentPath);
+expect(componentPath, component, /fetch\("\/api\/action-center"/, "the workspace must consume the lifecycle aggregate API");
+expect(componentPath, component, /"workflow"\s*\|\s*"hr-service"\s*\|\s*"employee-relations"/, "the UI must understand all connected lifecycle sources");
+expect(componentPath, component, /item\.action\?\.type\s*===\s*"complete-workflow"/, "direct completion must remain restricted to workflow tasks");
+expect(componentPath, component, /<Link[\s\S]*href=\{item\.href\}/, "non-workflow signals must deep-link to their governed module");
+expect(componentPath, component, /resourceType:\s*"WorkflowTask"/, "workflow completion must retain notification acknowledgement semantics");
+
+const packagePath = "package.json";
+const pkg = await source(packagePath);
+expect(packagePath, pkg, /lifecycle-action-center:validate/, "lifecycle action center validation must be wired into package scripts");
+expect(packagePath, pkg, /prebuild[\s\S]*lifecycle-action-center:validate/, "lifecycle action center validation must run before production builds");
+
+if (failures.length) {
+  console.error("Lifecycle action center validation failed:\n- " + failures.join("\n- "));
+  process.exit(1);
+}
+console.log("Lifecycle action center validation passed.");
