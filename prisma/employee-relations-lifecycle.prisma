@@ -1,0 +1,30 @@
+model EmployeeCaseStatusTransition {
+  id             String @id @default(cuid())
+  tenantId       String
+  caseId         String
+  fromStatus     CaseStatus
+  toStatus       CaseStatus
+  reason         String?
+  actorId        String
+  occurredAt     DateTime @default(now())
+  classification DataClassification @default(HIGHLY_RESTRICTED)
+
+  @@index([tenantId, caseId, occurredAt])
+  @@index([tenantId, toStatus, occurredAt])
+}
+
+model CaseActionStatusTransition {
+  id             String @id @default(cuid())
+  tenantId       String
+  caseId         String
+  actionId       String
+  fromStatus     CaseActionStatus
+  toStatus       CaseActionStatus
+  reason         String?
+  actorId        String
+  occurredAt     DateTime @default(now())
+  classification DataClassification @default(HIGHLY_RESTRICTED)
+
+  @@index([tenantId, caseId, occurredAt])
+  @@index([tenantId, actionId, occurredAt])
+}
