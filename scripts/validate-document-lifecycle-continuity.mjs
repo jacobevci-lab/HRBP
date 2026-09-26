@@ -29,6 +29,12 @@ expect(versionRoutePath, versions, /getVisibleDocument\(db,\s*ctx,\s*id\)/, "ver
 expect(versionRoutePath, versions, /rows\.map\(publicDocumentVersion\)/, "version list must redact private object keys");
 expect(versionRoutePath, versions, /data:\s*publicDocumentVersion\(result\)/, "version reservation response must redact private object keys");
 
+const governancePath = "app/api/documents/[id]/governance/route.ts";
+const governance = await source(governancePath);
+expect(governancePath, governance, /getVisibleDocument\(tx,\s*ctx,\s*id\)/, "governance mutations must remain scoped to a visible document");
+expect(governancePath, governance, /data:\s*publicDocument\(result\)/, "governance mutation responses must redact private object keys");
+expect(governancePath, governance, /PlatformRole\.LEGAL/, "legal hold changes must remain restricted to Legal");
+
 const deletePath = "app/api/documents/[id]/route.ts";
 const deletion = await source(deletePath);
 expect(deletePath, deletion, /select:\s*\{\s*id:\s*true,\s*status:\s*true\s*\}/, "logical deletion response must expose only minimal state");
