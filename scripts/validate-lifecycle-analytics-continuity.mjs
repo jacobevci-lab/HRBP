@@ -8,7 +8,9 @@ function reject(path, text, pattern, message) { if (pattern.test(text)) failures
 const helperPath = "lib/lifecycle-analytics-continuity.ts";
 const helper = await source(helperPath);
 expect(helperPath, helper, /getLifecycleActionCenterData\(ctx\)/, "analytics continuity must reuse the governed Action Center scope");
-expect(helperPath, helper, /summary:\s*\{[\s\S]*total:[\s\S]*overdue:[\s\S]*dueSoon:[\s\S]*critical:[\s\S]*workflow:[\s\S]*hrService:[\s\S]*employeeRelations:/, "analytics continuity must project aggregate counters only");
+for (const counter of ["total", "overdue", "dueSoon", "critical", "workflow", "hrService", "employeeRelations"]) {
+  expect(helperPath, helper, new RegExp(`${counter}:\\s*source\\.summary\\.${counter}`), `analytics continuity must copy only the governed ${counter} counter`);
+}
 expect(helperPath, helper, /aggregateOnly:\s*true/, "the projection must explicitly declare its aggregate-only privacy contract");
 expect(helperPath, helper, /catch\s*\{[\s\S]*EMPTY_SUMMARY[\s\S]*degraded:\s*true/, "source failure must fail closed with an empty degraded summary");
 reject(helperPath, helper, /\.items|items:|title:|subtitle:|subjectId:|requestNumber:|caseNumber:|documentName:|fileName:/, "analytics continuity must not expose record-level lifecycle details");
