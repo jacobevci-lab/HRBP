@@ -10,7 +10,8 @@ function serviceStatus(value: string | undefined, locale: Locale) {
   if (locale !== "tr") return normalized.toLowerCase().split("_").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
   const map: Record<string, string> = {
     OPEN: "Açık", TRIAGE: "Triyaj", IN_PROGRESS: "Devam ediyor", WAITING_EMPLOYEE: "Çalışan bekleniyor",
-    WAITING_THIRD_PARTY: "Üçüncü taraf bekleniyor", RESOLVED: "Çözüldü", CLOSED: "Kapalı", CANCELLED: "İptal edildi"
+    WAITING_THIRD_PARTY: "Üçüncü taraf bekleniyor", RESOLVED: "Çözüldü", CLOSED: "Kapalı", CANCELLED: "İptal edildi",
+    INVESTIGATING: "Soruşturuluyor", ACTION_REQUIRED: "Aksiyon gerekli", DRAFT: "Taslak", COMPLETED: "Tamamlandı"
   };
   return map[normalized] ?? normalized;
 }
@@ -41,9 +42,14 @@ const hrServiceTitles: Record<string, { en: string; tr: string }> = {
   HR_SERVICE_STAFF_REPLIED: { en: "HR replied to your request", tr: "İK talebinize yanıt verdi" },
   HR_SERVICE_ESCALATED: { en: "HR service SLA escalation", tr: "İK hizmeti SLA eskalasyonu" }
 };
+const employeeRelationsTitles: Record<string, { en: string; tr: string }> = {
+  ER_CASE_STATUS_CHANGED: { en: "Employee Relations case updated", tr: "Çalışan ilişkileri vakası güncellendi" },
+  ER_CASE_ACTION_ASSIGNED: { en: "Corrective action assigned", tr: "Düzeltici aksiyon atandı" },
+  ER_CASE_ACTION_STATUS_CHANGED: { en: "Corrective action updated", tr: "Düzeltici aksiyon güncellendi" }
+};
 
 export function notificationDisplayTitle(eventType: string, locale: Locale) {
-  return onboardingTitles[eventType]?.[locale] ?? offboardingTitles[eventType]?.[locale] ?? hrServiceTitles[eventType]?.[locale] ?? notificationTitle(eventType, locale);
+  return onboardingTitles[eventType]?.[locale] ?? offboardingTitles[eventType]?.[locale] ?? hrServiceTitles[eventType]?.[locale] ?? employeeRelationsTitles[eventType]?.[locale] ?? notificationTitle(eventType, locale);
 }
 
 export function notificationDisplaySummary(payload: unknown, locale: Locale) {
@@ -63,7 +69,17 @@ export function notificationDisplaySummary(payload: unknown, locale: Locale) {
     return `${employeeName} · ${taskName}${owner}${due ? ` · ${locale === "tr" ? "son tarih" : "due"} ${due}` : ""} · ${state}.`;
   }
 
-  const requestNumber = text(data.requestNumber); const notificationState = text(data.notificationState); const fromStatus = text(data.fromStatus); const toStatus = text(data.toStatus); const serviceReason = text(data.reason); const serviceQueue = text(data.queue); const serviceTitle = text(data.title); const escalationLevel = numberValue(data.escalationLevel); const escalationReason = text(data.escalationReason); const slaDueAt = text(data.slaDueAt);
+  const requestNumber = text(data.requestNumber); const notificationState = text(data.notificationState); const fromStatus = text(data.fromStatus); const toStatus = text(data.toStatus); const serviceReason = text(data.reason); const serviceQueue = text(data.queue); const serviceTitle = text(data.title); const escalationLevel = numberValue(data.escalationLevel); const escalationReason = text(data.escalationReason); const slaDueAt = text(data.slaDueAt); const caseNumber = text(data.caseNumber);
+  if (caseNumber && notificationState === "case-status-changed" && toStatus) {
+    return `${caseNumber} · ${serviceStatus(fromStatus, locale)} → ${serviceStatus(toStatus, locale)}.`;
+  }
+  if (caseNumber && notificationState === "case-action-assigned") {
+    const due = dueAt ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(dueAt)) : null;
+    return locale === "tr" ? `${caseNumber} · size yeni bir düzeltici aksiyon atandı${due ? ` · son tarih ${due}` : ""}.` : `${caseNumber} · a new corrective action was assigned to you${due ? ` · due ${due}` : ""}.`;
+  }
+  if (caseNumber && notificationState === "case-action-status-changed" && toStatus) {
+    return `${caseNumber} · ${serviceStatus(fromStatus, locale)} → ${serviceStatus(toStatus, locale)}.`;
+  }
   if (requestNumber && notificationState === "created") {
     return locale === "tr"
       ? `${requestNumber}${serviceTitle ? ` · ${serviceTitle}` : ""}${serviceQueue ? ` · ${serviceQueue}` : ""}. Talep yönlendirme ve triyaj için kaydedildi.`
@@ -124,5 +140,8 @@ export function notificationDisplayResourceHref(resourceType: string, resourceId
   if (resourceType === "SeparationProcess") return id ? `/module/offboarding?process=${encodeURIComponent(id)}` : "/module/offboarding";
   if (resourceType === "Requisition") return "/module/recruiting";
   if (resourceType === "HRServiceRequest") return id ? `/module/hr-service?request=${encodeURIComponent(id)}` : "/module/hr-service";
+  if (resourceType === "EmployeeCase") return id ? `/module/employee-relations?case=${encodeURIComponent(id)}` : "/module/employee-relations";
+  if (resourceType === "CaseAction") return id ? `/module/employee-relations?action=${encodeURIComponent(id)}` : "/module/employee-relations";
+  if (resourceType === "EmployeeCaseAppeal" || resourceType === "CaseAppeal") return id ? `/module/employee-relations?appeal=${encodeURIComponent(id)}` : "/module/employee-relations";
   return notificationResourceHref(resourceType, resourceId);
 }
