@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Clock3, ExternalLink, RefreshCw, ShieldAlert, Workflow } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock3, ExternalLink, FileClock, RefreshCw, ShieldAlert, Workflow } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
-type ActionKind = "workflow" | "hr-service" | "employee-relations";
+type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents";
 type Urgency = "normal" | "warning" | "critical";
 type Filter = "all" | "critical" | "overdue" | "due-soon" | ActionKind;
 
-const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations"]);
+const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents"]);
 
 function normalizeFilter(value?: string): Filter {
   return value && allowedFilters.has(value as Filter) ? value as Filter : "all";
@@ -35,18 +35,23 @@ type LifecycleActionItem = {
   };
 };
 
+type ActionSummary = {
+  total: number;
+  overdue: number;
+  dueSoon: number;
+  critical: number;
+  workflow: number;
+  hrService: number;
+  employeeRelations: number;
+  documents: number;
+};
+
+const emptySummary: ActionSummary = { total: 0, overdue: 0, dueSoon: 0, critical: 0, workflow: 0, hrService: 0, employeeRelations: 0, documents: 0 };
+
 type ActionQueueResponse = {
   data?: {
     items: LifecycleActionItem[];
-    summary: {
-      total: number;
-      overdue: number;
-      dueSoon: number;
-      critical: number;
-      workflow: number;
-      hrService: number;
-      employeeRelations: number;
-    };
+    summary: ActionSummary;
     generatedAt: string;
   };
   error?: string;
@@ -69,7 +74,7 @@ async function acknowledgeTaskNotifications(taskId: string) {
 export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initialFilter }: { initialTaskId?: string; initialInstanceId?: string; initialFilter?: string }) {
   const { locale } = useLocale();
   const [items, setItems] = useState<LifecycleActionItem[]>([]);
-  const [summary, setSummary] = useState({ total: 0, overdue: 0, dueSoon: 0, critical: 0, workflow: 0, hrService: 0, employeeRelations: 0 });
+  const [summary, setSummary] = useState<ActionSummary>(emptySummary);
   const [filter, setFilter] = useState<Filter>(() => normalizeFilter(initialFilter));
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -84,7 +89,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       const body = await response.json() as ActionQueueResponse;
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
       setItems(body.data?.items ?? []);
-      setSummary(body.data?.summary ?? { total: 0, overdue: 0, dueSoon: 0, critical: 0, workflow: 0, hrService: 0, employeeRelations: 0 });
+      setSummary(body.data?.summary ?? emptySummary);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : (locale === "tr" ? "Aksiyon merkezi yüklenemedi." : "Action center could not be loaded."));
     } finally {
@@ -115,7 +120,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       const due = new Date(item.dueAt).getTime();
       return due >= now && due <= soon;
     });
-    if (filter === "workflow" || filter === "hr-service" || filter === "employee-relations") return items.filter((item) => item.kind === filter);
+    if (filter === "workflow" || filter === "hr-service" || filter === "employee-relations" || filter === "documents") return items.filter((item) => item.kind === filter);
     return items;
   }, [filter, items]);
 
@@ -158,6 +163,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
   function sourceLabel(kind: ActionKind) {
     if (kind === "workflow") return locale === "tr" ? "İş akışı" : "Workflow";
     if (kind === "hr-service") return locale === "tr" ? "İK Hizmeti" : "HR Service";
+    if (kind === "documents") return locale === "tr" ? "Dokümanlar" : "Documents";
     return locale === "tr" ? "Çalışan İlişkileri" : "Employee Relations";
   }
 
@@ -173,7 +179,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <div>
           <span className="section-kicker">{locale === "tr" ? "Yaşam döngüsü aksiyon merkezi" : "Lifecycle action center"}</span>
           <h3>{locale === "tr" ? "Bekleyen işlerim ve operasyonel blokajlar" : "My pending work and operational blockers"}</h3>
-          <p>{locale === "tr" ? "İş akışlarını, İK hizmet taleplerini ve kısıtlı çalışan ilişkileri aksiyonlarını tek yetkili kuyrukta takip et." : "Track workflows, HR service requests and restricted employee-relations actions in one authorized queue."}</p>
+          <p>{locale === "tr" ? "İş akışlarını, İK hizmet taleplerini, kısıtlı çalışan ilişkileri aksiyonlarını ve görünür süresi dolan dokümanları tek yetkili kuyrukta takip et." : "Track workflows, HR service requests, restricted employee-relations actions and visible expiring documents in one authorized queue."}</p>
         </div>
         <button className="secondary-button" type="button" onClick={() => void refresh()} disabled={loading}>
           <RefreshCw size={15}/>{locale === "tr" ? "Yenile" : "Refresh"}
@@ -199,6 +205,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <button type="button" className={filter === "workflow" ? "active" : ""} onClick={() => setFilter("workflow")}>{locale === "tr" ? "İş akışı" : "Workflow"} <strong>{summary.workflow}</strong></button>
         <button type="button" className={filter === "hr-service" ? "active" : ""} onClick={() => setFilter("hr-service")}>{locale === "tr" ? "İK Hizmeti" : "HR Service"} <strong>{summary.hrService}</strong></button>
         <button type="button" className={filter === "employee-relations" ? "active" : ""} onClick={() => setFilter("employee-relations")}>{locale === "tr" ? "Çalışan İlişkileri" : "Employee Relations"} <strong>{summary.employeeRelations}</strong></button>
+        <button type="button" className={filter === "documents" ? "active" : ""} onClick={() => setFilter("documents")}><FileClock size={14}/>{locale === "tr" ? "Dokümanlar" : "Documents"} <strong>{summary.documents}</strong></button>
       </div>
 
       {error ? <div className="workflow-action-message error"><AlertTriangle size={15}/>{error}</div> : null}
@@ -206,37 +213,21 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
 
       <div className="workflow-action-table-wrap">
         <table className="workflow-action-table">
-          <thead>
-            <tr>
-              <th>{locale === "tr" ? "Kaynak" : "Source"}</th>
-              <th>{locale === "tr" ? "Aksiyon" : "Action"}</th>
-              <th>{locale === "tr" ? "Konu" : "Subject"}</th>
-              <th>SLA</th>
-              <th>{locale === "tr" ? "Öncelik" : "Priority"}</th>
-              <th>{locale === "tr" ? "Durum" : "Status"}</th>
-              <th>{locale === "tr" ? "İşlem" : "Operation"}</th>
-            </tr>
-          </thead>
+          <thead><tr><th>{locale === "tr" ? "Kaynak" : "Source"}</th><th>{locale === "tr" ? "Aksiyon" : "Action"}</th><th>{locale === "tr" ? "Konu" : "Subject"}</th><th>SLA</th><th>{locale === "tr" ? "Öncelik" : "Priority"}</th><th>{locale === "tr" ? "Durum" : "Status"}</th><th>{locale === "tr" ? "İşlem" : "Operation"}</th></tr></thead>
           <tbody>
             {loading && items.length === 0 ? <tr><td colSpan={7} className="workflow-action-empty">{locale === "tr" ? "Aksiyon merkezi yükleniyor…" : "Loading action center…"}</td></tr> : null}
             {!loading && visibleItems.length === 0 ? <tr><td colSpan={7} className="workflow-action-empty"><CheckCircle2 size={17}/>{locale === "tr" ? "Bu görünümde bekleyen aksiyon yok." : "No pending actions in this view."}</td></tr> : null}
             {visibleItems.map((item) => {
               const focused = item.kind === "workflow" && (item.action?.taskId === initialTaskId || item.action?.instanceId === initialInstanceId);
-              return (
-                <tr key={item.id} id={`action-item-${item.id}`} data-workflow-instance={item.action?.instanceId} className={focused ? "focused" : undefined}>
-                  <td><span className={`workflow-source ${item.kind}`}>{sourceLabel(item.kind)}</span></td>
-                  <td><strong>{item.title}</strong><small>{item.subtitle}</small></td>
-                  <td><span>{item.subjectType}</span><small>{item.subjectId}</small></td>
-                  <td><span className={`workflow-due ${item.urgency}`}>{formatDate(item.dueAt)}</span></td>
-                  <td><span className={`workflow-urgency ${item.urgency}`}>{urgencyLabel(item.urgency)}</span></td>
-                  <td><span className="workflow-task-status">{item.status}</span></td>
-                  <td>
-                    {item.action?.type === "complete-workflow"
-                      ? <button className="primary-button compact" type="button" disabled={busyId === item.id} onClick={() => void completeWorkflowTask(item)}>{busyId === item.id ? (locale === "tr" ? "İşleniyor…" : "Processing…") : (locale === "tr" ? "Tamamla" : "Complete")}</button>
-                      : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>}
-                  </td>
-                </tr>
-              );
+              return <tr key={item.id} id={`action-item-${item.id}`} data-workflow-instance={item.action?.instanceId} className={focused ? "focused" : undefined}>
+                <td><span className={`workflow-source ${item.kind}`}>{sourceLabel(item.kind)}</span></td>
+                <td><strong>{item.title}</strong><small>{item.subtitle}</small></td>
+                <td><span>{item.subjectType}</span><small>{item.subjectId}</small></td>
+                <td><span className={`workflow-due ${item.urgency}`}>{formatDate(item.dueAt)}</span></td>
+                <td><span className={`workflow-urgency ${item.urgency}`}>{urgencyLabel(item.urgency)}</span></td>
+                <td><span className="workflow-task-status">{item.status}</span></td>
+                <td>{item.action?.type === "complete-workflow" ? <button className="primary-button compact" type="button" disabled={busyId === item.id} onClick={() => void completeWorkflowTask(item)}>{busyId === item.id ? (locale === "tr" ? "İşleniyor…" : "Processing…") : (locale === "tr" ? "Tamamla" : "Complete")}</button> : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>}</td>
+              </tr>;
             })}
           </tbody>
         </table>

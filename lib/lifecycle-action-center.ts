@@ -1,7 +1,6 @@
 import {
   CaseActionStatus,
   CaseAppealStatus,
-  PlatformRole,
   Prisma,
   ServicePriority,
   ServiceRequestStatus,
@@ -10,10 +9,11 @@ import {
 } from "@prisma/client";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { documentVisibilityWhere } from "@/lib/document-access";
 import { hrServiceRequestWhere, isHRServiceSelfServiceRole, visibleHRServiceQueueKeys } from "@/lib/hr-service-access";
 import type { RequestContext } from "@/lib/request-context";
 
-export type LifecycleActionKind = "workflow" | "hr-service" | "employee-relations";
+export type LifecycleActionKind = "workflow" | "hr-service" | "employee-relations" | "documents";
 export type LifecycleActionUrgency = "normal" | "warning" | "critical";
 
 export type LifecycleActionItem = {
@@ -250,6 +250,49 @@ async function employeeRelationsItems(ctx: RequestContext): Promise<LifecycleAct
   ];
 }
 
+async function documentItems(ctx: RequestContext): Promise<LifecycleActionItem[]> {
+  if (!can(ctx, "documents:read")) return [];
+
+  const visibility = await documentVisibilityWhere(db, ctx);
+  const horizon = new Date();
+  horizon.setUTCDate(horizon.getUTCDate() + 30);
+
+  const rows = await db.documentRecord.findMany({
+    where: {
+      AND: [
+        visibility,
+        { expiresAt: { not: null, lte: horizon } }
+      ]
+    },
+    orderBy: [{ expiresAt: "asc" }, { createdAt: "asc" }],
+    take: 100,
+    select: {
+      id: true,
+      fileName: true,
+      purpose: true,
+      status: true,
+      expiresAt: true,
+      createdAt: true
+    }
+  });
+
+  return rows.map((row): LifecycleActionItem => ({
+    id: `documents:${row.id}`,
+    kind: "documents",
+    title: row.fileName,
+    subtitle: row.purpose || "Document lifecycle review",
+    module: "documents",
+    href: `/module/documents?document=${encodeURIComponent(row.id)}`,
+    subjectType: "DocumentRecord",
+    subjectId: row.id,
+    status: statusLabel(row.status),
+    dueAt: row.expiresAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+    urgency: urgencyForDueDate(row.expiresAt, "normal"),
+    action: null
+  }));
+}
+
 function sortItems(left: LifecycleActionItem, right: LifecycleActionItem) {
   const rank: Record<LifecycleActionUrgency, number> = { critical: 0, warning: 1, normal: 2 };
   if (rank[left.urgency] !== rank[right.urgency]) return rank[left.urgency] - rank[right.urgency];
@@ -260,12 +303,13 @@ function sortItems(left: LifecycleActionItem, right: LifecycleActionItem) {
 }
 
 export async function getLifecycleActionCenterData(ctx: RequestContext) {
-  const [workflows, hrService, employeeRelations] = await Promise.all([
+  const [workflows, hrService, employeeRelations, documents] = await Promise.all([
     workflowItems(ctx),
     hrServiceItems(ctx),
-    employeeRelationsItems(ctx)
+    employeeRelationsItems(ctx),
+    documentItems(ctx)
   ]);
-  const items = [...workflows, ...hrService, ...employeeRelations].sort(sortItems).slice(0, 250);
+  const items = [...workflows, ...hrService, ...employeeRelations, ...documents].sort(sortItems).slice(0, 250);
   const now = Date.now();
   const soon = now + 24 * 60 * 60 * 1000;
 
@@ -282,7 +326,8 @@ export async function getLifecycleActionCenterData(ctx: RequestContext) {
       critical: items.filter((item) => item.urgency === "critical").length,
       workflow: items.filter((item) => item.kind === "workflow").length,
       hrService: items.filter((item) => item.kind === "hr-service").length,
-      employeeRelations: items.filter((item) => item.kind === "employee-relations").length
+      employeeRelations: items.filter((item) => item.kind === "employee-relations").length,
+      documents: items.filter((item) => item.kind === "documents").length
     },
     generatedAt: new Date(now).toISOString()
   };
