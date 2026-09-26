@@ -65,11 +65,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const value = rawParticipants[index];
     if (!value || typeof value !== "object" || Array.isArray(value)) return Response.json({ error: `Participant ${index + 1} must be an object.` }, { status: 400 });
     const record = value as Record<string, unknown>;
-    const employmentId = record.employmentId === undefined || record.employmentId === null || record.employmentId === "" ? undefined : asIdentifier(record.employmentId);
-    const email = normalizeEmail(record.email);
-    if ((record.employmentId !== undefined && record.employmentId !== null && record.employmentId !== "" && !employmentId) || email === null) {
+    const rawEmploymentId = record.employmentId === undefined || record.employmentId === null || record.employmentId === "" ? undefined : asIdentifier(record.employmentId);
+    const rawEmail = normalizeEmail(record.email);
+    if ((record.employmentId !== undefined && record.employmentId !== null && record.employmentId !== "" && !rawEmploymentId) || rawEmail === null) {
       return Response.json({ error: `Participant ${index + 1} contains an invalid employmentId or email.` }, { status: 400 });
     }
+    const employmentId = rawEmploymentId ?? undefined;
+    const email = rawEmail ?? undefined;
     if (!employmentId && !email) return Response.json({ error: `Participant ${index + 1} requires an employmentId or email.` }, { status: 400 });
     const orderValue = record.signingOrder === undefined ? index + 1 : asFiniteNumber(record.signingOrder);
     if (orderValue === null || !Number.isInteger(orderValue) || orderValue < 1 || orderValue > 1000) {
