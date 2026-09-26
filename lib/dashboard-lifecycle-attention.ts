@@ -9,6 +9,7 @@ export type DashboardLifecycleAttention = {
   workflow: number;
   hrService: number;
   employeeRelations: number;
+  documents: number;
 };
 
 const emptySummary: DashboardLifecycleAttention = {
@@ -18,7 +19,8 @@ const emptySummary: DashboardLifecycleAttention = {
   critical: 0,
   workflow: 0,
   hrService: 0,
-  employeeRelations: 0
+  employeeRelations: 0,
+  documents: 0
 };
 
 export async function getDashboardLifecycleAttentionSafe(): Promise<{
