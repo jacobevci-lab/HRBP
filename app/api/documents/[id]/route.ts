@@ -20,7 +20,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     const updated = await tx.documentRecord.update({
       where: { id: document.id },
-      data: { status: DocumentStatus.DELETED }
+      data: { status: DocumentStatus.DELETED },
+      select: { id: true, status: true }
     });
     await appendAudit(tx, ctx, {
       action: "DOCUMENT_LOGICALLY_DELETED",
