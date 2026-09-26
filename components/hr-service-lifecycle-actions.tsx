@@ -28,6 +28,20 @@ function label(locale: Locale, value: string) {
   return map[normalized] ?? normalized;
 }
 
+async function acknowledgeRequestNotifications(requestId: string) {
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resourceType: "HRServiceRequest", resourceId: requestId, read: true })
+    });
+    if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
+  } catch {
+    // Notification acknowledgement is best-effort. A successful governed HR
+    // Service mutation must never be rolled back because badge cleanup failed.
+  }
+}
+
 export function HRServiceLifecycleActions({ requestId, status, locale, staff }: { requestId: string; status: string; locale: Locale; staff: boolean }) {
   const router = useRouter();
   const options = transitions[status] ?? [];
@@ -55,6 +69,7 @@ export function HRServiceLifecycleActions({ requestId, status, locale, staff }: 
       if (!response.ok) throw new Error(body.error ?? "Request update failed.");
       setReason("");
       setMessage(c(locale, "Lifecycle transition recorded.", "Yaşam döngüsü geçişi kaydedildi."));
+      await acknowledgeRequestNotifications(requestId);
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : c(locale, "Request update failed.", "Talep güncellenemedi."));
@@ -74,6 +89,7 @@ export function HRServiceLifecycleActions({ requestId, status, locale, staff }: 
       if (!response.ok) throw new Error(body.error ?? "Reply could not be added.");
       setReply("");
       setMessage(visibility === "PRIVATE_NOTE" ? c(locale, "Private HR note recorded.", "Özel İK notu kaydedildi.") : c(locale, "Reply recorded.", "Yanıt kaydedildi."));
+      await acknowledgeRequestNotifications(requestId);
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : c(locale, "Reply could not be added.", "Yanıt eklenemedi."));
