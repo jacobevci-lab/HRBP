@@ -26,9 +26,13 @@ Request input is bounded server-side: category and subcategory are limited to 80
 
 Queue selection is validated against active delegated queues. When a queued request is created, its queue owner receives transactional notification intent; otherwise the request falls back to the HR Operations role. Assignment changes validate that the target is an active service-staff user and, when a queue is selected, a member of that queue.
 
-## Notifications
+## Notifications and lifecycle routing
 
-Transactional outbox events cover request creation, assignment, requestor replies, staff replies, status changes and automated SLA escalation. Requester-facing notifications never include private HR notes. Notification deep links return to the governed HR Service workspace.
+Transactional outbox events cover request creation, assignment, requestor replies, staff replies, status changes and automated SLA escalation. Requester-facing notifications never include private HR notes.
+
+Notification and Lifecycle Action Center links resolve into the governed HR Service lifecycle history instead of only opening the generic module. A link may carry the request UUID or request number. Resolution always intersects the existing `hrServiceRequestWhere` scope; it never performs an unscoped fallback lookup. If a link is stale or the request is outside the actor's current scope, the workspace reports that the target is not visible without widening access.
+
+A visible linked request is pinned to the top of lifecycle history even when it has fallen outside the normal recent-request window. The same row retains its transition evidence, SLA state and governed action controls. After the actor successfully performs a lifecycle transition or adds a reply/note, matching in-app notifications for that request are acknowledged on a best-effort basis and the notification badge is refreshed. Notification cleanup can never roll back an already successful business mutation.
 
 ## Human decision boundary
 
