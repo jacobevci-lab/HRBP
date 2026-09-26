@@ -7,6 +7,7 @@ import type { RequestContext } from "@/lib/request-context";
 const activeAllegations = new Set<AllegationStatus>([AllegationStatus.OPEN, AllegationStatus.INVESTIGATING]);
 const activeActions = new Set<CaseActionStatus>([CaseActionStatus.OPEN, CaseActionStatus.IN_PROGRESS]);
 const activeAppeals = new Set<CaseAppealStatus>([CaseAppealStatus.SUBMITTED, CaseAppealStatus.REVIEWING]);
+const resolutionStatuses = new Set<CaseStatus>([CaseStatus.INVESTIGATING, CaseStatus.ACTION_REQUIRED]);
 
 function label(value: string) {
   return value.toLowerCase().split("_").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
@@ -118,7 +119,18 @@ export async function getEmployeeRelationsLifecycleLiveData(ctx: RequestContext,
       }
 
       let focusedCase = focusCaseId ? cases.find((item) => item.id === focusCaseId) : undefined;
-      if (focusCaseId && !focusedCase) focusedCase = await getCaseWallCase(ctx, focusCaseId, db) ?? undefined;
+      if (focusCaseId && !focusedCase) {
+        const allowed = await getCaseWallCase(ctx, focusCaseId, db);
+        if (allowed) {
+          focusedCase = await db.employeeCase.findFirst({
+            where: { id: focusCaseId, tenantId: ctx.tenantId },
+            include: {
+              subject: { select: { id: true, employeeNumber: true, givenName: true, familyName: true } },
+              assignments: { select: { assignedAt: true, user: { select: { displayName: true, role: true, subject: true } } } }
+            }
+          }) ?? undefined;
+        }
+      }
       if (requestedCaseId && !focusedCase && focusKind === "case") {
         focusCaseId = null;
         focusKind = null;
@@ -160,7 +172,7 @@ export async function getEmployeeRelationsLifecycleLiveData(ctx: RequestContext,
         const activeAppealCount = appeals.filter((item) => item.caseId === caseRecord.id && activeAppeals.has(item.status)).length;
         const findingCount = findings.filter((item) => item.caseId === caseRecord.id).length;
         const transition = lastTransition.get(caseRecord.id);
-        const readyToResolve = [CaseStatus.INVESTIGATING, CaseStatus.ACTION_REQUIRED].includes(caseRecord.status) && openAllegations === 0 && openActions === 0;
+        const readyToResolve = resolutionStatuses.has(caseRecord.status) && openAllegations === 0 && openActions === 0;
         const readyToClose = caseRecord.status === CaseStatus.RESOLVED && openAllegations === 0 && openActions === 0 && activeAppealCount === 0;
         return {
           id: caseRecord.id,
@@ -198,7 +210,7 @@ export async function getEmployeeRelationsLifecycleLiveData(ctx: RequestContext,
         total: rows.length,
         investigating: rows.filter((row) => row.status === CaseStatus.INVESTIGATING).length,
         actionRequired: rows.filter((row) => row.status === CaseStatus.ACTION_REQUIRED).length,
-        resolutionBlocked: rows.filter((row) => [CaseStatus.INVESTIGATING, CaseStatus.ACTION_REQUIRED].includes(row.status) && !row.readyToResolve).length,
+        resolutionBlocked: rows.filter((row) => resolutionStatuses.has(row.status) && !row.readyToResolve).length,
         readyToClose: rows.filter((row) => row.readyToClose).length,
         focusCaseId,
         focusKind,
