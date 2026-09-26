@@ -32,9 +32,23 @@ function label(locale: Locale, value: string) {
   return map[normalized] ?? normalized;
 }
 
+async function acknowledgeNotifications(resourceType: "EmployeeCase" | "CaseAction", resourceId: string) {
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resourceType, resourceId, read: true })
+    });
+    if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
+  } catch {
+    // Notification acknowledgement is deliberately best-effort. A governed
+    // case mutation must not be rolled back because badge cleanup failed.
+  }
+}
+
 type ActionItem = { id: string; actionType: string; status: CaseActionStatus; ownerId: string; dueAt: string | null };
 
-export function EmployeeRelationsCaseLifecycleActions({ caseId, status, actions, locale }: { caseId: string; status: CaseStatus; actions: ActionItem[]; locale: Locale }) {
+export function EmployeeRelationsCaseLifecycleActions({ caseId, status, actions, locale, focusedActionId }: { caseId: string; status: CaseStatus; actions: ActionItem[]; locale: Locale; focusedActionId?: string | null }) {
   const router = useRouter();
   const options = caseTransitions[status] ?? [];
   const [target, setTarget] = useState<CaseStatus | "">(options[0] ?? "");
@@ -52,7 +66,9 @@ export function EmployeeRelationsCaseLifecycleActions({ caseId, status, actions,
       const response = await fetch(`/api/employee-relations/cases/${encodeURIComponent(caseId)}/status`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: target, ...(reason.trim() ? { reason: reason.trim() } : {}) }) });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(body.error ?? "Case transition failed.");
-      setReason(""); setMessage(c(locale, "Case lifecycle updated.", "Vaka yaşam döngüsü güncellendi.")); router.refresh();
+      setReason(""); setMessage(c(locale, "Case lifecycle updated.", "Vaka yaşam döngüsü güncellendi."));
+      await acknowledgeNotifications("EmployeeCase", caseId);
+      router.refresh();
     } catch (error) { setMessage(error instanceof Error ? error.message : c(locale, "Case transition failed.", "Vaka geçişi başarısız.")); }
     finally { setBusy(null); }
   }
@@ -65,12 +81,14 @@ export function EmployeeRelationsCaseLifecycleActions({ caseId, status, actions,
       const response = await fetch(`/api/employee-relations/cases/${encodeURIComponent(caseId)}/actions/${encodeURIComponent(action.id)}/status`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: targetStatus, ...(actionReason ? { reason: actionReason } : {}) }) });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(body.error ?? "Corrective action update failed.");
-      setActionReasons((current) => ({ ...current, [action.id]: "" })); setMessage(c(locale, "Corrective action updated.", "Düzeltici aksiyon güncellendi.")); router.refresh();
+      setActionReasons((current) => ({ ...current, [action.id]: "" })); setMessage(c(locale, "Corrective action updated.", "Düzeltici aksiyon güncellendi."));
+      await acknowledgeNotifications("CaseAction", action.id);
+      router.refresh();
     } catch (error) { setMessage(error instanceof Error ? error.message : c(locale, "Corrective action update failed.", "Düzeltici aksiyon güncellenemedi.")); }
     finally { setBusy(null); }
   }
 
-  return <details style={{ minWidth: 280 }}>
+  return <details style={{ minWidth: 280 }} open={Boolean(focusedActionId)}>
     <summary style={{ cursor: "pointer", fontWeight: 700 }}>{c(locale, "Govern case", "Vakayı yönet")}</summary>
     <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
       {options.length ? <div style={{ display: "grid", gap: 7 }}>
@@ -80,8 +98,8 @@ export function EmployeeRelationsCaseLifecycleActions({ caseId, status, actions,
         <button type="button" onClick={changeCase} disabled={busy !== null || !target}>{busy === "case" ? c(locale, "Saving…", "Kaydediliyor…") : c(locale, "Apply case transition", "Vaka geçişini uygula")}</button>
       </div> : <small>{c(locale, "Case is terminal.", "Vaka terminal durumda.")}</small>}
 
-      {actions.filter((action) => actionTransitions[action.status].length).map((action) => <div key={action.id} style={{ display: "grid", gap: 6, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
-        <strong>{action.actionType}</strong><small>{label(locale, action.status)} · {c(locale, "Owner", "Sahip")}: {action.ownerId}</small>
+      {actions.filter((action) => actionTransitions[action.status].length).map((action) => <div key={action.id} aria-current={action.id === focusedActionId ? "true" : undefined} style={{ display: "grid", gap: 6, paddingTop: 8, borderTop: "1px solid var(--border)" }}>
+        <strong>{action.actionType}{action.id === focusedActionId ? ` · ${c(locale, "Focused", "Odak")}` : ""}</strong><small>{label(locale, action.status)} · {c(locale, "Owner", "Sahip")}: {action.ownerId}</small>
         <textarea value={actionReasons[action.id] ?? ""} onChange={(event) => setActionReasons((current) => ({ ...current, [action.id]: event.target.value }))} minLength={10} maxLength={2000} rows={2} placeholder={c(locale, "Completion / cancellation reason", "Tamamlama / iptal gerekçesi")}/>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{actionTransitions[action.status].map((next) => <button key={next} type="button" onClick={() => changeAction(action, next)} disabled={busy !== null}>{label(locale, next)}</button>)}</div>
       </div>)}
