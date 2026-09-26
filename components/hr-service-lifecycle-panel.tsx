@@ -1,4 +1,4 @@
-import { AlertTriangle, BadgeCheck, Clock3, MessageSquareText, PauseCircle } from "lucide-react";
+import { AlertTriangle, BadgeCheck, Clock3, Link2, MessageSquareText, PauseCircle } from "lucide-react";
 import { can } from "@/lib/authorization";
 import { getServerLocale } from "@/lib/i18n-server";
 import type { Locale } from "@/lib/i18n";
@@ -10,11 +10,12 @@ import { HRServiceRequestForm } from "@/components/hr-service-request-form";
 function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
 function Metric({ icon, label, value, meta }: { icon: React.ReactNode; label: string; value: string; meta: string }) { return <div className="services-metric card"><div className="services-metric-icon">{icon}</div><div><span>{label}</span><strong>{value}</strong><small>{meta}</small></div></div>; }
 
-export async function HRServiceLifecyclePanel() {
+export async function HRServiceLifecyclePanel({ focus }: { focus?: string }) {
   const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   if (!ctx || !can(ctx, "hr-service:read")) return null;
-  const data = await getHRServiceLifecycleLiveData(ctx);
+  const data = await getHRServiceLifecycleLiveData(ctx, focus);
   const canWrite = can(ctx, "hr-service:write");
+  const focusRequested = Boolean(focus?.trim());
 
   if (!data.schemaReady) {
     return <section className="card services-panel" style={{ marginTop: 18 }}>
@@ -31,6 +32,13 @@ export async function HRServiceLifecyclePanel() {
       <Metric icon={<MessageSquareText size={18}/>} label={c(locale, "Recorded transitions", "Kaydedilen geçişler")} value={String(data.transitions)} meta={c(locale, "Bounded visible scope", "Sınırlı görünür kapsam")}/>
     </section>
 
+    {focusRequested ? <section className="card services-panel" style={{ padding: "10px 12px", borderColor: data.focusedRequestId ? "color-mix(in srgb,var(--accent) 35%,var(--line))" : "color-mix(in srgb,var(--orange) 35%,var(--line))" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
+        {data.focusedRequestId ? <Link2 size={16} style={{ color: "var(--accent)" }}/> : <AlertTriangle size={16} style={{ color: "var(--orange)" }}/>} 
+        <div><strong style={{ display: "block", fontSize: 10.5 }}>{data.focusedRequestId ? c(locale, "Lifecycle link resolved", "Yaşam döngüsü bağlantısı bulundu") : c(locale, "Linked request is not visible", "Bağlantılı talep görünür değil")}</strong><small style={{ color: "var(--muted)" }}>{data.focusedRequestId ? c(locale, "The linked request is pinned to the top of the governed history below.", "Bağlantılı talep aşağıdaki yönetişimli geçmişte en üste sabitlendi.") : c(locale, "The request may be outside your authorized scope, removed, or the link may be stale. No broader fallback query was used.", "Talep yetkili kapsamınızın dışında, kaldırılmış veya bağlantı eski olabilir. Daha geniş bir yedek sorgu kullanılmadı.")}</small></div>
+      </div>
+    </section> : null}
+
     {canWrite ? <section className="card services-panel"><div className="services-panel-head"><div><span className="section-kicker">{c(locale, "Governed intake", "Yönetişimli talep girişi")}</span><h3>{c(locale, "Create an HR service request", "İK hizmet talebi oluştur")}</h3></div></div><HRServiceRequestForm locale={locale}/></section> : null}
 
     <section className="card services-panel">
@@ -38,9 +46,10 @@ export async function HRServiceLifecyclePanel() {
       <div className="services-table-wrap"><table className="services-table"><thead><tr><th>{c(locale, "Request", "Talep")}</th><th>{c(locale, "Title", "Başlık")}</th><th>{c(locale, "Status", "Durum")}</th><th>SLA</th><th>{c(locale, "Routing", "Yönlendirme")}</th><th>{c(locale, "Last transition", "Son geçiş")}</th><th>{c(locale, "Evidence", "Kanıt")}</th>{canWrite ? <th>{c(locale, "Action", "Aksiyon")}</th> : null}</tr></thead>
       <tbody>{data.rows.length ? data.rows.slice(0, 40).map((row) => {
         const terminal = row.rawStatus === "CLOSED" || row.rawStatus === "CANCELLED";
-        return <tr key={row.id}>
-          <td><strong>{row.requestNumber}</strong><small className="cell-sub">{row.category} · {row.priority}</small></td>
-          <td>{row.title}</td>
+        const focused = row.id === data.focusedRequestId;
+        return <tr key={row.id} style={focused ? { background: "var(--accent-soft)", boxShadow: "inset 3px 0 0 var(--accent)" } : undefined}>
+          <td><strong>{row.requestNumber}</strong>{focused ? <small className="cell-sub">{c(locale, "Linked action", "Bağlantılı aksiyon")}</small> : <small className="cell-sub">{row.category} · {row.priority}</small>}</td>
+          <td>{row.title}{focused ? <small className="cell-sub">{row.category} · {row.priority}</small> : null}</td>
           <td><em className={`services-pill ${row.rawStatus.toLowerCase().replace(/_/g, "-")}`}>{row.status}</em></td>
           <td>{row.slaPaused ? <><PauseCircle size={13}/> {c(locale, "Paused", "Duraklatıldı")}</> : row.sla}{row.escalationLevel ? <small className="cell-sub">L{row.escalationLevel} {c(locale, "escalation", "eskalasyon")}</small> : null}</td>
           <td>{row.queue}<small className="cell-sub">{row.assigneeId ? c(locale, "Assigned", "Atanmış") : c(locale, "Unassigned", "Atanmamış")}</small></td>
