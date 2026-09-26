@@ -55,6 +55,7 @@ model DocumentVersion {
   scanMessage     String?
   createdById     String
   createdAt       DateTime @default(now())
+  signatureEnvelopes SignatureEnvelope[]
 
   @@unique([documentId, version])
   @@index([tenantId, documentId, createdAt])
@@ -79,19 +80,22 @@ model DocumentAccessGrant {
 }
 
 model SignatureEnvelope {
-  id          String @id @default(cuid())
-  tenantId    String
-  documentId  String
-  title       String
-  status      SignatureEnvelopeStatus @default(DRAFT)
-  createdById String
-  expiresAt   DateTime?
-  createdAt   DateTime @default(now())
-  completedAt DateTime?
-  participants SignatureParticipant[]
-  events      SignatureEvent[]
+  id                String @id @default(cuid())
+  tenantId          String
+  documentId        String
+  documentVersionId String?
+  title             String
+  status            SignatureEnvelopeStatus @default(DRAFT)
+  createdById       String
+  expiresAt         DateTime?
+  createdAt         DateTime @default(now())
+  completedAt       DateTime?
+  documentVersion   DocumentVersion? @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  participants      SignatureParticipant[]
+  events            SignatureEvent[]
 
   @@index([tenantId, documentId, status])
+  @@index([tenantId, documentVersionId])
 }
 
 model SignatureParticipant {
