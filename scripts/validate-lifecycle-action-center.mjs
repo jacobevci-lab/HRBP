@@ -34,6 +34,32 @@ expect(componentPath, component, /"workflow"\s*\|\s*"hr-service"\s*\|\s*"employe
 expect(componentPath, component, /item\.action\?\.type\s*===\s*"complete-workflow"/, "direct completion must remain restricted to workflow tasks");
 expect(componentPath, component, /<Link[\s\S]*href=\{item\.href\}/, "non-workflow signals must deep-link to their governed module");
 expect(componentPath, component, /resourceType:\s*"WorkflowTask"/, "workflow completion must retain notification acknowledgement semantics");
+expect(componentPath, component, /allowedFilters[\s\S]*critical[\s\S]*overdue[\s\S]*due-soon[\s\S]*hr-service[\s\S]*employee-relations/, "action-center deep links must be constrained to the supported filter vocabulary");
+expect(componentPath, component, /normalizeFilter\(value\?\: string\)[\s\S]*:\s*"all"/, "unknown action-center view values must normalize back to all");
+expect(componentPath, component, /initialTaskId[\s\S]*initialInstanceId[\s\S]*setFilter\("all"\)/, "task and instance deep links must take precedence over a filtered view");
+
+const modulePagePath = "app/module/[slug]/page.tsx";
+const modulePage = await source(modulePagePath);
+expect(modulePagePath, modulePage, /search\.view/, "module routing must read the lifecycle action-center view parameter");
+expect(modulePagePath, modulePage, /initialFilter=\{actionView\}/, "workflow workspace must pass the requested view into the action center");
+
+const dashboardHelperPath = "lib/dashboard-lifecycle-attention.ts";
+const dashboardHelper = await source(dashboardHelperPath);
+expect(dashboardHelperPath, dashboardHelper, /getServerRequestContext\(\)/, "dashboard lifecycle counts must resolve the signed actor context server-side");
+expect(dashboardHelperPath, dashboardHelper, /getLifecycleActionCenterData\(ctx\)/, "dashboard counts must reuse the governed lifecycle aggregator instead of duplicating visibility logic");
+expect(dashboardHelperPath, dashboardHelper, /return \{ summary: data\.summary, degraded: false \}/, "dashboard integration must expose summary counts only");
+expect(dashboardHelperPath, dashboardHelper, /catch \(error\)[\s\S]*emptySummary[\s\S]*degraded: true/, "dashboard integration must fail soft without surfacing another actor or tenant's data");
+reject(dashboardHelperPath, dashboardHelper, /data\.items|items:/, "dashboard helper must not expose action-level Employee Relations or HR Service details");
+
+const dashboardPath = "components/dashboard.tsx";
+const dashboard = await source(dashboardPath);
+expect(dashboardPath, dashboard, /getDashboardLifecycleAttentionSafe\(\)/, "Dashboard must load the actor-scoped lifecycle summary");
+expect(dashboardPath, dashboard, /actionSummary\.critical/, "Dashboard must surface critical lifecycle blockers");
+expect(dashboardPath, dashboard, /actionSummary\.overdue/, "Dashboard must surface overdue lifecycle blockers");
+expect(dashboardPath, dashboard, /actionSummary\.hrService/, "Dashboard must connect HR Service attention into the lifecycle card");
+expect(dashboardPath, dashboard, /actionSummary\.employeeRelations/, "Dashboard must connect authorized Employee Relations attention into the lifecycle card");
+expect(dashboardPath, dashboard, /actionDataDegraded[\s\S]*upcomingStarters/, "Dashboard must retain safe fallback priorities if actor-specific lifecycle aggregation fails");
+reject(dashboardPath, dashboard, /actionSummary\.(items|records|cases)/, "Dashboard must consume only lifecycle summary counts, never action-level restricted content");
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);

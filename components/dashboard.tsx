@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, CalendarClock, ChevronRight, CircleAlert, CircleCheckBig, Clock3, FileWarning, ShieldCheck, Sparkles, UserPlus, UsersRound } from "lucide-react";
 import { can } from "@/lib/authorization";
 import { getDashboardDataSafe } from "@/lib/dashboard-safe";
+import { getDashboardLifecycleAttentionSafe } from "@/lib/dashboard-lifecycle-attention";
 import { getServerLocale } from "@/lib/i18n-server";
 import { translate, type Locale, type TranslationKey } from "@/lib/i18n";
 import { getServerSessionClaims } from "@/lib/server-session";
@@ -41,14 +42,33 @@ function localizedStatus(locale: Locale, status: string) {
   return values[normalized] ?? status;
 }
 
+function attentionCopy(locale: Locale, key: "critical" | "overdue" | "hr-service" | "employee-relations", count: number) {
+  const tr = {
+    critical: { title: "Kritik yaşam döngüsü aksiyonları", detail: `${count} kritik aksiyon veya operasyonel blokaj bekliyor` },
+    overdue: { title: "Geciken aksiyonlar", detail: `${count} aksiyon hedef tarihini geçti` },
+    "hr-service": { title: "İK hizmet aksiyonları", detail: `${count} hizmet talebi yanıt, atama veya operasyonel takip bekliyor` },
+    "employee-relations": { title: "Çalışan ilişkileri aksiyonları", detail: `${count} yetkili vaka aksiyonu veya itiraz incelemesi bekliyor` }
+  } as const;
+  const en = {
+    critical: { title: "Critical lifecycle actions", detail: `${count} critical actions or operational blockers are pending` },
+    overdue: { title: "Overdue actions", detail: `${count} actions are past their target date` },
+    "hr-service": { title: "HR service actions", detail: `${count} service requests need response, assignment or operational follow-up` },
+    "employee-relations": { title: "Employee relations actions", detail: `${count} authorized case actions or appeal reviews are pending` }
+  } as const;
+  return (locale === "tr" ? tr : en)[key];
+}
+
 export async function Dashboard() {
-  const [locale, session, dashboard] = await Promise.all([
+  const [locale, session, dashboard, lifecycleAttention] = await Promise.all([
     getServerLocale(),
     getServerSessionClaims(),
-    getDashboardDataSafe()
+    getDashboardDataSafe(),
+    getDashboardLifecycleAttentionSafe()
   ]);
   const t = (key: TranslationKey, vars?: Record<string, string | number>) => translate(locale, key, vars);
   const { data, degraded } = dashboard;
+  const actionSummary = lifecycleAttention.summary;
+  const actionDataDegraded = lifecycleAttention.degraded;
   const ctx = session ? { tenantId: session.tenantId, actorId: session.actorId, role: session.role, employmentId: session.employmentId } : null;
   const firstName = session?.displayName?.trim().split(/\s+/)[0] || (locale === "tr" ? "ekip" : "team");
   const maxPlan = Math.max(...data.headcountSeries.map((item) => item.plan), 1);
@@ -59,6 +79,7 @@ export async function Dashboard() {
     organization: ctx && can(ctx, "organization:read") ? "/module/organization" : null,
     onboarding: ctx && can(ctx, "onboarding:read") ? "/module/onboarding" : null,
     cases: ctx && can(ctx, "cases:read") ? "/module/employee-relations" : null,
+    hrService: ctx && can(ctx, "hr-service:read") ? "/module/hr-service" : null,
     recruiting: ctx && can(ctx, "recruiting:read") ? "/module/recruiting" : null,
     people: ctx && can(ctx, "people:read") ? "/module/people" : null,
     audit: ctx && can(ctx, "audit:read") ? "/module/audit" : null,
@@ -66,6 +87,10 @@ export async function Dashboard() {
     ai: ctx && can(ctx, "ai:use") ? "/module/ai-assistant" : null,
     workflows: session ? "/module/workflows" : null
   };
+  const criticalCopy = attentionCopy(locale, "critical", actionSummary.critical);
+  const overdueCopy = attentionCopy(locale, "overdue", actionSummary.overdue);
+  const serviceCopy = attentionCopy(locale, "hr-service", actionSummary.hrService);
+  const relationsCopy = attentionCopy(locale, "employee-relations", actionSummary.employeeRelations);
 
   return (
     <>
@@ -103,14 +128,21 @@ export async function Dashboard() {
         </div>
 
         <div className="card action-card">
-          <CardHeader title={t("dashboard.needsAttention")} subtitle={degraded ? t("dashboard.safePriorities") : t("dashboard.livePriorities")} />
+          <CardHeader title={t("dashboard.needsAttention")} subtitle={actionDataDegraded ? t("dashboard.safePriorities") : (locale === "tr" ? "Yetkili yaşam döngüsü kuyruğundan önceliklendirildi" : "Prioritized from your authorized lifecycle queue")} />
           <div className="attention-list">
-            <Attention icon={<CalendarClock size={17}/>} tone="amber" title={t("dashboard.upcomingStarters")} detail={t("dashboard.peopleStart", { count: data.upcomingStarters })} tag={t("nav.onboarding")} href={links.onboarding} />
-            <Attention icon={<FileWarning size={17}/>} tone="red" title={t("dashboard.employeeRelations")} detail={t("dashboard.activeCases", { count: data.openCases })} tag={data.openCases ? t("dashboard.review") : t("dashboard.clear")} href={links.cases} />
-            <Attention icon={<BriefcaseBusiness size={17}/>} tone="purple" title={t("dashboard.criticalVacancies")} detail={t("dashboard.positionsRemainOpen", { count: data.criticalOpenPositions })} tag={t("dashboard.hiring")} href={links.recruiting} />
-            <Attention icon={<Clock3 size={17}/>} tone="sage" title={t("dashboard.onboardingPlans")} detail={t("dashboard.plansInProgress", { count: data.onboardingInProgress })} tag={t("dashboard.items", { count: data.onboardingInProgress })} href={links.onboarding} />
+            {!actionDataDegraded ? <>
+              <Attention icon={<CircleAlert size={17}/>} tone="red" title={criticalCopy.title} detail={criticalCopy.detail} tag={t("dashboard.items", { count: actionSummary.critical })} href={links.workflows} />
+              <Attention icon={<Clock3 size={17}/>} tone="amber" title={overdueCopy.title} detail={overdueCopy.detail} tag={t("dashboard.items", { count: actionSummary.overdue })} href={links.workflows} />
+              <Attention icon={<FileWarning size={17}/>} tone="sage" title={serviceCopy.title} detail={serviceCopy.detail} tag={t("dashboard.items", { count: actionSummary.hrService })} href={links.hrService ?? links.workflows} />
+              <Attention icon={<ShieldCheck size={17}/>} tone="purple" title={relationsCopy.title} detail={relationsCopy.detail} tag={t("dashboard.items", { count: actionSummary.employeeRelations })} href={links.cases ?? links.workflows} />
+            </> : <>
+              <Attention icon={<CalendarClock size={17}/>} tone="amber" title={t("dashboard.upcomingStarters")} detail={t("dashboard.peopleStart", { count: data.upcomingStarters })} tag={t("nav.onboarding")} href={links.onboarding} />
+              <Attention icon={<FileWarning size={17}/>} tone="red" title={t("dashboard.employeeRelations")} detail={t("dashboard.activeCases", { count: data.openCases })} tag={data.openCases ? t("dashboard.review") : t("dashboard.clear")} href={links.cases} />
+              <Attention icon={<BriefcaseBusiness size={17}/>} tone="purple" title={t("dashboard.criticalVacancies")} detail={t("dashboard.positionsRemainOpen", { count: data.criticalOpenPositions })} tag={t("dashboard.hiring")} href={links.recruiting} />
+              <Attention icon={<Clock3 size={17}/>} tone="sage" title={t("dashboard.onboardingPlans")} detail={t("dashboard.plansInProgress", { count: data.onboardingInProgress })} tag={t("dashboard.items", { count: data.onboardingInProgress })} href={links.onboarding} />
+            </>}
           </div>
-          {links.workflows ? <Link className="card-footer-button" href={links.workflows}>{t("dashboard.openActionCenter")} <ChevronRight size={15}/></Link> : null}
+          {links.workflows ? <Link className="card-footer-button" href={links.workflows}>{t("dashboard.openActionCenter")} {actionDataDegraded ? null : <strong>{actionSummary.total}</strong>} <ChevronRight size={15}/></Link> : null}
         </div>
       </section>
 

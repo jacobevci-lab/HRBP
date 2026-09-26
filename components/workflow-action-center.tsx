@@ -7,6 +7,13 @@ import { useLocale } from "@/components/locale-provider";
 
 type ActionKind = "workflow" | "hr-service" | "employee-relations";
 type Urgency = "normal" | "warning" | "critical";
+type Filter = "all" | "critical" | "overdue" | "due-soon" | ActionKind;
+
+const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations"]);
+
+function normalizeFilter(value?: string): Filter {
+  return value && allowedFilters.has(value as Filter) ? value as Filter : "all";
+}
 
 type LifecycleActionItem = {
   id: string;
@@ -45,8 +52,6 @@ type ActionQueueResponse = {
   error?: string;
 };
 
-type Filter = "all" | "critical" | "overdue" | "due-soon" | ActionKind;
-
 async function acknowledgeTaskNotifications(taskId: string) {
   try {
     const response = await fetch("/api/notifications", {
@@ -61,11 +66,11 @@ async function acknowledgeTaskNotifications(taskId: string) {
   }
 }
 
-export function WorkflowActionCenter({ initialTaskId, initialInstanceId }: { initialTaskId?: string; initialInstanceId?: string }) {
+export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initialFilter }: { initialTaskId?: string; initialInstanceId?: string; initialFilter?: string }) {
   const { locale } = useLocale();
   const [items, setItems] = useState<LifecycleActionItem[]>([]);
   const [summary, setSummary] = useState({ total: 0, overdue: 0, dueSoon: 0, critical: 0, workflow: 0, hrService: 0, employeeRelations: 0 });
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>(() => normalizeFilter(initialFilter));
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
