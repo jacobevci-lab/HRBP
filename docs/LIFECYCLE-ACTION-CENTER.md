@@ -12,6 +12,16 @@ The queue currently aggregates three governed sources:
 
 The action center does not create a new authorization surface. It composes the authorization and visibility boundaries already enforced by the source domains.
 
+## Dashboard continuity
+
+The Dashboard's **Needs attention** card now consumes the same actor-scoped lifecycle aggregation instead of maintaining an unrelated operational priority list.
+
+Only summary counts are projected into the Dashboard: total, critical, overdue, due-soon, Workflow, HR Service, and Employee Relations counts. Action titles, HR Service request details, case descriptions, appeal content, and other restricted row-level data stay inside the Action Center or their source module.
+
+The Dashboard integration is deliberately fail-soft. If the actor-specific lifecycle query fails, the Dashboard keeps rendering its safe workforce priorities and does not fall through to another tenant, another actor, or an unscoped operational query.
+
+Action Center URLs can carry a bounded `view` value (`all`, `critical`, `overdue`, `due-soon`, `workflow`, `hr-service`, `employee-relations`). The client normalizes unknown values back to `all`; task/instance deep links still take precedence and reset the view so the requested workflow row remains visible.
+
 ## Privacy and need-to-know rules
 
 - Every query is tenant scoped.
@@ -19,6 +29,7 @@ The action center does not create a new authorization surface. It composes the a
 - Employee Relations reuses the Case Wall ownership/assignment rule before querying actions or appeals.
 - HR Service comments and private notes are not loaded into the aggregate queue.
 - Appeal grounds and decision narratives are not loaded into the aggregate queue.
+- The Dashboard consumes aggregate counts only, never the restricted item collection.
 - The API response uses `Cache-Control: no-store` because the queue is actor-specific.
 
 ## Action semantics
@@ -42,4 +53,4 @@ The aggregate response is bounded to 250 items. Source queries are bounded indep
 
 ## Validation
 
-`npm run lifecycle-action-center:validate` statically verifies the important security and lifecycle invariants and is included in `prebuild`.
+`npm run lifecycle-action-center:validate` statically verifies the important security, privacy, Dashboard projection, and lifecycle invariants and is included in `prebuild`.
