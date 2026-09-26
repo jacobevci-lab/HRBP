@@ -13,6 +13,20 @@ const completedStatuses = new Set<ServiceRequestStatus>([
   ServiceRequestStatus.CANCELLED
 ]);
 
+const requestSelect = {
+  id: true,
+  requestNumber: true,
+  title: true,
+  category: true,
+  status: true,
+  priority: true,
+  queue: true,
+  assigneeId: true,
+  slaDueAt: true,
+  escalationLevel: true,
+  updatedAt: true
+} satisfies Prisma.HRServiceRequestSelect;
+
 function label(value: string) {
   return value.toLowerCase().split("_").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
 }
@@ -73,11 +87,18 @@ export type HRServiceLifecycleData = {
   waiting: number;
   resolved: number;
   transitions: number;
+  focusedRequestId: string | null;
   rows: HRServiceLifecycleRow[];
 };
 
-export async function getHRServiceLifecycleLiveData(ctx: RequestContext): Promise<HRServiceLifecycleData> {
+function normalizeFocus(value?: string) {
+  const focus = value?.trim();
+  return focus && focus.length <= 160 ? focus : "";
+}
+
+export async function getHRServiceLifecycleLiveData(ctx: RequestContext, focus?: string): Promise<HRServiceLifecycleData> {
   const selfService = isHRServiceSelfServiceRole(ctx.role);
+  const focusValue = normalizeFocus(focus);
   try {
     return await withDb(async (db) => {
       const scope = await hrServiceRequestWhere(db, ctx);
@@ -85,21 +106,28 @@ export async function getHRServiceLifecycleLiveData(ctx: RequestContext): Promis
         where: scope,
         orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
         take: 100,
-        select: {
-          id: true,
-          requestNumber: true,
-          title: true,
-          category: true,
-          status: true,
-          priority: true,
-          queue: true,
-          assigneeId: true,
-          slaDueAt: true,
-          escalationLevel: true,
-          updatedAt: true
-        }
+        select: requestSelect
       });
-      const requestIds = requests.map((request) => request.id);
+
+      let focusedRequest = focusValue
+        ? requests.find((request) => request.id === focusValue || request.requestNumber.toLowerCase() === focusValue.toLowerCase()) ?? null
+        : null;
+      if (focusValue && !focusedRequest) {
+        focusedRequest = await db.hRServiceRequest.findFirst({
+          where: {
+            AND: [
+              scope,
+              { OR: [{ id: focusValue }, { requestNumber: { equals: focusValue, mode: "insensitive" } }] }
+            ]
+          },
+          select: requestSelect
+        });
+      }
+
+      const visibleRequests = focusedRequest
+        ? [focusedRequest, ...requests.filter((request) => request.id !== focusedRequest?.id)]
+        : requests;
+      const requestIds = visibleRequests.map((request) => request.id);
       const [transitions, pauses] = requestIds.length ? await Promise.all([
         db.hRServiceStatusTransition.findMany({
           where: { tenantId: ctx.tenantId, requestId: { in: requestIds } },
@@ -128,7 +156,8 @@ export async function getHRServiceLifecycleLiveData(ctx: RequestContext): Promis
         waiting: requests.filter((request) => waitingStatuses.has(request.status)).length,
         resolved: requests.filter((request) => request.status === ServiceRequestStatus.RESOLVED).length,
         transitions: transitions.length,
-        rows: requests.map((request) => {
+        focusedRequestId: focusedRequest?.id ?? null,
+        rows: visibleRequests.map((request) => {
           const transition = lastTransition.get(request.id);
           const pause = openPause.get(request.id);
           return {
@@ -156,7 +185,7 @@ export async function getHRServiceLifecycleLiveData(ctx: RequestContext): Promis
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2021" || error.code === "P2022")) {
-      return { schemaReady: false, selfService, active: 0, waiting: 0, resolved: 0, transitions: 0, rows: [] };
+      return { schemaReady: false, selfService, active: 0, waiting: 0, resolved: 0, transitions: 0, focusedRequestId: null, rows: [] };
     }
     throw error;
   }
