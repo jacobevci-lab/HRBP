@@ -22,6 +22,14 @@ expect(grantsPath, grants, /asDate\(body\.expiresAt\)/, "grant expiry must use v
 expect(grantsPath, grants, /employmentPrincipalsWithinScope\(tx,\s*ctx,\s*\[principalId\]\)/, "employment grants must remain inside actor relationship scope");
 expect(grantsPath, grants, /take:\s*200/, "grant reads must remain bounded");
 
+const revokePath = "app/api/documents/[id]/access-grants/[grantId]/route.ts";
+const revoke = await source(revokePath);
+expect(revokePath, revoke, /asIdentifier\(resolved\.id\)/, "grant revocation must validate the document identifier");
+expect(revokePath, revoke, /asIdentifier\(resolved\.grantId\)/, "grant revocation must validate the grant identifier");
+expect(revokePath, revoke, /getVisibleDocument\(tx,\s*ctx,\s*id\)/, "grant revocation must remain inside governed document visibility");
+expect(revokePath, revoke, /tenantId:\s*ctx\.tenantId,\s*documentId:\s*id/, "grant revocation must keep grant lookup tenant and document scoped");
+expect(revokePath, revoke, /DOCUMENT_ACCESS_GRANT_REVOKED/, "grant revocation must remain auditable");
+
 const signaturesPath = "app/api/documents/[id]/signatures/route.ts";
 const signatures = await source(signaturesPath);
 expect(signaturesPath, signatures, /maxParticipants\s*=\s*50/, "signature participant fan-out must be bounded");
