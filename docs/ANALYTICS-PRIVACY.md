@@ -52,6 +52,27 @@ These calculations deliberately avoid speculative formulas. Metrics such as volu
 
 `POST /api/analytics/materialize` is a same-origin, authenticated derived-data refresh. A caller with `analytics:read` can materialize only the population resolved from their signed request context; the endpoint does not accept a tenant, employment set or fingerprint from the browser. Every refresh is recorded in the audit ledger.
 
+## Lifecycle continuity analytics
+
+The Analytics workspace also exposes an **operational lifecycle continuity** section. This is intentionally separate from population-bound `MetricSnapshot` analytics because it answers a different question: what governed work currently needs the signed actor's attention?
+
+`lib/lifecycle-analytics-continuity.ts` reuses `getLifecycleActionCenterData(ctx)` rather than querying Workflow, HR Service or Employee Relations tables directly. This preserves the exact Action Center visibility contract, including HR Service queue/self-service rules and Employee Relations Case Wall ownership/assignment rules.
+
+Only aggregate counters cross the analytics boundary:
+
+- total actor-scoped attention,
+- critical work,
+- overdue and due-soon work,
+- Workflow task count,
+- HR Service attention count,
+- Employee Relations attention count.
+
+Analytics never receives the source Action Center rows. Request titles/subjects, comments, private notes, case numbers, case narratives, appeal details, action descriptions, document names and source record identifiers are not projected into the analytics continuity result.
+
+This continuity projection is fail-closed. If the governed Action Center source cannot be resolved, Analytics returns zero counters with `degraded: true`; it does not retry with a tenant-wide or otherwise broader query. The UI explicitly surfaces the degraded state.
+
+Links from the continuity section route back to the existing governed Action Center filters (`critical`, `hr-service`, `employee-relations`). Analytics does not create a second mutation or case-management surface.
+
 ## Fail-closed states
 
 The live Analytics workspace can expose these states without exposing protected values:
