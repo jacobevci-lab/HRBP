@@ -34,6 +34,14 @@ expect(componentPath, component, /"workflow"\s*\|\s*"hr-service"\s*\|\s*"employe
 expect(componentPath, component, /item\.action\?\.type\s*===\s*"complete-workflow"/, "direct completion must remain restricted to workflow tasks");
 expect(componentPath, component, /<Link[\s\S]*href=\{item\.href\}/, "non-workflow signals must deep-link to their governed module");
 expect(componentPath, component, /resourceType:\s*"WorkflowTask"/, "workflow completion must retain notification acknowledgement semantics");
+expect(componentPath, component, /allowedFilters[\s\S]*critical[\s\S]*overdue[\s\S]*due-soon[\s\S]*hr-service[\s\S]*employee-relations/, "action-center deep links must be constrained to the supported filter vocabulary");
+expect(componentPath, component, /normalizeFilter\(value\?\: string\)[\s\S]*:\s*"all"/, "unknown action-center view values must normalize back to all");
+expect(componentPath, component, /initialTaskId[\s\S]*initialInstanceId[\s\S]*setFilter\("all"\)/, "task and instance deep links must take precedence over a filtered view");
+
+const modulePagePath = "app/module/[slug]/page.tsx";
+const modulePage = await source(modulePagePath);
+expect(modulePagePath, modulePage, /search\.view/, "module routing must read the lifecycle action-center view parameter");
+expect(modulePagePath, modulePage, /initialFilter=\{actionView\}/, "workflow workspace must pass the requested view into the action center");
 
 const dashboardHelperPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboardHelper = await source(dashboardHelperPath);
