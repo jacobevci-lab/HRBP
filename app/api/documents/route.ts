@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
 import { canWriteDocumentForPerson, documentVisibilityWhere } from "@/lib/document-access";
+import { publicDocument } from "@/lib/document-public-projection";
 import { normalizeDocumentContentType } from "@/lib/document-upload-policy";
 import { asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
@@ -13,8 +14,8 @@ export async function GET(request: Request) {
   if (!ctx) return unauthorized();
   if (!can(ctx, "documents:read")) return forbidden();
   const where = await documentVisibilityWhere(db, ctx);
-  const data = await db.documentRecord.findMany({ where, orderBy: { createdAt: "desc" }, take: 200 });
-  return Response.json({ data });
+  const rows = await db.documentRecord.findMany({ where, orderBy: { createdAt: "desc" }, take: 200 });
+  return Response.json({ data: rows.map(publicDocument) });
 }
 
 export async function POST(request: Request) {
@@ -50,5 +51,5 @@ export async function POST(request: Request) {
   }).catch((error) => error instanceof Error && error.message === "OUT_OF_SCOPE" ? null : Promise.reject(error));
 
   if (!data) return forbidden("Document subject is outside your authorized relationship scope or tenant.");
-  return Response.json({ data, next: { createVersion: `/api/documents/${encodeURIComponent(data.id)}/versions`, scanRequired: true } }, { status: 201 });
+  return Response.json({ data: publicDocument(data), next: { createVersion: `/api/documents/${encodeURIComponent(data.id)}/versions`, scanRequired: true } }, { status: 201 });
 }

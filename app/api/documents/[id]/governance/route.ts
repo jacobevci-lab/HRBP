@@ -3,6 +3,7 @@ import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { getVisibleDocument } from "@/lib/document-access";
+import { publicDocument } from "@/lib/document-public-projection";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 function parseOptionalDate(value: string | null | undefined) {
@@ -51,5 +52,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }).catch((error) => error instanceof Error && error.message === "NOT_FOUND" ? null : Promise.reject(error));
 
   if (!result) return Response.json({ error: "Document not found in your governed scope." }, { status: 404 });
-  return Response.json({ data: result });
+  return Response.json({ data: publicDocument(result) });
 }

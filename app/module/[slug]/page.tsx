@@ -35,8 +35,10 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const [{ slug }, search, ctx] = await Promise.all([params, searchParams, getServerRequestContext()]);
   const explicitQuery = typeof search.q === "string" ? search.q : "";
   const requestFocus = typeof search.request === "string" ? search.request : "";
-  const query = explicitQuery || requestFocus;
   const personId = typeof search.person === "string" ? search.person : undefined;
+  const documentFocus = typeof search.document === "string" ? search.document : undefined;
+  const documentLifecycleQuery = slug === "documents" ? (documentFocus || personId || "") : "";
+  const query = explicitQuery || requestFocus || documentLifecycleQuery;
   const tab = typeof search.tab === "string" ? search.tab : undefined;
   const escalation = typeof search.escalation === "string" ? search.escalation : undefined;
   const taskId = typeof search.task === "string" ? search.task : undefined;

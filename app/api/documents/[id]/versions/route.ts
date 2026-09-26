@@ -3,13 +3,10 @@ import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
 import { canWriteDocumentForPerson, getVisibleDocument } from "@/lib/document-access";
+import { publicDocumentVersion } from "@/lib/document-public-projection";
 import { documentUploadMaxBytes, normalizeDocumentContentType, normalizeSha256 } from "@/lib/document-upload-policy";
 import { asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
-
-function serializeVersion<T extends { sizeBytes: bigint | null }>(value: T) {
-  return { ...value, sizeBytes: value.sizeBytes === null ? null : value.sizeBytes.toString() };
-}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
@@ -20,7 +17,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const document = await getVisibleDocument(db, ctx, id);
   if (!document) return Response.json({ error: "Document not found or restricted by policy." }, { status: 404 });
   const rows = await db.documentVersion.findMany({ where: { tenantId: ctx.tenantId, documentId: id }, orderBy: { version: "desc" } });
-  return Response.json({ data: rows.map(serializeVersion) });
+  return Response.json({ data: rows.map(publicDocumentVersion) });
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -83,5 +80,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (result === "OUT_OF_SCOPE") return forbidden("Document subject is outside your authorized write scope.");
     return Response.json({ error: "Document version changed concurrently. Refresh and retry." }, { status: 409 });
   }
-  return Response.json({ data: serializeVersion(result), upload: { method: "PUT", endpoint: `/api/documents/${encodeURIComponent(id)}/versions/${encodeURIComponent(result.id)}/upload`, scanRequired: true } }, { status: 201 });
+  return Response.json({ data: publicDocumentVersion(result), upload: { method: "PUT", endpoint: `/api/documents/${encodeURIComponent(id)}/versions/${encodeURIComponent(result.id)}/upload`, scanRequired: true } }, { status: 201 });
 }

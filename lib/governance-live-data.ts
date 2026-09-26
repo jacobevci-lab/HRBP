@@ -16,8 +16,18 @@ export async function getDocumentWorkspaceData(ctx: RequestContext, query = "") 
   return withDb(async (db) => {
     const now = new Date(); const next30 = new Date(now); next30.setUTCDate(next30.getUTCDate() + 30);
     const baseWhere = await documentVisibilityWhere(db, ctx);
-    const normalized = query.trim();
-    const searchWhere: Prisma.DocumentRecordWhereInput = normalized ? { OR: [{ fileName: { contains: normalized, mode: "insensitive" } }, { purpose: { contains: normalized, mode: "insensitive" } }, { person: { is: { OR: [{ givenName: { contains: normalized, mode: "insensitive" } }, { familyName: { contains: normalized, mode: "insensitive" } }] } } }] } : {};
+    const normalized = query.trim().slice(0, 160);
+    const searchWhere: Prisma.DocumentRecordWhereInput = normalized ? {
+      OR: [
+        { id: normalized },
+        { personId: normalized },
+        { fileName: { contains: normalized, mode: "insensitive" } },
+        { purpose: { contains: normalized, mode: "insensitive" } },
+        { person: { is: { OR: [{ givenName: { contains: normalized, mode: "insensitive" } }, { familyName: { contains: normalized, mode: "insensitive" } }] } } }
+      ]
+    } : {};
+    // Lifecycle/deep-link lookups always intersect the exact same governed visibility scope.
+    // There is intentionally no unscoped fallback for an older or directly linked record.
     const rowWhere: Prisma.DocumentRecordWhereInput = normalized ? { AND: [baseWhere, searchWhere] } : baseWhere;
     const [total, restricted, expiring, legalHold, rows] = await Promise.all([
       db.documentRecord.count({ where: baseWhere }),

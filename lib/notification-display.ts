@@ -70,34 +70,20 @@ export function notificationDisplaySummary(payload: unknown, locale: Locale) {
   }
 
   const requestNumber = text(data.requestNumber); const notificationState = text(data.notificationState); const fromStatus = text(data.fromStatus); const toStatus = text(data.toStatus); const serviceReason = text(data.reason); const serviceQueue = text(data.queue); const serviceTitle = text(data.title); const escalationLevel = numberValue(data.escalationLevel); const escalationReason = text(data.escalationReason); const slaDueAt = text(data.slaDueAt); const caseNumber = text(data.caseNumber);
-  if (caseNumber && notificationState === "case-status-changed" && toStatus) {
-    return `${caseNumber} · ${serviceStatus(fromStatus, locale)} → ${serviceStatus(toStatus, locale)}.`;
-  }
+  if (caseNumber && notificationState === "case-status-changed" && toStatus) return `${caseNumber} · ${serviceStatus(fromStatus, locale)} → ${serviceStatus(toStatus, locale)}.`;
   if (caseNumber && notificationState === "case-action-assigned") {
     const due = dueAt ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(dueAt)) : null;
     return locale === "tr" ? `${caseNumber} · size yeni bir düzeltici aksiyon atandı${due ? ` · son tarih ${due}` : ""}.` : `${caseNumber} · a new corrective action was assigned to you${due ? ` · due ${due}` : ""}.`;
   }
-  if (caseNumber && notificationState === "case-action-status-changed" && toStatus) {
-    return `${caseNumber} · ${serviceStatus(fromStatus, locale)} → ${serviceStatus(toStatus, locale)}.`;
-  }
-  if (requestNumber && notificationState === "created") {
-    return locale === "tr"
-      ? `${requestNumber}${serviceTitle ? ` · ${serviceTitle}` : ""}${serviceQueue ? ` · ${serviceQueue}` : ""}. Talep yönlendirme ve triyaj için kaydedildi.`
-      : `${requestNumber}${serviceTitle ? ` · ${serviceTitle}` : ""}${serviceQueue ? ` · ${serviceQueue}` : ""}. The request is recorded for routing and triage.`;
-  }
+  if (caseNumber && notificationState === "case-action-status-changed" && toStatus) return `${caseNumber} · ${serviceStatus(fromStatus, locale)} → ${serviceStatus(toStatus, locale)}.`;
+  if (requestNumber && notificationState === "created") return locale === "tr" ? `${requestNumber}${serviceTitle ? ` · ${serviceTitle}` : ""}${serviceQueue ? ` · ${serviceQueue}` : ""}. Talep yönlendirme ve triyaj için kaydedildi.` : `${requestNumber}${serviceTitle ? ` · ${serviceTitle}` : ""}${serviceQueue ? ` · ${serviceQueue}` : ""}. The request is recorded for routing and triage.`;
   if (requestNumber && notificationState === "status-changed" && toStatus) {
     const transition = `${serviceStatus(fromStatus, locale)} → ${serviceStatus(toStatus, locale)}`;
-    return locale === "tr" ? `${requestNumber} · ${transition}${serviceReason ? ` · ${serviceReason}` : ""}.` : `${requestNumber} · ${transition}${serviceReason ? ` · ${serviceReason}` : ""}.`;
+    return `${requestNumber} · ${transition}${serviceReason ? ` · ${serviceReason}` : ""}.`;
   }
-  if (requestNumber && notificationState === "assigned") {
-    return locale === "tr" ? `${requestNumber}${serviceQueue ? ` · ${serviceQueue}` : ""} size atandı.` : `${requestNumber}${serviceQueue ? ` · ${serviceQueue}` : ""} was assigned to you.`;
-  }
-  if (requestNumber && notificationState === "requestor-replied") {
-    return locale === "tr" ? `${requestNumber} talebinin sahibi yeni bir yanıt ekledi.` : `The requestor added a new reply to ${requestNumber}.`;
-  }
-  if (requestNumber && notificationState === "staff-replied") {
-    return locale === "tr" ? `${requestNumber} talebinize İK tarafından yeni bir yanıt eklendi.` : `HR added a new reply to your request ${requestNumber}.`;
-  }
+  if (requestNumber && notificationState === "assigned") return locale === "tr" ? `${requestNumber}${serviceQueue ? ` · ${serviceQueue}` : ""} size atandı.` : `${requestNumber}${serviceQueue ? ` · ${serviceQueue}` : ""} was assigned to you.`;
+  if (requestNumber && notificationState === "requestor-replied") return locale === "tr" ? `${requestNumber} talebinin sahibi yeni bir yanıt ekledi.` : `The requestor added a new reply to ${requestNumber}.`;
+  if (requestNumber && notificationState === "staff-replied") return locale === "tr" ? `${requestNumber} talebinize İK tarafından yeni bir yanıt eklendi.` : `HR added a new reply to your request ${requestNumber}.`;
   if (requestNumber && escalationLevel !== undefined) {
     const due = slaDueAt ? new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(slaDueAt)) : null;
     return locale === "tr" ? `${requestNumber} · eskalasyon seviye ${escalationLevel}${serviceQueue ? ` · ${serviceQueue}` : ""}${due ? ` · SLA ${due}` : ""}${escalationReason ? ` · ${escalationReason}` : ""}.` : `${requestNumber} · escalation level ${escalationLevel}${serviceQueue ? ` · ${serviceQueue}` : ""}${due ? ` · SLA ${due}` : ""}${escalationReason ? ` · ${escalationReason}` : ""}.`;
@@ -143,5 +129,6 @@ export function notificationDisplayResourceHref(resourceType: string, resourceId
   if (resourceType === "EmployeeCase") return id ? `/module/employee-relations?case=${encodeURIComponent(id)}` : "/module/employee-relations";
   if (resourceType === "CaseAction") return id ? `/module/employee-relations?action=${encodeURIComponent(id)}` : "/module/employee-relations";
   if (resourceType === "EmployeeCaseAppeal" || resourceType === "CaseAppeal") return id ? `/module/employee-relations?appeal=${encodeURIComponent(id)}` : "/module/employee-relations";
+  if (resourceType === "DocumentRecord") return id ? `/module/documents?document=${encodeURIComponent(id)}` : "/module/documents";
   return notificationResourceHref(resourceType, resourceId);
 }
