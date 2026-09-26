@@ -42,6 +42,9 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const taskId = typeof search.task === "string" ? search.task : undefined;
   const instanceId = typeof search.instance === "string" ? search.instance : undefined;
   const actionView = typeof search.view === "string" ? search.view : undefined;
+  const employeeRelationsCaseId = typeof search.case === "string" ? search.case : undefined;
+  const employeeRelationsActionId = typeof search.action === "string" ? search.action : undefined;
+  const employeeRelationsAppealId = typeof search.appeal === "string" ? search.appeal : undefined;
 
   if (!ctx) return <AppShell><PublicModuleLanding slug={slug}/></AppShell>;
 
@@ -60,7 +63,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
       {slug === "workflows" ? <WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId} initialFilter={actionView}/> : null}
       {slug !== "workflows" || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/> : null}
       {slug === "offboarding" && can(ctx, "offboarding:write") ? <OffboardingClearanceLoader/> : null}
-      {slug === "employee-relations" ? <EmployeeRelationsCaseLifecyclePanel/> : null}
+      {slug === "employee-relations" ? <EmployeeRelationsCaseLifecyclePanel focus={{ query, caseId: employeeRelationsCaseId, actionId: employeeRelationsActionId, appealId: employeeRelationsAppealId }}/> : null}
       {slug === "hr-service" ? <HRServiceLifecyclePanel focus={query}/> : null}
       {slug === "hr-service" ? <HRServiceEscalationPanel filterValue={escalation}/> : null}
     </AppShell>
