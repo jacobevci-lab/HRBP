@@ -32,7 +32,9 @@ const governanceSlugs = new Set<GovernanceSlug>(["engagement", "workforce-planni
 
 export default async function ModulePage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: SearchParams }) {
   const [{ slug }, search, ctx] = await Promise.all([params, searchParams, getServerRequestContext()]);
-  const query = typeof search.q === "string" ? search.q : "";
+  const explicitQuery = typeof search.q === "string" ? search.q : "";
+  const requestFocus = typeof search.request === "string" ? search.request : "";
+  const query = explicitQuery || requestFocus;
   const personId = typeof search.person === "string" ? search.person : undefined;
   const tab = typeof search.tab === "string" ? search.tab : undefined;
   const escalation = typeof search.escalation === "string" ? search.escalation : undefined;
@@ -57,7 +59,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
       {slug === "workflows" ? <WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId} initialFilter={actionView}/> : null}
       {slug !== "workflows" || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/> : null}
       {slug === "offboarding" && can(ctx, "offboarding:write") ? <OffboardingClearanceLoader/> : null}
-      {slug === "hr-service" ? <HRServiceLifecyclePanel/> : null}
+      {slug === "hr-service" ? <HRServiceLifecyclePanel focus={query}/> : null}
       {slug === "hr-service" ? <HRServiceEscalationPanel filterValue={escalation}/> : null}
     </AppShell>
   );
