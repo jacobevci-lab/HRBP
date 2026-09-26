@@ -51,12 +51,17 @@ expect(liveDataPath, liveData, /hrServiceRequestWhere/, "lifecycle evidence must
 expect(liveDataPath, liveData, /hRServiceStatusTransition\.findMany[\s\S]*take:\s*500/, "transition evidence query must be bounded");
 expect(liveDataPath, liveData, /hRServiceSlaPause\.findMany[\s\S]*resumedAt:\s*null/, "workspace must surface active SLA pause evidence");
 expect(liveDataPath, liveData, /P2021[\s\S]*P2022/, "new evidence tables must fail soft during staged schema rollout");
+expect(liveDataPath, liveData, /normalizeFocus[\s\S]*length\s*<=\s*160/, "notification and action-center focus identifiers must be bounded");
+expect(liveDataPath, liveData, /hRServiceRequest\.findFirst[\s\S]*AND:\s*\[[\s\S]*scope[\s\S]*requestNumber/, "focused requests must still intersect the governed HR Service visibility scope");
+expect(liveDataPath, liveData, /focusedRequestId:\s*focusedRequest\?\.id\s*\?\?\s*null/, "focused lifecycle links must expose only the resolved visible request id");
 
 const actionPath = "components/hr-service-lifecycle-actions.tsx";
 const actions = await source(actionPath);
 expect(actionPath, actions, /\/api\/hr-service\/requests\/\$\{encodeURIComponent\(requestId\)\}\/status/, "lifecycle actions must call the governed status endpoint");
 expect(actionPath, actions, /minLength=\{10\}[\s\S]*maxLength=\{2000\}/, "transition reason UI must mirror server bounds");
 expect(actionPath, actions, /PRIVATE_NOTE/, "service staff must be able to record private handling notes deliberately");
+expect(actionPath, actions, /resourceType:\s*"HRServiceRequest"[\s\S]*resourceId:\s*requestId[\s\S]*read:\s*true/, "successful HR Service actions must retire the actor's stale notifications for that request");
+expect(actionPath, actions, /hrbp:notifications-changed/, "notification badges must refresh after request action acknowledgement");
 
 const formPath = "components/hr-service-request-form.tsx";
 const form = await source(formPath);
@@ -68,15 +73,20 @@ const panel = await source(panelPath);
 expect(panelPath, panel, /HRServiceLifecycleActions/, "live service workspace must expose governed lifecycle actions");
 expect(panelPath, panel, /HRServiceRequestForm/, "live service workspace must expose governed intake");
 expect(panelPath, panel, /schemaReady/, "lifecycle panel must fail soft during schema rollout");
+expect(panelPath, panel, /getHRServiceLifecycleLiveData\(ctx,\s*focus\)/, "lifecycle panel must resolve notification/action-center focus through the governed data layer");
+expect(panelPath, panel, /row\.id\s*===\s*data\.focusedRequestId/, "the resolved lifecycle target must be visually pinned for the actor");
+expect(panelPath, panel, /No broader fallback query was used|Daha geniş bir yedek sorgu kullanılmadı/, "unresolvable links must fail closed without broadening visibility");
 
 const modulePath = "app/module/[slug]/page.tsx";
 const modulePage = await source(modulePath);
-expect(modulePath, modulePage, /slug\s*===\s*"hr-service"[\s\S]*<HRServiceLifecyclePanel/, "HR Service module must mount lifecycle governance");
+expect(modulePath, modulePage, /search\.request/, "HR Service notification resource links must be accepted by module routing");
+expect(modulePath, modulePage, /explicitQuery\s*\|\|\s*requestFocus/, "Action Center q-links and notification request-links must converge on one governed focus value");
+expect(modulePath, modulePage, /slug\s*===\s*"hr-service"[\s\S]*<HRServiceLifecyclePanel focus=\{query\}/, "HR Service module must pass the lifecycle focus into governed history");
 
 const notificationPath = "lib/notification-display.ts";
 const notification = await source(notificationPath);
 expect(notificationPath, notification, /HR_SERVICE_REQUEST_CREATED[\s\S]*HR_SERVICE_STATUS_CHANGED[\s\S]*HR_SERVICE_ASSIGNED/, "HR service lifecycle notifications must be localized");
-expect(notificationPath, notification, /resourceType\s*===\s*"HRServiceRequest"/, "HR service notifications must deep-link to the service workspace");
+expect(notificationPath, notification, /resourceType\s*===\s*"HRServiceRequest"[\s\S]*\/module\/hr-service\?request=/, "HR service notifications must deep-link to the governed request focus route");
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);
