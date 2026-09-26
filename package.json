@@ -5,7 +5,7 @@
   "prisma": { "schema": "./prisma" },
   "scripts": {
     "dev": "npm run db:generate && next dev",
-    "prebuild": "npm run routes:validate && npm run ui:validate && npm run staging:validate && npm run performance:validate && npm run growth:validate && npm run growth-automation:validate && npm run talent-learning:validate && npm run benefits:validate && npm run connected-growth:validate && npm run development-plan:validate && npm run leave:validate && npm run time:validate && npm run compensation:validate && npm run payroll:validate && npm run recruiting-access:validate && npm run onboarding-readiness:validate && npm run onboarding-observability:validate && npm run offboarding:validate && npm run offboarding-clearance:validate && npm run offboarding-decisions:validate && npm run offboarding-settlement:validate && npm run offboarding-cancellation:validate && npm run offboarding-history:validate && npm run offboarding-settlement-reversal:validate && npm run offboarding-schedule:validate && npm run offboarding-backfill:validate && npm run offboarding-manager-handover:validate && npm run hr-service-lifecycle:validate && npm run maintenance:validate && npm run hire:validate",
+    "prebuild": "npm run routes:validate && npm run ui:validate && npm run staging:validate && npm run performance:validate && npm run growth:validate && npm run growth-automation:validate && npm run talent-learning:validate && npm run benefits:validate && npm run connected-growth:validate && npm run development-plan:validate && npm run leave:validate && npm run time:validate && npm run compensation:validate && npm run payroll:validate && npm run recruiting-access:validate && npm run onboarding-readiness:validate && npm run onboarding-observability:validate && npm run offboarding:validate && npm run offboarding-clearance:validate && npm run offboarding-decisions:validate && npm run offboarding-settlement:validate && npm run offboarding-cancellation:validate && npm run offboarding-history:validate && npm run offboarding-settlement-reversal:validate && npm run offboarding-schedule:validate && npm run offboarding-backfill:validate && npm run offboarding-manager-handover:validate && npm run hr-service-lifecycle:validate && npm run lifecycle-action-center:validate && npm run maintenance:validate && npm run hire:validate",
     "build": "npm run db:generate && next build",
     "start": "next start",
     "lint": "eslint .",
@@ -37,6 +37,7 @@
     "offboarding-backfill:validate": "node scripts/validate-offboarding-backfill.mjs",
     "offboarding-manager-handover:validate": "node scripts/validate-offboarding-manager-handover.mjs",
     "hr-service-lifecycle:validate": "node scripts/validate-hr-service-lifecycle.mjs",
+    "lifecycle-action-center:validate": "node scripts/validate-lifecycle-action-center.mjs",
     "maintenance:validate": "node scripts/validate-maintenance-resilience.mjs",
     "hire:validate": "node scripts/validate-hire-conversion.mjs",
     "typecheck": "npm run db:generate && tsc --noEmit",
