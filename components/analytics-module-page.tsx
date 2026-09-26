@@ -1,4 +1,5 @@
 import { Activity, BarChart3, CheckCircle2, CircleAlert, Clock3, EyeOff, Fingerprint, Headphones, ShieldCheck, UsersRound, Workflow } from "lucide-react";
+import Link from "next/link";
 import { AnalyticsRefreshButton } from "@/components/analytics-refresh-button";
 import { getGovernedAnalyticsMetrics, type AnalyticsPrivacyState } from "@/lib/analytics-privacy";
 import { can } from "@/lib/authorization";
@@ -86,17 +87,17 @@ export async function AnalyticsModulePage() {
         <p style={{ marginTop: 0, color: "var(--muted)" }}>{c(locale, "These counters reuse your governed Action Center scope. Analytics receives aggregates only; request subjects, case narratives, document names and record identifiers are never projected here.", "Bu sayaçlar yönetişimli Aksiyon Merkezi kapsamınızı yeniden kullanır. Analitik yalnızca toplamları alır; talep konuları, vaka anlatıları, doküman adları ve kayıt kimlikleri buraya hiçbir zaman taşınmaz.")}</p>
         {continuity.degraded ? <div className="governance-note" style={{ margin: "12px 0" }}><CircleAlert size={18}/><p><strong>{c(locale, "Lifecycle summary is temporarily unavailable.", "Yaşam döngüsü özeti geçici olarak kullanılamıyor.")}</strong> {c(locale, "The system failed closed and did not retry with a broader tenant query.", "Sistem güvenli biçimde kapandı ve daha geniş tenant sorgusuyla yeniden denemedi.")}</p></div> : null}
         <section className="gov-metrics">
-          <Metric icon={<Activity size={18}/>} label={c(locale, "Open attention", "Açık dikkat") } value={String(continuity.summary.total)} meta={c(locale, "Actor-scoped Action Center", "Aktör kapsamlı Aksiyon Merkezi")}/>
-          <Metric icon={<CircleAlert size={18}/>} label={c(locale, "Critical", "Kritik") } value={String(continuity.summary.critical)} meta={c(locale, "Urgent governed work", "Acil yönetişimli iş")}/>
-          <Metric icon={<Clock3 size={18}/>} label={c(locale, "Overdue / due soon", "Geciken / yakında") } value={`${continuity.summary.overdue} / ${continuity.summary.dueSoon}`} meta={c(locale, "Due-date continuity", "Termin sürekliliği")}/>
-          <Metric icon={<Workflow size={18}/>} label={c(locale, "Workflow tasks", "İş akışı görevleri") } value={String(continuity.summary.workflow)} meta={c(locale, "Assigned or role-scoped", "Atanmış veya rol kapsamlı")}/>
-          <Metric icon={<Headphones size={18}/>} label={c(locale, "HR Service", "HR Service") } value={String(continuity.summary.hrService)} meta={c(locale, "Visible service attention", "Görünür servis dikkati")}/>
-          <Metric icon={<ShieldCheck size={18}/>} label={c(locale, "Employee Relations", "Çalışan İlişkileri") } value={String(continuity.summary.employeeRelations)} meta={c(locale, "Case Wall governed", "Case Wall yönetişimli")}/>
+          <Metric icon={<Activity size={18}/>} label={c(locale, "Open attention", "Açık dikkat")} value={String(continuity.summary.total)} meta={c(locale, "Actor-scoped Action Center", "Aktör kapsamlı Aksiyon Merkezi")}/>
+          <Metric icon={<CircleAlert size={18}/>} label={c(locale, "Critical", "Kritik")} value={String(continuity.summary.critical)} meta={c(locale, "Urgent governed work", "Acil yönetişimli iş")}/>
+          <Metric icon={<Clock3 size={18}/>} label={c(locale, "Overdue / due soon", "Geciken / yakında")} value={`${continuity.summary.overdue} / ${continuity.summary.dueSoon}`} meta={c(locale, "Due-date continuity", "Termin sürekliliği")}/>
+          <Metric icon={<Workflow size={18}/>} label={c(locale, "Workflow tasks", "İş akışı görevleri")} value={String(continuity.summary.workflow)} meta={c(locale, "Assigned or role-scoped", "Atanmış veya rol kapsamlı")}/>
+          <Metric icon={<Headphones size={18}/>} label={c(locale, "HR Service", "HR Service")} value={String(continuity.summary.hrService)} meta={c(locale, "Visible service attention", "Görünür servis dikkati")}/>
+          <Metric icon={<ShieldCheck size={18}/>} label={c(locale, "Employee Relations", "Çalışan İlişkileri")} value={String(continuity.summary.employeeRelations)} meta={c(locale, "Case Wall governed", "Case Wall yönetişimli")}/>
         </section>
         <div className="module-heading-actions" style={{ justifyContent: "flex-start", marginTop: 14 }}>
-          <a className="secondary-button" href="/module/workflows?view=critical">{c(locale, "Open critical work", "Kritik işleri aç")}</a>
-          <a className="secondary-button" href="/module/workflows?view=hr-service">{c(locale, "Open HR Service queue", "HR Service kuyruğunu aç")}</a>
-          <a className="secondary-button" href="/module/workflows?view=employee-relations">{c(locale, "Open ER queue", "ER kuyruğunu aç")}</a>
+          <Link className="secondary-button" href="/module/workflows?view=critical">{c(locale, "Open critical work", "Kritik işleri aç")}</Link>
+          <Link className="secondary-button" href="/module/workflows?view=hr-service">{c(locale, "Open HR Service queue", "HR Service kuyruğunu aç")}</Link>
+          <Link className="secondary-button" href="/module/workflows?view=employee-relations">{c(locale, "Open ER queue", "ER kuyruğunu aç")}</Link>
         </div>
       </section>
 
