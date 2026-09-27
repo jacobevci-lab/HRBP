@@ -22,6 +22,19 @@ function Icon({ status }: { status: TimeStatus }) {
   return <ArrowRight size={13}/>;
 }
 
+async function acknowledgeNotifications(resourceId: string) {
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resourceType: "TimeEntry", resourceId, read: true })
+    });
+    if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
+  } catch {
+    // Badge cleanup is best-effort and must not roll back a committed time transition.
+  }
+}
+
 export function TimeEntryTransitionButtons({ entryId, targets }: { entryId: string; targets: TimeStatus[] }) {
   const router = useRouter();
   const [busy, setBusy] = useState<TimeStatus | null>(null);
@@ -39,6 +52,7 @@ export function TimeEntryTransitionButtons({ entryId, targets }: { entryId: stri
       });
       const payload = await response.json().catch(() => null) as { error?: string } | null;
       if (!response.ok) throw new Error(payload?.error || "Time-entry transition failed.");
+      await acknowledgeNotifications(entryId);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Time-entry transition failed.");
