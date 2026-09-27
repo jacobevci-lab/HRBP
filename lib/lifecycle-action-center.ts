@@ -301,7 +301,7 @@ async function leaveApprovalItems(ctx: RequestContext): Promise<LifecycleActionI
       tenantId: ctx.tenantId,
       status: LeaveRequestStatus.PENDING,
       ...employmentIdFilter(scope),
-      ...(ctx.employmentId ? { employmentId: { ...(scope === null ? {} : { in: scope }), not: ctx.employmentId } } } : {})
+      ...(ctx.employmentId ? { employmentId: { ...(scope === null ? {} : { in: scope }), not: ctx.employmentId } } : {})
     },
     orderBy: [{ startsAt: "asc" }, { createdAt: "asc" }],
     take: 100,
@@ -342,7 +342,7 @@ async function timeApprovalItems(ctx: RequestContext): Promise<LifecycleActionIt
       tenantId: ctx.tenantId,
       status: TimeEntryStatus.SUBMITTED,
       ...employmentIdFilter(scope),
-      ...(ctx.employmentId ? { employmentId: { ...(scope === null ? {} : { in: scope }), not: ctx.employmentId } } } : {})
+      ...(ctx.employmentId ? { employmentId: { ...(scope === null ? {} : { in: scope }), not: ctx.employmentId } } : {})
     },
     orderBy: [{ workDate: "asc" }, { createdAt: "asc" }],
     take: 100,
