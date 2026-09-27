@@ -45,6 +45,12 @@ function nextUtcDay(value: Date) {
   return next;
 }
 
+function approvalEmploymentFilter(scope: string[] | null, ownEmploymentId?: string) {
+  if (scope === null) return ownEmploymentId ? { employmentId: { not: ownEmploymentId } } : {};
+  const allowed = ownEmploymentId ? scope.filter((id) => id !== ownEmploymentId) : scope;
+  return { employmentId: { in: allowed } };
+}
+
 async function timeApprovalItems(ctx: RequestContext, scope: string[] | null): Promise<WorkPayActionCenterItem[]> {
   if (!can(ctx, "time:read") || !can(ctx, "time:approve")) return [];
 
@@ -52,14 +58,12 @@ async function timeApprovalItems(ctx: RequestContext, scope: string[] | null): P
     where: {
       tenantId: ctx.tenantId,
       status: TimeEntryStatus.SUBMITTED,
-      ...employmentIdFilter(scope),
-      ...(ctx.employmentId ? { employmentId: { not: ctx.employmentId, ...(scope === null ? {} : { in: scope }) } } : {})
+      ...approvalEmploymentFilter(scope, ctx.employmentId)
     },
     orderBy: [{ workDate: "asc" }, { createdAt: "asc" }],
     take: 75,
     select: {
       id: true,
-      employmentId: true,
       workDate: true,
       status: true,
       createdAt: true,
@@ -94,15 +98,13 @@ async function leaveApprovalItems(ctx: RequestContext, scope: string[] | null): 
     where: {
       tenantId: ctx.tenantId,
       status: LeaveRequestStatus.PENDING,
-      ...employmentIdFilter(scope),
-      ...(ctx.employmentId ? { employmentId: { not: ctx.employmentId, ...(scope === null ? {} : { in: scope }) } } : {})
+      ...approvalEmploymentFilter(scope, ctx.employmentId)
     },
     orderBy: [{ startsAt: "asc" }, { id: "asc" }],
     take: 75,
     select: {
       id: true,
       startsAt: true,
-      endsAt: true,
       status: true,
       employment: { select: { person: { select: { givenName: true, familyName: true } } } },
       leaveType: { select: { name: true } }
