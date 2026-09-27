@@ -5,6 +5,19 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
+async function acknowledgeNotifications(resourceId: string) {
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resourceType: "CompensationChange", resourceId, read: true })
+    });
+    if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
+  } catch {
+    // Notification cleanup is best-effort and must not roll back a committed compensation transition.
+  }
+}
+
 export function CompensationDecisionButtons({
   changeId,
   status,
@@ -37,6 +50,7 @@ export function CompensationDecisionButtons({
       });
       const value = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(value.error || c("Compensation draft could not be submitted.", "Ücret değişikliği taslağı onaya gönderilemedi."));
+      await acknowledgeNotifications(changeId);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : c("Compensation draft could not be submitted.", "Ücret değişikliği taslağı onaya gönderilemedi."));
@@ -57,6 +71,7 @@ export function CompensationDecisionButtons({
       });
       const value = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(value.error || c("Compensation decision could not be completed.", "Ücretlendirme kararı tamamlanamadı."));
+      await acknowledgeNotifications(changeId);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : c("The request could not reach HRBP.", "İstek HRBP'ye ulaştırılamadı."));
