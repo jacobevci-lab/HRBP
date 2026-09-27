@@ -11,6 +11,25 @@ function enumLabel(value: string) {
   return value.toLowerCase().split("_").map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`).join(" ");
 }
 
+const changeSelect = {
+  id: true,
+  currency: true,
+  currentAnnualBase: true,
+  proposedAnnualBase: true,
+  effectiveAt: true,
+  status: true,
+  reason: true,
+  requestedById: true,
+  approvedById: true,
+  createdAt: true,
+  employment: {
+    select: {
+      person: { select: { employeeNumber: true, givenName: true, familyName: true } },
+      position: { select: { title: true, orgUnit: { select: { name: true } } } }
+    }
+  }
+} as const;
+
 export type CompensationQueueRow = {
   id: string;
   employee: string;
@@ -27,6 +46,7 @@ export type CompensationQueueRow = {
   requestedById: string;
   approvedById: string | null;
   createdAt: string;
+  focused: boolean;
 };
 
 export type CompensationEligibleEmployment = {
@@ -39,11 +59,12 @@ export type CompensationEligibleEmployment = {
   currentAnnualBase: string | null;
 };
 
-export async function getCompensationWorkspaceData(ctx: RequestContext) {
+export async function getCompensationWorkspaceData(ctx: RequestContext, focusId?: string) {
   return withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
     const now = new Date();
-    const [currentHistory, changes, eligibleEmployments] = await Promise.all([
+    const boundedFocusId = focusId?.trim().slice(0, 160) || undefined;
+    const [currentHistory, changes, focusedChange, eligibleEmployments] = await Promise.all([
       db.compensationHistory.findMany({
         where: {
           effectiveFrom: { lte: now },
@@ -57,25 +78,12 @@ export async function getCompensationWorkspaceData(ctx: RequestContext) {
         where: { tenantId: ctx.tenantId, ...employmentIdFilter(scope) },
         orderBy: [{ createdAt: "desc" }, { effectiveAt: "desc" }],
         take: 150,
-        select: {
-          id: true,
-          currency: true,
-          currentAnnualBase: true,
-          proposedAnnualBase: true,
-          effectiveAt: true,
-          status: true,
-          reason: true,
-          requestedById: true,
-          approvedById: true,
-          createdAt: true,
-          employment: {
-            select: {
-              person: { select: { employeeNumber: true, givenName: true, familyName: true } },
-              position: { select: { title: true, orgUnit: { select: { name: true } } } }
-            }
-          }
-        }
+        select: changeSelect
       }),
+      boundedFocusId ? db.compensationChange.findFirst({
+        where: { id: boundedFocusId, tenantId: ctx.tenantId, ...employmentIdFilter(scope) },
+        select: changeSelect
+      }) : Promise.resolve(null),
       db.employment.findMany({
         where: {
           tenantId: ctx.tenantId,
@@ -98,6 +106,9 @@ export async function getCompensationWorkspaceData(ctx: RequestContext) {
       })
     ]);
 
+    const visibleChanges = focusedChange && !changes.some((change) => change.id === focusedChange.id)
+      ? [focusedChange, ...changes]
+      : changes;
     const totalsByCurrency = new Map<string, number>();
     for (const row of currentHistory) totalsByCurrency.set(row.currency, (totalsByCurrency.get(row.currency) ?? 0) + Number(row.annualBase));
 
@@ -106,6 +117,8 @@ export async function getCompensationWorkspaceData(ctx: RequestContext) {
       pending: changes.filter((change) => change.status === CompensationChangeStatus.APPROVAL).length,
       approved: changes.filter((change) => change.status === CompensationChangeStatus.APPROVED).length,
       applied: changes.filter((change) => change.status === CompensationChangeStatus.APPLIED).length,
+      focusId: boundedFocusId,
+      focusVisible: Boolean(focusedChange),
       currencies: [...totalsByCurrency.entries()].map(([currency, total]) => ({ currency, total })),
       eligibleEmployments: eligibleEmployments.map<CompensationEligibleEmployment>((employment) => ({
         id: employment.id,
@@ -116,7 +129,7 @@ export async function getCompensationWorkspaceData(ctx: RequestContext) {
         currency: employment.compensation[0]?.currency ?? null,
         currentAnnualBase: employment.compensation[0]?.annualBase.toString() ?? null
       })),
-      rows: changes.map<CompensationQueueRow>((change) => ({
+      rows: visibleChanges.map<CompensationQueueRow>((change) => ({
         id: change.id,
         employee: `${change.employment.person.givenName} ${change.employment.person.familyName}`,
         employeeNumber: change.employment.person.employeeNumber ?? "—",
@@ -131,7 +144,8 @@ export async function getCompensationWorkspaceData(ctx: RequestContext) {
         reason: change.reason ?? "—",
         requestedById: change.requestedById,
         approvedById: change.approvedById,
-        createdAt: formatDate(change.createdAt)
+        createdAt: formatDate(change.createdAt),
+        focused: change.id === boundedFocusId
       }))
     };
   });
