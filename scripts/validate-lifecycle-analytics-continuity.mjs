@@ -8,12 +8,12 @@ function reject(path, text, pattern, message) { if (pattern.test(text)) failures
 const helperPath = "lib/lifecycle-analytics-continuity.ts";
 const helper = await source(helperPath);
 expect(helperPath, helper, /getLifecycleActionCenterData\(ctx\)/, "analytics continuity must reuse the governed Action Center scope");
-for (const counter of ["total", "overdue", "dueSoon", "critical", "workflow", "hrService", "employeeRelations", "documents"]) {
+for (const counter of ["total", "overdue", "dueSoon", "critical", "workflow", "hrService", "employeeRelations", "documents", "workPay"]) {
   expect(helperPath, helper, new RegExp(`${counter}:\\s*source\\.summary\\.${counter}`), `analytics continuity must copy only the governed ${counter} counter`);
 }
 expect(helperPath, helper, /aggregateOnly:\s*true/, "the projection must explicitly declare its aggregate-only privacy contract");
 expect(helperPath, helper, /catch\s*\{[\s\S]*EMPTY_SUMMARY[\s\S]*degraded:\s*true/, "source failure must fail closed with an empty degraded summary");
-reject(helperPath, helper, /\.items|items:|title:|subtitle:|subjectId:|requestNumber:|caseNumber:|documentName:|fileName:/, "analytics continuity must not expose record-level lifecycle details");
+reject(helperPath, helper, /\.items|items:|title:|subtitle:|subjectId:|requestNumber:|caseNumber:|documentName:|fileName:|proposedAnnualBase:|grossPay:|netPay:/, "analytics continuity must not expose record-level lifecycle or Work & Pay values");
 reject(helperPath, helper, /db\.|findMany\(|findFirst\(|count\(/, "analytics continuity must not bypass source-domain visibility with direct database queries");
 
 const pagePath = "components/analytics-module-page.tsx";
@@ -26,18 +26,21 @@ expect(pagePath, page, /continuity\.summary\.workflow/, "Analytics must surface 
 expect(pagePath, page, /continuity\.summary\.hrService/, "Analytics must surface aggregate HR Service attention");
 expect(pagePath, page, /continuity\.summary\.employeeRelations/, "Analytics must surface aggregate Employee Relations attention");
 expect(pagePath, page, /continuity\.summary\.documents/, "Analytics must surface aggregate document expiry attention without document metadata");
+expect(pagePath, page, /continuity\.summary\.workPay/, "Analytics must surface only the aggregate Work & Pay attention count");
 expect(pagePath, page, /continuity\.degraded[\s\S]*broader tenant query/, "Analytics must communicate fail-closed degradation without broad fallback");
 expect(pagePath, page, /\/module\/workflows\?view=critical/, "critical continuity must deep-link into the governed Action Center filter");
 expect(pagePath, page, /\/module\/workflows\?view=hr-service/, "HR Service continuity must deep-link into the governed Action Center filter");
 expect(pagePath, page, /\/module\/workflows\?view=employee-relations/, "Employee Relations continuity must deep-link into the governed Action Center filter");
 expect(pagePath, page, /\/module\/workflows\?view=documents/, "Document continuity must deep-link into the governed Action Center filter");
-reject(pagePath, page, /continuity\.items|continuity\.records|continuity\.cases|continuity\.documents\./, "Analytics UI must never consume restricted lifecycle rows or document metadata");
+expect(pagePath, page, /\/module\/workflows\?view=work-pay/, "Work & Pay continuity must deep-link into the governed Action Center filter");
+reject(pagePath, page, /continuity\.items|continuity\.records|continuity\.cases|continuity\.documents\.|continuity\.workPay\./, "Analytics UI must never consume restricted lifecycle rows, document metadata or Work & Pay record details");
 
 const actionCenterPath = "lib/lifecycle-action-center.ts";
 const actionCenter = await source(actionCenterPath);
 expect(actionCenterPath, actionCenter, /hrServiceRequestWhere\(db,\s*ctx\)/, "source HR Service visibility must remain governed");
 expect(actionCenterPath, actionCenter, /ownerUserId:\s*ctx\.actorId[\s\S]*assignments:\s*\{\s*some:/, "source Employee Relations visibility must remain Case Wall scoped");
 expect(actionCenterPath, actionCenter, /documentVisibilityWhere\(db,\s*ctx\)/, "source document visibility must remain governed by the existing document scope");
+expect(actionCenterPath, actionCenter, /getWorkPayActionCenterItems\(ctx\)/, "source Work & Pay attention must remain delegated to its governed domain helper");
 reject(actionCenterPath, actionCenter, /objectKey|contentHash|scanMessage/, "document lifecycle aggregation must not load storage capabilities or scan narratives");
 
 const packagePath = "package.json";
