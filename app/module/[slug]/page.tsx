@@ -44,6 +44,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const taskId = typeof search.task === "string" ? search.task : undefined;
   const instanceId = typeof search.instance === "string" ? search.instance : undefined;
   const actionView = typeof search.view === "string" ? search.view : undefined;
+  const workPayFocus = typeof search.focus === "string" ? search.focus : undefined;
   const employeeRelationsCaseId = typeof search.case === "string" ? search.case : undefined;
   const employeeRelationsActionId = typeof search.action === "string" ? search.action : undefined;
   const employeeRelationsAppealId = typeof search.appeal === "string" ? search.appeal : undefined;
@@ -55,7 +56,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   if (slug === "audit") return <AppShell><AuditLivePage searchParams={search}/></AppShell>;
   if (slug === "analytics") return <AnalyticsModulePage/>;
   if (growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug}/>;
-  if (workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug}/>;
+  if (workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug} focusId={workPayFocus}/>;
   if (governanceSlugs.has(slug as GovernanceSlug)) return <GovernancePlanningModulePage slug={slug as GovernanceSlug}/>;
 
   const workflowAdminVisible = can(ctx, "workflows:read");
