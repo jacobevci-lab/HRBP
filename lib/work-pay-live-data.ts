@@ -47,6 +47,11 @@ const employmentDisplay = {
   }
 } as const;
 
+const payrollInclude = {
+  payrollPeriod: { include: { countryPack: true } },
+  results: { select: { grossPay: true, netPay: true, employerCost: true } }
+} as const;
+
 export async function getTimeAttendanceLiveData(ctx: RequestContext, focusId?: string) {
   return withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
@@ -198,9 +203,10 @@ export async function getLeaveLiveData(ctx: RequestContext, focusId?: string) {
   });
 }
 
-export async function getPayrollLiveData(ctx: RequestContext) {
+export async function getPayrollLiveData(ctx: RequestContext, focusId?: string) {
   return withDb(async (db) => {
-    const [packs, runs] = await Promise.all([
+    const boundedFocusId = focusId?.trim().slice(0, 160) || undefined;
+    const [packs, runs, focusedRun] = await Promise.all([
       db.payrollCountryPack.findMany({
         where: { tenantId: ctx.tenantId, active: true },
         orderBy: { countryCode: "asc" }
@@ -208,15 +214,19 @@ export async function getPayrollLiveData(ctx: RequestContext) {
       db.payrollRun.findMany({
         where: { tenantId: ctx.tenantId },
         orderBy: { startedAt: "desc" },
-        include: {
-          payrollPeriod: { include: { countryPack: true } },
-          results: { select: { grossPay: true, netPay: true, employerCost: true } }
-        },
+        include: payrollInclude,
         take: 40
-      })
+      }),
+      boundedFocusId ? db.payrollRun.findFirst({
+        where: { tenantId: ctx.tenantId, id: boundedFocusId },
+        include: payrollInclude
+      }) : Promise.resolve(null)
     ]);
 
-    const rows = runs.map((run) => {
+    const visibleRuns = focusedRun && !runs.some((run) => run.id === focusedRun.id)
+      ? [focusedRun, ...runs]
+      : runs;
+    const rows = visibleRuns.map((run) => {
       const gross = run.results.reduce((sum, result) => sum + decimalNumber(result.grossPay), 0);
       const net = run.results.reduce((sum, result) => sum + decimalNumber(result.netPay), 0);
       const employerCost = run.results.reduce((sum, result) => sum + decimalNumber(result.employerCost), 0);
@@ -236,17 +246,21 @@ export async function getPayrollLiveData(ctx: RequestContext) {
         net,
         employerCost,
         payDate: dayLabel(run.payrollPeriod.payDate),
-        approvedById: run.approvedById ?? "—"
+        approvedById: run.approvedById ?? "—",
+        focused: run.id === boundedFocusId
       };
     });
 
+    const baseRows = rows.filter((row) => runs.some((run) => run.id === row.id));
     const openRuns = runs.filter((run) => !isClosedPayrollStatus(run.status)).length;
-    const employeesInLatestRuns = rows.reduce((sum, row) => sum + row.employees, 0);
+    const employeesInLatestRuns = baseRows.reduce((sum, row) => sum + row.employees, 0);
 
     return {
       activeCountryPacks: packs.length,
       openRuns,
       employeesInLatestRuns,
+      focusId: boundedFocusId,
+      focusVisible: Boolean(focusedRun),
       rows
     };
   });
