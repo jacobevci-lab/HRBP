@@ -10,6 +10,8 @@ export type LifecycleAnalyticsContinuitySummary = {
   hrService: number;
   employeeRelations: number;
   documents: number;
+  leave: number;
+  timeAttendance: number;
 };
 
 const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
@@ -20,16 +22,19 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
   workflow: 0,
   hrService: 0,
   employeeRelations: 0,
-  documents: 0
+  documents: 0,
+  leave: 0,
+  timeAttendance: 0
 };
 
 /**
  * Builds an analytics-safe operational continuity projection for the signed actor.
  *
  * The source remains the governed Lifecycle Action Center, so HR Service,
- * Employee Relations and Documents visibility is never recalculated or widened
- * here. Only aggregate counters are returned: titles, descriptions, case/request
- * numbers, document metadata and subject identifiers never cross this boundary.
+ * Employee Relations, Documents and work-pay approval visibility is never
+ * recalculated or widened here. Only aggregate counters are returned: titles,
+ * descriptions, employee names, case/request numbers, document metadata and
+ * subject identifiers never cross this boundary.
  *
  * Failure is intentionally fail-closed. Analytics may render a degraded state,
  * but it must never retry through a broader tenant query.
@@ -45,7 +50,9 @@ export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
       workflow: source.summary.workflow,
       hrService: source.summary.hrService,
       employeeRelations: source.summary.employeeRelations,
-      documents: source.summary.documents
+      documents: source.summary.documents,
+      leave: source.summary.leave,
+      timeAttendance: source.summary.timeAttendance
     };
 
     return {
