@@ -8,7 +8,7 @@ function reject(path, text, pattern, message) { if (pattern.test(text)) failures
 const helperPath = "lib/lifecycle-analytics-continuity.ts";
 const helper = await source(helperPath);
 expect(helperPath, helper, /getLifecycleActionCenterData\(ctx\)/, "analytics continuity must reuse the governed Action Center scope");
-for (const counter of ["total", "overdue", "dueSoon", "critical", "workflow", "hrService", "employeeRelations", "documents", "leave", "timeAttendance"]) {
+for (const counter of ["total", "overdue", "dueSoon", "critical", "workflow", "hrService", "employeeRelations", "documents", "leave", "timeAttendance", "compensation", "payroll"]) {
   expect(helperPath, helper, new RegExp(`${counter}:\\s*source\\.summary\\.${counter}`), `analytics continuity must copy only the governed ${counter} counter`);
 }
 expect(helperPath, helper, /aggregateOnly:\s*true/, "the projection must explicitly declare its aggregate-only privacy contract");
@@ -38,8 +38,11 @@ const actionCenter = await source(actionCenterPath);
 expect(actionCenterPath, actionCenter, /hrServiceRequestWhere\(db,\s*ctx\)/, "source HR Service visibility must remain governed");
 expect(actionCenterPath, actionCenter, /ownerUserId:\s*ctx\.actorId[\s\S]*assignments:\s*\{\s*some:/, "source Employee Relations visibility must remain Case Wall scoped");
 expect(actionCenterPath, actionCenter, /documentVisibilityWhere\(db,\s*ctx\)/, "source document visibility must remain governed by the existing document scope");
-expect(actionCenterPath, actionCenter, /resolveEmploymentScope\(db,\s*ctx\)/, "source leave/time approval visibility must remain employment scoped");
-reject(actionCenterPath, actionCenter, /objectKey|contentHash|scanMessage/, "document lifecycle aggregation must not load storage capabilities or scan narratives");
+expect(actionCenterPath, actionCenter, /resolveEmploymentScope\(db,\s*ctx\)/, "source relationship-scoped work-pay visibility must remain employment scoped");
+expect(actionCenterPath, actionCenter, /requestedById:\s*\{\s*not:\s*ctx\.actorId\s*\}/, "compensation aggregate attention must preserve four-eyes separation at source");
+expect(actionCenterPath, actionCenter, /creators\.get\(row\.id\) !== ctx\.actorId/, "payroll approval attention must exclude the run creator at source");
+expect(actionCenterPath, actionCenter, /row\.approvedById !== ctx\.actorId/, "payroll payment attention must exclude the approver at source");
+reject(actionCenterPath, actionCenter, /objectKey|contentHash|scanMessage|currentAnnualBase|proposedAnnualBase|grossPay|netPay|employerCost/, "lifecycle aggregation must not load restricted storage, compensation amounts or payroll results");
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);

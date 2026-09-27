@@ -1,7 +1,9 @@
 import {
   CaseActionStatus,
   CaseAppealStatus,
+  CompensationChangeStatus,
   LeaveRequestStatus,
+  PayrollRunStatus,
   Prisma,
   ServicePriority,
   ServiceRequestStatus,
@@ -16,7 +18,7 @@ import { employmentIdFilter, resolveEmploymentScope } from "@/lib/employment-sco
 import { hrServiceRequestWhere, isHRServiceSelfServiceRole, visibleHRServiceQueueKeys } from "@/lib/hr-service-access";
 import type { RequestContext } from "@/lib/request-context";
 
-export type LifecycleActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "leave" | "time-attendance";
+export type LifecycleActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "leave" | "time-attendance" | "compensation" | "payroll";
 export type LifecycleActionUrgency = "normal" | "warning" | "critical";
 
 export type LifecycleActionItem = {
@@ -58,6 +60,10 @@ function serviceUrgency(priority: ServicePriority, dueAt: Date | null, escalatio
 
 function statusLabel(value: string) {
   return value.toLowerCase().replace(/_/g, " ");
+}
+
+function dayLabel(value: Date) {
+  return value.toISOString().slice(0, 10);
 }
 
 async function workflowItems(ctx: RequestContext): Promise<LifecycleActionItem[]> {
@@ -374,6 +380,117 @@ async function timeApprovalItems(ctx: RequestContext): Promise<LifecycleActionIt
   }));
 }
 
+async function compensationItems(ctx: RequestContext): Promise<LifecycleActionItem[]> {
+  if (!can(ctx, "compensation:read")) return [];
+  const canApprove = can(ctx, "compensation:approve");
+  const canApply = can(ctx, "compensation:apply");
+  if (!canApprove && !canApply) return [];
+
+  const statuses: CompensationChangeStatus[] = [];
+  if (canApprove) statuses.push(CompensationChangeStatus.APPROVAL);
+  if (canApply) statuses.push(CompensationChangeStatus.APPROVED);
+  const scope = await resolveEmploymentScope(db, ctx);
+  const rows = await db.compensationChange.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      status: { in: statuses },
+      requestedById: { not: ctx.actorId },
+      ...employmentIdFilter(scope)
+    },
+    orderBy: [{ effectiveAt: "asc" }, { createdAt: "asc" }],
+    take: 100,
+    select: {
+      id: true,
+      status: true,
+      effectiveAt: true,
+      createdAt: true,
+      employment: { select: { person: { select: { givenName: true, familyName: true } } } }
+    }
+  });
+
+  return rows.map((row): LifecycleActionItem => ({
+    id: `compensation:${row.id}`,
+    kind: "compensation",
+    title: row.status === CompensationChangeStatus.APPROVAL
+      ? `Compensation approval · ${row.employment.person.givenName} ${row.employment.person.familyName}`
+      : `Compensation apply · ${row.employment.person.givenName} ${row.employment.person.familyName}`,
+    subtitle: `${row.status === CompensationChangeStatus.APPROVAL ? "Independent decision required" : "Approved change ready to apply"} · effective ${dayLabel(row.effectiveAt)}`,
+    module: "compensation",
+    href: `/module/compensation?change=${encodeURIComponent(row.id)}`,
+    subjectType: "CompensationChange",
+    subjectId: row.id,
+    status: statusLabel(row.status),
+    dueAt: row.effectiveAt.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+    urgency: urgencyForDueDate(row.effectiveAt, "warning"),
+    action: null
+  }));
+}
+
+async function payrollItems(ctx: RequestContext): Promise<LifecycleActionItem[]> {
+  if (!can(ctx, "payroll:read")) return [];
+  const canApprove = can(ctx, "payroll:approve");
+  const canPay = can(ctx, "payroll:pay");
+  if (!canApprove && !canPay) return [];
+
+  const statuses: PayrollRunStatus[] = [];
+  if (canApprove) statuses.push(PayrollRunStatus.APPROVAL);
+  if (canPay) statuses.push(PayrollRunStatus.APPROVED);
+  const rows = await db.payrollRun.findMany({
+    where: { tenantId: ctx.tenantId, status: { in: statuses } },
+    orderBy: [{ payrollPeriod: { payDate: "asc" } }, { startedAt: "asc" }],
+    take: 80,
+    select: {
+      id: true,
+      runNumber: true,
+      status: true,
+      approvedById: true,
+      startedAt: true,
+      payrollPeriod: {
+        select: {
+          code: true,
+          payDate: true,
+          countryPack: { select: { countryCode: true } }
+        }
+      }
+    }
+  });
+
+  const approvalIds = rows.filter((row) => row.status === PayrollRunStatus.APPROVAL).map((row) => row.id);
+  const creatorEvents = approvalIds.length ? await db.auditEvent.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      resourceType: "PayrollRun",
+      resourceId: { in: approvalIds },
+      action: "payroll-run.created"
+    },
+    orderBy: [{ occurredAt: "asc" }, { id: "asc" }],
+    select: { resourceId: true, actorId: true }
+  }) : [];
+  const creators = new Map<string, string | null>();
+  for (const event of creatorEvents) if (!creators.has(event.resourceId)) creators.set(event.resourceId, event.actorId);
+
+  return rows.filter((row) => {
+    if (row.status === PayrollRunStatus.APPROVAL) return canApprove && creators.get(row.id) !== ctx.actorId;
+    if (row.status === PayrollRunStatus.APPROVED) return canPay && row.approvedById !== ctx.actorId;
+    return false;
+  }).map((row): LifecycleActionItem => ({
+    id: `payroll:${row.id}`,
+    kind: "payroll",
+    title: row.status === PayrollRunStatus.APPROVAL ? "Payroll approval" : "Payroll payment completion",
+    subtitle: `${row.payrollPeriod.countryPack.countryCode} · ${row.payrollPeriod.code} · run #${row.runNumber}`,
+    module: "payroll",
+    href: `/module/payroll?run=${encodeURIComponent(row.id)}`,
+    subjectType: "PayrollRun",
+    subjectId: row.id,
+    status: statusLabel(row.status),
+    dueAt: row.payrollPeriod.payDate.toISOString(),
+    createdAt: row.startedAt.toISOString(),
+    urgency: urgencyForDueDate(row.payrollPeriod.payDate, "warning"),
+    action: null
+  }));
+}
+
 function sortItems(left: LifecycleActionItem, right: LifecycleActionItem) {
   const rank: Record<LifecycleActionUrgency, number> = { critical: 0, warning: 1, normal: 2 };
   if (rank[left.urgency] !== rank[right.urgency]) return rank[left.urgency] - rank[right.urgency];
@@ -384,15 +501,17 @@ function sortItems(left: LifecycleActionItem, right: LifecycleActionItem) {
 }
 
 export async function getLifecycleActionCenterData(ctx: RequestContext) {
-  const [workflows, hrService, employeeRelations, documents, leave, timeAttendance] = await Promise.all([
+  const [workflows, hrService, employeeRelations, documents, leave, timeAttendance, compensation, payroll] = await Promise.all([
     workflowItems(ctx),
     hrServiceItems(ctx),
     employeeRelationsItems(ctx),
     documentItems(ctx),
     leaveApprovalItems(ctx),
-    timeApprovalItems(ctx)
+    timeApprovalItems(ctx),
+    compensationItems(ctx),
+    payrollItems(ctx)
   ]);
-  const items = [...workflows, ...hrService, ...employeeRelations, ...documents, ...leave, ...timeAttendance].sort(sortItems).slice(0, 250);
+  const items = [...workflows, ...hrService, ...employeeRelations, ...documents, ...leave, ...timeAttendance, ...compensation, ...payroll].sort(sortItems).slice(0, 300);
   const now = Date.now();
   const soon = now + 24 * 60 * 60 * 1000;
 
@@ -412,7 +531,9 @@ export async function getLifecycleActionCenterData(ctx: RequestContext) {
       employeeRelations: items.filter((item) => item.kind === "employee-relations").length,
       documents: items.filter((item) => item.kind === "documents").length,
       leave: items.filter((item) => item.kind === "leave").length,
-      timeAttendance: items.filter((item) => item.kind === "time-attendance").length
+      timeAttendance: items.filter((item) => item.kind === "time-attendance").length,
+      compensation: items.filter((item) => item.kind === "compensation").length,
+      payroll: items.filter((item) => item.kind === "payroll").length
     },
     generatedAt: new Date(now).toISOString()
   };

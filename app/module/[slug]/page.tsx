@@ -36,6 +36,8 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const explicitQuery = typeof search.q === "string" ? search.q : "";
   const requestFocus = typeof search.request === "string" ? search.request : "";
   const entryFocus = typeof search.entry === "string" ? search.entry : "";
+  const compensationFocus = typeof search.change === "string" ? search.change : "";
+  const payrollFocus = typeof search.run === "string" ? search.run : "";
   const personId = typeof search.person === "string" ? search.person : undefined;
   const documentFocus = typeof search.document === "string" ? search.document : undefined;
   const documentLifecycleQuery = slug === "documents" ? (documentFocus || personId || "") : "";
@@ -48,7 +50,15 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const employeeRelationsCaseId = typeof search.case === "string" ? search.case : undefined;
   const employeeRelationsActionId = typeof search.action === "string" ? search.action : undefined;
   const employeeRelationsAppealId = typeof search.appeal === "string" ? search.appeal : undefined;
-  const workPayFocus = slug === "leave" ? requestFocus : slug === "time-attendance" ? entryFocus : undefined;
+  const workPayFocus = slug === "leave"
+    ? requestFocus
+    : slug === "time-attendance"
+      ? entryFocus
+      : slug === "compensation"
+        ? compensationFocus
+        : slug === "payroll"
+          ? payrollFocus
+          : undefined;
 
   if (!ctx) return <AppShell><PublicModuleLanding slug={slug}/></AppShell>;
 

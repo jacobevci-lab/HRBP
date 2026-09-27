@@ -46,6 +46,20 @@ const blockerLabels: Record<string, string> = {
   pendingCompensationChanges: "unapplied compensation changes"
 };
 
+async function acknowledgePayrollNotification(runId: string) {
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resourceType: "PayrollRun", resourceId: runId, read: true })
+    });
+    if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
+  } catch {
+    // Badge cleanup is best-effort and must never invalidate a payroll approval
+    // or payment transition that has already committed.
+  }
+}
+
 export function PayrollTransitionButton({ runId, status, access }: { runId: string; status: PayrollStatus; access: PayrollAccess }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -69,6 +83,8 @@ export function PayrollTransitionButton({ runId, status, access }: { runId: stri
           : "";
         throw new Error([payload?.error || "Payroll transition failed.", blockers].filter(Boolean).join(" "));
       }
+      if (next === "APPROVED" || next === "PAID") await acknowledgePayrollNotification(runId);
+      window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Payroll transition failed.");
