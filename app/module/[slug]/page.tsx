@@ -44,7 +44,17 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const taskId = typeof search.task === "string" ? search.task : undefined;
   const instanceId = typeof search.instance === "string" ? search.instance : undefined;
   const actionView = typeof search.view === "string" ? search.view : undefined;
-  const workPayFocus = typeof search.focus === "string" ? search.focus : undefined;
+  const exactWorkPayFocus = typeof search.focus === "string" ? search.focus : undefined;
+  const legacyWorkPayFocus = slug === "time-attendance" && typeof search.entry === "string"
+    ? search.entry
+    : slug === "leave" && typeof search.request === "string"
+      ? search.request
+      : slug === "compensation" && typeof search.change === "string"
+        ? search.change
+        : slug === "payroll" && typeof search.run === "string"
+          ? search.run
+          : undefined;
+  const workPayFocus = exactWorkPayFocus || legacyWorkPayFocus;
   const employeeRelationsCaseId = typeof search.case === "string" ? search.case : undefined;
   const employeeRelationsActionId = typeof search.action === "string" ? search.action : undefined;
   const employeeRelationsAppealId = typeof search.appeal === "string" ? search.appeal : undefined;
