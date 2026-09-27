@@ -1,6 +1,7 @@
 import { CompensationChangeStatus, EmploymentStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
 import { employmentIdFilter, employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
+import { asIdentifier } from "@/lib/input-validation";
 import type { RequestContext } from "@/lib/request-context";
 
 function formatDate(date: Date) {
@@ -39,11 +40,31 @@ export type CompensationEligibleEmployment = {
   currentAnnualBase: string | null;
 };
 
-export async function getCompensationWorkspaceData(ctx: RequestContext) {
+export async function getCompensationWorkspaceData(ctx: RequestContext, focusId?: string) {
   return withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
+    const focus = asIdentifier(focusId);
     const now = new Date();
-    const [currentHistory, changes, eligibleEmployments] = await Promise.all([
+    const changeSelect = {
+      id: true,
+      currency: true,
+      currentAnnualBase: true,
+      proposedAnnualBase: true,
+      effectiveAt: true,
+      status: true,
+      reason: true,
+      requestedById: true,
+      approvedById: true,
+      createdAt: true,
+      employment: {
+        select: {
+          person: { select: { employeeNumber: true, givenName: true, familyName: true } },
+          position: { select: { title: true, orgUnit: { select: { name: true } } } }
+        }
+      }
+    } as const;
+
+    const [currentHistory, changes, eligibleEmployments, focusedChange] = await Promise.all([
       db.compensationHistory.findMany({
         where: {
           effectiveFrom: { lte: now },
@@ -57,24 +78,7 @@ export async function getCompensationWorkspaceData(ctx: RequestContext) {
         where: { tenantId: ctx.tenantId, ...employmentIdFilter(scope) },
         orderBy: [{ createdAt: "desc" }, { effectiveAt: "desc" }],
         take: 150,
-        select: {
-          id: true,
-          currency: true,
-          currentAnnualBase: true,
-          proposedAnnualBase: true,
-          effectiveAt: true,
-          status: true,
-          reason: true,
-          requestedById: true,
-          approvedById: true,
-          createdAt: true,
-          employment: {
-            select: {
-              person: { select: { employeeNumber: true, givenName: true, familyName: true } },
-              position: { select: { title: true, orgUnit: { select: { name: true } } } }
-            }
-          }
-        }
+        select: changeSelect
       }),
       db.employment.findMany({
         where: {
@@ -95,17 +99,25 @@ export async function getCompensationWorkspaceData(ctx: RequestContext) {
             select: { currency: true, annualBase: true }
           }
         }
-      })
+      }),
+      focus ? db.compensationChange.findFirst({
+        where: { id: focus, tenantId: ctx.tenantId, ...employmentIdFilter(scope) },
+        select: changeSelect
+      }) : Promise.resolve(null)
     ]);
 
     const totalsByCurrency = new Map<string, number>();
     for (const row of currentHistory) totalsByCurrency.set(row.currency, (totalsByCurrency.get(row.currency) ?? 0) + Number(row.annualBase));
+    const displayedChanges = focus
+      ? [...(focusedChange ? [focusedChange] : []), ...changes.filter((change) => change.id !== focus)]
+      : changes;
 
     return {
       currentRecords: currentHistory.length,
       pending: changes.filter((change) => change.status === CompensationChangeStatus.APPROVAL).length,
       approved: changes.filter((change) => change.status === CompensationChangeStatus.APPROVED).length,
       applied: changes.filter((change) => change.status === CompensationChangeStatus.APPLIED).length,
+      focusId: focusedChange?.id ?? null,
       currencies: [...totalsByCurrency.entries()].map(([currency, total]) => ({ currency, total })),
       eligibleEmployments: eligibleEmployments.map<CompensationEligibleEmployment>((employment) => ({
         id: employment.id,
@@ -116,7 +128,7 @@ export async function getCompensationWorkspaceData(ctx: RequestContext) {
         currency: employment.compensation[0]?.currency ?? null,
         currentAnnualBase: employment.compensation[0]?.annualBase.toString() ?? null
       })),
-      rows: changes.map<CompensationQueueRow>((change) => ({
+      rows: displayedChanges.map<CompensationQueueRow>((change) => ({
         id: change.id,
         employee: `${change.employment.person.givenName} ${change.employment.person.familyName}`,
         employeeNumber: change.employment.person.employeeNumber ?? "—",
