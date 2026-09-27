@@ -64,6 +64,20 @@ expect(compensationFocusPath, compensationFocus, /asIdentifier\(focusId\)/, "com
 expect(compensationFocusPath, compensationFocus, /id:\s*focus,\s*tenantId:\s*ctx\.tenantId,\s*\.\.\.employmentIdFilter\(scope\)/, "compensation exact focus must retain tenant and relationship scope");
 expect(compensationFocusPath, compensationFocus, /focusId:\s*focusedChange\?\.id\s*\?\?\s*null/, "compensation focus must only be echoed after governed resolution");
 
+for (const [controlPath, resourceType, idName] of [
+  ["components/time-entry-transition-buttons.tsx", "TimeEntry", "entryId"],
+  ["components/leave-decision-buttons.tsx", "LeaveRequest", "requestId"],
+  ["components/compensation-decision-buttons.tsx", "CompensationChange", "changeId"],
+  ["components/payroll-transition-button.tsx", "PayrollRun", "runId"]
+]) {
+  const control = await source(controlPath);
+  expect(controlPath, control, /fetch\("\/api\/notifications"/, "successful Work & Pay controls must support resource notification acknowledgement");
+  expect(controlPath, control, new RegExp(`resourceType:\\s*"${resourceType}"`), "notification acknowledgement must target the matching resource type");
+  expect(controlPath, control, new RegExp(`await acknowledgeNotifications\\(${idName}\\)`), "notification acknowledgement must happen after the governed mutation succeeds");
+  expect(controlPath, control, /catch\s*\{[\s\S]*best-effort/, "notification cleanup must remain best-effort and independent from the business mutation");
+  expect(controlPath, control, /hrbp:notifications-changed/, "successful acknowledgement must refresh the in-app notification badge");
+}
+
 const routePath = "app/api/action-center/route.ts";
 const route = await source(routePath);
 expect(routePath, route, /getRequestContext\(request\)/, "the action center API must require authenticated request context");
@@ -88,6 +102,7 @@ const modulePage = await source(modulePagePath);
 expect(modulePagePath, modulePage, /search\.view/, "module routing must read the lifecycle action-center view parameter");
 expect(modulePagePath, modulePage, /initialFilter=\{actionView\}/, "workflow workspace must pass the requested view into the action center");
 expect(modulePagePath, modulePage, /search\.focus/, "module routing must read the exact Work & Pay focus parameter");
+expect(modulePagePath, modulePage, /search\.entry[\s\S]*search\.request[\s\S]*search\.change[\s\S]*search\.run/, "legacy Work & Pay notification links must converge into the governed focus route");
 expect(modulePagePath, modulePage, /WorkPayModulePage[\s\S]*focusId=\{workPayFocus\}/, "Work & Pay focus must be delegated to its governed workspace");
 
 const dashboardHelperPath = "lib/dashboard-lifecycle-attention.ts";
