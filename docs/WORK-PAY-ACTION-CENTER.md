@@ -49,6 +49,8 @@ Rows route to `/module/payroll?focus=<payrollRunId>` and the exact run is resolv
 
 Existing Work & Pay notifications already use resource-specific query parameters (`entry`, `request`, `change`, `run`). Module routing converges those legacy notification links and the new Action Center `focus` link into the same governed focus resolver. This avoids duplicate lookup paths while preserving compatibility with already-delivered notifications.
 
+After a successful Time, Leave, Compensation or Payroll transition, the corresponding in-app notifications are acknowledged by resource id on a best-effort basis. Notification cleanup occurs only after the governed business mutation succeeds and can never roll back a committed domain transition. The notification badge refresh event is emitted only when acknowledgement succeeds.
+
 An inaccessible or stale identifier is never widened into a broader lookup and is not echoed back as a resolved focus.
 
 ## Dashboard and Analytics
@@ -67,6 +69,7 @@ The existing lifecycle validators assert that:
 - payroll creator/approver separation is preserved,
 - salary and payroll-result values are absent from the Action Center source,
 - exact focus links resolve only through governed tenant/relationship scope,
+- successful domain transitions acknowledge resource notifications only as best-effort cleanup,
 - Dashboard and Analytics consume aggregate counts only, and
 - Work & Pay Action Center filters route back to the governed domain workspaces.
 
