@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Clock3, ExternalLink, FileClock, RefreshCw, ShieldAlert, Workflow } from "lucide-react";
+import { AlertTriangle, CalendarCheck2, CheckCircle2, Clock3, ExternalLink, FileClock, RefreshCw, ShieldAlert, TimerReset, Workflow } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
-type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents";
+type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "leave" | "time-attendance";
 type Urgency = "normal" | "warning" | "critical";
 type Filter = "all" | "critical" | "overdue" | "due-soon" | ActionKind;
 
-const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents"]);
+const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents", "leave", "time-attendance"]);
 
 function normalizeFilter(value?: string): Filter {
   return value && allowedFilters.has(value as Filter) ? value as Filter : "all";
@@ -44,9 +44,11 @@ type ActionSummary = {
   hrService: number;
   employeeRelations: number;
   documents: number;
+  leave: number;
+  timeAttendance: number;
 };
 
-const emptySummary: ActionSummary = { total: 0, overdue: 0, dueSoon: 0, critical: 0, workflow: 0, hrService: 0, employeeRelations: 0, documents: 0 };
+const emptySummary: ActionSummary = { total: 0, overdue: 0, dueSoon: 0, critical: 0, workflow: 0, hrService: 0, employeeRelations: 0, documents: 0, leave: 0, timeAttendance: 0 };
 
 type ActionQueueResponse = {
   data?: {
@@ -120,7 +122,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       const due = new Date(item.dueAt).getTime();
       return due >= now && due <= soon;
     });
-    if (filter === "workflow" || filter === "hr-service" || filter === "employee-relations" || filter === "documents") return items.filter((item) => item.kind === filter);
+    if (filter !== "all") return items.filter((item) => item.kind === filter);
     return items;
   }, [filter, items]);
 
@@ -164,6 +166,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
     if (kind === "workflow") return locale === "tr" ? "İş akışı" : "Workflow";
     if (kind === "hr-service") return locale === "tr" ? "İK Hizmeti" : "HR Service";
     if (kind === "documents") return locale === "tr" ? "Dokümanlar" : "Documents";
+    if (kind === "leave") return locale === "tr" ? "İzin" : "Leave";
+    if (kind === "time-attendance") return locale === "tr" ? "Zaman & Devam" : "Time & Attendance";
     return locale === "tr" ? "Çalışan İlişkileri" : "Employee Relations";
   }
 
@@ -179,7 +183,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <div>
           <span className="section-kicker">{locale === "tr" ? "Yaşam döngüsü aksiyon merkezi" : "Lifecycle action center"}</span>
           <h3>{locale === "tr" ? "Bekleyen işlerim ve operasyonel blokajlar" : "My pending work and operational blockers"}</h3>
-          <p>{locale === "tr" ? "İş akışlarını, İK hizmet taleplerini, kısıtlı çalışan ilişkileri aksiyonlarını ve görünür süresi dolan dokümanları tek yetkili kuyrukta takip et." : "Track workflows, HR service requests, restricted employee-relations actions and visible expiring documents in one authorized queue."}</p>
+          <p>{locale === "tr" ? "İş akışlarını, İK hizmet taleplerini, kısıtlı çalışan ilişkileri aksiyonlarını, doküman yaşam döngüsünü ve yönetişimli izin/zaman onaylarını tek yetkili kuyrukta takip et." : "Track workflows, HR service requests, restricted employee-relations actions, document lifecycle and governed leave/time approvals in one authorized queue."}</p>
         </div>
         <button className="secondary-button" type="button" onClick={() => void refresh()} disabled={loading}>
           <RefreshCw size={15}/>{locale === "tr" ? "Yenile" : "Refresh"}
@@ -206,6 +210,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <button type="button" className={filter === "hr-service" ? "active" : ""} onClick={() => setFilter("hr-service")}>{locale === "tr" ? "İK Hizmeti" : "HR Service"} <strong>{summary.hrService}</strong></button>
         <button type="button" className={filter === "employee-relations" ? "active" : ""} onClick={() => setFilter("employee-relations")}>{locale === "tr" ? "Çalışan İlişkileri" : "Employee Relations"} <strong>{summary.employeeRelations}</strong></button>
         <button type="button" className={filter === "documents" ? "active" : ""} onClick={() => setFilter("documents")}><FileClock size={14}/>{locale === "tr" ? "Dokümanlar" : "Documents"} <strong>{summary.documents}</strong></button>
+        <button type="button" className={filter === "leave" ? "active" : ""} onClick={() => setFilter("leave")}><CalendarCheck2 size={14}/>{locale === "tr" ? "İzin" : "Leave"} <strong>{summary.leave}</strong></button>
+        <button type="button" className={filter === "time-attendance" ? "active" : ""} onClick={() => setFilter("time-attendance")}><TimerReset size={14}/>{locale === "tr" ? "Zaman" : "Time"} <strong>{summary.timeAttendance}</strong></button>
       </div>
 
       {error ? <div className="workflow-action-message error"><AlertTriangle size={15}/>{error}</div> : null}
