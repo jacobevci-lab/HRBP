@@ -1,4 +1,4 @@
-import { Activity, BarChart3, CheckCircle2, CircleAlert, Clock3, EyeOff, FileClock, Fingerprint, Headphones, ShieldCheck, UsersRound, Workflow } from "lucide-react";
+import { Activity, BadgeDollarSign, BarChart3, CheckCircle2, CircleAlert, Clock3, EyeOff, FileClock, Fingerprint, Headphones, ShieldCheck, UsersRound, Workflow } from "lucide-react";
 import Link from "next/link";
 import { AnalyticsRefreshButton } from "@/components/analytics-refresh-button";
 import { getGovernedAnalyticsMetrics, type AnalyticsPrivacyState } from "@/lib/analytics-privacy";
@@ -84,7 +84,7 @@ export async function AnalyticsModulePage() {
 
       <section className="card gov-panel">
         <div className="gov-panel-head"><div><span className="section-kicker">{c(locale, "Lifecycle continuity", "Yaşam döngüsü sürekliliği")}</span><h3>{c(locale, "Operational attention, without sensitive record exposure", "Hassas kayıt açığa çıkarmadan operasyonel dikkat")}</h3></div><Activity size={18}/></div>
-        <p style={{ marginTop: 0, color: "var(--muted)" }}>{c(locale, "These counters reuse your governed Action Center scope. Analytics receives aggregates only; request subjects, case narratives, document names and record identifiers are never projected here.", "Bu sayaçlar yönetişimli Aksiyon Merkezi kapsamınızı yeniden kullanır. Analitik yalnızca toplamları alır; talep konuları, vaka anlatıları, doküman adları ve kayıt kimlikleri buraya hiçbir zaman taşınmaz.")}</p>
+        <p style={{ marginTop: 0, color: "var(--muted)" }}>{c(locale, "These counters reuse your governed Action Center scope. Analytics receives aggregates only; request subjects, case narratives, document names, compensation or payroll values and record identifiers are never projected here.", "Bu sayaçlar yönetişimli Aksiyon Merkezi kapsamınızı yeniden kullanır. Analitik yalnızca toplamları alır; talep konuları, vaka anlatıları, doküman adları, ücret veya bordro değerleri ve kayıt kimlikleri buraya hiçbir zaman taşınmaz.")}</p>
         {continuity.degraded ? <div className="governance-note" style={{ margin: "12px 0" }}><CircleAlert size={18}/><p><strong>{c(locale, "Lifecycle summary is temporarily unavailable.", "Yaşam döngüsü özeti geçici olarak kullanılamıyor.")}</strong> {c(locale, "The system failed closed and did not retry with a broader tenant query.", "Sistem güvenli biçimde kapandı ve daha geniş tenant sorgusuyla yeniden denemedi.")}</p></div> : null}
         <section className="gov-metrics">
           <Metric icon={<Activity size={18}/>} label={c(locale, "Open attention", "Açık dikkat")} value={String(continuity.summary.total)} meta={c(locale, "Actor-scoped Action Center", "Aktör kapsamlı Aksiyon Merkezi")}/>
@@ -94,12 +94,14 @@ export async function AnalyticsModulePage() {
           <Metric icon={<Headphones size={18}/>} label={c(locale, "HR Service", "HR Service")} value={String(continuity.summary.hrService)} meta={c(locale, "Visible service attention", "Görünür servis dikkati")}/>
           <Metric icon={<ShieldCheck size={18}/>} label={c(locale, "Employee Relations", "Çalışan İlişkileri")} value={String(continuity.summary.employeeRelations)} meta={c(locale, "Case Wall governed", "Case Wall yönetişimli")}/>
           <Metric icon={<FileClock size={18}/>} label={c(locale, "Documents", "Dokümanlar")} value={String(continuity.summary.documents)} meta={c(locale, "Visible expiry attention", "Görünür süre sonu dikkati")}/>
+          <Metric icon={<BadgeDollarSign size={18}/>} label={c(locale, "Work & Pay", "İş & Ücret")} value={String(continuity.summary.workPay)} meta={c(locale, "Separated approval attention", "Ayrıştırılmış onay dikkati")}/>
         </section>
         <div className="module-heading-actions" style={{ justifyContent: "flex-start", marginTop: 14 }}>
           <Link className="secondary-button" href="/module/workflows?view=critical">{c(locale, "Open critical work", "Kritik işleri aç")}</Link>
           <Link className="secondary-button" href="/module/workflows?view=hr-service">{c(locale, "Open HR Service queue", "HR Service kuyruğunu aç")}</Link>
           <Link className="secondary-button" href="/module/workflows?view=employee-relations">{c(locale, "Open ER queue", "ER kuyruğunu aç")}</Link>
           <Link className="secondary-button" href="/module/workflows?view=documents">{c(locale, "Open document attention", "Doküman dikkat listesini aç")}</Link>
+          <Link className="secondary-button" href="/module/workflows?view=work-pay">{c(locale, "Open Work & Pay approvals", "İş & Ücret onaylarını aç")}</Link>
         </div>
       </section>
 
