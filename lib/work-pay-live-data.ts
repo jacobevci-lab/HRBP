@@ -39,12 +39,13 @@ function isClosedPayrollStatus(status: PayrollRunStatus) {
   return status === PayrollRunStatus.PAID || status === PayrollRunStatus.CANCELLED;
 }
 
-export async function getTimeAttendanceLiveData(ctx: RequestContext) {
+export async function getTimeAttendanceLiveData(ctx: RequestContext, focusId?: string) {
   return withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
     const now = new Date();
     const today = startOfUtcDay(now);
     const tomorrow = addUtcDays(today, 1);
+    const boundedFocusId = focusId?.trim().slice(0, 160) || undefined;
 
     const [expected, entries, scheduleAssignments] = await Promise.all([
       db.employment.count({
@@ -57,8 +58,11 @@ export async function getTimeAttendanceLiveData(ctx: RequestContext) {
       db.timeEntry.findMany({
         where: {
           tenantId: ctx.tenantId,
-          workDate: { gte: today, lt: tomorrow },
-          ...employmentIdFilter(scope)
+          ...employmentIdFilter(scope),
+          OR: [
+            { workDate: { gte: today, lt: tomorrow } },
+            ...(boundedFocusId ? [{ id: boundedFocusId }] : [])
+          ]
         },
         orderBy: [{ status: "asc" }, { startAt: "asc" }],
         include: {
@@ -70,7 +74,7 @@ export async function getTimeAttendanceLiveData(ctx: RequestContext) {
             }
           }
         },
-        take: 250
+        take: 251
       }),
       db.workScheduleAssignment.findMany({
         where: {
@@ -83,18 +87,19 @@ export async function getTimeAttendanceLiveData(ctx: RequestContext) {
       })
     ]);
 
+    const todayEntries = entries.filter((entry) => entry.workDate >= today && entry.workDate < tomorrow);
     const scheduledEmployments = new Set(scheduleAssignments.map((row) => row.employmentId)).size;
-    const exceptions = entries.filter((entry) =>
-      !isFinalTimeStatus(entry.status) || !entry.startAt || !entry.endAt
-    ).length;
-    const overtimeMinutes = entries.reduce((sum, entry) => sum + entry.overtimeMinutes, 0);
+    const exceptions = todayEntries.filter((entry) => !isFinalTimeStatus(entry.status) || !entry.startAt || !entry.endAt).length;
+    const overtimeMinutes = todayEntries.reduce((sum, entry) => sum + entry.overtimeMinutes, 0);
 
     return {
       expected,
-      recorded: entries.length,
+      recorded: todayEntries.length,
       exceptions,
       overtimeMinutes,
       scheduleCoverage: expected ? Math.min(100, Math.round((scheduledEmployments / expected) * 1000) / 10) : 0,
+      focusId: boundedFocusId,
+      focusVisible: Boolean(boundedFocusId && entries.some((entry) => entry.id === boundedFocusId)),
       rows: entries.map((entry) => ({
         id: entry.id,
         employmentId: entry.employmentId,
@@ -108,27 +113,31 @@ export async function getTimeAttendanceLiveData(ctx: RequestContext) {
         overtimeMinutes: entry.overtimeMinutes,
         status: statusLabel(entry.status),
         rawStatus: entry.status,
-        source: entry.source ?? "—"
+        source: entry.source ?? "—",
+        focused: entry.id === boundedFocusId
       }))
     };
   });
 }
 
-export async function getLeaveLiveData(ctx: RequestContext) {
+export async function getLeaveLiveData(ctx: RequestContext, focusId?: string) {
   return withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
     const now = new Date();
     const today = startOfUtcDay(now);
     const horizon = addUtcDays(today, 60);
     const currentYear = today.getUTCFullYear();
+    const boundedFocusId = focusId?.trim().slice(0, 160) || undefined;
 
     const [requests, balances, awayToday] = await Promise.all([
       db.leaveRequest.findMany({
         where: {
           tenantId: ctx.tenantId,
-          startsAt: { lte: horizon },
-          endsAt: { gte: today },
-          ...employmentIdFilter(scope)
+          ...employmentIdFilter(scope),
+          OR: [
+            { startsAt: { lte: horizon }, endsAt: { gte: today } },
+            ...(boundedFocusId ? [{ id: boundedFocusId }] : [])
+          ]
         },
         orderBy: [{ status: "asc" }, { startsAt: "asc" }],
         include: {
@@ -141,7 +150,7 @@ export async function getLeaveLiveData(ctx: RequestContext) {
             }
           }
         },
-        take: 250
+        take: 251
       }),
       db.leaveBalance.findMany({
         where: { tenantId: ctx.tenantId, periodYear: currentYear, ...employmentIdFilter(scope) },
@@ -158,7 +167,8 @@ export async function getLeaveLiveData(ctx: RequestContext) {
       })
     ]);
 
-    const pending = requests.filter((request) => request.status === LeaveRequestStatus.PENDING).length;
+    const operationalRequests = requests.filter((request) => request.startsAt <= horizon && request.endsAt >= today);
+    const pending = operationalRequests.filter((request) => request.status === LeaveRequestStatus.PENDING).length;
     const totalRemaining = balances.reduce((sum, balance) => sum + decimalNumber(balance.opening) + decimalNumber(balance.accrued) + decimalNumber(balance.adjustment) - decimalNumber(balance.used), 0);
     const averageRemaining = balances.length ? Math.round((totalRemaining / balances.length) * 10) / 10 : 0;
 
@@ -167,6 +177,8 @@ export async function getLeaveLiveData(ctx: RequestContext) {
       awayToday,
       averageRemaining,
       balanceRecords: balances.length,
+      focusId: boundedFocusId,
+      focusVisible: Boolean(boundedFocusId && requests.some((request) => request.id === boundedFocusId)),
       rows: requests.map((request) => ({
         id: request.id,
         employmentId: request.employmentId,
@@ -181,7 +193,8 @@ export async function getLeaveLiveData(ctx: RequestContext) {
         units: decimalNumber(request.units),
         status: statusLabel(request.status),
         rawStatus: request.status,
-        approverId: request.approverId ?? "—"
+        approverId: request.approverId ?? "—",
+        focused: request.id === boundedFocusId
       }))
     };
   });
