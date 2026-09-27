@@ -8,12 +8,12 @@ function reject(path, text, pattern, message) { if (pattern.test(text)) failures
 const helperPath = "lib/lifecycle-analytics-continuity.ts";
 const helper = await source(helperPath);
 expect(helperPath, helper, /getLifecycleActionCenterData\(ctx\)/, "analytics continuity must reuse the governed Action Center scope");
-for (const counter of ["total", "overdue", "dueSoon", "critical", "workflow", "hrService", "employeeRelations", "documents"]) {
+for (const counter of ["total", "overdue", "dueSoon", "critical", "workflow", "hrService", "employeeRelations", "documents", "leave", "timeAttendance"]) {
   expect(helperPath, helper, new RegExp(`${counter}:\\s*source\\.summary\\.${counter}`), `analytics continuity must copy only the governed ${counter} counter`);
 }
 expect(helperPath, helper, /aggregateOnly:\s*true/, "the projection must explicitly declare its aggregate-only privacy contract");
 expect(helperPath, helper, /catch\s*\{[\s\S]*EMPTY_SUMMARY[\s\S]*degraded:\s*true/, "source failure must fail closed with an empty degraded summary");
-reject(helperPath, helper, /\.items|items:|title:|subtitle:|subjectId:|requestNumber:|caseNumber:|documentName:|fileName:/, "analytics continuity must not expose record-level lifecycle details");
+reject(helperPath, helper, /\.items|items:|title:|subtitle:|subjectId:|requestNumber:|caseNumber:|documentName:|fileName:|employeeName:/, "analytics continuity must not expose record-level lifecycle details");
 reject(helperPath, helper, /db\.|findMany\(|findFirst\(|count\(/, "analytics continuity must not bypass source-domain visibility with direct database queries");
 
 const pagePath = "components/analytics-module-page.tsx";
@@ -38,6 +38,7 @@ const actionCenter = await source(actionCenterPath);
 expect(actionCenterPath, actionCenter, /hrServiceRequestWhere\(db,\s*ctx\)/, "source HR Service visibility must remain governed");
 expect(actionCenterPath, actionCenter, /ownerUserId:\s*ctx\.actorId[\s\S]*assignments:\s*\{\s*some:/, "source Employee Relations visibility must remain Case Wall scoped");
 expect(actionCenterPath, actionCenter, /documentVisibilityWhere\(db,\s*ctx\)/, "source document visibility must remain governed by the existing document scope");
+expect(actionCenterPath, actionCenter, /resolveEmploymentScope\(db,\s*ctx\)/, "source leave/time approval visibility must remain employment scoped");
 reject(actionCenterPath, actionCenter, /objectKey|contentHash|scanMessage/, "document lifecycle aggregation must not load storage capabilities or scan narratives");
 
 const packagePath = "package.json";

@@ -39,7 +39,7 @@ function ConsoleWarning({ locale, title, body }: { locale: Locale; title: string
   return <section className="card module-degraded-banner" style={{ marginTop: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}><CircleAlert size={18}/><div><strong style={{ display: "block", fontSize: 11 }}>{title}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5 }}>{body}</p></div></section>;
 }
 
-export async function WorkPayModulePage({ slug }: { slug: Slug }) {
+export async function WorkPayModulePage({ slug, focusId }: { slug: Slug; focusId?: string }) {
   const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   const meta = copy[slug][locale];
   const capability = capabilityFor(slug);
@@ -79,7 +79,7 @@ export async function WorkPayModulePage({ slug }: { slug: Slug }) {
       const data = await getPayrollSelfServiceData(ctx);
       content = <PayrollPayslipWorkspace data={data}/>;
     } else {
-      content = await (await import("@/components/work-pay-live-workspace")).WorkPayLiveWorkspace({ slug: slug as "time-attendance" | "leave" | "payroll" });
+      content = await (await import("@/components/work-pay-live-workspace")).WorkPayLiveWorkspace({ slug: slug as "time-attendance" | "leave" | "payroll", focusId });
     }
     let participant: React.ReactNode = null;
 
