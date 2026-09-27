@@ -1,6 +1,7 @@
 import { EmploymentStatus, LeaveRequestStatus, PayrollRunStatus, TimeEntryStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
 import { employmentIdFilter, employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
+import { asIdentifier } from "@/lib/input-validation";
 import type { RequestContext } from "@/lib/request-context";
 
 function startOfUtcDay(date: Date) {
@@ -39,14 +40,22 @@ function isClosedPayrollStatus(status: PayrollRunStatus) {
   return status === PayrollRunStatus.PAID || status === PayrollRunStatus.CANCELLED;
 }
 
-export async function getTimeAttendanceLiveData(ctx: RequestContext) {
+export async function getTimeAttendanceLiveData(ctx: RequestContext, focusId?: string) {
   return withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
+    const focus = asIdentifier(focusId);
     const now = new Date();
     const today = startOfUtcDay(now);
     const tomorrow = addUtcDays(today, 1);
+    const employmentInclude = {
+      select: {
+        id: true,
+        person: { select: { employeeNumber: true, givenName: true, familyName: true } },
+        position: { select: { title: true, orgUnit: { select: { name: true } } } }
+      }
+    } as const;
 
-    const [expected, entries, scheduleAssignments] = await Promise.all([
+    const [expected, entries, scheduleAssignments, focusedEntry] = await Promise.all([
       db.employment.count({
         where: {
           tenantId: ctx.tenantId,
@@ -61,15 +70,7 @@ export async function getTimeAttendanceLiveData(ctx: RequestContext) {
           ...employmentIdFilter(scope)
         },
         orderBy: [{ status: "asc" }, { startAt: "asc" }],
-        include: {
-          employment: {
-            select: {
-              id: true,
-              person: { select: { employeeNumber: true, givenName: true, familyName: true } },
-              position: { select: { title: true, orgUnit: { select: { name: true } } } }
-            }
-          }
-        },
+        include: { employment: employmentInclude },
         take: 250
       }),
       db.workScheduleAssignment.findMany({
@@ -80,14 +81,19 @@ export async function getTimeAttendanceLiveData(ctx: RequestContext) {
           ...employmentIdFilter(scope)
         },
         select: { employmentId: true }
-      })
+      }),
+      focus ? db.timeEntry.findFirst({
+        where: { id: focus, tenantId: ctx.tenantId, ...employmentIdFilter(scope) },
+        include: { employment: employmentInclude }
+      }) : Promise.resolve(null)
     ]);
 
     const scheduledEmployments = new Set(scheduleAssignments.map((row) => row.employmentId)).size;
-    const exceptions = entries.filter((entry) =>
-      !isFinalTimeStatus(entry.status) || !entry.startAt || !entry.endAt
-    ).length;
+    const exceptions = entries.filter((entry) => !isFinalTimeStatus(entry.status) || !entry.startAt || !entry.endAt).length;
     const overtimeMinutes = entries.reduce((sum, entry) => sum + entry.overtimeMinutes, 0);
+    const rowEntries = focus
+      ? [...(focusedEntry ? [focusedEntry] : []), ...entries.filter((entry) => entry.id !== focus)]
+      : entries;
 
     return {
       expected,
@@ -95,7 +101,8 @@ export async function getTimeAttendanceLiveData(ctx: RequestContext) {
       exceptions,
       overtimeMinutes,
       scheduleCoverage: expected ? Math.min(100, Math.round((scheduledEmployments / expected) * 1000) / 10) : 0,
-      rows: entries.map((entry) => ({
+      focusId: focusedEntry?.id ?? null,
+      rows: rowEntries.map((entry) => ({
         id: entry.id,
         employmentId: entry.employmentId,
         employee: `${entry.employment.person.givenName} ${entry.employment.person.familyName}`,
@@ -114,15 +121,26 @@ export async function getTimeAttendanceLiveData(ctx: RequestContext) {
   });
 }
 
-export async function getLeaveLiveData(ctx: RequestContext) {
+export async function getLeaveLiveData(ctx: RequestContext, focusId?: string) {
   return withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
+    const focus = asIdentifier(focusId);
     const now = new Date();
     const today = startOfUtcDay(now);
     const horizon = addUtcDays(today, 60);
     const currentYear = today.getUTCFullYear();
+    const requestInclude = {
+      leaveType: true,
+      employment: {
+        select: {
+          id: true,
+          person: { select: { employeeNumber: true, givenName: true, familyName: true } },
+          position: { select: { title: true, orgUnit: { select: { name: true } } } }
+        }
+      }
+    } as const;
 
-    const [requests, balances, awayToday] = await Promise.all([
+    const [requests, balances, awayToday, focusedRequest] = await Promise.all([
       db.leaveRequest.findMany({
         where: {
           tenantId: ctx.tenantId,
@@ -131,16 +149,7 @@ export async function getLeaveLiveData(ctx: RequestContext) {
           ...employmentIdFilter(scope)
         },
         orderBy: [{ status: "asc" }, { startsAt: "asc" }],
-        include: {
-          leaveType: true,
-          employment: {
-            select: {
-              id: true,
-              person: { select: { employeeNumber: true, givenName: true, familyName: true } },
-              position: { select: { title: true, orgUnit: { select: { name: true } } } }
-            }
-          }
-        },
+        include: requestInclude,
         take: 250
       }),
       db.leaveBalance.findMany({
@@ -155,19 +164,27 @@ export async function getLeaveLiveData(ctx: RequestContext) {
           endsAt: { gte: today },
           ...employmentIdFilter(scope)
         }
-      })
+      }),
+      focus ? db.leaveRequest.findFirst({
+        where: { id: focus, tenantId: ctx.tenantId, ...employmentIdFilter(scope) },
+        include: requestInclude
+      }) : Promise.resolve(null)
     ]);
 
     const pending = requests.filter((request) => request.status === LeaveRequestStatus.PENDING).length;
     const totalRemaining = balances.reduce((sum, balance) => sum + decimalNumber(balance.opening) + decimalNumber(balance.accrued) + decimalNumber(balance.adjustment) - decimalNumber(balance.used), 0);
     const averageRemaining = balances.length ? Math.round((totalRemaining / balances.length) * 10) / 10 : 0;
+    const rowRequests = focus
+      ? [...(focusedRequest ? [focusedRequest] : []), ...requests.filter((request) => request.id !== focus)]
+      : requests;
 
     return {
       pending,
       awayToday,
       averageRemaining,
       balanceRecords: balances.length,
-      rows: requests.map((request) => ({
+      focusId: focusedRequest?.id ?? null,
+      rows: rowRequests.map((request) => ({
         id: request.id,
         employmentId: request.employmentId,
         employee: `${request.employment.person.givenName} ${request.employment.person.familyName}`,
@@ -187,9 +204,14 @@ export async function getLeaveLiveData(ctx: RequestContext) {
   });
 }
 
-export async function getPayrollLiveData(ctx: RequestContext) {
+export async function getPayrollLiveData(ctx: RequestContext, focusId?: string) {
   return withDb(async (db) => {
-    const [packs, runs] = await Promise.all([
+    const focus = asIdentifier(focusId);
+    const runInclude = {
+      payrollPeriod: { include: { countryPack: true } },
+      results: { select: { grossPay: true, netPay: true, employerCost: true } }
+    } as const;
+    const [packs, runs, focusedRun] = await Promise.all([
       db.payrollCountryPack.findMany({
         where: { tenantId: ctx.tenantId, active: true },
         orderBy: { countryCode: "asc" }
@@ -197,15 +219,19 @@ export async function getPayrollLiveData(ctx: RequestContext) {
       db.payrollRun.findMany({
         where: { tenantId: ctx.tenantId },
         orderBy: { startedAt: "desc" },
-        include: {
-          payrollPeriod: { include: { countryPack: true } },
-          results: { select: { grossPay: true, netPay: true, employerCost: true } }
-        },
+        include: runInclude,
         take: 40
-      })
+      }),
+      focus ? db.payrollRun.findFirst({
+        where: { id: focus, tenantId: ctx.tenantId },
+        include: runInclude
+      }) : Promise.resolve(null)
     ]);
 
-    const rows = runs.map((run) => {
+    const displayedRuns = focus
+      ? [...(focusedRun ? [focusedRun] : []), ...runs.filter((run) => run.id !== focus)]
+      : runs;
+    const rows = displayedRuns.map((run) => {
       const gross = run.results.reduce((sum, result) => sum + decimalNumber(result.grossPay), 0);
       const net = run.results.reduce((sum, result) => sum + decimalNumber(result.netPay), 0);
       const employerCost = run.results.reduce((sum, result) => sum + decimalNumber(result.employerCost), 0);
@@ -230,12 +256,13 @@ export async function getPayrollLiveData(ctx: RequestContext) {
     });
 
     const openRuns = runs.filter((run) => !isClosedPayrollStatus(run.status)).length;
-    const employeesInLatestRuns = rows.reduce((sum, row) => sum + row.employees, 0);
+    const employeesInLatestRuns = runs.reduce((sum, run) => sum + run.results.length, 0);
 
     return {
       activeCountryPacks: packs.length,
       openRuns,
       employeesInLatestRuns,
+      focusId: focusedRun?.id ?? null,
       rows
     };
   });
