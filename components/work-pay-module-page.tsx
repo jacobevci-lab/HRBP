@@ -70,7 +70,7 @@ export async function WorkPayModulePage({ slug, focusId }: { slug: Slug; focusId
   try {
     let content: React.ReactNode;
     if (slug === "compensation") {
-      content = await (await import("@/components/compensation-live-workspace")).CompensationLiveWorkspace();
+      content = await (await import("@/components/compensation-live-workspace")).CompensationLiveWorkspace({ focusId });
     } else if (slug === "payroll" && !can(ctx, "payroll:read")) {
       const [{ PayrollPayslipWorkspace }, { getPayrollSelfServiceData }] = await Promise.all([
         import("@/components/payroll-payslip-workspace"),
