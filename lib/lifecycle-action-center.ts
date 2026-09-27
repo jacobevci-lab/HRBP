@@ -12,8 +12,9 @@ import { db } from "@/lib/db";
 import { documentVisibilityWhere } from "@/lib/document-access";
 import { hrServiceRequestWhere, isHRServiceSelfServiceRole, visibleHRServiceQueueKeys } from "@/lib/hr-service-access";
 import type { RequestContext } from "@/lib/request-context";
+import { getWorkPayActionCenterItems } from "@/lib/work-pay-action-center";
 
-export type LifecycleActionKind = "workflow" | "hr-service" | "employee-relations" | "documents";
+export type LifecycleActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "work-pay";
 export type LifecycleActionUrgency = "normal" | "warning" | "critical";
 
 export type LifecycleActionItem = {
@@ -303,13 +304,14 @@ function sortItems(left: LifecycleActionItem, right: LifecycleActionItem) {
 }
 
 export async function getLifecycleActionCenterData(ctx: RequestContext) {
-  const [workflows, hrService, employeeRelations, documents] = await Promise.all([
+  const [workflows, hrService, employeeRelations, documents, workPay] = await Promise.all([
     workflowItems(ctx),
     hrServiceItems(ctx),
     employeeRelationsItems(ctx),
-    documentItems(ctx)
+    documentItems(ctx),
+    getWorkPayActionCenterItems(ctx)
   ]);
-  const items = [...workflows, ...hrService, ...employeeRelations, ...documents].sort(sortItems).slice(0, 250);
+  const items: LifecycleActionItem[] = [...workflows, ...hrService, ...employeeRelations, ...documents, ...workPay].sort(sortItems).slice(0, 250);
   const now = Date.now();
   const soon = now + 24 * 60 * 60 * 1000;
 
@@ -327,7 +329,8 @@ export async function getLifecycleActionCenterData(ctx: RequestContext) {
       workflow: items.filter((item) => item.kind === "workflow").length,
       hrService: items.filter((item) => item.kind === "hr-service").length,
       employeeRelations: items.filter((item) => item.kind === "employee-relations").length,
-      documents: items.filter((item) => item.kind === "documents").length
+      documents: items.filter((item) => item.kind === "documents").length,
+      workPay: items.filter((item) => item.kind === "work-pay").length
     },
     generatedAt: new Date(now).toISOString()
   };
