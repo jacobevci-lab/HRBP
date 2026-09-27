@@ -4,6 +4,19 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, X } from "lucide-react";
 
+async function acknowledgeNotifications(resourceId: string) {
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resourceType: "LeaveRequest", resourceId, read: true })
+    });
+    if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
+  } catch {
+    // Badge cleanup is best-effort and must not roll back a committed leave decision.
+  }
+}
+
 export function LeaveDecisionButtons({ requestId }: { requestId: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState<"APPROVED" | "REJECTED" | null>(null);
@@ -20,6 +33,7 @@ export function LeaveDecisionButtons({ requestId }: { requestId: string }) {
       });
       const payload = await response.json().catch(() => null) as { error?: string } | null;
       if (!response.ok) throw new Error(payload?.error || "Leave decision failed.");
+      await acknowledgeNotifications(requestId);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Leave decision failed.");
