@@ -46,6 +46,19 @@ const blockerLabels: Record<string, string> = {
   pendingCompensationChanges: "unapplied compensation changes"
 };
 
+async function acknowledgeNotifications(resourceId: string) {
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resourceType: "PayrollRun", resourceId, read: true })
+    });
+    if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
+  } catch {
+    // Notification cleanup is best-effort and must not roll back a committed payroll transition.
+  }
+}
+
 export function PayrollTransitionButton({ runId, status, access }: { runId: string; status: PayrollStatus; access: PayrollAccess }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -69,6 +82,7 @@ export function PayrollTransitionButton({ runId, status, access }: { runId: stri
           : "";
         throw new Error([payload?.error || "Payroll transition failed.", blockers].filter(Boolean).join(" "));
       }
+      await acknowledgeNotifications(runId);
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Payroll transition failed.");
