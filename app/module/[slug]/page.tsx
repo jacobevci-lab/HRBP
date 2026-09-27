@@ -35,6 +35,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const [{ slug }, search, ctx] = await Promise.all([params, searchParams, getServerRequestContext()]);
   const explicitQuery = typeof search.q === "string" ? search.q : "";
   const requestFocus = typeof search.request === "string" ? search.request : "";
+  const entryFocus = typeof search.entry === "string" ? search.entry : "";
   const personId = typeof search.person === "string" ? search.person : undefined;
   const documentFocus = typeof search.document === "string" ? search.document : undefined;
   const documentLifecycleQuery = slug === "documents" ? (documentFocus || personId || "") : "";
@@ -47,6 +48,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const employeeRelationsCaseId = typeof search.case === "string" ? search.case : undefined;
   const employeeRelationsActionId = typeof search.action === "string" ? search.action : undefined;
   const employeeRelationsAppealId = typeof search.appeal === "string" ? search.appeal : undefined;
+  const workPayFocus = slug === "leave" ? requestFocus : slug === "time-attendance" ? entryFocus : undefined;
 
   if (!ctx) return <AppShell><PublicModuleLanding slug={slug}/></AppShell>;
 
@@ -55,7 +57,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   if (slug === "audit") return <AppShell><AuditLivePage searchParams={search}/></AppShell>;
   if (slug === "analytics") return <AnalyticsModulePage/>;
   if (growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug}/>;
-  if (workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug}/>;
+  if (workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug} focusId={workPayFocus}/>;
   if (governanceSlugs.has(slug as GovernanceSlug)) return <GovernancePlanningModulePage slug={slug as GovernanceSlug}/>;
 
   const workflowAdminVisible = can(ctx, "workflows:read");
