@@ -12,6 +12,8 @@ export type LifecycleAnalyticsContinuitySummary = {
   documents: number;
   leave: number;
   timeAttendance: number;
+  compensation: number;
+  payroll: number;
 };
 
 const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
@@ -24,7 +26,9 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
   employeeRelations: 0,
   documents: 0,
   leave: 0,
-  timeAttendance: 0
+  timeAttendance: 0,
+  compensation: 0,
+  payroll: 0
 };
 
 /**
@@ -33,8 +37,9 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
  * The source remains the governed Lifecycle Action Center, so HR Service,
  * Employee Relations, Documents and work-pay approval visibility is never
  * recalculated or widened here. Only aggregate counters are returned: titles,
- * descriptions, employee names, case/request numbers, document metadata and
- * subject identifiers never cross this boundary.
+ * descriptions, employee names, case/request numbers, compensation amounts,
+ * payroll results, document metadata and subject identifiers never cross this
+ * boundary.
  *
  * Failure is intentionally fail-closed. Analytics may render a degraded state,
  * but it must never retry through a broader tenant query.
@@ -52,7 +57,9 @@ export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
       employeeRelations: source.summary.employeeRelations,
       documents: source.summary.documents,
       leave: source.summary.leave,
-      timeAttendance: source.summary.timeAttendance
+      timeAttendance: source.summary.timeAttendance,
+      compensation: source.summary.compensation,
+      payroll: source.summary.payroll
     };
 
     return {
