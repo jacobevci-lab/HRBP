@@ -1,6 +1,6 @@
 # Document lifecycle continuity
 
-The Documents workspace is the governed HR document vault for non-case employee records. This batch connects lifecycle links to that existing vault rather than creating a second attachment or evidence subsystem.
+The Documents workspace is the governed HR document vault for non-case employee records. This work connects lifecycle links and operational expiry attention to that existing vault rather than creating a second attachment or evidence subsystem.
 
 ## Lifecycle routing
 
@@ -13,6 +13,31 @@ The module accepts three governed lookup paths:
 `app/module/[slug]/page.tsx` converges the exact document/person lifecycle parameters into the existing Documents search path. `getDocumentWorkspaceData` then intersects the lookup with `documentVisibilityWhere`; there is no unscoped fallback. A stale or inaccessible deep link therefore resolves to an empty governed result rather than confirming that a hidden record exists.
 
 Notification resources with type `DocumentRecord` resolve to the exact `?document=` path.
+
+## Lifecycle Action Center
+
+Documents that have an explicit `expiresAt` date and are already expired or will expire within the next 30 days can enter the Lifecycle Action Center. This is an operational attention signal, not a second document store and not an automatic mutation.
+
+The source query:
+
+1. requires `documents:read`,
+2. reuses `documentVisibilityWhere(db, ctx)`,
+3. keeps the existing tenant, relationship, explicit-grant and classification restrictions,
+4. keeps Employee Relations evidence excluded through `caseId: null`,
+5. reads only the minimal metadata required for an authorized action row, and
+6. deep-links back to `/module/documents?document=<id>` so any follow-up occurs inside the governed vault.
+
+Expired visible documents are treated as critical through the common due-date urgency model. Records expiring within 24 hours are attention/warning items; the remainder of the 30-day window stays normal until it approaches expiry.
+
+The Action Center does not load `objectKey`, version object keys, hashes, malware scan narratives or document contents. It also does not modify, archive, renew or delete a document directly. Document lifecycle mutations remain inside the Documents domain and its existing authorization/audit controls.
+
+## Dashboard and Analytics continuity
+
+Because Dashboard and Analytics consume Action Center summaries, document expiry contributes to aggregate `total`, `critical`, `overdue` and `dueSoon` counters automatically.
+
+Analytics additionally receives an aggregate `documents` counter. It never receives filenames, purposes, document IDs or other row-level document metadata. The analytics helper reuses the Action Center result and performs no direct document query or broader fallback.
+
+The Analytics Documents shortcut routes to `/module/workflows?view=documents`, which remains an actor-scoped Action Center filter. Opening an individual item then uses the governed exact-document route above.
 
 ## Security boundary
 
@@ -35,14 +60,18 @@ This separation is intentional: lifecycle continuity may reuse the document stor
 
 ## Validation
 
-`npm run document-lifecycle:validate` verifies that:
+`npm run document-lifecycle:validate`, `npm run lifecycle-action-center:validate` and `npm run lifecycle-analytics:validate` collectively verify that:
 
 - tenant/relationship/classification scope remains in place,
 - exact document and person deep links reuse the existing governed scope,
 - case evidence remains excluded from the generic vault,
 - browser/API projections do not expose private object keys,
 - deletion still enforces legal hold and retention,
-- uploads remain malware-gated, and
-- document notifications route into the governed vault.
+- uploads remain malware-gated,
+- document notifications route into the governed vault,
+- Action Center document attention requires `documents:read` and the existing document visibility helper,
+- the expiry query is bounded to actionable expiry-bearing records,
+- Action Center never reads private storage capabilities or scan narratives, and
+- Analytics receives only aggregate document attention.
 
-The validator is part of `prebuild` so CI/builds fail if these invariants regress.
+These validators are part of `prebuild` so CI/builds fail if the lifecycle or privacy invariants regress.

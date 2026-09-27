@@ -1,4 +1,4 @@
-import { Activity, BarChart3, CheckCircle2, CircleAlert, Clock3, EyeOff, Fingerprint, Headphones, ShieldCheck, UsersRound, Workflow } from "lucide-react";
+import { Activity, BarChart3, CheckCircle2, CircleAlert, Clock3, EyeOff, FileClock, Fingerprint, Headphones, ShieldCheck, UsersRound, Workflow } from "lucide-react";
 import Link from "next/link";
 import { AnalyticsRefreshButton } from "@/components/analytics-refresh-button";
 import { getGovernedAnalyticsMetrics, type AnalyticsPrivacyState } from "@/lib/analytics-privacy";
@@ -93,11 +93,13 @@ export async function AnalyticsModulePage() {
           <Metric icon={<Workflow size={18}/>} label={c(locale, "Workflow tasks", "İş akışı görevleri")} value={String(continuity.summary.workflow)} meta={c(locale, "Assigned or role-scoped", "Atanmış veya rol kapsamlı")}/>
           <Metric icon={<Headphones size={18}/>} label={c(locale, "HR Service", "HR Service")} value={String(continuity.summary.hrService)} meta={c(locale, "Visible service attention", "Görünür servis dikkati")}/>
           <Metric icon={<ShieldCheck size={18}/>} label={c(locale, "Employee Relations", "Çalışan İlişkileri")} value={String(continuity.summary.employeeRelations)} meta={c(locale, "Case Wall governed", "Case Wall yönetişimli")}/>
+          <Metric icon={<FileClock size={18}/>} label={c(locale, "Documents", "Dokümanlar")} value={String(continuity.summary.documents)} meta={c(locale, "Visible expiry attention", "Görünür süre sonu dikkati")}/>
         </section>
         <div className="module-heading-actions" style={{ justifyContent: "flex-start", marginTop: 14 }}>
           <Link className="secondary-button" href="/module/workflows?view=critical">{c(locale, "Open critical work", "Kritik işleri aç")}</Link>
           <Link className="secondary-button" href="/module/workflows?view=hr-service">{c(locale, "Open HR Service queue", "HR Service kuyruğunu aç")}</Link>
           <Link className="secondary-button" href="/module/workflows?view=employee-relations">{c(locale, "Open ER queue", "ER kuyruğunu aç")}</Link>
+          <Link className="secondary-button" href="/module/workflows?view=documents">{c(locale, "Open document attention", "Doküman dikkat listesini aç")}</Link>
         </div>
       </section>
 
