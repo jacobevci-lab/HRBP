@@ -10,7 +10,6 @@ import { TimeEntryTransitionButtons } from "@/components/time-entry-transition-b
 
 type TimeTarget = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "LOCKED";
 type TimeAccess = { selfEntry: boolean; operationalWrite: boolean; approve: boolean; lock: boolean };
-
 type PayrollAccess = { prepare: boolean; approve: boolean; pay: boolean; configure: boolean };
 
 function Metric({ icon, label, value, meta }: { icon: React.ReactNode; label: string; value: string; meta: string }) {
@@ -41,7 +40,7 @@ function timeTargets(access: TimeAccess, actorEmploymentId: string | undefined, 
   return [];
 }
 
-export async function WorkPayLiveWorkspace({ slug }: { slug: "time-attendance" | "leave" | "payroll" }) {
+export async function WorkPayLiveWorkspace({ slug, focusId }: { slug: "time-attendance" | "leave" | "payroll"; focusId?: string }) {
   const ctx = await getServerRequestContext();
 
   if (!ctx) {
@@ -53,7 +52,7 @@ export async function WorkPayLiveWorkspace({ slug }: { slug: "time-attendance" |
   if (!can(ctx, capability)) return <Restricted title={`${slug === "time-attendance" ? "Time & Attendance" : slug === "leave" ? "Leave" : "Payroll"} access is restricted`} detail={`Your authenticated role does not include ${capability}. Employee and manager access is relationship-scoped; payroll remains role-separated.`} returnTo={`/module/${slug}`}/>;
 
   if (slug === "time-attendance") {
-    const data = await getTimeAttendanceLiveData(ctx);
+    const data = await getTimeAttendanceLiveData(ctx, focusId);
     const access: TimeAccess = {
       selfEntry: can(ctx, "time:self-entry"),
       operationalWrite: can(ctx, "time:write"),
@@ -71,7 +70,7 @@ export async function WorkPayLiveWorkspace({ slug }: { slug: "time-attendance" |
       <section className="workpay-split">
         <div className="card workpay-panel"><div className="workpay-panel-head"><div><span className="section-kicker">Live daily control</span><h3>Attendance operating view</h3></div><span className="matrix-note">Relationship scoped</span></div><div className="workpay-table-wrap"><table className="workpay-table"><thead><tr><th>Employee</th><th>Organization</th><th>In</th><th>Out</th><th>Worked</th><th>OT</th><th>Source</th><th>Status</th>{showControl ? <th>Control</th> : null}</tr></thead><tbody>{data.rows.length ? data.rows.map((row) => {
           const targets = showControl ? timeTargets(access, ctx.employmentId, row.employmentId, row.rawStatus as TimeTarget) : [];
-          return <tr key={row.id}><td><strong>{row.employee}</strong><small className="cell-sub">{row.employeeNumber} · {row.position}</small></td><td>{row.organization}</td><td>{row.startAt}</td><td>{row.endAt}</td><td>{Math.floor(row.minutes / 60)}h {row.minutes % 60}m</td><td>{row.overtimeMinutes ? `${Math.floor(row.overtimeMinutes / 60)}h ${row.overtimeMinutes % 60}m` : "—"}</td><td>{row.source}</td><td><Status value={row.status}/></td>{showControl ? <td><TimeEntryTransitionButtons entryId={row.id} targets={targets}/></td> : null}</tr>;
+          return <tr key={row.id} className={row.id === data.focusId ? "focused" : undefined}><td><strong>{row.employee}</strong><small className="cell-sub">{row.employeeNumber} · {row.position}</small></td><td>{row.organization}</td><td>{row.startAt}</td><td>{row.endAt}</td><td>{Math.floor(row.minutes / 60)}h {row.minutes % 60}m</td><td>{row.overtimeMinutes ? `${Math.floor(row.overtimeMinutes / 60)}h ${row.overtimeMinutes % 60}m` : "—"}</td><td>{row.source}</td><td><Status value={row.status}/></td>{showControl ? <td><TimeEntryTransitionButtons entryId={row.id} targets={targets}/></td> : null}</tr>;
         }) : <tr><td colSpan={showControl ? 9 : 8} style={{ textAlign: "center", padding: 28 }}>No time entries are recorded for today.</td></tr>}</tbody></table></div></div>
         <aside className="card workpay-side"><div className="workpay-panel-head"><div><span className="section-kicker">Approval & payroll control</span><h3>Separated time authority</h3></div><ShieldCheck size={18}/></div><div className="control-stack"><div><ShieldCheck size={17}/><span><strong>Employee self-service</strong><small>Own drafts can be created and submitted only through signed employment identity.</small></span></div><div><UsersRound size={17}/><span><strong>Manager approval</strong><small>Relationship-scoped reports can be approved or rejected; self-approval remains blocked.</small></span></div><div><CheckCircle2 size={17}/><span><strong>Payroll-ready lock</strong><small>An effective schedule and valid interval are required. The approving actor cannot also perform the payroll lock.</small></span></div></div></aside>
       </section>
@@ -79,7 +78,7 @@ export async function WorkPayLiveWorkspace({ slug }: { slug: "time-attendance" |
   }
 
   if (slug === "leave") {
-    const data = await getLeaveLiveData(ctx);
+    const data = await getLeaveLiveData(ctx, focusId);
     const canApprove = can(ctx, "leave:approve");
     return <div className="workpay-shell">
       <section className="workpay-metrics">
@@ -89,13 +88,13 @@ export async function WorkPayLiveWorkspace({ slug }: { slug: "time-attendance" |
         <Metric icon={<TrendingUp size={18}/>} label="Avg. balance" value={String(data.averageRemaining)} meta="Opening + accrual + adjustment − used"/>
       </section>
       <section className="workpay-split">
-        <div className="card workpay-panel"><div className="workpay-panel-head"><div><span className="section-kicker">Live leave operations</span><h3>Request & approval queue</h3></div><span className="matrix-note">Effective-dated policy</span></div><div className="workpay-table-wrap"><table className="workpay-table"><thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Units</th><th>Organization</th><th>Status</th>{canApprove ? <th>Decision</th> : null}</tr></thead><tbody>{data.rows.length ? data.rows.map((row) => <tr key={row.id}><td><strong>{row.employee}</strong><small className="cell-sub">{row.employeeNumber} · {row.position}</small></td><td>{row.leaveType}</td><td>{row.startsAt} → {row.endsAt}</td><td>{row.units} {row.unit.toLowerCase()}</td><td>{row.organization}</td><td><Status value={row.status}/></td>{canApprove ? <td>{row.rawStatus === "PENDING" && row.employmentId !== ctx.employmentId ? <LeaveDecisionButtons requestId={row.id}/> : <span style={{ color: "var(--muted)" }}>—</span>}</td> : null}</tr>) : <tr><td colSpan={canApprove ? 7 : 6} style={{ textAlign: "center", padding: 28 }}>No leave requests are in the operating horizon.</td></tr>}</tbody></table></div></div>
+        <div className="card workpay-panel"><div className="workpay-panel-head"><div><span className="section-kicker">Live leave operations</span><h3>Request & approval queue</h3></div><span className="matrix-note">Effective-dated policy</span></div><div className="workpay-table-wrap"><table className="workpay-table"><thead><tr><th>Employee</th><th>Type</th><th>Dates</th><th>Units</th><th>Organization</th><th>Status</th>{canApprove ? <th>Decision</th> : null}</tr></thead><tbody>{data.rows.length ? data.rows.map((row) => <tr key={row.id} className={row.id === data.focusId ? "focused" : undefined}><td><strong>{row.employee}</strong><small className="cell-sub">{row.employeeNumber} · {row.position}</small></td><td>{row.leaveType}</td><td>{row.startsAt} → {row.endsAt}</td><td>{row.units} {row.unit.toLowerCase()}</td><td>{row.organization}</td><td><Status value={row.status}/></td>{canApprove ? <td>{row.rawStatus === "PENDING" && row.employmentId !== ctx.employmentId ? <LeaveDecisionButtons requestId={row.id}/> : <span style={{ color: "var(--muted)" }}>—</span>}</td> : null}</tr>) : <tr><td colSpan={canApprove ? 7 : 6} style={{ textAlign: "center", padding: 28 }}>No leave requests are in the operating horizon.</td></tr>}</tbody></table></div></div>
         <aside className="card workpay-side"><div className="workpay-panel-head"><div><span className="section-kicker">Approval control</span><h3>No self-approval</h3></div><ShieldCheck size={18}/></div><p>Managers can only view their relationship-scoped population. Their own request remains visible but cannot be approved from the manager decision path. HR operations can act through explicit approval authority.</p><div className="mini-rule"><span>Scope</span><strong>Employment graph</strong></div><div className="mini-rule"><span>Decision audit</span><strong>Enabled</strong></div><div className="mini-rule"><span>Balance reservation</span><strong>Atomic</strong></div></aside>
       </section>
     </div>;
   }
 
-  const data = await getPayrollLiveData(ctx);
+  const data = await getPayrollLiveData(ctx, focusId);
   const payrollAccess: PayrollAccess = {
     prepare: can(ctx, "payroll:prepare"),
     approve: can(ctx, "payroll:approve"),
@@ -111,7 +110,7 @@ export async function WorkPayLiveWorkspace({ slug }: { slug: "time-attendance" |
       <Metric icon={<LockKeyhole size={18}/>} label="Access boundary" value="Restricted" meta="Prepare · approve · pay are independently authorized"/>
     </section>
     <section className="workpay-split">
-      <div className="card workpay-panel"><div className="workpay-panel-head"><div><span className="section-kicker">Live payroll operations</span><h3>Country-pack run register</h3></div><span className="matrix-note">Input fingerprint protected</span></div><div className="workpay-table-wrap"><table className="workpay-table"><thead><tr><th>Period / country</th><th>Run</th><th>Employees</th><th>Gross</th><th>Net</th><th>Employer cost</th><th>Pay date</th><th>Status</th>{showPayrollControl ? <th>Next control</th> : null}</tr></thead><tbody>{data.rows.length ? data.rows.map((row) => <tr key={row.id}><td><strong>{row.periodCode}</strong><small className="cell-sub">{row.country} · {row.countryCode} · pack {row.packVersion}</small></td><td>#{row.runNumber}<small className="cell-sub">Period: {row.periodStatus}</small></td><td>{row.employees}</td><td>{money(row.currency, row.gross)}</td><td>{money(row.currency, row.net)}</td><td>{money(row.currency, row.employerCost)}</td><td>{row.payDate}</td><td><Status value={row.status}/></td>{showPayrollControl ? <td><PayrollTransitionButton runId={row.id} status={row.rawStatus} access={payrollAccess}/></td> : null}</tr>) : <tr><td colSpan={showPayrollControl ? 9 : 8} style={{ textAlign: "center", padding: 28 }}>No payroll runs are recorded.</td></tr>}</tbody></table></div></div>
+      <div className="card workpay-panel"><div className="workpay-panel-head"><div><span className="section-kicker">Live payroll operations</span><h3>Country-pack run register</h3></div><span className="matrix-note">Input fingerprint protected</span></div><div className="workpay-table-wrap"><table className="workpay-table"><thead><tr><th>Period / country</th><th>Run</th><th>Employees</th><th>Gross</th><th>Net</th><th>Employer cost</th><th>Pay date</th><th>Status</th>{showPayrollControl ? <th>Next control</th> : null}</tr></thead><tbody>{data.rows.length ? data.rows.map((row) => <tr key={row.id} className={row.id === data.focusId ? "focused" : undefined}><td><strong>{row.periodCode}</strong><small className="cell-sub">{row.country} · {row.countryCode} · pack {row.packVersion}</small></td><td>#{row.runNumber}<small className="cell-sub">Period: {row.periodStatus}</small></td><td>{row.employees}</td><td>{money(row.currency, row.gross)}</td><td>{money(row.currency, row.net)}</td><td>{money(row.currency, row.employerCost)}</td><td>{row.payDate}</td><td><Status value={row.status}/></td>{showPayrollControl ? <td><PayrollTransitionButton runId={row.id} status={row.rawStatus} access={payrollAccess}/></td> : null}</tr>) : <tr><td colSpan={showPayrollControl ? 9 : 8} style={{ textAlign: "center", padding: 28 }}>No payroll runs are recorded.</td></tr>}</tbody></table></div></div>
       <aside className="card workpay-side restricted-side"><div className="workpay-panel-head"><div><span className="section-kicker">Four-eyes payroll</span><h3>Locked-input state machine</h3></div><BadgeDollarSign size={18}/></div><div className="control-stack"><div><CheckCircle2 size={17}/><span><strong>Prepare & input lock</strong><small>Time must be locked; pending leave and unapplied compensation block validation. A SHA-256 fingerprint freezes governed inputs before calculation.</small></span></div><div><ShieldCheck size={17}/><span><strong>Independent approval</strong><small>The run creator cannot approve the run. Approval authority is distinct from payroll preparation.</small></span></div><div><LockKeyhole size={17}/><span><strong>Payment separation</strong><small>The payroll approver cannot mark the same run paid. Post-lock input drift blocks calculation, approval and payment.</small></span></div></div></aside>
     </section>
   </div>;
