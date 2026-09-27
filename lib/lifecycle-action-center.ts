@@ -1,19 +1,22 @@
 import {
   CaseActionStatus,
   CaseAppealStatus,
+  LeaveRequestStatus,
   Prisma,
   ServicePriority,
   ServiceRequestStatus,
+  TimeEntryStatus,
   WorkflowInstanceStatus,
   WorkflowTaskStatus
 } from "@prisma/client";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { documentVisibilityWhere } from "@/lib/document-access";
+import { employmentIdFilter, resolveEmploymentScope } from "@/lib/employment-scope";
 import { hrServiceRequestWhere, isHRServiceSelfServiceRole, visibleHRServiceQueueKeys } from "@/lib/hr-service-access";
 import type { RequestContext } from "@/lib/request-context";
 
-export type LifecycleActionKind = "workflow" | "hr-service" | "employee-relations" | "documents";
+export type LifecycleActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "leave" | "time-attendance";
 export type LifecycleActionUrgency = "normal" | "warning" | "critical";
 
 export type LifecycleActionItem = {
@@ -259,10 +262,7 @@ async function documentItems(ctx: RequestContext): Promise<LifecycleActionItem[]
 
   const rows = await db.documentRecord.findMany({
     where: {
-      AND: [
-        visibility,
-        { expiresAt: { not: null, lte: horizon } }
-      ]
+      AND: [visibility, { expiresAt: { not: null, lte: horizon } }]
     },
     orderBy: [{ expiresAt: "asc" }, { createdAt: "asc" }],
     take: 100,
@@ -293,6 +293,87 @@ async function documentItems(ctx: RequestContext): Promise<LifecycleActionItem[]
   }));
 }
 
+async function leaveApprovalItems(ctx: RequestContext): Promise<LifecycleActionItem[]> {
+  if (!can(ctx, "leave:approve")) return [];
+  const scope = await resolveEmploymentScope(db, ctx);
+  const rows = await db.leaveRequest.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      status: LeaveRequestStatus.PENDING,
+      ...employmentIdFilter(scope),
+      ...(ctx.employmentId ? { employmentId: { ...(scope === null ? {} : { in: scope }), not: ctx.employmentId } } } : {})
+    },
+    orderBy: [{ startsAt: "asc" }, { createdAt: "asc" }],
+    take: 100,
+    select: {
+      id: true,
+      status: true,
+      startsAt: true,
+      endsAt: true,
+      units: true,
+      createdAt: true,
+      leaveType: { select: { name: true, unit: true } },
+      employment: { select: { person: { select: { givenName: true, familyName: true } } } }
+    }
+  });
+
+  return rows.map((row): LifecycleActionItem => ({
+    id: `leave:${row.id}`,
+    kind: "leave",
+    title: `Leave approval · ${row.employment.person.givenName} ${row.employment.person.familyName}`,
+    subtitle: `${row.leaveType.name} · ${String(row.units)} ${row.leaveType.unit.toLowerCase()}`,
+    module: "leave",
+    href: `/module/leave?request=${encodeURIComponent(row.id)}`,
+    subjectType: "LeaveRequest",
+    subjectId: row.id,
+    status: statusLabel(row.status),
+    dueAt: row.startsAt.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+    urgency: urgencyForDueDate(row.startsAt, "warning"),
+    action: null
+  }));
+}
+
+async function timeApprovalItems(ctx: RequestContext): Promise<LifecycleActionItem[]> {
+  if (!can(ctx, "time:approve")) return [];
+  const scope = await resolveEmploymentScope(db, ctx);
+  const rows = await db.timeEntry.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      status: TimeEntryStatus.SUBMITTED,
+      ...employmentIdFilter(scope),
+      ...(ctx.employmentId ? { employmentId: { ...(scope === null ? {} : { in: scope }), not: ctx.employmentId } } } : {})
+    },
+    orderBy: [{ workDate: "asc" }, { createdAt: "asc" }],
+    take: 100,
+    select: {
+      id: true,
+      status: true,
+      workDate: true,
+      minutes: true,
+      overtimeMinutes: true,
+      createdAt: true,
+      employment: { select: { person: { select: { givenName: true, familyName: true } } } }
+    }
+  });
+
+  return rows.map((row): LifecycleActionItem => ({
+    id: `time-attendance:${row.id}`,
+    kind: "time-attendance",
+    title: `Time approval · ${row.employment.person.givenName} ${row.employment.person.familyName}`,
+    subtitle: `${Math.floor(row.minutes / 60)}h ${row.minutes % 60}m${row.overtimeMinutes ? ` · OT ${Math.floor(row.overtimeMinutes / 60)}h ${row.overtimeMinutes % 60}m` : ""}`,
+    module: "time-attendance",
+    href: `/module/time-attendance?entry=${encodeURIComponent(row.id)}`,
+    subjectType: "TimeEntry",
+    subjectId: row.id,
+    status: statusLabel(row.status),
+    dueAt: row.workDate.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+    urgency: urgencyForDueDate(row.workDate, "warning"),
+    action: null
+  }));
+}
+
 function sortItems(left: LifecycleActionItem, right: LifecycleActionItem) {
   const rank: Record<LifecycleActionUrgency, number> = { critical: 0, warning: 1, normal: 2 };
   if (rank[left.urgency] !== rank[right.urgency]) return rank[left.urgency] - rank[right.urgency];
@@ -303,13 +384,15 @@ function sortItems(left: LifecycleActionItem, right: LifecycleActionItem) {
 }
 
 export async function getLifecycleActionCenterData(ctx: RequestContext) {
-  const [workflows, hrService, employeeRelations, documents] = await Promise.all([
+  const [workflows, hrService, employeeRelations, documents, leave, timeAttendance] = await Promise.all([
     workflowItems(ctx),
     hrServiceItems(ctx),
     employeeRelationsItems(ctx),
-    documentItems(ctx)
+    documentItems(ctx),
+    leaveApprovalItems(ctx),
+    timeApprovalItems(ctx)
   ]);
-  const items = [...workflows, ...hrService, ...employeeRelations, ...documents].sort(sortItems).slice(0, 250);
+  const items = [...workflows, ...hrService, ...employeeRelations, ...documents, ...leave, ...timeAttendance].sort(sortItems).slice(0, 250);
   const now = Date.now();
   const soon = now + 24 * 60 * 60 * 1000;
 
@@ -327,7 +410,9 @@ export async function getLifecycleActionCenterData(ctx: RequestContext) {
       workflow: items.filter((item) => item.kind === "workflow").length,
       hrService: items.filter((item) => item.kind === "hr-service").length,
       employeeRelations: items.filter((item) => item.kind === "employee-relations").length,
-      documents: items.filter((item) => item.kind === "documents").length
+      documents: items.filter((item) => item.kind === "documents").length,
+      leave: items.filter((item) => item.kind === "leave").length,
+      timeAttendance: items.filter((item) => item.kind === "time-attendance").length
     },
     generatedAt: new Date(now).toISOString()
   };
