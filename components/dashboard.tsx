@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowDownRight, ArrowUpRight, BriefcaseBusiness, CalendarClock, ChevronRight, CircleAlert, CircleCheckBig, Clock3, FileWarning, ShieldCheck, Sparkles, UserPlus, UsersRound } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BadgeDollarSign, BriefcaseBusiness, CalendarClock, ChevronRight, CircleAlert, CircleCheckBig, Clock3, FileWarning, ShieldCheck, Sparkles, UserPlus, UsersRound } from "lucide-react";
 import { can } from "@/lib/authorization";
 import { getDashboardDataSafe } from "@/lib/dashboard-safe";
 import { getDashboardLifecycleAttentionSafe } from "@/lib/dashboard-lifecycle-attention";
@@ -42,18 +42,20 @@ function localizedStatus(locale: Locale, status: string) {
   return values[normalized] ?? status;
 }
 
-function attentionCopy(locale: Locale, key: "critical" | "overdue" | "hr-service" | "employee-relations", count: number) {
+function attentionCopy(locale: Locale, key: "critical" | "overdue" | "hr-service" | "employee-relations" | "work-pay", count: number) {
   const tr = {
     critical: { title: "Kritik yaşam döngüsü aksiyonları", detail: `${count} kritik aksiyon veya operasyonel blokaj bekliyor` },
     overdue: { title: "Geciken aksiyonlar", detail: `${count} aksiyon hedef tarihini geçti` },
     "hr-service": { title: "İK hizmet aksiyonları", detail: `${count} hizmet talebi yanıt, atama veya operasyonel takip bekliyor` },
-    "employee-relations": { title: "Çalışan ilişkileri aksiyonları", detail: `${count} yetkili vaka aksiyonu veya itiraz incelemesi bekliyor` }
+    "employee-relations": { title: "Çalışan ilişkileri aksiyonları", detail: `${count} yetkili vaka aksiyonu veya itiraz incelemesi bekliyor` },
+    "work-pay": { title: "İş & Ücret onayları", detail: `${count} ayrıştırılmış zaman, izin, ücret veya bordro kontrolü bekliyor` }
   } as const;
   const en = {
     critical: { title: "Critical lifecycle actions", detail: `${count} critical actions or operational blockers are pending` },
     overdue: { title: "Overdue actions", detail: `${count} actions are past their target date` },
     "hr-service": { title: "HR service actions", detail: `${count} service requests need response, assignment or operational follow-up` },
-    "employee-relations": { title: "Employee relations actions", detail: `${count} authorized case actions or appeal reviews are pending` }
+    "employee-relations": { title: "Employee relations actions", detail: `${count} authorized case actions or appeal reviews are pending` },
+    "work-pay": { title: "Work & Pay approvals", detail: `${count} separated time, leave, compensation or payroll controls are pending` }
   } as const;
   return (locale === "tr" ? tr : en)[key];
 }
@@ -91,6 +93,7 @@ export async function Dashboard() {
   const overdueCopy = attentionCopy(locale, "overdue", actionSummary.overdue);
   const serviceCopy = attentionCopy(locale, "hr-service", actionSummary.hrService);
   const relationsCopy = attentionCopy(locale, "employee-relations", actionSummary.employeeRelations);
+  const workPayCopy = attentionCopy(locale, "work-pay", actionSummary.workPay);
 
   return (
     <>
@@ -131,10 +134,11 @@ export async function Dashboard() {
           <CardHeader title={t("dashboard.needsAttention")} subtitle={actionDataDegraded ? t("dashboard.safePriorities") : (locale === "tr" ? "Yetkili yaşam döngüsü kuyruğundan önceliklendirildi" : "Prioritized from your authorized lifecycle queue")} />
           <div className="attention-list">
             {!actionDataDegraded ? <>
-              <Attention icon={<CircleAlert size={17}/>} tone="red" title={criticalCopy.title} detail={criticalCopy.detail} tag={t("dashboard.items", { count: actionSummary.critical })} href={links.workflows} />
-              <Attention icon={<Clock3 size={17}/>} tone="amber" title={overdueCopy.title} detail={overdueCopy.detail} tag={t("dashboard.items", { count: actionSummary.overdue })} href={links.workflows} />
-              <Attention icon={<FileWarning size={17}/>} tone="sage" title={serviceCopy.title} detail={serviceCopy.detail} tag={t("dashboard.items", { count: actionSummary.hrService })} href={links.hrService ?? links.workflows} />
-              <Attention icon={<ShieldCheck size={17}/>} tone="purple" title={relationsCopy.title} detail={relationsCopy.detail} tag={t("dashboard.items", { count: actionSummary.employeeRelations })} href={links.cases ?? links.workflows} />
+              <Attention icon={<CircleAlert size={17}/>} tone="red" title={criticalCopy.title} detail={criticalCopy.detail} tag={t("dashboard.items", { count: actionSummary.critical })} href={links.workflows ? `${links.workflows}?view=critical` : null} />
+              <Attention icon={<Clock3 size={17}/>} tone="amber" title={overdueCopy.title} detail={overdueCopy.detail} tag={t("dashboard.items", { count: actionSummary.overdue })} href={links.workflows ? `${links.workflows}?view=overdue` : null} />
+              <Attention icon={<FileWarning size={17}/>} tone="sage" title={serviceCopy.title} detail={serviceCopy.detail} tag={t("dashboard.items", { count: actionSummary.hrService })} href={links.workflows ? `${links.workflows}?view=hr-service` : links.hrService} />
+              <Attention icon={<ShieldCheck size={17}/>} tone="purple" title={relationsCopy.title} detail={relationsCopy.detail} tag={t("dashboard.items", { count: actionSummary.employeeRelations })} href={links.workflows ? `${links.workflows}?view=employee-relations` : links.cases} />
+              <Attention icon={<BadgeDollarSign size={17}/>} tone="sage" title={workPayCopy.title} detail={workPayCopy.detail} tag={t("dashboard.items", { count: actionSummary.workPay })} href={links.workflows ? `${links.workflows}?view=work-pay` : null} />
             </> : <>
               <Attention icon={<CalendarClock size={17}/>} tone="amber" title={t("dashboard.upcomingStarters")} detail={t("dashboard.peopleStart", { count: data.upcomingStarters })} tag={t("nav.onboarding")} href={links.onboarding} />
               <Attention icon={<FileWarning size={17}/>} tone="red" title={t("dashboard.employeeRelations")} detail={t("dashboard.activeCases", { count: data.openCases })} tag={data.openCases ? t("dashboard.review") : t("dashboard.clear")} href={links.cases} />
