@@ -1,10 +1,11 @@
-import { LearningAssignmentStatus, ReviewCycleStatus, ReviewStatus } from "@prisma/client";
+import { DevelopmentPlanStatus, LearningAssignmentStatus, ReviewCycleStatus, ReviewStatus } from "@prisma/client";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { getLifecycleActionCenterData, type LifecycleActionItem, type LifecycleActionUrgency } from "@/lib/lifecycle-action-center";
 import type { RequestContext } from "@/lib/request-context";
+import { runtimeNumber } from "@/lib/runtime-env";
 
-export type GrowthLifecycleActionKind = "performance" | "learning";
+export type GrowthLifecycleActionKind = "performance" | "learning" | "development-plan" | "succession";
 export type ExpandedLifecycleActionItem = LifecycleActionItem | (Omit<LifecycleActionItem, "kind"> & { kind: GrowthLifecycleActionKind });
 
 function urgencyForDueDate(dueAt: Date | null, fallback: LifecycleActionUrgency = "normal", now = Date.now()): LifecycleActionUrgency {
@@ -17,6 +18,10 @@ function urgencyForDueDate(dueAt: Date | null, fallback: LifecycleActionUrgency 
 
 function statusLabel(value: string) {
   return value.toLowerCase().replace(/_/g, " ");
+}
+
+function boundedWarningDays(key: string, fallback: number) {
+  return Math.min(90, Math.max(1, Math.floor(runtimeNumber(key, fallback))));
 }
 
 async function performanceParticipantItems(ctx: RequestContext): Promise<ExpandedLifecycleActionItem[]> {
@@ -141,6 +146,85 @@ async function learningParticipantItems(ctx: RequestContext): Promise<ExpandedLi
   }));
 }
 
+async function developmentPlanOwnerItems(ctx: RequestContext): Promise<ExpandedLifecycleActionItem[]> {
+  if (!can(ctx, "talent:write")) return [];
+  const warningDays = boundedWarningDays("HRBP_DEVELOPMENT_PLAN_WARNING_DAYS", 30);
+  const horizon = new Date(Date.now() + warningDays * 86_400_000);
+  const rows = await db.developmentPlan.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      ownerId: ctx.actorId,
+      status: DevelopmentPlanStatus.ACTIVE,
+      targetAt: { lte: horizon }
+    },
+    orderBy: [{ targetAt: "asc" }, { updatedAt: "asc" }],
+    take: 100,
+    select: { id: true, title: true, status: true, targetAt: true, updatedAt: true }
+  });
+
+  return rows.map((plan): ExpandedLifecycleActionItem => ({
+    id: `development-plan:${plan.id}`,
+    kind: "development-plan",
+    title: plan.title,
+    subtitle: "Development outcome / human reassessment review",
+    module: "talent",
+    href: `/module/talent?developmentPlan=${encodeURIComponent(plan.id)}`,
+    subjectType: "DevelopmentPlan",
+    subjectId: plan.id,
+    status: statusLabel(plan.status),
+    dueAt: plan.targetAt.toISOString(),
+    createdAt: plan.updatedAt.toISOString(),
+    urgency: urgencyForDueDate(plan.targetAt, "warning"),
+    action: null
+  }));
+}
+
+async function successionPlanOwnerItems(ctx: RequestContext): Promise<ExpandedLifecycleActionItem[]> {
+  if (!can(ctx, "succession:write")) return [];
+  const warningDays = boundedWarningDays("HRBP_SUCCESSION_REVIEW_WARNING_DAYS", 30);
+  const horizon = new Date(Date.now() + warningDays * 86_400_000);
+  const plans = await db.successionPlan.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      ownerId: ctx.actorId,
+      active: true,
+      reviewDueAt: { not: null, lte: horizon }
+    },
+    orderBy: [{ reviewDueAt: "asc" }, { updatedAt: "asc" }],
+    take: 100,
+    select: { id: true, name: true, positionId: true, reviewDueAt: true, updatedAt: true }
+  });
+
+  const positionIds = [...new Set(plans.map((plan) => plan.positionId))];
+  const positions = positionIds.length ? await db.position.findMany({
+    where: { tenantId: ctx.tenantId, id: { in: positionIds } },
+    select: { id: true, positionCode: true, title: true }
+  }) : [];
+  const positionMap = new Map(positions.map((position) => [position.id, position]));
+
+  return plans.flatMap((plan): ExpandedLifecycleActionItem[] => {
+    if (!plan.reviewDueAt) return [];
+    const position = positionMap.get(plan.positionId);
+    const title = plan.name?.trim() || position?.title || "Succession plan";
+    const code = position?.positionCode ? `${position.positionCode} · ` : "";
+    return [{
+      id: `succession:${plan.id}`,
+      kind: "succession",
+      title: `Succession review · ${title}`,
+      subtitle: `${code}human readiness review owned by you`,
+      module: "succession",
+      href: `/module/succession?plan=${encodeURIComponent(plan.id)}`,
+      subjectType: "SuccessionPlan",
+      subjectId: plan.id,
+      status: "active",
+      dueAt: plan.reviewDueAt.toISOString(),
+      createdAt: plan.updatedAt.toISOString(),
+      urgency: urgencyForDueDate(plan.reviewDueAt, "warning"),
+      action: null
+    }];
+  });
+}
+
 function sortItems(left: ExpandedLifecycleActionItem, right: ExpandedLifecycleActionItem) {
   const rank: Record<LifecycleActionUrgency, number> = { critical: 0, warning: 1, normal: 2 };
   if (rank[left.urgency] !== rank[right.urgency]) return rank[left.urgency] - rank[right.urgency];
@@ -156,17 +240,19 @@ export async function getLifecycleActionCenterContinuityData(ctx: RequestContext
   let growthDegraded = false;
 
   try {
-    const [performance, learning] = await Promise.all([
+    const [performance, learning, developmentPlans, succession] = await Promise.all([
       performanceParticipantItems(ctx),
-      learningParticipantItems(ctx)
+      learningParticipantItems(ctx),
+      developmentPlanOwnerItems(ctx),
+      successionPlanOwnerItems(ctx)
     ]);
-    growth = [...performance, ...learning];
+    growth = [...performance, ...learning, ...developmentPlans, ...succession];
   } catch (error) {
     growthDegraded = true;
-    console.error("[HRBP] Growth participant action aggregation failed; preserving the governed core Action Center.", error);
+    console.error("[HRBP] Growth lifecycle action aggregation failed; preserving the governed core Action Center.", error);
   }
 
-  const items: ExpandedLifecycleActionItem[] = [...base.items, ...growth].sort(sortItems).slice(0, 300);
+  const items: ExpandedLifecycleActionItem[] = [...base.items, ...growth].sort(sortItems).slice(0, 350);
   const now = Date.now();
   const soon = now + 24 * 60 * 60 * 1000;
 
@@ -183,7 +269,9 @@ export async function getLifecycleActionCenterContinuityData(ctx: RequestContext
       }).length,
       critical: items.filter((item) => item.urgency === "critical").length,
       performance: items.filter((item) => item.kind === "performance").length,
-      learning: items.filter((item) => item.kind === "learning").length
+      learning: items.filter((item) => item.kind === "learning").length,
+      developmentPlans: items.filter((item) => item.kind === "development-plan").length,
+      succession: items.filter((item) => item.kind === "succession").length
     },
     generatedAt: new Date(now).toISOString(),
     growthDegraded
