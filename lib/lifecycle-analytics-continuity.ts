@@ -1,4 +1,4 @@
-import { getEmployeeLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/employee-lifecycle-action-continuity";
+import { getDocumentSignatureLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/document-signature-action-continuity";
 import type { RequestContext } from "@/lib/request-context";
 
 export type LifecycleAnalyticsContinuitySummary = {

@@ -26,9 +26,13 @@ reject(continuityPath, continuity, /employeeReason|rehireDecisionReason|replacem
 expect(continuityPath, continuity, /slice\(0,\s*300\)/, "combined action queue must remain bounded");
 expect(continuityPath, continuity, /employeeLifecycleDegraded/, "new lifecycle aggregation must fail soft without suppressing the existing queue");
 
+const signatureContinuityPath = "lib/document-signature-action-continuity.ts";
+const signatureContinuity = await source(signatureContinuityPath);
+expect(signatureContinuityPath, signatureContinuity, /getEmployeeLifecycleActionCenterData/, "later continuity layers must preserve the employee lifecycle queue as their governed base");
+
 const apiPath = "app/api/action-center/route.ts";
 const api = await source(apiPath);
-expect(apiPath, api, /getEmployeeLifecycleActionCenterData/, "Action Center API must serve the expanded governed queue");
+expect(apiPath, api, /getDocumentSignatureLifecycleActionCenterData/, "Action Center API must serve the latest layered governed queue");
 
 const uiPath = "components/workflow-action-center.tsx";
 const ui = await source(uiPath);
