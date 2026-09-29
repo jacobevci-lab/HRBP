@@ -14,6 +14,7 @@ export type DashboardLifecycleAttention = {
   timeAttendance: number;
   compensation: number;
   payroll: number;
+  benefits: number;
   performance: number;
   learning: number;
   developmentPlans: number;
@@ -33,6 +34,7 @@ const emptySummary: DashboardLifecycleAttention = {
   timeAttendance: 0,
   compensation: 0,
   payroll: 0,
+  benefits: 0,
   performance: 0,
   learning: 0,
   developmentPlans: 0,
