@@ -1,4 +1,4 @@
-import { getLifecycleActionCenterData } from "@/lib/lifecycle-action-center";
+import { getLifecycleActionCenterContinuityData } from "@/lib/growth-action-center-continuity";
 import type { RequestContext } from "@/lib/request-context";
 
 export type LifecycleAnalyticsContinuitySummary = {
@@ -14,6 +14,8 @@ export type LifecycleAnalyticsContinuitySummary = {
   timeAttendance: number;
   compensation: number;
   payroll: number;
+  performance: number;
+  learning: number;
 };
 
 const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
@@ -28,25 +30,27 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
   leave: 0,
   timeAttendance: 0,
   compensation: 0,
-  payroll: 0
+  payroll: 0,
+  performance: 0,
+  learning: 0
 };
 
 /**
  * Builds an analytics-safe operational continuity projection for the signed actor.
  *
  * The source remains the governed Lifecycle Action Center, so HR Service,
- * Employee Relations, Documents and work-pay approval visibility is never
- * recalculated or widened here. Only aggregate counters are returned: titles,
- * descriptions, employee names, case/request numbers, compensation amounts,
- * payroll results, document metadata and subject identifiers never cross this
- * boundary.
+ * Employee Relations, Documents, work-pay and growth-participant visibility is
+ * never recalculated or widened here. Only aggregate counters are returned:
+ * titles, descriptions, employee names, case/request numbers, ratings, learning
+ * evidence, compensation amounts, payroll results, document metadata and subject
+ * identifiers never cross this boundary.
  *
  * Failure is intentionally fail-closed. Analytics may render a degraded state,
  * but it must never retry through a broader tenant query.
  */
 export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
   try {
-    const source = await getLifecycleActionCenterData(ctx);
+    const source = await getLifecycleActionCenterContinuityData(ctx);
     const summary: LifecycleAnalyticsContinuitySummary = {
       total: source.summary.total,
       overdue: source.summary.overdue,
@@ -59,7 +63,9 @@ export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
       leave: source.summary.leave,
       timeAttendance: source.summary.timeAttendance,
       compensation: source.summary.compensation,
-      payroll: source.summary.payroll
+      payroll: source.summary.payroll,
+      performance: source.summary.performance,
+      learning: source.summary.learning
     };
 
     return {
