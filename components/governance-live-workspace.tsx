@@ -7,6 +7,7 @@ import { getServerLocale } from "@/lib/i18n-server";
 import type { Locale } from "@/lib/i18n";
 import { getAuditWorkspaceData, getDocumentWorkspaceData } from "@/lib/governance-live-data";
 import { AuditChainButton } from "@/components/audit-chain-button";
+import { DocumentSignatureGovernance } from "@/components/document-signature-governance";
 import { DocumentVaultActions } from "@/components/document-vault-actions";
 
 function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
@@ -28,6 +29,7 @@ export async function GovernanceLiveWorkspace({ slug, query = "" }: { slug: stri
     const data = await getDocumentWorkspaceData(ctx, query);
     const canWrite = can(ctx, "documents:write");
     const canGrant = can(ctx, "documents:grant");
+    const canSign = can(ctx, "documents:sign");
     const canGovern = can(ctx, "documents:govern");
     const canSetLegalHold = canGovern && ctx.role === PlatformRole.LEGAL;
     return <>
@@ -49,7 +51,7 @@ export async function GovernanceLiveWorkspace({ slug, query = "" }: { slug: stri
           <td>{row.retention}<small className="cell-sub">{c(locale,"Expires","Son kullanma")}: {row.expires}</small></td>
           <td>{row.activeGrants}<small className="cell-sub">{c(locale,"active explicit grants","aktif açık yetki")}</small></td>
           <td>{row.created}</td>
-          <td><DocumentVaultActions documentId={row.id} downloadReady={row.downloadReady} legalHold={row.legalHold} retentionUntil={row.retentionUntil} activeGrants={row.activeGrants} canWrite={canWrite} canGrant={canGrant} canGovern={canGovern} canSetLegalHold={canSetLegalHold}/></td>
+          <td><div style={{ display: "grid", gap: 7 }}><DocumentVaultActions documentId={row.id} downloadReady={row.downloadReady} legalHold={row.legalHold} retentionUntil={row.retentionUntil} activeGrants={row.activeGrants} canWrite={canWrite} canGrant={canGrant} canGovern={canGovern} canSetLegalHold={canSetLegalHold}/><DocumentSignatureGovernance documentId={row.id} canSign={canSign}/></div></td>
         </tr>) : <tr><td colSpan={9} style={{ textAlign: "center", padding: 28 }}>{c(locale,"No documents match this governed scope.","Bu yönetişim kapsamıyla eşleşen doküman bulunmuyor.")}</td></tr>}</tbody></table></div>
       </div>
     </>;
