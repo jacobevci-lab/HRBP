@@ -8,8 +8,10 @@ function reject(path, text, pattern, message) { if (pattern.test(text)) failures
 const componentPath = "components/document-signature-governance.tsx";
 const component = await source(componentPath);
 expect(componentPath, component, /\/api\/documents\/\$\{encodeURIComponent\(documentId\)\}\/signatures/, "signature console must use the governed document-scoped endpoint");
-expect(componentPath, component, /search\.get\("envelope"\)/, "signature console must honor exact envelope focus");
-expect(componentPath, component, /search\.get\("document"\) === documentId/, "envelope focus must remain bound to the selected document");
+expect(componentPath, component, /URLSearchParams\(window\.location\.search\)/, "signature console must read exact focus without widening server scope");
+expect(componentPath, component, /params\.get\("envelope"\)\?\.trim\(\)\.slice\(0,\s*128\)/, "envelope focus input must be bounded");
+expect(componentPath, component, /params\.get\("document"\)\?\.trim\(\)\.slice\(0,\s*128\)/, "document focus input must be bounded");
+expect(componentPath, component, /focusDocumentId === documentId/, "envelope focus must remain bound to the selected document");
 expect(componentPath, component, /No broader lookup was attempted/, "unavailable focus must fail closed without a broader lookup");
 expect(componentPath, component, /hrbp:lifecycle-actions-changed/, "sending an envelope must refresh shared lifecycle attention");
 expect(componentPath, component, /current CLEAN document version|mevcut CLEAN doküman sürümüne/, "UI must communicate immutable CLEAN-version binding");
