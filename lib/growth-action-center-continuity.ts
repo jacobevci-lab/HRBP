@@ -53,13 +53,20 @@ async function performanceParticipantItems(ctx: RequestContext): Promise<Expande
       take: 100,
       select: {
         id: true,
+        employmentId: true,
         status: true,
         updatedAt: true,
-        cycle: { select: { name: true, endsAt: true } },
-        employment: { select: { person: { select: { givenName: true, familyName: true } } } }
+        cycle: { select: { name: true, endsAt: true } }
       }
     }) : Promise.resolve([])
   ]);
+
+  const employmentIds = [...new Set(managerReviews.map((review) => review.employmentId))];
+  const employments = employmentIds.length ? await db.employment.findMany({
+    where: { tenantId: ctx.tenantId, id: { in: employmentIds } },
+    select: { id: true, person: { select: { givenName: true, familyName: true } } }
+  }) : [];
+  const names = new Map(employments.map((employment) => [employment.id, `${employment.person.givenName} ${employment.person.familyName}`]));
 
   return [
     ...selfReviews.map((review): ExpandedLifecycleActionItem => ({
@@ -80,7 +87,7 @@ async function performanceParticipantItems(ctx: RequestContext): Promise<Expande
     ...managerReviews.map((review): ExpandedLifecycleActionItem => ({
       id: `performance:manager:${review.id}`,
       kind: "performance",
-      title: `Manager review · ${review.employment.person.givenName} ${review.employment.person.familyName}`,
+      title: `Manager review · ${names.get(review.employmentId) ?? "Assigned employee"}`,
       subtitle: `${review.cycle.name} · assigned manager decision required`,
       module: "performance",
       href: `/module/performance?review=${encodeURIComponent(review.id)}`,
