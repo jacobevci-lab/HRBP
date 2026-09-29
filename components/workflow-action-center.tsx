@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, BadgeDollarSign, BookOpenCheck, CalendarCheck2, CheckCircle2, ClipboardCheck, Clock3, ExternalLink, FileClock, ReceiptText, RefreshCw, ShieldAlert, Target, TimerReset, UsersRound, Workflow } from "lucide-react";
+import { AlertTriangle, BadgeDollarSign, BookOpenCheck, CalendarCheck2, CheckCircle2, ClipboardCheck, Clock3, ExternalLink, FileClock, HeartHandshake, ReceiptText, RefreshCw, ShieldAlert, Target, TimerReset, UsersRound, Workflow } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
-type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "leave" | "time-attendance" | "compensation" | "payroll" | "performance" | "learning" | "development-plan" | "succession";
+type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "leave" | "time-attendance" | "compensation" | "payroll" | "benefits" | "performance" | "learning" | "development-plan" | "succession";
 type Urgency = "normal" | "warning" | "critical";
 type Filter = "all" | "critical" | "overdue" | "due-soon" | ActionKind;
 
-const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents", "leave", "time-attendance", "compensation", "payroll", "performance", "learning", "development-plan", "succession"]);
+const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents", "leave", "time-attendance", "compensation", "payroll", "benefits", "performance", "learning", "development-plan", "succession"]);
 
 function normalizeFilter(value?: string): Filter {
   return value && allowedFilters.has(value as Filter) ? value as Filter : "all";
@@ -48,6 +48,7 @@ type ActionSummary = {
   timeAttendance: number;
   compensation: number;
   payroll: number;
+  benefits: number;
   performance: number;
   learning: number;
   developmentPlans: number;
@@ -67,6 +68,7 @@ const emptySummary: ActionSummary = {
   timeAttendance: 0,
   compensation: 0,
   payroll: 0,
+  benefits: 0,
   performance: 0,
   learning: 0,
   developmentPlans: 0,
@@ -199,6 +201,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
     if (kind === "time-attendance") return locale === "tr" ? "Zaman & Devam" : "Time & Attendance";
     if (kind === "compensation") return locale === "tr" ? "Ücretlendirme" : "Compensation";
     if (kind === "payroll") return locale === "tr" ? "Bordro" : "Payroll";
+    if (kind === "benefits") return locale === "tr" ? "Yan Haklar" : "Benefits";
     if (kind === "performance") return locale === "tr" ? "Performans" : "Performance";
     if (kind === "learning") return locale === "tr" ? "Eğitim" : "Learning";
     if (kind === "development-plan") return locale === "tr" ? "Gelişim Planı" : "Development Plan";
@@ -218,7 +221,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <div>
           <span className="section-kicker">{locale === "tr" ? "Yaşam döngüsü aksiyon merkezi" : "Lifecycle action center"}</span>
           <h3>{locale === "tr" ? "Bekleyen işlerim ve operasyonel blokajlar" : "My pending work and operational blockers"}</h3>
-          <p>{locale === "tr" ? "İş akışlarını, İK hizmet taleplerini, kısıtlı çalışan ilişkileri aksiyonlarını, doküman yaşam döngüsünü, yönetişimli iş-ücret kontrollerini, kimliğe bağlı performans/eğitim aksiyonlarını ve insan sahipli gelişim/yedekleme incelemelerini tek yetkili kuyrukta takip et." : "Track workflows, HR service requests, restricted employee-relations actions, document lifecycle, governed work-pay controls, identity-bound performance/learning actions, and human-owned development/succession reviews in one authorized queue."}</p>
+          <p>{locale === "tr" ? "İş akışlarını, İK hizmet taleplerini, kısıtlı çalışan ilişkileri aksiyonlarını, doküman yaşam döngüsünü, yönetişimli iş-ücret ve yan hak kontrollerini, kimliğe bağlı performans/eğitim aksiyonlarını ve insan sahipli gelişim/yedekleme incelemelerini tek yetkili kuyrukta takip et." : "Track workflows, HR service requests, restricted employee-relations actions, document lifecycle, governed work-pay and benefits controls, identity-bound performance/learning actions, and human-owned development/succession reviews in one authorized queue."}</p>
         </div>
         <button className="secondary-button" type="button" onClick={() => void refresh()} disabled={loading}>
           <RefreshCw size={15}/>{locale === "tr" ? "Yenile" : "Refresh"}
@@ -249,6 +252,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <button type="button" className={filter === "time-attendance" ? "active" : ""} onClick={() => setFilter("time-attendance")}><TimerReset size={14}/>{locale === "tr" ? "Zaman" : "Time"} <strong>{summary.timeAttendance}</strong></button>
         <button type="button" className={filter === "compensation" ? "active" : ""} onClick={() => setFilter("compensation")}><BadgeDollarSign size={14}/>{locale === "tr" ? "Ücret" : "Compensation"} <strong>{summary.compensation}</strong></button>
         <button type="button" className={filter === "payroll" ? "active" : ""} onClick={() => setFilter("payroll")}><ReceiptText size={14}/>{locale === "tr" ? "Bordro" : "Payroll"} <strong>{summary.payroll}</strong></button>
+        <button type="button" className={filter === "benefits" ? "active" : ""} onClick={() => setFilter("benefits")}><HeartHandshake size={14}/>{locale === "tr" ? "Yan Haklar" : "Benefits"} <strong>{summary.benefits}</strong></button>
         <button type="button" className={filter === "performance" ? "active" : ""} onClick={() => setFilter("performance")}><ClipboardCheck size={14}/>{locale === "tr" ? "Performans" : "Performance"} <strong>{summary.performance}</strong></button>
         <button type="button" className={filter === "learning" ? "active" : ""} onClick={() => setFilter("learning")}><BookOpenCheck size={14}/>{locale === "tr" ? "Eğitim" : "Learning"} <strong>{summary.learning}</strong></button>
         <button type="button" className={filter === "development-plan" ? "active" : ""} onClick={() => setFilter("development-plan")}><Target size={14}/>{locale === "tr" ? "Gelişim" : "Development"} <strong>{summary.developmentPlans}</strong></button>
