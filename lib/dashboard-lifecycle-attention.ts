@@ -1,4 +1,4 @@
-import { getEmployeeLifecycleActionCenterData } from "@/lib/employee-lifecycle-action-continuity";
+import { getEmployeeLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/employee-lifecycle-action-continuity";
 import { getServerRequestContext } from "@/lib/server-session";
 
 export type DashboardLifecycleAttention = {
@@ -53,7 +53,7 @@ export async function getDashboardLifecycleAttentionSafe(): Promise<{
   if (!ctx) return { summary: emptySummary, degraded: true };
 
   try {
-    const data = await getEmployeeLifecycleActionCenterData(ctx);
+    const data = await getLifecycleActionCenterContinuityData(ctx);
     return { summary: data.summary, degraded: false };
   } catch (error) {
     console.error("[HRBP] Dashboard lifecycle attention failed; hiding actor-specific action counts", error);
