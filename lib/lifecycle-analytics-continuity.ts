@@ -1,4 +1,4 @@
-import { getEmployeeLifecycleActionCenterData } from "@/lib/employee-lifecycle-action-continuity";
+import { getEmployeeLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/employee-lifecycle-action-continuity";
 import type { RequestContext } from "@/lib/request-context";
 
 export type LifecycleAnalyticsContinuitySummary = {
@@ -48,12 +48,13 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
 /**
  * Builds an analytics-safe operational continuity projection for the signed actor.
  * The source remains the governed Lifecycle Action Center. Only aggregate counters
- * cross this boundary; onboarding task detail, offboarding clearance detail,
- * employee names, ratings, pay data and document metadata remain in their owning domains.
+ * cross this boundary; titles, employee names, ratings, learning evidence,
+ * onboarding task detail, offboarding clearance detail, pay data and document
+ * metadata remain in their owning domains.
  */
 export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
   try {
-    const source = await getEmployeeLifecycleActionCenterData(ctx);
+    const source = await getLifecycleActionCenterContinuityData(ctx);
     const summary: LifecycleAnalyticsContinuitySummary = {
       total: source.summary.total,
       overdue: source.summary.overdue,
