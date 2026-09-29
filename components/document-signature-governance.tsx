@@ -1,7 +1,6 @@
 "use client";
 
 import { BadgeCheck, FileSignature, LoaderCircle, Plus, Send, UsersRound } from "lucide-react";
-import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
@@ -62,10 +61,10 @@ function signerKey() {
 export function DocumentSignatureGovernance({ documentId, canSign }: Props) {
   const { locale } = useLocale();
   const c = (en: string, tr: string) => locale === "tr" ? tr : en;
-  const search = useSearchParams();
-  const focusedEnvelopeId = search.get("envelope")?.trim().slice(0, 128) || "";
-  const focusApplies = Boolean(focusedEnvelopeId && search.get("document") === documentId);
-  const [open, setOpen] = useState(focusApplies);
+  const [focusedEnvelopeId, setFocusedEnvelopeId] = useState("");
+  const [focusDocumentId, setFocusDocumentId] = useState("");
+  const focusApplies = Boolean(focusedEnvelopeId && focusDocumentId === documentId);
+  const [open, setOpen] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,6 +93,12 @@ export function DocumentSignatureGovernance({ documentId, canSign }: Props) {
       setBusy(null);
     }
   }
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setFocusedEnvelopeId(params.get("envelope")?.trim().slice(0, 128) || "");
+    setFocusDocumentId(params.get("document")?.trim().slice(0, 128) || "");
+  }, []);
 
   useEffect(() => {
     if (focusApplies && !loaded && busy !== "load") void load();
