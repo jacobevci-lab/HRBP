@@ -52,14 +52,16 @@ export type DevelopmentPlanGovernanceData = {
   plans: DevelopmentPlanOperation[];
   skills: DevelopmentPlanCatalogSkill[];
   courses: DevelopmentPlanCatalogCourse[];
+  focusVisible: boolean;
 };
 
 export async function getDevelopmentPlanGovernanceData(
   ctx: RequestContext,
-  options: { includeLearningCatalog?: boolean } = {}
+  options: { includeLearningCatalog?: boolean; focusId?: string } = {}
 ): Promise<DevelopmentPlanGovernanceData> {
   return withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
+    const focusId = options.focusId?.trim().slice(0, 128) || undefined;
     const plans = await db.developmentPlan.findMany({
       where: { tenantId: ctx.tenantId, ...employmentIdFilter(scope) },
       orderBy: [{ status: "asc" }, { targetAt: "asc" }, { updatedAt: "desc" }],
@@ -94,9 +96,16 @@ export async function getDevelopmentPlanGovernanceData(
       }
     });
 
-    const employmentIds = [...new Set(plans.map((plan) => plan.employmentId))];
-    const ownerIds = [...new Set(plans.map((plan) => plan.ownerId))];
-    const skillIds = [...new Set(plans.flatMap((plan) => plan.focusSkillId ? [plan.focusSkillId] : []))];
+    // Exact Action Center focus is owner-bound in addition to normal relationship scope.
+    // A manipulated focus id must never widen the governed Talent query.
+    const focusVisible = !focusId || plans.some((plan) => plan.id === focusId && plan.ownerId === ctx.actorId);
+    const orderedPlans = focusId && focusVisible
+      ? [...plans].sort((left, right) => left.id === focusId ? -1 : right.id === focusId ? 1 : 0)
+      : plans;
+
+    const employmentIds = [...new Set(orderedPlans.map((plan) => plan.employmentId))];
+    const ownerIds = [...new Set(orderedPlans.map((plan) => plan.ownerId))];
+    const skillIds = [...new Set(orderedPlans.flatMap((plan) => plan.focusSkillId ? [plan.focusSkillId] : []))];
 
     const [employments, owners, proficiencies, skills, courses] = await Promise.all([
       employmentIds.length ? db.employment.findMany({
@@ -134,7 +143,8 @@ export async function getDevelopmentPlanGovernanceData(
     const proficiencyMap = new Map(proficiencies.map((entry) => [`${entry.employmentId}:${entry.skillId}`, entry.proficiency]));
 
     return {
-      plans: plans.map((plan) => {
+      focusVisible,
+      plans: orderedPlans.map((plan) => {
         const employment = employmentMap.get(plan.employmentId);
         const owner = ownerMap.get(plan.ownerId);
         return {
