@@ -1,11 +1,12 @@
-import { DevelopmentPlanStatus, LearningAssignmentStatus, ReviewCycleStatus, ReviewStatus } from "@prisma/client";
+import { BenefitEnrollmentStatus, DevelopmentPlanStatus, LearningAssignmentStatus, ReviewCycleStatus, ReviewStatus } from "@prisma/client";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { employmentIdFilter, resolveEmploymentScope } from "@/lib/employment-scope";
 import { getLifecycleActionCenterData, type LifecycleActionItem, type LifecycleActionUrgency } from "@/lib/lifecycle-action-center";
 import type { RequestContext } from "@/lib/request-context";
 import { runtimeNumber } from "@/lib/runtime-env";
 
-export type GrowthLifecycleActionKind = "performance" | "learning" | "development-plan" | "succession";
+export type GrowthLifecycleActionKind = "benefits" | "performance" | "learning" | "development-plan" | "succession";
 export type ExpandedLifecycleActionItem = LifecycleActionItem | (Omit<LifecycleActionItem, "kind"> & { kind: GrowthLifecycleActionKind });
 
 function urgencyForDueDate(dueAt: Date | null, fallback: LifecycleActionUrgency = "normal", now = Date.now()): LifecycleActionUrgency {
@@ -22,6 +23,50 @@ function statusLabel(value: string) {
 
 function boundedWarningDays(key: string, fallback: number) {
   return Math.min(90, Math.max(1, Math.floor(runtimeNumber(key, fallback))));
+}
+
+async function benefitsPendingItems(ctx: RequestContext): Promise<ExpandedLifecycleActionItem[]> {
+  if (!can(ctx, "benefits:write")) return [];
+  const scope = await resolveEmploymentScope(db, ctx);
+  const rows = await db.benefitEnrollment.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      status: BenefitEnrollmentStatus.PENDING,
+      ...employmentIdFilter(scope)
+    },
+    orderBy: [{ effectiveFrom: "asc" }, { createdAt: "asc" }],
+    take: 100,
+    select: {
+      id: true,
+      employmentId: true,
+      status: true,
+      effectiveFrom: true,
+      createdAt: true,
+      benefitPlan: { select: { code: true, name: true } }
+    }
+  });
+  const employmentIds = [...new Set(rows.map((row) => row.employmentId))];
+  const employments = employmentIds.length ? await db.employment.findMany({
+    where: { tenantId: ctx.tenantId, id: { in: employmentIds } },
+    select: { id: true, person: { select: { givenName: true, familyName: true } } }
+  }) : [];
+  const names = new Map(employments.map((employment) => [employment.id, `${employment.person.givenName} ${employment.person.familyName}`]));
+
+  return rows.map((enrollment): ExpandedLifecycleActionItem => ({
+    id: `benefits:${enrollment.id}`,
+    kind: "benefits",
+    title: `Benefit election · ${names.get(enrollment.employmentId) ?? "Scoped employee"}`,
+    subtitle: `${enrollment.benefitPlan.code} · ${enrollment.benefitPlan.name} · pending governance decision`,
+    module: "benefits",
+    href: `/module/benefits?enrollment=${encodeURIComponent(enrollment.id)}`,
+    subjectType: "BenefitEnrollment",
+    subjectId: enrollment.id,
+    status: statusLabel(enrollment.status),
+    dueAt: enrollment.effectiveFrom.toISOString(),
+    createdAt: enrollment.createdAt.toISOString(),
+    urgency: urgencyForDueDate(enrollment.effectiveFrom, "normal"),
+    action: null
+  }));
 }
 
 async function performanceParticipantItems(ctx: RequestContext): Promise<ExpandedLifecycleActionItem[]> {
@@ -240,13 +285,14 @@ export async function getLifecycleActionCenterContinuityData(ctx: RequestContext
   let growthDegraded = false;
 
   try {
-    const [performance, learning, developmentPlans, succession] = await Promise.all([
+    const [benefits, performance, learning, developmentPlans, succession] = await Promise.all([
+      benefitsPendingItems(ctx),
       performanceParticipantItems(ctx),
       learningParticipantItems(ctx),
       developmentPlanOwnerItems(ctx),
       successionPlanOwnerItems(ctx)
     ]);
-    growth = [...performance, ...learning, ...developmentPlans, ...succession];
+    growth = [...benefits, ...performance, ...learning, ...developmentPlans, ...succession];
   } catch (error) {
     growthDegraded = true;
     console.error("[HRBP] Growth lifecycle action aggregation failed; preserving the governed core Action Center.", error);
@@ -268,6 +314,7 @@ export async function getLifecycleActionCenterContinuityData(ctx: RequestContext
         return due >= now && due <= soon;
       }).length,
       critical: items.filter((item) => item.urgency === "critical").length,
+      benefits: items.filter((item) => item.kind === "benefits").length,
       performance: items.filter((item) => item.kind === "performance").length,
       learning: items.filter((item) => item.kind === "learning").length,
       developmentPlans: items.filter((item) => item.kind === "development-plan").length,
