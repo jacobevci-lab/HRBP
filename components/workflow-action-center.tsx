@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, BadgeDollarSign, BookOpenCheck, CalendarCheck2, CheckCircle2, ClipboardCheck, Clock3, ExternalLink, FileClock, HeartHandshake, ReceiptText, RefreshCw, ShieldAlert, Target, TimerReset, UsersRound, Workflow } from "lucide-react";
+import { AlertTriangle, BadgeDollarSign, BookOpenCheck, CalendarCheck2, CheckCircle2, ClipboardCheck, Clock3, ExternalLink, FileClock, HeartHandshake, ReceiptText, RefreshCw, ShieldAlert, Target, TimerReset, UserMinus, UserPlus, UsersRound, Workflow } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
-type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "leave" | "time-attendance" | "compensation" | "payroll" | "benefits" | "performance" | "learning" | "development-plan" | "succession";
+type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "onboarding" | "offboarding" | "leave" | "time-attendance" | "compensation" | "payroll" | "benefits" | "performance" | "learning" | "development-plan" | "succession";
 type Urgency = "normal" | "warning" | "critical";
 type Filter = "all" | "critical" | "overdue" | "due-soon" | ActionKind;
 
-const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents", "leave", "time-attendance", "compensation", "payroll", "benefits", "performance", "learning", "development-plan", "succession"]);
+const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents", "onboarding", "offboarding", "leave", "time-attendance", "compensation", "payroll", "benefits", "performance", "learning", "development-plan", "succession"]);
 
 function normalizeFilter(value?: string): Filter {
   return value && allowedFilters.has(value as Filter) ? value as Filter : "all";
@@ -44,6 +44,8 @@ type ActionSummary = {
   hrService: number;
   employeeRelations: number;
   documents: number;
+  onboarding: number;
+  offboarding: number;
   leave: number;
   timeAttendance: number;
   compensation: number;
@@ -64,6 +66,8 @@ const emptySummary: ActionSummary = {
   hrService: 0,
   employeeRelations: 0,
   documents: 0,
+  onboarding: 0,
+  offboarding: 0,
   leave: 0,
   timeAttendance: 0,
   compensation: 0,
@@ -197,6 +201,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
     if (kind === "workflow") return locale === "tr" ? "İş akışı" : "Workflow";
     if (kind === "hr-service") return locale === "tr" ? "İK Hizmeti" : "HR Service";
     if (kind === "documents") return locale === "tr" ? "Dokümanlar" : "Documents";
+    if (kind === "onboarding") return locale === "tr" ? "İşe Başlatma" : "Onboarding";
+    if (kind === "offboarding") return locale === "tr" ? "İşten Ayrılış" : "Offboarding";
     if (kind === "leave") return locale === "tr" ? "İzin" : "Leave";
     if (kind === "time-attendance") return locale === "tr" ? "Zaman & Devam" : "Time & Attendance";
     if (kind === "compensation") return locale === "tr" ? "Ücretlendirme" : "Compensation";
@@ -221,7 +227,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <div>
           <span className="section-kicker">{locale === "tr" ? "Yaşam döngüsü aksiyon merkezi" : "Lifecycle action center"}</span>
           <h3>{locale === "tr" ? "Bekleyen işlerim ve operasyonel blokajlar" : "My pending work and operational blockers"}</h3>
-          <p>{locale === "tr" ? "İş akışlarını, İK hizmet taleplerini, kısıtlı çalışan ilişkileri aksiyonlarını, doküman yaşam döngüsünü, yönetişimli iş-ücret ve yan hak kontrollerini, kimliğe bağlı performans/eğitim aksiyonlarını ve insan sahipli gelişim/yedekleme incelemelerini tek yetkili kuyrukta takip et." : "Track workflows, HR service requests, restricted employee-relations actions, document lifecycle, governed work-pay and benefits controls, identity-bound performance/learning actions, and human-owned development/succession reviews in one authorized queue."}</p>
+          <p>{locale === "tr" ? "İş akışlarını, işe başlatma ve işten ayrılış kontrollerini, İK hizmet taleplerini, kısıtlı çalışan ilişkileri aksiyonlarını, doküman yaşam döngüsünü, iş-ücret ve yan hak kontrollerini ve gelişim aksiyonlarını tek yetkili kuyrukta takip et." : "Track workflows, onboarding and offboarding controls, HR service requests, restricted employee-relations actions, document lifecycle, work-pay and benefits controls, and growth actions in one authorized queue."}</p>
         </div>
         <button className="secondary-button" type="button" onClick={() => void refresh()} disabled={loading}>
           <RefreshCw size={15}/>{locale === "tr" ? "Yenile" : "Refresh"}
@@ -248,6 +254,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <button type="button" className={filter === "hr-service" ? "active" : ""} onClick={() => setFilter("hr-service")}>{locale === "tr" ? "İK Hizmeti" : "HR Service"} <strong>{summary.hrService}</strong></button>
         <button type="button" className={filter === "employee-relations" ? "active" : ""} onClick={() => setFilter("employee-relations")}>{locale === "tr" ? "Çalışan İlişkileri" : "Employee Relations"} <strong>{summary.employeeRelations}</strong></button>
         <button type="button" className={filter === "documents" ? "active" : ""} onClick={() => setFilter("documents")}><FileClock size={14}/>{locale === "tr" ? "Dokümanlar" : "Documents"} <strong>{summary.documents}</strong></button>
+        <button type="button" className={filter === "onboarding" ? "active" : ""} onClick={() => setFilter("onboarding")}><UserPlus size={14}/>{locale === "tr" ? "İşe Başlatma" : "Onboarding"} <strong>{summary.onboarding}</strong></button>
+        <button type="button" className={filter === "offboarding" ? "active" : ""} onClick={() => setFilter("offboarding")}><UserMinus size={14}/>{locale === "tr" ? "İşten Ayrılış" : "Offboarding"} <strong>{summary.offboarding}</strong></button>
         <button type="button" className={filter === "leave" ? "active" : ""} onClick={() => setFilter("leave")}><CalendarCheck2 size={14}/>{locale === "tr" ? "İzin" : "Leave"} <strong>{summary.leave}</strong></button>
         <button type="button" className={filter === "time-attendance" ? "active" : ""} onClick={() => setFilter("time-attendance")}><TimerReset size={14}/>{locale === "tr" ? "Zaman" : "Time"} <strong>{summary.timeAttendance}</strong></button>
         <button type="button" className={filter === "compensation" ? "active" : ""} onClick={() => setFilter("compensation")}><BadgeDollarSign size={14}/>{locale === "tr" ? "Ücret" : "Compensation"} <strong>{summary.compensation}</strong></button>
