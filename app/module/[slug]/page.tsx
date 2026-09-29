@@ -40,6 +40,8 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const payrollFocus = typeof search.run === "string" ? search.run : "";
   const reviewFocus = typeof search.review === "string" ? search.review : "";
   const assignmentFocus = typeof search.assignment === "string" ? search.assignment : "";
+  const developmentPlanFocus = typeof search.developmentPlan === "string" ? search.developmentPlan : "";
+  const successionPlanFocus = typeof search.plan === "string" ? search.plan : "";
   const personId = typeof search.person === "string" ? search.person : undefined;
   const documentFocus = typeof search.document === "string" ? search.document : undefined;
   const documentLifecycleQuery = slug === "documents" ? (documentFocus || personId || "") : "";
@@ -65,7 +67,11 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
     ? reviewFocus
     : slug === "learning"
       ? assignmentFocus
-      : undefined;
+      : slug === "talent"
+        ? developmentPlanFocus
+        : slug === "succession"
+          ? successionPlanFocus
+          : undefined;
 
   if (!ctx) return <AppShell><PublicModuleLanding slug={slug}/></AppShell>;
 
