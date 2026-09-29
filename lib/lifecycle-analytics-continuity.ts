@@ -1,4 +1,4 @@
-import { getLifecycleActionCenterContinuityData } from "@/lib/growth-action-center-continuity";
+import { getLifecycleActionCenterFullContinuityData } from "@/lib/joiner-leaver-action-center-continuity";
 import type { RequestContext } from "@/lib/request-context";
 
 export type LifecycleAnalyticsContinuitySummary = {
@@ -19,6 +19,8 @@ export type LifecycleAnalyticsContinuitySummary = {
   learning: number;
   developmentPlans: number;
   succession: number;
+  onboarding: number;
+  offboarding: number;
 };
 
 const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
@@ -38,26 +40,29 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
   performance: 0,
   learning: 0,
   developmentPlans: 0,
-  succession: 0
+  succession: 0,
+  onboarding: 0,
+  offboarding: 0
 };
 
 /**
  * Builds an analytics-safe operational continuity projection for the signed actor.
  *
  * The source remains the governed Lifecycle Action Center, so HR Service,
- * Employee Relations, Documents, work-pay and growth visibility is never
- * recalculated or widened here. Only aggregate counters are returned: titles,
- * descriptions, employee names, case/request numbers, ratings, learning
- * evidence, benefit contribution/coverage details, development outcomes,
- * succession readiness, compensation amounts, payroll results, document metadata
- * and subject identifiers never cross this boundary.
+ * Employee Relations, Documents, work-pay, growth, onboarding and offboarding
+ * visibility is never recalculated or widened here. Only aggregate counters are
+ * returned: titles, descriptions, employee names, case/request numbers, ratings,
+ * learning evidence, benefit contribution/coverage details, development outcomes,
+ * succession readiness, compensation amounts, payroll results, onboarding task
+ * detail, exit-control detail, document metadata and subject identifiers never
+ * cross this boundary.
  *
  * Failure is intentionally fail-closed. Analytics may render a degraded state,
  * but it must never retry through a broader tenant query.
  */
 export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
   try {
-    const source = await getLifecycleActionCenterContinuityData(ctx);
+    const source = await getLifecycleActionCenterFullContinuityData(ctx);
     const summary: LifecycleAnalyticsContinuitySummary = {
       total: source.summary.total,
       overdue: source.summary.overdue,
@@ -75,7 +80,9 @@ export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
       performance: source.summary.performance,
       learning: source.summary.learning,
       developmentPlans: source.summary.developmentPlans,
-      succession: source.summary.succession
+      succession: source.summary.succession,
+      onboarding: source.summary.onboarding,
+      offboarding: source.summary.offboarding
     };
 
     return {
