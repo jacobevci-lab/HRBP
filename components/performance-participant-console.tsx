@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, CircleAlert, ClipboardCheck, ShieldCheck, Target, UsersRound } from "lucide-react";
 import { useLocale } from "@/components/locale-provider";
@@ -32,6 +32,19 @@ function dueDate(value: string, locale: "en" | "tr") {
   return new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-GB", { dateStyle: "medium" }).format(new Date(value));
 }
 
+async function acknowledgePerformanceNotification(reviewId: string) {
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resourceType: "PerformanceReview", resourceId: reviewId, read: true })
+    });
+    if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
+  } catch {
+    // Notification cleanup is secondary to the already committed participant decision.
+  }
+}
+
 export function PerformanceParticipantConsole({ selfReviews, managerReviews, ownGoals }: PerformanceParticipantData) {
   const router = useRouter();
   const { locale } = useLocale();
@@ -39,9 +52,13 @@ export function PerformanceParticipantConsole({ selfReviews, managerReviews, own
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
 
+  useEffect(() => {
+    document.querySelector<HTMLElement>(".performance-operation.focused")?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, []);
+
   if (!selfReviews.length && !managerReviews.length && !ownGoals.length) return null;
 
-  async function submit(key: string, url: string, payload: Record<string, unknown>, method: "POST" | "PATCH" = "POST") {
+  async function submit(key: string, url: string, payload: Record<string, unknown>, method: "POST" | "PATCH" = "POST", reviewId?: string) {
     setPending(key);
     setNotice(null);
     try {
@@ -53,6 +70,10 @@ export function PerformanceParticipantConsole({ selfReviews, managerReviews, own
       });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(body.error || c(`Request failed (${response.status})`, `İstek başarısız (${response.status})`));
+      if (reviewId) {
+        await acknowledgePerformanceNotification(reviewId);
+        window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
+      }
       setNotice({ tone: "ok", text: c("Performance action saved and audit evidence written.", "Performans aksiyonu kaydedildi ve denetim kanıtı yazıldı.") });
       router.refresh();
     } catch (error) {
@@ -77,10 +98,10 @@ export function PerformanceParticipantConsole({ selfReviews, managerReviews, own
     <div className="performance-ops-grid">
       <div className="performance-ops-panel">
         <div className="performance-panel-title"><ClipboardCheck size={16}/><div><strong>{c("My self reviews", "Öz değerlendirmelerim")}</strong><small>{selfReviews.length} {c("awaiting submission", "gönderim bekliyor")}</small></div></div>
-        <div className="performance-operation-list">{selfReviews.length ? selfReviews.map((review) => <form key={review.id} className="performance-operation review-operation" onSubmit={(event) => {
+        <div className="performance-operation-list">{selfReviews.length ? selfReviews.map((review) => <form key={review.id} id={`performance-review-${review.id}`} className={`performance-operation review-operation${review.focused ? " focused" : ""}`} onSubmit={(event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
-          void submit(`self-${review.id}`, `/api/performance/reviews/${review.id}/self-submit`, { selfRating: data.get("selfRating") });
+          void submit(`self-${review.id}`, `/api/performance/reviews/${review.id}/self-submit`, { selfRating: data.get("selfRating") }, "POST", review.id);
         }}>
           <div className="performance-operation-main"><strong>{review.cycle}</strong><small>{c("Your rating moves this review to the assigned manager.", "Puanınız bu değerlendirmeyi atanmış yöneticiye taşır.")}</small><div className="performance-rating-line"><em className={`growth-pill ${review.status.toLowerCase().replaceAll("_", "-")}`}>{label(review.status, locale)}</em></div></div>
           <div className="performance-review-controls"><select name="selfRating" required defaultValue={review.selfRating ?? ""}><option value="" disabled>{c("Select self rating", "Öz değerlendirme puanı seçin")}</option>{ratings.map((ratingValue) => <option key={ratingValue} value={ratingValue}>{label(ratingValue, locale)}</option>)}</select><button className="secondary-button" disabled={pending !== null}>{pending === `self-${review.id}` ? "…" : c("Submit to manager", "Yöneticiye gönder")}</button></div>
@@ -89,10 +110,10 @@ export function PerformanceParticipantConsole({ selfReviews, managerReviews, own
 
       <div className="performance-ops-panel">
         <div className="performance-panel-title"><UsersRound size={16}/><div><strong>{c("Manager reviews", "Yönetici değerlendirmeleri")}</strong><small>{managerReviews.length} {c("assigned reviews", "atanmış değerlendirme")}</small></div></div>
-        <div className="performance-operation-list">{managerReviews.length ? managerReviews.map((review) => <form key={review.id} className="performance-operation review-operation" onSubmit={(event) => {
+        <div className="performance-operation-list">{managerReviews.length ? managerReviews.map((review) => <form key={review.id} id={`performance-review-${review.id}`} className={`performance-operation review-operation${review.focused ? " focused" : ""}`} onSubmit={(event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
-          void submit(`manager-${review.id}`, `/api/performance/reviews/${review.id}/manager-submit`, { managerRating: data.get("managerRating") });
+          void submit(`manager-${review.id}`, `/api/performance/reviews/${review.id}/manager-submit`, { managerRating: data.get("managerRating") }, "POST", review.id);
         }}>
           <div className="performance-operation-main"><strong>{review.person}</strong><small>{review.cycle} · {review.position} · {review.employeeNumber}</small><div className="performance-rating-line"><em className="growth-pill manager-review">{c("Manager review", "Yönetici değerlendirmesi")}</em>{review.selfRating ? <span>{c("Self", "Öz")}: {label(review.selfRating, locale)}</span> : null}</div></div>
           <div className="performance-review-controls"><select name="managerRating" required defaultValue=""><option value="" disabled>{c("Select manager rating", "Yönetici puanı seçin")}</option>{ratings.map((ratingValue) => <option key={ratingValue} value={ratingValue}>{label(ratingValue, locale)}</option>)}</select><button className="secondary-button" disabled={pending !== null}>{pending === `manager-${review.id}` ? "…" : c("Submit to calibration", "Kalibrasyona gönder")}</button></div>
