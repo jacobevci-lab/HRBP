@@ -3,6 +3,7 @@ import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { getVisibleDocument } from "@/lib/document-access";
+import { asIdentifier } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string; grantId: string }> }) {
@@ -11,7 +12,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "documents:grant")) return forbidden();
 
-  const { id, grantId } = await params;
+  const resolved = await params;
+  const id = asIdentifier(resolved.id);
+  const grantId = asIdentifier(resolved.grantId);
+  if (!id || !grantId) return Response.json({ error: "Valid document and grant ids are required." }, { status: 400 });
   const result = await db.$transaction(async (tx) => {
     const document = await getVisibleDocument(tx, ctx, id);
     if (!document) throw new Error("DOCUMENT");
