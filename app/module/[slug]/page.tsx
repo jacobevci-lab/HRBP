@@ -38,6 +38,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const entryFocus = typeof search.entry === "string" ? search.entry : "";
   const compensationFocus = typeof search.change === "string" ? search.change : "";
   const payrollFocus = typeof search.run === "string" ? search.run : "";
+  const enrollmentFocus = typeof search.enrollment === "string" ? search.enrollment : "";
   const reviewFocus = typeof search.review === "string" ? search.review : "";
   const assignmentFocus = typeof search.assignment === "string" ? search.assignment : "";
   const developmentPlanFocus = typeof search.developmentPlan === "string" ? search.developmentPlan : "";
@@ -63,15 +64,17 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
         : slug === "payroll"
           ? payrollFocus
           : undefined;
-  const growthFocus = slug === "performance"
-    ? reviewFocus
-    : slug === "learning"
-      ? assignmentFocus
-      : slug === "talent"
-        ? developmentPlanFocus
-        : slug === "succession"
-          ? successionPlanFocus
-          : undefined;
+  const growthFocus = slug === "benefits"
+    ? enrollmentFocus
+    : slug === "performance"
+      ? reviewFocus
+      : slug === "learning"
+        ? assignmentFocus
+        : slug === "talent"
+          ? developmentPlanFocus
+          : slug === "succession"
+            ? successionPlanFocus
+            : undefined;
 
   if (!ctx) return <AppShell><PublicModuleLanding slug={slug}/></AppShell>;
 
