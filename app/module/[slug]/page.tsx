@@ -38,6 +38,8 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const entryFocus = typeof search.entry === "string" ? search.entry : "";
   const compensationFocus = typeof search.change === "string" ? search.change : "";
   const payrollFocus = typeof search.run === "string" ? search.run : "";
+  const reviewFocus = typeof search.review === "string" ? search.review : "";
+  const assignmentFocus = typeof search.assignment === "string" ? search.assignment : "";
   const personId = typeof search.person === "string" ? search.person : undefined;
   const documentFocus = typeof search.document === "string" ? search.document : undefined;
   const documentLifecycleQuery = slug === "documents" ? (documentFocus || personId || "") : "";
@@ -59,6 +61,11 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
         : slug === "payroll"
           ? payrollFocus
           : undefined;
+  const growthFocus = slug === "performance"
+    ? reviewFocus
+    : slug === "learning"
+      ? assignmentFocus
+      : undefined;
 
   if (!ctx) return <AppShell><PublicModuleLanding slug={slug}/></AppShell>;
 
@@ -66,7 +73,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   if (slug === "settings") return <AppShell><SettingsLivePage/><SecurityPolicyEditorLoader/><ConnectionLifecyclePanel/>{can(ctx, "settings:write") ? <SettingsConnectionsManager/> : null}</AppShell>;
   if (slug === "audit") return <AppShell><AuditLivePage searchParams={search}/></AppShell>;
   if (slug === "analytics") return <AnalyticsModulePage/>;
-  if (growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug}/>;
+  if (growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug} focusId={growthFocus}/>;
   if (workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug} focusId={workPayFocus}/>;
   if (governanceSlugs.has(slug as GovernanceSlug)) return <GovernancePlanningModulePage slug={slug as GovernanceSlug}/>;
 
