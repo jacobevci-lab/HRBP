@@ -18,6 +18,7 @@ export type BenefitEnrollmentOperation = {
   effectiveTo: string | null;
   planEffectiveFrom: string;
   planEffectiveTo: string | null;
+  focused: boolean;
 };
 
 export type LearningAssignmentOperation = {
@@ -54,15 +55,17 @@ async function employmentNames(ctx: RequestContext, ids: string[]) {
   });
 }
 
-export async function getBenefitEnrollmentOperationsData(ctx: RequestContext): Promise<BenefitEnrollmentOperation[]> {
+export async function getBenefitEnrollmentOperationsData(ctx: RequestContext, focusId?: string): Promise<BenefitEnrollmentOperation[]> {
+  const boundedFocusId = focusId?.trim().slice(0, 160) || null;
   const rows = await withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
-    return db.benefitEnrollment.findMany({
-      where: {
-        tenantId: ctx.tenantId,
-        status: { in: [BenefitEnrollmentStatus.PENDING, BenefitEnrollmentStatus.ACTIVE, BenefitEnrollmentStatus.SUSPENDED] },
-        ...employmentIdFilter(scope)
-      },
+    const visibleWhere = {
+      tenantId: ctx.tenantId,
+      status: { in: [BenefitEnrollmentStatus.PENDING, BenefitEnrollmentStatus.ACTIVE, BenefitEnrollmentStatus.SUSPENDED] },
+      ...employmentIdFilter(scope)
+    };
+    const list = await db.benefitEnrollment.findMany({
+      where: visibleWhere,
       orderBy: [{ effectiveFrom: "desc" }, { createdAt: "desc" }],
       take: 150,
       select: {
@@ -77,6 +80,22 @@ export async function getBenefitEnrollmentOperationsData(ctx: RequestContext): P
         benefitPlan: { select: { code: true, name: true, effectiveFrom: true, effectiveTo: true } }
       }
     });
+    if (!boundedFocusId || list.some((row) => row.id === boundedFocusId)) return list;
+    const focused = await db.benefitEnrollment.findFirst({
+      where: { ...visibleWhere, id: boundedFocusId },
+      select: {
+        id: true,
+        employmentId: true,
+        status: true,
+        coverageTier: true,
+        employerContribution: true,
+        employeeContribution: true,
+        effectiveFrom: true,
+        effectiveTo: true,
+        benefitPlan: { select: { code: true, name: true, effectiveFrom: true, effectiveTo: true } }
+      }
+    });
+    return focused ? [focused, ...list] : list;
   });
   const names = await employmentNames(ctx, [...new Set(rows.map((row) => row.employmentId))]);
   return rows.map((row) => ({
@@ -93,7 +112,8 @@ export async function getBenefitEnrollmentOperationsData(ctx: RequestContext): P
     effectiveFrom: row.effectiveFrom.toISOString(),
     effectiveTo: row.effectiveTo?.toISOString() ?? null,
     planEffectiveFrom: row.benefitPlan.effectiveFrom.toISOString(),
-    planEffectiveTo: row.benefitPlan.effectiveTo?.toISOString() ?? null
+    planEffectiveTo: row.benefitPlan.effectiveTo?.toISOString() ?? null,
+    focused: row.id === boundedFocusId
   }));
 }
 
