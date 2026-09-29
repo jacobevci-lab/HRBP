@@ -45,8 +45,8 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
  * The source remains the governed Lifecycle Action Center, so HR Service,
  * Employee Relations, Documents, work-pay and growth visibility is never
  * recalculated or widened here. Only aggregate counters are returned: titles,
- * descriptions, employee names, case/request numbers, ratings, development
- * outcomes, succession readiness, learning evidence, compensation amounts,
+ * descriptions, employee names, case/request numbers, ratings, learning
+ * evidence, development outcomes, succession readiness, compensation amounts,
  * payroll results, document metadata and subject identifiers never cross this
  * boundary.
  *
