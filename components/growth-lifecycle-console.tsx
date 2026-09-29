@@ -49,6 +49,7 @@ export function GrowthLifecycleConsole(props: Props) {
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(body.error || c(`Request failed (${response.status})`, `İstek başarısız (${response.status})`));
       setNotice({ tone: "ok", text: successText ?? c("Lifecycle transition completed and audit evidence written.", "Yaşam döngüsü geçişi tamamlandı ve denetim kanıtı yazıldı.") });
+      window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
       router.refresh();
     } catch (error) {
       setNotice({ tone: "error", text: error instanceof Error ? error.message : c("Transaction failed.", "İşlem başarısız.") });
@@ -67,7 +68,7 @@ export function GrowthLifecycleConsole(props: Props) {
   </section>;
 
   function BenefitQueue({ rows }: { rows: BenefitEnrollmentOperation[] }) {
-    return <div className="growth-lifecycle-list">{rows.length ? rows.map((row) => <article className="growth-lifecycle-row" key={row.id}>
+    return <div className="growth-lifecycle-list">{rows.length ? rows.map((row) => <article id={`benefit-enrollment-${row.id}`} className={`growth-lifecycle-row${row.focused ? " focused" : ""}`} key={row.id}>
       <div className="growth-lifecycle-icon"><HeartHandshake size={16}/></div>
       <div className="growth-lifecycle-copy"><strong>{row.person}</strong><small>{row.employeeNumber} · {row.planCode} · {row.plan}</small><span>{c("Coverage", "Kapsam")}: {row.coverageTier} · {dateOnly(row.effectiveFrom)} → {dateOnly(row.effectiveTo)}</span></div>
       <em className={`growth-pill ${row.status.toLowerCase().replaceAll("_", "-")}`}>{label(row.status, locale)}</em>
