@@ -1,4 +1,4 @@
-import { getLifecycleActionCenterContinuityData } from "@/lib/growth-action-center-continuity";
+import { getLifecycleActionCenterFullContinuityData } from "@/lib/joiner-leaver-action-center-continuity";
 import { getServerRequestContext } from "@/lib/server-session";
 
 export type DashboardLifecycleAttention = {
@@ -19,6 +19,8 @@ export type DashboardLifecycleAttention = {
   learning: number;
   developmentPlans: number;
   succession: number;
+  onboarding: number;
+  offboarding: number;
 };
 
 const emptySummary: DashboardLifecycleAttention = {
@@ -38,7 +40,9 @@ const emptySummary: DashboardLifecycleAttention = {
   performance: 0,
   learning: 0,
   developmentPlans: 0,
-  succession: 0
+  succession: 0,
+  onboarding: 0,
+  offboarding: 0
 };
 
 export async function getDashboardLifecycleAttentionSafe(): Promise<{
@@ -49,7 +53,7 @@ export async function getDashboardLifecycleAttentionSafe(): Promise<{
   if (!ctx) return { summary: emptySummary, degraded: true };
 
   try {
-    const data = await getLifecycleActionCenterContinuityData(ctx);
+    const data = await getLifecycleActionCenterFullContinuityData(ctx);
     return { summary: data.summary, degraded: false };
   } catch (error) {
     console.error("[HRBP] Dashboard lifecycle attention failed; hiding actor-specific action counts", error);
