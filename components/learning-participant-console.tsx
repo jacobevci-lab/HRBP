@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpenCheck, CheckCircle2, CircleAlert, Clock3, ShieldCheck, Sparkles } from "lucide-react";
 import { useLocale } from "@/components/locale-provider";
@@ -17,12 +17,29 @@ function label(value: string, locale: "en" | "tr") {
 
 function dateOnly(value: string | null) { return value ? value.slice(0, 10) : "—"; }
 
+async function acknowledgeLearningNotification(assignmentId: string) {
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resourceType: "LearningAssignment", resourceId: assignmentId, read: true })
+    });
+    if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
+  } catch {
+    // Notification cleanup is best-effort and cannot roll back learning progress.
+  }
+}
+
 export function LearningParticipantConsole({ assignments }: { assignments: LearningParticipantAssignment[] }) {
   const router = useRouter();
   const { locale } = useLocale();
   const c = (en: string, tr: string) => locale === "tr" ? tr : en;
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    document.querySelector<HTMLElement>(".growth-lifecycle-row.focused")?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, []);
 
   if (!assignments.length) return null;
 
@@ -38,6 +55,8 @@ export function LearningParticipantConsole({ assignments }: { assignments: Learn
       });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(body.error || c(`Request failed (${response.status})`, `İstek başarısız (${response.status})`));
+      await acknowledgeLearningNotification(id);
+      window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
       setNotice({ tone: "ok", text: c("Learning progress saved and audit evidence written.", "Eğitim ilerlemesi kaydedildi ve denetim kanıtı yazıldı.") });
       router.refresh();
     } catch (error) {
@@ -55,7 +74,7 @@ export function LearningParticipantConsole({ assignments }: { assignments: Learn
 
     {notice ? <div className={`performance-notice ${notice.tone}`}><span>{notice.tone === "ok" ? <CheckCircle2 size={15}/> : <CircleAlert size={15}/>}</span>{notice.text}</div> : null}
 
-    <div className="growth-lifecycle-list">{assignments.map((assignment) => <form className="growth-lifecycle-row" key={assignment.id} onSubmit={(event) => {
+    <div className="growth-lifecycle-list">{assignments.map((assignment) => <form id={`learning-assignment-${assignment.id}`} className={`growth-lifecycle-row${assignment.focused ? " focused" : ""}`} key={assignment.id} onSubmit={(event) => {
       event.preventDefault();
       const data = new FormData(event.currentTarget);
       const next = assignment.status === "ASSIGNED" ? "IN_PROGRESS" : "COMPLETED";
