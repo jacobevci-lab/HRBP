@@ -9,6 +9,7 @@ export type ParticipantSelfReview = {
   status: string;
   selfRating: string | null;
   updatedAt: string;
+  focused: boolean;
 };
 
 export type ParticipantManagerReview = {
@@ -20,6 +21,7 @@ export type ParticipantManagerReview = {
   position: string;
   selfRating: string | null;
   updatedAt: string;
+  focused: boolean;
 };
 
 export type ParticipantGoal = {
@@ -34,17 +36,29 @@ export type PerformanceParticipantData = {
   selfReviews: ParticipantSelfReview[];
   managerReviews: ParticipantManagerReview[];
   ownGoals: ParticipantGoal[];
+  focusVisible: boolean;
 };
 
-export async function getPerformanceParticipantData(ctx: RequestContext): Promise<PerformanceParticipantData> {
-  if (!ctx.employmentId) return { selfReviews: [], managerReviews: [], ownGoals: [] };
+export async function getPerformanceParticipantData(ctx: RequestContext, focusId?: string): Promise<PerformanceParticipantData> {
+  if (!ctx.employmentId) return { selfReviews: [], managerReviews: [], ownGoals: [], focusVisible: false };
 
   return withDb(async (db) => {
     const selfEnabled = can(ctx, "performance:self-submit");
     const managerEnabled = can(ctx, "performance:manager-review");
     const goalProgressEnabled = can(ctx, "performance:goal-progress");
+    const boundedFocusId = focusId?.trim().slice(0, 160) || undefined;
 
-    const [selfReviews, managerReviews, ownGoals] = await Promise.all([
+    const reviewSelect = {
+      id: true,
+      employmentId: true,
+      managerEmploymentId: true,
+      status: true,
+      selfRating: true,
+      updatedAt: true,
+      cycle: { select: { name: true, status: true } }
+    } as const;
+
+    const [selfReviews, managerReviews, ownGoals, focusedReview] = await Promise.all([
       selfEnabled ? db.performanceReview.findMany({
         where: {
           tenantId: ctx.tenantId,
@@ -54,13 +68,7 @@ export async function getPerformanceParticipantData(ctx: RequestContext): Promis
         },
         orderBy: { updatedAt: "desc" },
         take: 20,
-        select: {
-          id: true,
-          status: true,
-          selfRating: true,
-          updatedAt: true,
-          cycle: { select: { name: true } }
-        }
+        select: reviewSelect
       }) : Promise.resolve([]),
       managerEnabled ? db.performanceReview.findMany({
         where: {
@@ -71,13 +79,7 @@ export async function getPerformanceParticipantData(ctx: RequestContext): Promis
         },
         orderBy: { updatedAt: "asc" },
         take: 100,
-        select: {
-          id: true,
-          employmentId: true,
-          selfRating: true,
-          updatedAt: true,
-          cycle: { select: { name: true } }
-        }
+        select: reviewSelect
       }) : Promise.resolve([]),
       goalProgressEnabled ? db.goal.findMany({
         where: {
@@ -88,10 +90,35 @@ export async function getPerformanceParticipantData(ctx: RequestContext): Promis
         orderBy: [{ dueAt: "asc" }, { updatedAt: "desc" }],
         take: 50,
         select: { id: true, title: true, status: true, progress: true, dueAt: true }
-      }) : Promise.resolve([])
+      }) : Promise.resolve([]),
+      boundedFocusId && (selfEnabled || managerEnabled) ? db.performanceReview.findFirst({
+        where: {
+          id: boundedFocusId,
+          tenantId: ctx.tenantId,
+          cycle: { status: ReviewCycleStatus.OPEN },
+          OR: [
+            ...(selfEnabled ? [{ employmentId: ctx.employmentId, status: { in: [ReviewStatus.NOT_STARTED, ReviewStatus.SELF_REVIEW] } }] : []),
+            ...(managerEnabled ? [{ managerEmploymentId: ctx.employmentId, status: ReviewStatus.MANAGER_REVIEW }] : [])
+          ]
+        },
+        select: reviewSelect
+      }) : Promise.resolve(null)
     ]);
 
-    const employmentIds = [...new Set(managerReviews.map((review) => review.employmentId))];
+    const visibleSelfReviews = focusedReview
+      && focusedReview.employmentId === ctx.employmentId
+      && (focusedReview.status === ReviewStatus.NOT_STARTED || focusedReview.status === ReviewStatus.SELF_REVIEW)
+      && !selfReviews.some((review) => review.id === focusedReview.id)
+      ? [focusedReview, ...selfReviews]
+      : selfReviews;
+    const visibleManagerReviews = focusedReview
+      && focusedReview.managerEmploymentId === ctx.employmentId
+      && focusedReview.status === ReviewStatus.MANAGER_REVIEW
+      && !managerReviews.some((review) => review.id === focusedReview.id)
+      ? [focusedReview, ...managerReviews]
+      : managerReviews;
+
+    const employmentIds = [...new Set(visibleManagerReviews.map((review) => review.employmentId))];
     const employments = employmentIds.length ? await db.employment.findMany({
       where: { tenantId: ctx.tenantId, id: { in: employmentIds } },
       select: {
@@ -103,14 +130,15 @@ export async function getPerformanceParticipantData(ctx: RequestContext): Promis
     const employmentMap = new Map(employments.map((employment) => [employment.id, employment]));
 
     return {
-      selfReviews: selfReviews.map((review) => ({
+      selfReviews: visibleSelfReviews.map((review) => ({
         id: review.id,
         cycle: review.cycle.name,
         status: review.status,
         selfRating: review.selfRating,
-        updatedAt: review.updatedAt.toISOString()
+        updatedAt: review.updatedAt.toISOString(),
+        focused: review.id === boundedFocusId
       })),
-      managerReviews: managerReviews.flatMap((review) => {
+      managerReviews: visibleManagerReviews.flatMap((review) => {
         const employment = employmentMap.get(review.employmentId);
         return employment ? [{
           id: review.id,
@@ -120,7 +148,8 @@ export async function getPerformanceParticipantData(ctx: RequestContext): Promis
           employeeNumber: employment.person.employeeNumber ?? "—",
           position: employment.position?.title ?? "Unassigned",
           selfRating: review.selfRating,
-          updatedAt: review.updatedAt.toISOString()
+          updatedAt: review.updatedAt.toISOString(),
+          focused: review.id === boundedFocusId
         }] : [];
       }),
       ownGoals: ownGoals.map((goal) => ({
@@ -129,7 +158,8 @@ export async function getPerformanceParticipantData(ctx: RequestContext): Promis
         status: goal.status,
         progress: goal.progress,
         dueAt: goal.dueAt.toISOString()
-      }))
+      })),
+      focusVisible: Boolean(focusedReview)
     };
   });
 }
