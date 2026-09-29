@@ -252,7 +252,7 @@ export async function getLifecycleActionCenterContinuityData(ctx: RequestContext
     console.error("[HRBP] Growth lifecycle action aggregation failed; preserving the governed core Action Center.", error);
   }
 
-  const items: ExpandedLifecycleActionItem[] = [...base.items, ...growth].sort(sortItems).slice(0, 350);
+  const items: ExpandedLifecycleActionItem[] = [...base.items, ...growth].sort(sortItems).slice(0, 300);
   const now = Date.now();
   const soon = now + 24 * 60 * 60 * 1000;
 
