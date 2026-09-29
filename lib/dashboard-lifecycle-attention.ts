@@ -1,4 +1,4 @@
-import { getLifecycleActionCenterData } from "@/lib/lifecycle-action-center";
+import { getLifecycleActionCenterContinuityData } from "@/lib/growth-action-center-continuity";
 import { getServerRequestContext } from "@/lib/server-session";
 
 export type DashboardLifecycleAttention = {
@@ -14,6 +14,8 @@ export type DashboardLifecycleAttention = {
   timeAttendance: number;
   compensation: number;
   payroll: number;
+  performance: number;
+  learning: number;
 };
 
 const emptySummary: DashboardLifecycleAttention = {
@@ -28,7 +30,9 @@ const emptySummary: DashboardLifecycleAttention = {
   leave: 0,
   timeAttendance: 0,
   compensation: 0,
-  payroll: 0
+  payroll: 0,
+  performance: 0,
+  learning: 0
 };
 
 export async function getDashboardLifecycleAttentionSafe(): Promise<{
@@ -39,7 +43,7 @@ export async function getDashboardLifecycleAttentionSafe(): Promise<{
   if (!ctx) return { summary: emptySummary, degraded: true };
 
   try {
-    const data = await getLifecycleActionCenterData(ctx);
+    const data = await getLifecycleActionCenterContinuityData(ctx);
     return { summary: data.summary, degraded: false };
   } catch (error) {
     console.error("[HRBP] Dashboard lifecycle attention failed; hiding actor-specific action counts", error);

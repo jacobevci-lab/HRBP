@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, BadgeDollarSign, CalendarCheck2, CheckCircle2, Clock3, ExternalLink, FileClock, ReceiptText, RefreshCw, ShieldAlert, TimerReset, Workflow } from "lucide-react";
+import { AlertTriangle, BadgeDollarSign, BookOpenCheck, CalendarCheck2, CheckCircle2, ClipboardCheck, Clock3, ExternalLink, FileClock, ReceiptText, RefreshCw, ShieldAlert, TimerReset, Workflow } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
-type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "leave" | "time-attendance" | "compensation" | "payroll";
+type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "leave" | "time-attendance" | "compensation" | "payroll" | "performance" | "learning";
 type Urgency = "normal" | "warning" | "critical";
 type Filter = "all" | "critical" | "overdue" | "due-soon" | ActionKind;
 
-const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents", "leave", "time-attendance", "compensation", "payroll"]);
+const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents", "leave", "time-attendance", "compensation", "payroll", "performance", "learning"]);
 
 function normalizeFilter(value?: string): Filter {
   return value && allowedFilters.has(value as Filter) ? value as Filter : "all";
@@ -48,6 +48,8 @@ type ActionSummary = {
   timeAttendance: number;
   compensation: number;
   payroll: number;
+  performance: number;
+  learning: number;
 };
 
 const emptySummary: ActionSummary = {
@@ -62,7 +64,9 @@ const emptySummary: ActionSummary = {
   leave: 0,
   timeAttendance: 0,
   compensation: 0,
-  payroll: 0
+  payroll: 0,
+  performance: 0,
+  learning: 0
 };
 
 type ActionQueueResponse = {
@@ -116,6 +120,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    const handleLifecycleChange = () => void refresh();
+    window.addEventListener("hrbp:lifecycle-actions-changed", handleLifecycleChange);
+    return () => window.removeEventListener("hrbp:lifecycle-actions-changed", handleLifecycleChange);
   }, [refresh]);
 
   useEffect(() => {
@@ -185,6 +195,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
     if (kind === "time-attendance") return locale === "tr" ? "Zaman & Devam" : "Time & Attendance";
     if (kind === "compensation") return locale === "tr" ? "Ücretlendirme" : "Compensation";
     if (kind === "payroll") return locale === "tr" ? "Bordro" : "Payroll";
+    if (kind === "performance") return locale === "tr" ? "Performans" : "Performance";
+    if (kind === "learning") return locale === "tr" ? "Eğitim" : "Learning";
     return locale === "tr" ? "Çalışan İlişkileri" : "Employee Relations";
   }
 
@@ -200,7 +212,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <div>
           <span className="section-kicker">{locale === "tr" ? "Yaşam döngüsü aksiyon merkezi" : "Lifecycle action center"}</span>
           <h3>{locale === "tr" ? "Bekleyen işlerim ve operasyonel blokajlar" : "My pending work and operational blockers"}</h3>
-          <p>{locale === "tr" ? "İş akışlarını, İK hizmet taleplerini, kısıtlı çalışan ilişkileri aksiyonlarını, doküman yaşam döngüsünü ve yönetişimli izin, zaman, ücret ve bordro kontrollerini tek yetkili kuyrukta takip et." : "Track workflows, HR service requests, restricted employee-relations actions, document lifecycle, and governed leave, time, compensation and payroll controls in one authorized queue."}</p>
+          <p>{locale === "tr" ? "İş akışlarını, İK hizmet taleplerini, kısıtlı çalışan ilişkileri aksiyonlarını, doküman yaşam döngüsünü, yönetişimli iş-ücret kontrollerini ve kimliğe bağlı performans/eğitim aksiyonlarını tek yetkili kuyrukta takip et." : "Track workflows, HR service requests, restricted employee-relations actions, document lifecycle, governed work-pay controls, and identity-bound performance/learning actions in one authorized queue."}</p>
         </div>
         <button className="secondary-button" type="button" onClick={() => void refresh()} disabled={loading}>
           <RefreshCw size={15}/>{locale === "tr" ? "Yenile" : "Refresh"}
@@ -231,6 +243,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <button type="button" className={filter === "time-attendance" ? "active" : ""} onClick={() => setFilter("time-attendance")}><TimerReset size={14}/>{locale === "tr" ? "Zaman" : "Time"} <strong>{summary.timeAttendance}</strong></button>
         <button type="button" className={filter === "compensation" ? "active" : ""} onClick={() => setFilter("compensation")}><BadgeDollarSign size={14}/>{locale === "tr" ? "Ücret" : "Compensation"} <strong>{summary.compensation}</strong></button>
         <button type="button" className={filter === "payroll" ? "active" : ""} onClick={() => setFilter("payroll")}><ReceiptText size={14}/>{locale === "tr" ? "Bordro" : "Payroll"} <strong>{summary.payroll}</strong></button>
+        <button type="button" className={filter === "performance" ? "active" : ""} onClick={() => setFilter("performance")}><ClipboardCheck size={14}/>{locale === "tr" ? "Performans" : "Performance"} <strong>{summary.performance}</strong></button>
+        <button type="button" className={filter === "learning" ? "active" : ""} onClick={() => setFilter("learning")}><BookOpenCheck size={14}/>{locale === "tr" ? "Eğitim" : "Learning"} <strong>{summary.learning}</strong></button>
       </div>
 
       {error ? <div className="workflow-action-message error"><AlertTriangle size={15}/>{error}</div> : null}

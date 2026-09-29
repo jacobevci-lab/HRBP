@@ -10,7 +10,7 @@ const modulePage = await source(modulePath);
 expect(modulePath, modulePage, /if\s*\(slug\s*===\s*"performance"\)\s*return\s*"performance:write"/, "performance must map to the performance:write capability");
 expect(modulePath, modulePage, /PerformanceOperationsConsole/, "authenticated performance page must expose the governed operations console");
 expect(modulePath, modulePage, /PerformanceParticipantConsole/, "performance page must expose identity-bound participant actions");
-expect(modulePath, modulePage, /getPerformanceParticipantData\(ctx\)/, "participant queues must load from the signed request context");
+expect(modulePath, modulePage, /getPerformanceParticipantData\(ctx(?:,\s*focusId)?\)/, "participant queues must load from the signed request context with optional governed exact focus");
 
 const authorizationPath = "lib/authorization.ts";
 const authorization = await source(authorizationPath);
