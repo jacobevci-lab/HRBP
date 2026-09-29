@@ -14,7 +14,7 @@ expect(modulePath, modulePage, /if\s*\(!ctx\)/, "public growth routes must branc
 expect(modulePath, modulePage, /SuccessionGovernanceConsole/, "succession writers must receive the governed plan and candidate queue");
 expect(modulePath, modulePage, /getSuccessionGovernanceData\(ctx[,)]/, "succession governance queue must load from signed request context");
 expect(modulePath, modulePage, /LearningParticipantConsole/, "learning readers with self-progress capability must receive the employee learning inbox");
-expect(modulePath, modulePage, /getLearningParticipantData\(ctx\)/, "learning participant data must load from the signed request context");
+expect(modulePath, modulePage, /getLearningParticipantData\(ctx(?:,\s*focusId)?\)/, "learning participant data must load from the signed request context with optional governed exact focus");
 expect(modulePath, modulePage, /can\(ctx,\s*"learning:self-progress"\)/, "learning self-service UI must be capability-gated");
 
 const authorizationPath = "lib/authorization.ts";
