@@ -14,6 +14,7 @@ export type LifecycleAnalyticsContinuitySummary = {
   timeAttendance: number;
   compensation: number;
   payroll: number;
+  benefits: number;
   performance: number;
   learning: number;
   developmentPlans: number;
@@ -33,6 +34,7 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
   timeAttendance: 0,
   compensation: 0,
   payroll: 0,
+  benefits: 0,
   performance: 0,
   learning: 0,
   developmentPlans: 0,
@@ -46,9 +48,9 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
  * Employee Relations, Documents, work-pay and growth visibility is never
  * recalculated or widened here. Only aggregate counters are returned: titles,
  * descriptions, employee names, case/request numbers, ratings, learning
- * evidence, development outcomes, succession readiness, compensation amounts,
- * payroll results, document metadata and subject identifiers never cross this
- * boundary.
+ * evidence, benefit contribution/coverage details, development outcomes,
+ * succession readiness, compensation amounts, payroll results, document metadata
+ * and subject identifiers never cross this boundary.
  *
  * Failure is intentionally fail-closed. Analytics may render a degraded state,
  * but it must never retry through a broader tenant query.
@@ -69,6 +71,7 @@ export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
       timeAttendance: source.summary.timeAttendance,
       compensation: source.summary.compensation,
       payroll: source.summary.payroll,
+      benefits: source.summary.benefits,
       performance: source.summary.performance,
       learning: source.summary.learning,
       developmentPlans: source.summary.developmentPlans,

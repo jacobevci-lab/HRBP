@@ -181,10 +181,11 @@ export async function GrowthModulePage({ slug, focusId }: { slug: GrowthSlug; fo
               import("@/lib/benefits-governance-data")
             ]);
             const [enrollments, plans] = await Promise.all([
-              lifecycleData.getBenefitEnrollmentOperationsData(ctx),
+              lifecycleData.getBenefitEnrollmentOperationsData(ctx, focusId),
               getBenefitsGovernanceData(ctx)
             ]);
-            lifecycle = <><GrowthLifecycleConsole slug="benefits" enrollments={enrollments}/><BenefitsGovernanceConsole plans={plans}/></>;
+            const focusVisible = !focusId || enrollments.some((enrollment) => enrollment.focused);
+            lifecycle = <>{focusId && !focusVisible ? <ConsoleWarning locale={locale} title={c(locale, "Requested benefit election is not available", "İstenen yan hak seçimi kullanılamıyor")} body={c(locale, "The enrollment is outside your authorized employment relationship scope or no longer has an actionable lifecycle state. No broader record lookup was attempted.", "Kayıt yetkili istihdam ilişki kapsamınızın dışında veya artık aksiyon alınabilir bir yaşam döngüsü durumunda değil. Daha geniş bir kayıt sorgusu denenmedi.")}/> : null}<GrowthLifecycleConsole slug="benefits" enrollments={enrollments}/><BenefitsGovernanceConsole plans={plans}/></>;
           }
         } catch (lifecycleError) {
           console.error(`[HRBP] ${slug} lifecycle queue could not initialize.`, lifecycleError);
