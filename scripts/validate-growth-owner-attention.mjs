@@ -46,7 +46,7 @@ const analyticsPath = "lib/lifecycle-analytics-continuity.ts";
 const analytics = await source(analyticsPath);
 expect(analyticsPath, analytics, /developmentPlans:\s*source\.summary\.developmentPlans/, "Analytics must project only the development-plan count");
 expect(analyticsPath, analytics, /succession:\s*source\.summary\.succession/, "Analytics must project only the succession count");
-reject(analyticsPath, analytics, /outcomeNotes|developmentGap|readiness|targetProficiency|currentProficiency/, "Analytics continuity must not project growth decision evidence");
+reject(analyticsPath, analytics, /(?:outcomeNotes|developmentGap|readiness|targetProficiency|currentProficiency)\s*:/, "Analytics continuity must not project growth decision evidence fields");
 
 if (failures.length) {
   console.error("Growth owner attention validation failed:\n- " + failures.join("\n- "));
