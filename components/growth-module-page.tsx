@@ -145,8 +145,8 @@ export async function GrowthModulePage({ slug, focusId }: { slug: GrowthSlug; fo
               import("@/lib/succession-governance-data")
             ]);
             const allowLearningPlan = can(ctx, "learning:write");
-            const data = await getSuccessionGovernanceData(ctx, { includeDevelopmentCatalog: allowLearningPlan });
-            lifecycle = <SuccessionGovernanceConsole {...data} allowLearningPlan={allowLearningPlan}/>;
+            const data = await getSuccessionGovernanceData(ctx, { includeDevelopmentCatalog: allowLearningPlan, focusId });
+            lifecycle = <>{focusId && !data.focusVisible ? <ConsoleWarning locale={locale} title={c(locale, "Requested succession review is not available", "İstenen yedekleme incelemesi kullanılamıyor")} body={c(locale, "The plan is outside your governed relationship scope, is not owned by your signed identity, or no longer exists. No broader plan lookup was attempted.", "Plan yönetişimli ilişki kapsamınızın dışında, imzalı kimliğinizin sahipliğinde değil veya artık mevcut değil. Daha geniş bir plan sorgusu denenmedi.")}/> : null}<SuccessionGovernanceConsole {...data} allowLearningPlan={allowLearningPlan}/></>;
           } else if (slug === "talent") {
             const allowLearningPlan = can(ctx, "learning:write");
             const canReadLearningCatalog = can(ctx, "learning:read");
@@ -158,9 +158,9 @@ export async function GrowthModulePage({ slug, focusId }: { slug: GrowthSlug; fo
             ]);
             const [talent, development] = await Promise.all([
               getTalentGovernanceData(ctx),
-              getDevelopmentPlanGovernanceData(ctx, { includeLearningCatalog: canReadLearningCatalog })
+              getDevelopmentPlanGovernanceData(ctx, { includeLearningCatalog: canReadLearningCatalog, focusId })
             ]);
-            lifecycle = <><TalentGovernanceConsole {...talent}/><DevelopmentPlanConsole {...development} assessments={talent.rows} allowLearningPlan={allowLearningPlan}/></>;
+            lifecycle = <>{focusId && !development.focusVisible ? <ConsoleWarning locale={locale} title={c(locale, "Requested development-plan review is not available", "İstenen gelişim planı incelemesi kullanılamıyor")} body={c(locale, "The plan is outside your governed relationship scope, is not owned by your signed identity, or no longer exists. No broader plan lookup was attempted.", "Plan yönetişimli ilişki kapsamınızın dışında, imzalı kimliğinizin sahipliğinde değil veya artık mevcut değil. Daha geniş bir plan sorgusu denenmedi.")}/> : null}<TalentGovernanceConsole {...talent}/><DevelopmentPlanConsole {...development} assessments={talent.rows} allowLearningPlan={allowLearningPlan}/></>;
           } else if (slug === "learning") {
             const [{ GrowthLifecycleConsole }, lifecycleData, { LearningGovernanceConsole }, { getLearningGovernanceData }] = await Promise.all([
               import("@/components/growth-lifecycle-console"),

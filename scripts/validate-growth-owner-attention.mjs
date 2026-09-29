@@ -28,6 +28,30 @@ expect(pagePath, page, /search\.plan/, "module routing must accept exact success
 expect(pagePath, page, /slug === "talent"[\s\S]*developmentPlanFocus/, "talent focus must remain domain-specific");
 expect(pagePath, page, /slug === "succession"[\s\S]*successionPlanFocus/, "succession focus must remain domain-specific");
 
+const growthModulePath = "components/growth-module-page.tsx";
+const growthModule = await source(growthModulePath);
+expect(growthModulePath, growthModule, /getSuccessionGovernanceData\(ctx,\s*\{[\s\S]*focusId[\s\S]*\}\)/, "succession exact focus must flow into governed succession data");
+expect(growthModulePath, growthModule, /getDevelopmentPlanGovernanceData\(ctx,\s*\{[\s\S]*focusId[\s\S]*\}\)/, "development-plan exact focus must flow into governed talent data");
+expect(growthModulePath, growthModule, /focusId\s*&&\s*!data\.focusVisible/, "succession must warn when exact owner focus is unavailable");
+expect(growthModulePath, growthModule, /focusId\s*&&\s*!development\.focusVisible/, "development-plan must warn when exact owner focus is unavailable");
+expect(growthModulePath, growthModule, /No broader plan lookup was attempted/, "invalid growth focus must fail closed without broad fallback");
+
+const developmentDataPath = "lib/development-plan-data.ts";
+const developmentData = await source(developmentDataPath);
+expect(developmentDataPath, developmentData, /focusId\?\.trim\(\)\.slice\(0,\s*128\)/, "development-plan focus input must be bounded");
+expect(developmentDataPath, developmentData, /employmentIdFilter\(scope\)/, "development-plan focus must stay inside relationship scope");
+expect(developmentDataPath, developmentData, /plan\.id\s*===\s*focusId\s*&&\s*plan\.ownerId\s*===\s*ctx\.actorId/, "development-plan focus must also require signed owner identity");
+expect(developmentDataPath, developmentData, /orderedPlans[\s\S]*left\.id\s*===\s*focusId/, "authorized development-plan focus must be pinned without a second broad query");
+reject(developmentDataPath, developmentData, /findUnique\(|findFirst\(\{[\s\S]*id:\s*focusId/, "development-plan focus must not fall back to an unscoped primary-key lookup");
+
+const successionDataPath = "lib/succession-governance-data.ts";
+const successionData = await source(successionDataPath);
+expect(successionDataPath, successionData, /focusId\?\.trim\(\)\.slice\(0,\s*128\)/, "succession focus input must be bounded");
+expect(successionDataPath, successionData, /employmentPrimaryKeyFilter\(scope\)/, "succession focus must preserve relationship-scoped position authorization");
+expect(successionDataPath, successionData, /plan\.id\s*===\s*focusId\s*&&\s*plan\.ownerId\s*===\s*ctx\.actorId/, "succession focus must require signed owner identity");
+expect(successionDataPath, successionData, /orderedPlans[\s\S]*left\.id\s*===\s*focusId/, "authorized succession focus must be pinned without a second broad query");
+reject(successionDataPath, successionData, /findUnique\(|findFirst\(\{[\s\S]*id:\s*focusId/, "succession focus must not fall back to an unscoped primary-key lookup");
+
 const componentPath = "components/workflow-action-center.tsx";
 const component = await source(componentPath);
 expect(componentPath, component, /"development-plan"/, "Action Center UI must understand development-plan attention");

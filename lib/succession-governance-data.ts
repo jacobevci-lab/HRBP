@@ -67,14 +67,16 @@ export type SuccessionGovernanceData = {
   plans: SuccessionPlanOperation[];
   courses: SuccessionDevelopmentCourseOption[];
   skills: SuccessionDevelopmentSkillOption[];
+  focusVisible: boolean;
 };
 
 export async function getSuccessionGovernanceData(
   ctx: RequestContext,
-  options: { includeDevelopmentCatalog?: boolean } = {}
+  options: { includeDevelopmentCatalog?: boolean; focusId?: string } = {}
 ): Promise<SuccessionGovernanceData> {
   return withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
+    const focusId = options.focusId?.trim().slice(0, 128) || undefined;
     const scopedPositionIds = scope === null ? null : [...new Set((await db.employment.findMany({
       where: {
         tenantId: ctx.tenantId,
@@ -94,6 +96,7 @@ export async function getSuccessionGovernanceData(
       take: 200,
       select: {
         id: true,
+        ownerId: true,
         positionId: true,
         active: true,
         reviewDueAt: true,
@@ -125,9 +128,16 @@ export async function getSuccessionGovernanceData(
       }
     });
 
-    const positionIds = [...new Set(plans.map((plan) => plan.positionId))];
-    const employmentIds = [...new Set(plans.flatMap((plan) => plan.candidates.map((candidate) => candidate.employmentId)))];
-    const linkedSkillIds = [...new Set(plans.flatMap((plan) => plan.candidates.flatMap((candidate) => candidate.learningAssignments.flatMap((assignment) => assignment.developmentSkillId ? [assignment.developmentSkillId] : []))))];
+    // Action Center succession focus is owner-bound. Keep normal relationship-scoped
+    // data visible, but never honor a manipulated focus id owned by another actor.
+    const focusVisible = !focusId || plans.some((plan) => plan.id === focusId && plan.ownerId === ctx.actorId);
+    const orderedPlans = focusId && focusVisible
+      ? [...plans].sort((left, right) => left.id === focusId ? -1 : right.id === focusId ? 1 : 0)
+      : plans;
+
+    const positionIds = [...new Set(orderedPlans.map((plan) => plan.positionId))];
+    const employmentIds = [...new Set(orderedPlans.flatMap((plan) => plan.candidates.map((candidate) => candidate.employmentId)))];
+    const linkedSkillIds = [...new Set(orderedPlans.flatMap((plan) => plan.candidates.flatMap((candidate) => candidate.learningAssignments.flatMap((assignment) => assignment.developmentSkillId ? [assignment.developmentSkillId] : []))))];
 
     const [positions, employments, talentAssessments, employmentSkills, courses, skills] = await Promise.all([
       positionIds.length ? db.position.findMany({
@@ -175,9 +185,10 @@ export async function getSuccessionGovernanceData(
     const now = Date.now();
 
     return {
+      focusVisible,
       courses,
       skills,
-      plans: plans.map((plan) => {
+      plans: orderedPlans.map((plan) => {
         const position = positionMap.get(plan.positionId);
         return {
           id: plan.id,
