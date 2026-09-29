@@ -54,7 +54,7 @@ function ConsoleWarning({ locale, title, body }: { locale: Locale; title: string
   return <section className="card module-degraded-banner" style={{ marginTop: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}><CircleAlert size={18}/><div><strong style={{ display: "block", fontSize: 11 }}>{title}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5 }}>{body}</p></div></section>;
 }
 
-export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
+export async function GrowthModulePage({ slug, focusId }: { slug: GrowthSlug; focusId?: string }) {
   const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   const meta = copy[slug][locale];
 
@@ -88,8 +88,8 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
           import("@/components/performance-participant-console"),
           import("@/lib/performance-participant-data")
         ]);
-        const participantData = await getPerformanceParticipantData(ctx);
-        participant = <PerformanceParticipantConsole {...participantData}/>;
+        const participantData = await getPerformanceParticipantData(ctx, focusId);
+        participant = <>{focusId && !participantData.focusVisible ? <ConsoleWarning locale={locale} title={c(locale, "Requested performance action is not available", "İstenen performans aksiyonu kullanılamıyor")} body={c(locale, "The review is outside your participant identity scope, no longer actionable, or the review cycle is closed. No broader record lookup was attempted.", "Değerlendirme katılımcı kimlik kapsamınızın dışında, artık aksiyon alınabilir durumda değil veya değerlendirme dönemi kapalı. Daha geniş bir kayıt sorgusu denenmedi.")}/> : null}<PerformanceParticipantConsole {...participantData}/></>;
       } catch (participantError) {
         console.error("[HRBP] performance participant inbox could not initialize.", participantError);
         participant = <ConsoleWarning locale={locale} title={c(locale, "Participant review inbox is temporarily unavailable", "Katılımcı değerlendirme kutusu geçici olarak kullanılamıyor")} body={c(locale, "No participant decision was changed. The governed read surface remains available while the inbox recovers.", "Hiçbir katılımcı kararı değiştirilmedi. Kutu toparlanırken yönetişimli salt-okunur görünüm kullanılabilir.")}/>;
@@ -103,10 +103,11 @@ export async function GrowthModulePage({ slug }: { slug: GrowthSlug }) {
           import("@/lib/development-plan-participant-data")
         ]);
         const [assignments, plans] = await Promise.all([
-          getLearningParticipantData(ctx),
+          getLearningParticipantData(ctx, focusId),
           getDevelopmentPlanParticipantData(ctx)
         ]);
-        participant = <><DevelopmentPlanParticipantConsole plans={plans}/><LearningParticipantConsole assignments={assignments}/></>;
+        const focusVisible = !focusId || assignments.some((assignment) => assignment.focused);
+        participant = <>{focusId && !focusVisible ? <ConsoleWarning locale={locale} title={c(locale, "Requested learning action is not available", "İstenen eğitim aksiyonu kullanılamıyor")} body={c(locale, "The assignment is outside your employment identity, already closed, or no longer accepts participant progress. No unscoped fallback was used.", "Atama istihdam kimliğinizin dışında, kapanmış veya artık katılımcı ilerlemesi kabul etmiyor. Kapsamsız bir yedek sorgu kullanılmadı.")}/> : null}<DevelopmentPlanParticipantConsole plans={plans}/><LearningParticipantConsole assignments={assignments}/></>;
       } catch (participantError) {
         console.error("[HRBP] learning and development self-service could not initialize.", participantError);
         participant = <ConsoleWarning locale={locale} title={c(locale, "Learning self-service is temporarily unavailable", "Eğitim self-servis geçici olarak kullanılamıyor")} body={c(locale, "No employee learning progress was changed. The governed learning read surface remains available.", "Hiçbir çalışan eğitim ilerlemesi değiştirilmedi. Yönetişimli eğitim salt-okunur görünümü kullanılabilir.")}/>;
