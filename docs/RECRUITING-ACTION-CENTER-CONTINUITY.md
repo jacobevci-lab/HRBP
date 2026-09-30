@@ -24,6 +24,12 @@ Approve, return, cancel and withdraw operations remain in the existing Recruitin
 
 No approval outcome is generated automatically by the Action Center.
 
+## Notification continuity
+
+After a successful independent Requisition or Offer decision, the Recruiting console performs best-effort acknowledgement of the matching `Requisition` or `Offer` notification and refreshes the shared lifecycle/notification surfaces.
+
+The notification acknowledgement is deliberately secondary to the business transaction. A notification cleanup failure never rolls back or changes an approval decision that already committed successfully.
+
 ## Data minimization
 
 The Requisition projection contains only operational context needed to recognize the approval, such as title, position and opening count.
@@ -42,4 +48,4 @@ Dashboard and Analytics consume the same top-level Recruiting continuity wrapper
 
 ## Validation
 
-`npm run recruiting-action-center:validate` verifies capability gating, approval-state filtering, audit provenance, creator exclusion, salary-data exclusion, deep-link-only behavior, existing domain four-eyes controls and aggregate-only Dashboard/Analytics propagation.
+`npm run recruiting-action-center:validate` verifies capability gating, approval-state filtering, audit provenance, creator exclusion, salary-data exclusion, deep-link-only behavior, notification acknowledgement ordering, existing domain four-eyes controls and aggregate-only Dashboard/Analytics propagation.
