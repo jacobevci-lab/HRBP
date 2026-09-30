@@ -26,7 +26,7 @@ export type Capability =
   | "analytics:read"
   | "ai:use"
   | "privacy:read" | "privacy:write"
-  | "workflows:read" | "workflows:write" | "workflows:run"
+  | "workflows:read" | "workflows:write" | "workflows:approve" | "workflows:run"
   | "settings:read" | "settings:write"
   | "audit:read";
 
@@ -78,7 +78,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "policies:read", "policies:write", "policies:approve",
     "engagement:read", "engagement:write", "workforce-plan:read", "workforce-plan:write", "workforce-plan:approve",
     "analytics:read", "ai:use",
-    "workflows:read", "workflows:write", "workflows:run", "settings:read"
+    "workflows:read", "workflows:write", "workflows:approve", "workflows:run", "settings:read"
   ],
   RECRUITER: [
     "people:read", "organization:read", "positions:read", "documents:read",
@@ -130,7 +130,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "talent:read", "succession:read", "learning:read", "learning:self-progress",
     "hr-service:read", "hr-service:write", "policies:read", "engagement:read",
     "workforce-plan:read", "analytics:read", "ai:use",
-    "workflows:read", "workflows:write", "settings:read", "settings:write", "audit:read"
+    "workflows:read", "workflows:write", "workflows:approve", "settings:read", "settings:write", "audit:read"
   ]
 };
 
