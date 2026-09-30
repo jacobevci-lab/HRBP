@@ -1,4 +1,4 @@
-import { getPolicyLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/policy-action-center-continuity";
+import { getWorkforcePlanningLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/workforce-planning-action-center-continuity";
 import { getServerRequestContext } from "@/lib/server-session";
 
 export type DashboardLifecycleAttention = {
@@ -23,6 +23,7 @@ export type DashboardLifecycleAttention = {
   offboarding: number;
   recruiting: number;
   policies: number;
+  workforcePlanning: number;
 };
 
 const emptySummary: DashboardLifecycleAttention = {
@@ -46,7 +47,8 @@ const emptySummary: DashboardLifecycleAttention = {
   onboarding: 0,
   offboarding: 0,
   recruiting: 0,
-  policies: 0
+  policies: 0,
+  workforcePlanning: 0
 };
 
 export async function getDashboardLifecycleAttentionSafe(): Promise<{
