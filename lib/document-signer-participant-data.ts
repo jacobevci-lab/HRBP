@@ -80,12 +80,11 @@ export async function getDocumentSignerParticipantData(
     && participant.envelope.documentVersion.scanStatus === VaultScanStatus.CLEAN
     && participant.envelope.documentVersion.uploadedAt
   );
-  const actionable =
-    [SignatureEnvelopeStatus.SENT, SignatureEnvelopeStatus.IN_PROGRESS].includes(participant.envelope.status)
-    && [SignatureParticipantStatus.PENDING, SignatureParticipantStatus.VIEWED].includes(participant.status)
-    && !blockedByEarlierSigner
-    && !expired
-    && versionReady;
+  const envelopeActionable = participant.envelope.status === SignatureEnvelopeStatus.SENT
+    || participant.envelope.status === SignatureEnvelopeStatus.IN_PROGRESS;
+  const participantActionable = participant.status === SignatureParticipantStatus.PENDING
+    || participant.status === SignatureParticipantStatus.VIEWED;
+  const actionable = envelopeActionable && participantActionable && !blockedByEarlierSigner && !expired && versionReady;
 
   return {
     participantId: participant.id,
