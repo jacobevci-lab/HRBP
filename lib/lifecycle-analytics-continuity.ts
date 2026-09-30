@@ -1,4 +1,4 @@
-import { getPrivacyLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/privacy-action-center-continuity";
+import { getEngagementLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/engagement-action-center-continuity";
 import type { RequestContext } from "@/lib/request-context";
 
 export type LifecycleAnalyticsContinuitySummary = {
@@ -25,6 +25,7 @@ export type LifecycleAnalyticsContinuitySummary = {
   policies: number;
   workforcePlanning: number;
   privacy: number;
+  engagement: number;
 };
 
 const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
@@ -50,7 +51,8 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
   recruiting: 0,
   policies: 0,
   workforcePlanning: 0,
-  privacy: 0
+  privacy: 0,
+  engagement: 0
 };
 
 /**
@@ -86,7 +88,8 @@ export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
       recruiting: source.summary.recruiting,
       policies: source.summary.policies,
       workforcePlanning: source.summary.workforcePlanning,
-      privacy: source.summary.privacy
+      privacy: source.summary.privacy,
+      engagement: source.summary.engagement
     };
 
     return {
