@@ -26,7 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const result = await db.$transaction(async (tx) => {
     const current = await tx.workflowDefinition.findFirst({
       where: { id, tenantId: ctx.tenantId },
-      select: { id: true, status: true, createdById: true }
+      select: { id: true, key: true, status: true, createdById: true }
     });
     if (!current) throw new Error("NOT_FOUND");
 
@@ -34,6 +34,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (action === "ACTIVATE") {
       if (!activatableStatuses.has(current.status)) throw new Error("STATE");
       if (current.createdById === ctx.actorId) throw new Error("FOUR_EYES");
+      const activeSibling = await tx.workflowDefinition.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          key: current.key,
+          id: { not: current.id },
+          status: WorkflowDefinitionStatus.ACTIVE
+        },
+        select: { id: true }
+      });
+      if (activeSibling) throw new Error("ACTIVE_VERSION");
       status = WorkflowDefinitionStatus.ACTIVE;
     } else if (action === "PAUSE") {
       if (current.status !== WorkflowDefinitionStatus.ACTIVE) throw new Error("STATE");
@@ -57,13 +67,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return updated;
   }).catch((error) => {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") return "CONFLICT" as const;
-    if (error instanceof Error && ["NOT_FOUND", "STATE", "FOUR_EYES"].includes(error.message)) return error.message;
+    if (error instanceof Error && ["NOT_FOUND", "STATE", "FOUR_EYES", "ACTIVE_VERSION"].includes(error.message)) return error.message;
     return Promise.reject(error);
   });
 
   if (result === "NOT_FOUND") return Response.json({ error: "Workflow definition not found." }, { status: 404 });
   if (result === "STATE") return Response.json({ error: "The requested workflow definition transition is not allowed from the current state." }, { status: 409 });
   if (result === "FOUR_EYES") return forbidden("Workflow definition creators cannot activate their own definition.");
+  if (result === "ACTIVE_VERSION") return Response.json({ error: "Another version of this workflow key is already active. Pause it before activating this version." }, { status: 409 });
   if (result === "CONFLICT") return Response.json({ error: "Workflow definition state changed concurrently. Refresh and retry." }, { status: 409 });
   return Response.json({ data: result });
 }
