@@ -57,12 +57,12 @@ async function policyReviewItems(ctx: RequestContext): Promise<PolicyLifecycleAt
   });
 
   return policies.map((policy) => ({
-    id: \`policies:review:\${policy.id}\`,
+    id: `policies:review:${policy.id}`,
     kind: "policies",
-    title: \`Policy review · \${policy.code}\`,
-    subtitle: \`\${policy.title} · v\${policy.version}\`,
+    title: `Policy review · ${policy.code}`,
+    subtitle: `${policy.title} · v${policy.version}`,
     module: "policies",
-    href: \`/module/policies?policy=\${encodeURIComponent(policy.id)}&mode=review\`,
+    href: `/module/policies?policy=${encodeURIComponent(policy.id)}&mode=review`,
     subjectType: "PolicyRecord",
     subjectId: policy.id,
     status: statusLabel(policy.status),
@@ -102,12 +102,12 @@ async function policyAcknowledgementItems(ctx: RequestContext): Promise<PolicyLi
   });
 
   return assignments.map((assignment) => ({
-    id: \`policies:acknowledgement:\${assignment.id}\`,
+    id: `policies:acknowledgement:${assignment.id}`,
     kind: "policies",
-    title: \`Policy acknowledgement · \${assignment.policy.code}\`,
-    subtitle: \`\${assignment.policy.title} · v\${assignment.policy.version}\`,
+    title: `Policy acknowledgement · ${assignment.policy.code}`,
+    subtitle: `${assignment.policy.title} · v${assignment.policy.version}`,
     module: "policies",
-    href: \`/module/policies?policy=\${encodeURIComponent(assignment.policy.id)}&mode=acknowledge\`,
+    href: `/module/policies?policy=${encodeURIComponent(assignment.policy.id)}&mode=acknowledge`,
     subjectType: "PolicyAssignment",
     subjectId: assignment.id,
     status: statusLabel(assignment.status),
