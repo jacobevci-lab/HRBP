@@ -1,4 +1,4 @@
-import { getEngagementLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/engagement-action-center-continuity";
+import { getWorkflowDefinitionLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/workflow-definition-action-continuity";
 import { getServerRequestContext } from "@/lib/server-session";
 
 export type DashboardLifecycleAttention = {
