@@ -384,7 +384,7 @@ export async function getPrivacyLiveData(ctx: RequestContext) {
       db.processingActivity.findMany({ where: { tenantId: ctx.tenantId, active: true }, orderBy: { updatedAt: "desc" }, take: 150, select: { id: true, code: true, name: true, purpose: true, legalBasis: true, riskRating: true, ownerId: true, specialCategories: true } }),
       db.dataSubjectRequest.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }], take: 200, select: { id: true, requestNumber: true, subjectPersonId: true, type: true, status: true, ownerId: true, dueAt: true, verifiedAt: true, completedAt: true, createdAt: true } }),
       db.dataTransferRegister.findMany({ where: { tenantId: ctx.tenantId, active: true }, orderBy: { updatedAt: "desc" }, take: 100, select: { id: true, name: true, sourceCountry: true, destinationCountry: true, recipient: true, mechanism: true, transferImpactDueAt: true } }),
-      db.privacyRiskAssessment.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }], take: 100, select: { id: true, name: true, riskLevel: true, requiresDpia: true, status: true, ownerId: true, dueAt: true } })
+      db.privacyRiskAssessment.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }], take: 100, select: { id: true, name: true, riskLevel: true, requiresDpia: true, status: true, ownerId: true, dueAt: true, completedAt: true, createdAt: true } })
     ]);
 
     const openStatuses = new Set<DSRStatus>([DSRStatus.RECEIVED, DSRStatus.IDENTITY_VERIFICATION, DSRStatus.IN_PROGRESS, DSRStatus.WAITING]);
@@ -421,13 +421,26 @@ export async function getPrivacyLiveData(ctx: RequestContext) {
         specialCategory: Boolean(activity.specialCategories),
         owner: ownerMap.get(activity.ownerId) ?? activity.ownerId
       })),
-      transfers: transfers.slice(0, 12).map((transfer) => ({
+      assessments: assessments.slice(0, 20).map((assessment) => ({
+        id: assessment.id,
+        name: assessment.name,
+        riskLevel: assessment.riskLevel,
+        requiresDpia: assessment.requiresDpia,
+        status: assessment.status,
+        ownerId: assessment.ownerId,
+        owner: ownerMap.get(assessment.ownerId) ?? assessment.ownerId,
+        dueAt: formatDate(assessment.dueAt),
+        dueAtIso: assessment.dueAt?.toISOString() ?? null,
+        completed: Boolean(assessment.completedAt)
+      })),
+      transfers: transfers.slice(0, 20).map((transfer) => ({
         id: transfer.id,
         name: transfer.name,
         route: `${transfer.sourceCountry} → ${transfer.destinationCountry}`,
         recipient: transfer.recipient,
         mechanism: enumLabel(transfer.mechanism),
-        tiaDueAt: formatDate(transfer.transferImpactDueAt)
+        tiaDueAt: formatDate(transfer.transferImpactDueAt),
+        tiaDueAtIso: transfer.transferImpactDueAt?.toISOString() ?? null
       }))
     };
   });
