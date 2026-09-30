@@ -5,12 +5,12 @@ import { db } from "@/lib/db";
 import { asEnumValue, asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
-type DSRAction = "VERIFY" | "START" | "WAIT" | "RESUME" | "COMPLETE" | "REJECT" | "CANCEL";
-const actions: DSRAction[] = ["VERIFY", "START", "WAIT", "RESUME", "COMPLETE", "REJECT", "CANCEL"];
+type DSRAction = "BEGIN_VERIFICATION" | "VERIFY" | "WAIT" | "RESUME" | "COMPLETE" | "REJECT" | "CANCEL";
+const actions: DSRAction[] = ["BEGIN_VERIFICATION", "VERIFY", "WAIT", "RESUME", "COMPLETE", "REJECT", "CANCEL"];
 
 function nextStatus(current: DSRStatus, action: DSRAction) {
-  if (action === "VERIFY" && current === DSRStatus.RECEIVED) return DSRStatus.IDENTITY_VERIFICATION;
-  if (action === "START" && (current === DSRStatus.RECEIVED || current === DSRStatus.IDENTITY_VERIFICATION)) return DSRStatus.IN_PROGRESS;
+  if (action === "BEGIN_VERIFICATION" && current === DSRStatus.RECEIVED) return DSRStatus.IDENTITY_VERIFICATION;
+  if (action === "VERIFY" && current === DSRStatus.IDENTITY_VERIFICATION) return DSRStatus.IN_PROGRESS;
   if (action === "WAIT" && current === DSRStatus.IN_PROGRESS) return DSRStatus.WAITING;
   if (action === "RESUME" && current === DSRStatus.WAITING) return DSRStatus.IN_PROGRESS;
   if (action === "COMPLETE" && (current === DSRStatus.IN_PROGRESS || current === DSRStatus.WAITING)) return DSRStatus.COMPLETED;
@@ -30,7 +30,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "JSON body must be an object." }, { status: 400 });
   const action = asEnumValue(body.action, actions);
-  if (!action) return Response.json({ error: "A valid DSR action is required." }, { status: 400 });
+  if (!action) return Response.json({ error: "A valid DSR lifecycle action is required." }, { status: 400 });
   const rejectionReason = action === "REJECT" ? asText(body.reason, 2000) : undefined;
   if (action === "REJECT" && !rejectionReason) return Response.json({ error: "reason is required when rejecting a DSR." }, { status: 400 });
 
