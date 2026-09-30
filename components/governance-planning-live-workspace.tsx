@@ -19,6 +19,7 @@ import { can } from "@/lib/authorization";
 import { WorkforceScenarioActions } from "@/components/workforce-scenario-actions";
 import { DSRLifecycleActions } from "@/components/dsr-lifecycle-actions";
 import { EngagementCampaignActions } from "@/components/engagement-campaign-actions";
+import { EngagementCampaignWindowEditor } from "@/components/engagement-campaign-window-editor";
 import { getServerRequestContext } from "@/lib/server-session";
 import {
   getAIAssistantLiveData,
@@ -72,7 +73,7 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
               <td>{row.survey}<small className="cell-sub">{row.surveyCode}</small></td>
               <td>{row.suppressed ? "Suppressed" : `${row.responses}${row.target ? ` / ${row.target}` : ""}`}</td>
               <td>{row.suppressed ? "Suppressed" : row.rate === null ? "—" : `${row.rate}%`}</td>
-              <td>{row.threshold}</td><td>{row.mode}</td><td>{row.opensAt} → {row.closesAt}</td><td><Pill value={row.status}/></td><td><EngagementCampaignActions campaignId={row.id} status={row.rawStatus} createdById={row.createdById} actorId={ctx.actorId} canWrite={engagementCanWrite}/></td>
+              <td>{row.threshold}</td><td>{row.mode}</td><td>{row.opensAt} → {row.closesAt}</td><td><Pill value={row.status}/></td><td><div style={{display:"grid",gap:5}}><EngagementCampaignWindowEditor campaignId={row.id} status={row.rawStatus} createdById={row.createdById} actorId={ctx.actorId} canWrite={engagementCanWrite} opensAt={row.opensAtIso} closesAt={row.closesAtIso}/><EngagementCampaignActions campaignId={row.id} status={row.rawStatus} createdById={row.createdById} actorId={ctx.actorId} canWrite={engagementCanWrite}/></div></td>
             </tr>) : <Empty text="No campaigns are visible inside your authorized population." columns={9}/>}
           </tbody></table></div>
         </div>
