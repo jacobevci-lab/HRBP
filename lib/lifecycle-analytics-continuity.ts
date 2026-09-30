@@ -1,4 +1,4 @@
-import { getDocumentSignatureLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/document-signature-action-continuity";
+import { getRecruitingLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/recruiting-action-center-continuity";
 import type { RequestContext } from "@/lib/request-context";
 
 export type LifecycleAnalyticsContinuitySummary = {
@@ -21,6 +21,7 @@ export type LifecycleAnalyticsContinuitySummary = {
   succession: number;
   onboarding: number;
   offboarding: number;
+  recruiting: number;
 };
 
 const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
@@ -42,15 +43,16 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
   developmentPlans: 0,
   succession: 0,
   onboarding: 0,
-  offboarding: 0
+  offboarding: 0,
+  recruiting: 0
 };
 
 /**
  * Builds an analytics-safe operational continuity projection for the signed actor.
  * The source remains the governed Lifecycle Action Center. Only aggregate counters
  * cross this boundary; titles, employee names, ratings, learning evidence,
- * onboarding task detail, offboarding clearance detail, pay data and document
- * metadata remain in their owning domains.
+ * onboarding task detail, offboarding clearance detail, recruiting candidate detail,
+ * pay data and document metadata remain in their owning domains.
  */
 export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
   try {
@@ -74,7 +76,8 @@ export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
       developmentPlans: source.summary.developmentPlans,
       succession: source.summary.succession,
       onboarding: source.summary.onboarding,
-      offboarding: source.summary.offboarding
+      offboarding: source.summary.offboarding,
+      recruiting: source.summary.recruiting
     };
 
     return {
