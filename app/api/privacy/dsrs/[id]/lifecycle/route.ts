@@ -7,6 +7,7 @@ import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/re
 
 type DSRAction = "BEGIN_VERIFICATION" | "VERIFY" | "WAIT" | "RESUME" | "COMPLETE" | "REJECT" | "CANCEL";
 const actions: DSRAction[] = ["BEGIN_VERIFICATION", "VERIFY", "WAIT", "RESUME", "COMPLETE", "REJECT", "CANCEL"];
+const terminalStatuses = new Set<DSRStatus>([DSRStatus.COMPLETED, DSRStatus.REJECTED, DSRStatus.CANCELLED]);
 
 function nextStatus(current: DSRStatus, action: DSRAction) {
   if (action === "BEGIN_VERIFICATION" && current === DSRStatus.RECEIVED) return DSRStatus.IDENTITY_VERIFICATION;
@@ -14,8 +15,8 @@ function nextStatus(current: DSRStatus, action: DSRAction) {
   if (action === "WAIT" && current === DSRStatus.IN_PROGRESS) return DSRStatus.WAITING;
   if (action === "RESUME" && current === DSRStatus.WAITING) return DSRStatus.IN_PROGRESS;
   if (action === "COMPLETE" && (current === DSRStatus.IN_PROGRESS || current === DSRStatus.WAITING)) return DSRStatus.COMPLETED;
-  if (action === "REJECT" && ![DSRStatus.COMPLETED, DSRStatus.REJECTED, DSRStatus.CANCELLED].includes(current)) return DSRStatus.REJECTED;
-  if (action === "CANCEL" && ![DSRStatus.COMPLETED, DSRStatus.REJECTED, DSRStatus.CANCELLED].includes(current)) return DSRStatus.CANCELLED;
+  if (action === "REJECT" && !terminalStatuses.has(current)) return DSRStatus.REJECTED;
+  if (action === "CANCEL" && !terminalStatuses.has(current)) return DSRStatus.CANCELLED;
   return null;
 }
 
