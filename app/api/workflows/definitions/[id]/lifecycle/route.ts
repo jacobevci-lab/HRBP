@@ -7,6 +7,8 @@ import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/re
 
 type DefinitionAction = "ACTIVATE" | "PAUSE" | "RETIRE";
 const actions: DefinitionAction[] = ["ACTIVATE", "PAUSE", "RETIRE"];
+const activatableStatuses = new Set<WorkflowDefinitionStatus>([WorkflowDefinitionStatus.DRAFT, WorkflowDefinitionStatus.PAUSED]);
+const retirableStatuses = new Set<WorkflowDefinitionStatus>([WorkflowDefinitionStatus.DRAFT, WorkflowDefinitionStatus.PAUSED]);
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = getRequestContext(request);
@@ -30,14 +32,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     let status: WorkflowDefinitionStatus;
     if (action === "ACTIVATE") {
-      if (![WorkflowDefinitionStatus.DRAFT, WorkflowDefinitionStatus.PAUSED].includes(current.status)) throw new Error("STATE");
+      if (!activatableStatuses.has(current.status)) throw new Error("STATE");
       if (current.createdById === ctx.actorId) throw new Error("FOUR_EYES");
       status = WorkflowDefinitionStatus.ACTIVE;
     } else if (action === "PAUSE") {
       if (current.status !== WorkflowDefinitionStatus.ACTIVE) throw new Error("STATE");
       status = WorkflowDefinitionStatus.PAUSED;
     } else {
-      if (![WorkflowDefinitionStatus.DRAFT, WorkflowDefinitionStatus.PAUSED].includes(current.status)) throw new Error("STATE");
+      if (!retirableStatuses.has(current.status)) throw new Error("STATE");
       status = WorkflowDefinitionStatus.RETIRED;
     }
 
