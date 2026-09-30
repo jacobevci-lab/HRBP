@@ -29,7 +29,7 @@ expect(policyContinuityPath, policyContinuity, /recruitingDegraded:\s*base\.recr
 
 const actionRoutePath = "app/api/action-center/route.ts";
 const actionRoute = await source(actionRoutePath);
-expect(actionRoutePath, actionRoute, /workforce-planning-action-center-continuity/, "the Action Center API must route through the current top-level continuity wrapper");
+expect(actionRoutePath, actionRoute, /privacy-action-center-continuity/, "the Action Center API must route through the current top-level continuity wrapper");
 expect(actionRoutePath, actionRoute, /cache-control[\s\S]*no-store/, "personal action queues must remain non-cacheable");
 
 const uiPath = "components/workflow-action-center.tsx";
@@ -67,13 +67,13 @@ expect(offerRoutePath, offerRoute, /TransactionIsolationLevel\.Serializable/, "o
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
-expect(dashboardPath, dashboard, /getWorkforcePlanningLifecycleActionCenterData/, "Dashboard must reuse the current top-level continuity source that preserves Recruiting");
+expect(dashboardPath, dashboard, /getPrivacyLifecycleActionCenterData/, "Dashboard must reuse the current top-level continuity source that preserves Recruiting");
 expect(dashboardPath, dashboard, /recruiting:\s*number/, "Dashboard summary must carry aggregate Recruiting attention only");
 reject(dashboardPath, dashboard, /candidateName|annualBase|requisitionTitle|\.items/, "Dashboard must not receive Recruiting record detail");
 
 const analyticsPath = "lib/lifecycle-analytics-continuity.ts";
 const analytics = await source(analyticsPath);
-expect(analyticsPath, analytics, /getWorkforcePlanningLifecycleActionCenterData/, "Analytics must reuse the current top-level continuity source that preserves Recruiting");
+expect(analyticsPath, analytics, /getPrivacyLifecycleActionCenterData/, "Analytics must reuse the current top-level continuity source that preserves Recruiting");
 expect(analyticsPath, analytics, /recruiting:\s*source\.summary\.recruiting/, "Analytics must project the Recruiting aggregate only");
 expect(analyticsPath, analytics, /aggregateOnly:\s*true/, "Analytics privacy contract must remain aggregate-only");
 reject(analyticsPath, analytics, /candidateName|annualBase|requisitionTitle|\.items/, "Analytics must not project Recruiting record detail");
