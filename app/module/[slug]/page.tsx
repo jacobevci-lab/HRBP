@@ -10,6 +10,7 @@ import { HRServiceLifecyclePanel } from "@/components/hr-service-lifecycle-panel
 import { ModuleLanding } from "@/components/module-landing";
 import { NotificationsModulePage } from "@/components/notifications-module-page";
 import { OffboardingClearanceLoader } from "@/components/offboarding-clearance-loader";
+import { PolicyLifecycleFocusPanel } from "@/components/policy-lifecycle-focus-panel";
 import { PublicModuleLanding } from "@/components/public-module-landing";
 import { SecurityPolicyEditorLoader } from "@/components/security-policy-editor-loader";
 import { SettingsConnectionsManager } from "@/components/settings-connections-manager";
@@ -43,6 +44,8 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const assignmentFocus = typeof search.assignment === "string" ? search.assignment : "";
   const developmentPlanFocus = typeof search.developmentPlan === "string" ? search.developmentPlan : "";
   const successionPlanFocus = typeof search.plan === "string" ? search.plan : "";
+  const policyFocus = typeof search.policy === "string" ? search.policy : undefined;
+  const policyExceptionFocus = typeof search.exception === "string" ? search.exception : undefined;
   const personId = typeof search.person === "string" ? search.person : undefined;
   const documentFocus = typeof search.document === "string" ? search.document : undefined;
   const documentLifecycleQuery = slug === "documents" ? (documentFocus || personId || "") : "";
@@ -96,6 +99,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
       {slug === "employee-relations" ? <EmployeeRelationsCaseLifecyclePanel focus={{ query, caseId: employeeRelationsCaseId, actionId: employeeRelationsActionId, appealId: employeeRelationsAppealId }}/> : null}
       {slug === "hr-service" ? <HRServiceLifecyclePanel focus={query}/> : null}
       {slug === "hr-service" ? <HRServiceEscalationPanel filterValue={escalation}/> : null}
+      {slug === "policies" && (policyFocus || policyExceptionFocus) ? <PolicyLifecycleFocusPanel focus={{ policyId: policyFocus, exceptionId: policyExceptionFocus }}/> : null}
     </AppShell>
   );
 }
