@@ -43,16 +43,16 @@ expect(recruitingContinuityPath, recruitingContinuity, /documentSignatureDegrade
 
 const apiPath = "app/api/action-center/route.ts";
 const api = await source(apiPath);
-expect(apiPath, api, /engagement-action-center-continuity/, "Action Center API must use the current top-level continuity wrapper that contains signature continuity");
+expect(apiPath, api, /workflow-definition-action-continuity/, "Action Center API must use the current top-level continuity wrapper that contains signature continuity");
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
-expect(dashboardPath, dashboard, /engagement-action-center-continuity/, "Dashboard must use the same current governed continuity source");
+expect(dashboardPath, dashboard, /workflow-definition-action-continuity/, "Dashboard must use the same current governed continuity source");
 reject(dashboardPath, dashboard, /SignatureEnvelope|documentVersion|participants|contentHash/, "Dashboard must remain aggregate-only");
 
 const analyticsPath = "lib/lifecycle-analytics-continuity.ts";
 const analytics = await source(analyticsPath);
-expect(analyticsPath, analytics, /engagement-action-center-continuity/, "Analytics must use the same current governed continuity source");
+expect(analyticsPath, analytics, /workflow-definition-action-continuity/, "Analytics must use the same current governed continuity source");
 reject(analyticsPath, analytics, /SignatureEnvelope|documentVersion|participants|contentHash/, "Analytics must not project signature evidence");
 
 if (failures.length) {
