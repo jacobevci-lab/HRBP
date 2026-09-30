@@ -148,9 +148,14 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
   }
 
   const data = await getPrivacyLiveData(ctx);
-  const privacyFocusVisible = focusId ? data.dsrs.some((row) => row.id === focusId) : true;
   const privacyCanWrite = can(ctx, "privacy:write");
-  return <div className="gov-shell"><GovernedFocusScroller attribute="data-dsr-id" value={privacyFocusVisible ? focusId : undefined}/>{focusId && !privacyFocusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>DSR focus is unavailable in your governed privacy scope.</strong> The deep link failed closed and did not broaden the privacy query.</p></section> : null}
+  const privacyFocusType = mode === "assessment" ? "assessment" : mode === "transfer" ? "transfer" : "dsr";
+  const privacyFocusVisible = !focusId
+    || (privacyFocusType === "assessment" && data.assessments.some((row) => row.id === focusId))
+    || (privacyFocusType === "transfer" && data.transfers.some((row) => row.id === focusId))
+    || (privacyFocusType === "dsr" && data.dsrs.some((row) => row.id === focusId));
+  const privacyFocusAttribute = privacyFocusType === "assessment" ? "data-privacy-assessment-id" : privacyFocusType === "transfer" ? "data-privacy-transfer-id" : "data-dsr-id";
+  return <div className="gov-shell"><GovernedFocusScroller attribute={privacyFocusAttribute} value={privacyFocusVisible ? focusId : undefined}/>{focusId && !privacyFocusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>Privacy focus is unavailable in your governed scope.</strong> The deep link failed closed and did not broaden the privacy query.</p></section> : null}
     <section className="gov-metrics">
       <Metric icon={<FileKey2 size={18}/>} label="Processing activities" value={String(data.processingActivities)} meta="Active RoPA records"/>
       <Metric icon={<Activity size={18}/>} label="Open DSRs" value={String(data.openDsrs)} meta={`${data.dsrsDue7} due within 7 days`}/>
@@ -161,13 +166,25 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
       <div className="card gov-panel">
         <div className="gov-panel-head"><div><span className="section-kicker">Live privacy operations</span><h3>Data subject requests</h3></div><span className="matrix-note">Privacy / Legal only</span></div>
         <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Request</th><th>Type</th><th>State</th><th>Age</th><th>Due</th><th>Owner</th><th>Status</th><th>Lifecycle</th></tr></thead><tbody>
-          {data.dsrs.length ? data.dsrs.map((row) => <tr key={row.id} data-dsr-id={row.id} className={focusId === row.id ? "focused" : undefined}><td><strong>{row.requestNumber}</strong>{focusId === row.id ? <small className="cell-sub">{mode === "work" ? "Focused DSR action" : "Focused DSR"}</small> : null}</td><td>{row.type}</td><td>{row.state}</td><td>{row.age}d</td><td>{row.dueAt}</td><td>{row.owner}</td><td><Pill value={row.status}/></td><td><DSRLifecycleActions dsrId={row.id} status={row.rawStatus} ownerId={row.ownerId} actorId={ctx.actorId} canWrite={privacyCanWrite}/></td></tr>) : <Empty text="No data subject requests are recorded." columns={8}/>} 
+          {data.dsrs.length ? data.dsrs.map((row) => <tr key={row.id} data-dsr-id={row.id} className={privacyFocusType === "dsr" && focusId === row.id ? "focused" : undefined}><td><strong>{row.requestNumber}</strong>{privacyFocusType === "dsr" && focusId === row.id ? <small className="cell-sub">{mode === "work" ? "Focused DSR action" : "Focused DSR"}</small> : null}</td><td>{row.type}</td><td>{row.state}</td><td>{row.age}d</td><td>{row.dueAt}</td><td>{row.owner}</td><td><Pill value={row.status}/></td><td><DSRLifecycleActions dsrId={row.id} status={row.rawStatus} ownerId={row.ownerId} actorId={ctx.actorId} canWrite={privacyCanWrite}/></td></tr>) : <Empty text="No data subject requests are recorded." columns={8}/>} 
         </tbody></table></div>
       </div>
       <aside className="card gov-side">
         <div className="gov-panel-head"><div><span className="section-kicker">Separation of duties</span><h3>Privacy operations boundary</h3></div><ShieldCheck size={18}/></div>
         <div className="gov-controls"><p><LockKeyhole size={17}/><span><strong>Privacy / Legal roles only</strong><small>General HRBP, HR Operations and tenant administration do not inherit DSR, RoPA or transfer-register visibility.</small></span></p><p><Scale size={17}/><span><strong>Lawful basis first</strong><small>Processing purpose, legal basis, transfer mechanism and DPIA signals remain explicit records.</small></span></p><p><FileKey2 size={17}/><span><strong>Operational traceability</strong><small>Request ownership and due dates remain visible only inside the dedicated privacy boundary.</small></span></p></div>
       </aside>
+    </section>
+    <section className="card gov-panel">
+      <div className="gov-panel-head"><div><span className="section-kicker">Privacy assurance</span><h3>DPIA & privacy risk assessments</h3></div><span className="matrix-note">Owner + due date</span></div>
+      <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Assessment</th><th>Risk</th><th>DPIA</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead><tbody>
+        {data.assessments.length ? data.assessments.map((row) => <tr key={row.id} data-privacy-assessment-id={row.id} className={privacyFocusType === "assessment" && focusId === row.id ? "focused" : undefined}><td><strong>{row.name}</strong>{privacyFocusType === "assessment" && focusId === row.id ? <small className="cell-sub">Focused privacy assessment</small> : null}</td><td>{row.riskLevel}</td><td>{row.requiresDpia ? "Required" : "Not required"}</td><td>{row.owner}</td><td>{row.dueAt}</td><td><Pill value={row.status}/></td></tr>) : <Empty text="No privacy risk assessments are recorded." columns={6}/>}
+      </tbody></table></div>
+    </section>
+    <section className="card gov-panel">
+      <div className="gov-panel-head"><div><span className="section-kicker">Cross-border assurance</span><h3>Transfer impact review register</h3></div><span className="matrix-note">TIA due-date control</span></div>
+      <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Transfer</th><th>Route</th><th>Recipient</th><th>Mechanism</th><th>TIA due</th></tr></thead><tbody>
+        {data.transfers.length ? data.transfers.map((row) => <tr key={row.id} data-privacy-transfer-id={row.id} className={privacyFocusType === "transfer" && focusId === row.id ? "focused" : undefined}><td><strong>{row.name}</strong>{privacyFocusType === "transfer" && focusId === row.id ? <small className="cell-sub">Focused transfer impact review</small> : null}</td><td>{row.route}</td><td>{row.recipient}</td><td>{row.mechanism}</td><td>{row.tiaDueAt}</td></tr>) : <Empty text="No active cross-border transfer records are configured." columns={5}/>}
+      </tbody></table></div>
     </section>
   </div>;
 }

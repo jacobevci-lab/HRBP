@@ -81,16 +81,100 @@ async function privacyDsrItems(ctx: RequestContext): Promise<PrivacyLifecycleAtt
   }));
 }
 
+async function privacyAssuranceItems(ctx: RequestContext): Promise<PrivacyLifecycleAttentionItem[]> {
+  if (!can(ctx, "privacy:write")) return [];
+
+  const now = new Date();
+  const assuranceHorizon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const [assessments, transfers] = await Promise.all([
+    db.privacyRiskAssessment.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        ownerId: ctx.actorId,
+        completedAt: null,
+        status: { notIn: ["COMPLETED", "CLOSED"] },
+        dueAt: { not: null, lte: assuranceHorizon }
+      },
+      orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }],
+      take: 100,
+      select: {
+        id: true,
+        name: true,
+        riskLevel: true,
+        requiresDpia: true,
+        status: true,
+        dueAt: true,
+        createdAt: true
+      }
+    }),
+    db.dataTransferRegister.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        active: true,
+        transferImpactDueAt: { not: null, lte: assuranceHorizon }
+      },
+      orderBy: [{ transferImpactDueAt: "asc" }, { createdAt: "asc" }],
+      take: 100,
+      select: {
+        id: true,
+        name: true,
+        destinationCountry: true,
+        mechanism: true,
+        transferImpactDueAt: true,
+        createdAt: true
+      }
+    })
+  ]);
+
+  const assessmentItems: PrivacyLifecycleAttentionItem[] = assessments.map((assessment) => ({
+    id: `privacy:assessment:${assessment.id}`,
+    kind: "privacy",
+    title: `${assessment.requiresDpia ? "DPIA" : "Privacy assessment"} · ${assessment.name}`,
+    subtitle: `${assessment.riskLevel} risk · ${assessment.status}`,
+    module: "privacy",
+    href: `/module/privacy?assessment=${encodeURIComponent(assessment.id)}&mode=assessment`,
+    subjectType: "PrivacyRiskAssessment",
+    subjectId: assessment.id,
+    status: assessment.status.toLowerCase().replace(/_/g, " "),
+    dueAt: assessment.dueAt?.toISOString() ?? null,
+    createdAt: assessment.createdAt.toISOString(),
+    urgency: assessment.dueAt ? urgencyForDueDate(assessment.dueAt) : "normal",
+    action: null
+  }));
+
+  const transferItems: PrivacyLifecycleAttentionItem[] = transfers.map((transfer) => ({
+      id: `privacy:transfer:${transfer.id}`,
+      kind: "privacy",
+      title: `Transfer impact review · ${transfer.name}`,
+      subtitle: `${transfer.destinationCountry} · ${transfer.mechanism.toLowerCase().replace(/_/g, " ")}`,
+      module: "privacy",
+      href: `/module/privacy?transfer=${encodeURIComponent(transfer.id)}&mode=transfer`,
+      subjectType: "DataTransferRegister",
+      subjectId: transfer.id,
+      status: "active",
+      dueAt: transfer.transferImpactDueAt?.toISOString() ?? null,
+      createdAt: transfer.createdAt.toISOString(),
+      urgency: transfer.transferImpactDueAt ? urgencyForDueDate(transfer.transferImpactDueAt) : "normal",
+      action: null
+    }));
+
+  return [...assessmentItems, ...transferItems];
+}
+
 export async function getPrivacyLifecycleActionCenterData(ctx: RequestContext) {
   const base = await getWorkforcePlanningLifecycleActionCenterData(ctx);
   let privacyItems: PrivacyLifecycleAttentionItem[] = [];
   let privacyDegraded = false;
 
   try {
-    privacyItems = await privacyDsrItems(ctx);
+    const [dsrItems, assuranceItems] = await Promise.all([
+      privacyDsrItems(ctx),
+      privacyAssuranceItems(ctx)
+    ]);
+    privacyItems = [...dsrItems, ...assuranceItems];
   } catch (error) {
     privacyDegraded = true;
-    console.error("[HRBP] Privacy DSR attention failed; preserving the governed Action Center.", error);
+    console.error("[HRBP] Privacy attention failed; preserving the governed Action Center.", error);
   }
 
   const items: PrivacyTopLevelItem[] = [...base.items, ...privacyItems].sort(sortItems).slice(0, 500);
