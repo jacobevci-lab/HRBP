@@ -9,6 +9,15 @@ const authPath = "lib/authorization.ts";
 const auth = await source(authPath);
 expect(authPath, auth, /workflows:approve/, "authorization must define a dedicated workflow approval capability");
 
+const intakePath = "app/api/workflows/definitions/route.ts";
+const intake = await source(intakePath);
+expect(intakePath, intake, /mutationOriginAllowed\(request\)/, "workflow definition mutations must enforce origin checks");
+expect(intakePath, intake, /MAX_STEPS = 50/, "workflow definition intake must bound step count");
+expect(intakePath, intake, /stepKey values must be unique/, "workflow definition intake must reject duplicate step keys");
+expect(intakePath, intake, /Object\.values\(PlatformRole\)/, "workflow assignee roles must be validated against platform roles");
+expect(intakePath, intake, /MAX_SLA_MINUTES = 43_200/, "workflow step SLA must be bounded");
+expect(intakePath, intake, /version must be an integer between 1 and 1000/, "workflow definition version must be bounded");
+
 const routePath = "app/api/workflows/definitions/[id]/lifecycle/route.ts";
 const route = await source(routePath);
 expect(routePath, route, /can\(ctx,\s*"workflows:approve"\)/, "workflow definition lifecycle must require approval authority");
