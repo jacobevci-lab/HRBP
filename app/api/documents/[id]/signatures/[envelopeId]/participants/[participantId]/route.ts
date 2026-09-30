@@ -70,7 +70,7 @@ export async function PATCH(
 
     const participant = envelope.participants.find((entry) => entry.id === participantId);
     if (!participant || participant.employmentId !== ctx.employmentId) throw new Error("PARTICIPANT");
-    if (!actionableParticipantStatuses.includes(participant.status)) throw new Error("STATE");
+    if (participant.status !== SignatureParticipantStatus.PENDING && participant.status !== SignatureParticipantStatus.VIEWED) throw new Error("STATE");
 
     const blockedByEarlierSigner = envelope.participants.some((entry) =>
       entry.signingOrder < participant.signingOrder && entry.status !== SignatureParticipantStatus.SIGNED
