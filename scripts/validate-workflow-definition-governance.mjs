@@ -28,6 +28,9 @@ expect(routePath, route, /WorkflowDefinitionStatus\.RETIRED/, "definition lifecy
 expect(routePath, route, /activatableStatuses\.has\(current\.status\)/, "activation state guard must be type-safe and bounded");
 expect(routePath, route, /retirableStatuses\.has\(current\.status\)/, "retirement state guard must be type-safe and bounded");
 expect(routePath, route, /Independent workflow definition activation/, "activation audit evidence must preserve four-eyes purpose");
+expect(routePath, route, /activeSibling[\s\S]*WorkflowDefinitionStatus\.ACTIVE/, "activation must reject a second active version for the same workflow key");
+expect(routePath, route, /ACTIVE_VERSION/, "active-version conflicts must return a governed conflict");
+reject(routePath, route, /workflowInstance\.(?:update|updateMany|delete|deleteMany)/, "definition lifecycle transitions must not silently mutate running workflow instances");
 
 const continuityPath = "lib/workflow-definition-action-continuity.ts";
 const continuity = await source(continuityPath);
