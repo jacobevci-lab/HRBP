@@ -22,9 +22,14 @@ expect(continuityPath, continuity, /slice\(0,\s*350\)/, "combined Action Center 
 reject(continuityPath, continuity, /annualBase|currency|proposedAnnualBase|currentAnnualBase|bank|accountNumber/, "central Recruiting attention must not load offer compensation or payment data");
 reject(continuityPath, continuity, /\/status["'`]/, "the central Action Center must not perform Recruiting decisions directly");
 
+const policyContinuityPath = "lib/policy-action-center-continuity.ts";
+const policyContinuity = await source(policyContinuityPath);
+expect(policyContinuityPath, policyContinuity, /getRecruitingLifecycleActionCenterData\(ctx\)/, "newer continuity layers must preserve Recruiting as their governed base");
+expect(policyContinuityPath, policyContinuity, /recruitingDegraded:\s*base\.recruitingDegraded/, "newer continuity layers must preserve Recruiting degradation state");
+
 const actionRoutePath = "app/api/action-center/route.ts";
 const actionRoute = await source(actionRoutePath);
-expect(actionRoutePath, actionRoute, /getRecruitingLifecycleActionCenterData/, "the Action Center API must route through Recruiting continuity");
+expect(actionRoutePath, actionRoute, /policy-action-center-continuity/, "the Action Center API must route through the current top-level continuity wrapper");
 expect(actionRoutePath, actionRoute, /cache-control[\s\S]*no-store/, "personal action queues must remain non-cacheable");
 
 const uiPath = "components/workflow-action-center.tsx";
@@ -62,13 +67,13 @@ expect(offerRoutePath, offerRoute, /TransactionIsolationLevel\.Serializable/, "o
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
-expect(dashboardPath, dashboard, /getRecruitingLifecycleActionCenterData/, "Dashboard must reuse the same governed Recruiting continuity source");
+expect(dashboardPath, dashboard, /getPolicyLifecycleActionCenterData/, "Dashboard must reuse the current top-level continuity source that preserves Recruiting");
 expect(dashboardPath, dashboard, /recruiting:\s*number/, "Dashboard summary must carry aggregate Recruiting attention only");
 reject(dashboardPath, dashboard, /candidateName|annualBase|requisitionTitle|\.items/, "Dashboard must not receive Recruiting record detail");
 
 const analyticsPath = "lib/lifecycle-analytics-continuity.ts";
 const analytics = await source(analyticsPath);
-expect(analyticsPath, analytics, /getRecruitingLifecycleActionCenterData/, "Analytics must reuse the same governed Recruiting continuity source");
+expect(analyticsPath, analytics, /getPolicyLifecycleActionCenterData/, "Analytics must reuse the current top-level continuity source that preserves Recruiting");
 expect(analyticsPath, analytics, /recruiting:\s*source\.summary\.recruiting/, "Analytics must project the Recruiting aggregate only");
 expect(analyticsPath, analytics, /aggregateOnly:\s*true/, "Analytics privacy contract must remain aggregate-only");
 reject(analyticsPath, analytics, /candidateName|annualBase|requisitionTitle|\.items/, "Analytics must not project Recruiting record detail");
