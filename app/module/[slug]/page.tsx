@@ -47,6 +47,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const documentFocus = typeof search.document === "string" ? search.document : undefined;
   const policyFocus = typeof search.policy === "string" ? search.policy : undefined;
   const scenarioFocus = typeof search.scenario === "string" ? search.scenario : undefined;
+  const dsrFocus = typeof search.dsr === "string" ? search.dsr : undefined;
   const lifecycleMode = typeof search.mode === "string" ? search.mode : undefined;
   const documentLifecycleQuery = slug === "documents" ? (documentFocus || personId || "") : "";
   const policyLifecycleQuery = slug === "policies" ? (policyFocus || "") : "";
@@ -88,7 +89,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   if (slug === "analytics") return <AnalyticsModulePage/>;
   if (growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug} focusId={growthFocus}/>;
   if (workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug} focusId={workPayFocus}/>;
-  if (governanceSlugs.has(slug as GovernanceSlug)) return <GovernancePlanningModulePage slug={slug as GovernanceSlug} focusId={slug === "workforce-planning" ? scenarioFocus : undefined} mode={lifecycleMode}/>;
+  if (governanceSlugs.has(slug as GovernanceSlug)) return <GovernancePlanningModulePage slug={slug as GovernanceSlug} focusId={slug === "workforce-planning" ? scenarioFocus : slug === "privacy" ? dsrFocus : undefined} mode={lifecycleMode}/>;
 
   const workflowAdminVisible = can(ctx, "workflows:read");
 
