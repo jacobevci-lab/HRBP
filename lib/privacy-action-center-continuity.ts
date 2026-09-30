@@ -1,0 +1,123 @@
+import { DSRStatus } from "@prisma/client";
+import { can } from "@/lib/authorization";
+import { db } from "@/lib/db";
+import {
+  getWorkforcePlanningLifecycleActionCenterData,
+  type WorkforcePlanningLifecycleAttentionItem
+} from "@/lib/workforce-planning-action-center-continuity";
+import type { CompleteLifecycleActionItem } from "@/lib/recruiting-action-center-continuity";
+import type { PolicyLifecycleAttentionItem } from "@/lib/policy-action-center-continuity";
+import type { LifecycleActionUrgency } from "@/lib/lifecycle-action-center";
+import type { RequestContext } from "@/lib/request-context";
+
+export type PrivacyLifecycleAttentionItem = Omit<WorkforcePlanningLifecycleAttentionItem, "kind"> & {
+  kind: "privacy";
+};
+
+type PrivacyTopLevelItem =
+  | CompleteLifecycleActionItem
+  | PolicyLifecycleAttentionItem
+  | WorkforcePlanningLifecycleAttentionItem
+  | PrivacyLifecycleAttentionItem;
+
+const openStatuses = [
+  DSRStatus.RECEIVED,
+  DSRStatus.IDENTITY_VERIFICATION,
+  DSRStatus.IN_PROGRESS,
+  DSRStatus.WAITING
+];
+
+function urgencyForDueDate(dueAt: Date, now = Date.now()): LifecycleActionUrgency {
+  const due = dueAt.getTime();
+  if (due < now) return "critical";
+  if (due <= now + 7 * 24 * 60 * 60 * 1000) return "warning";
+  return "normal";
+}
+
+function sortItems(left: PrivacyTopLevelItem, right: PrivacyTopLevelItem) {
+  const rank: Record<LifecycleActionUrgency, number> = { critical: 0, warning: 1, normal: 2 };
+  if (rank[left.urgency] !== rank[right.urgency]) return rank[left.urgency] - rank[right.urgency];
+  const leftDue = left.dueAt ? new Date(left.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+  const rightDue = right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
+  if (leftDue !== rightDue) return leftDue - rightDue;
+  return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+}
+
+async function privacyDsrItems(ctx: RequestContext): Promise<PrivacyLifecycleAttentionItem[]> {
+  if (!can(ctx, "privacy:write")) return [];
+
+  const dsrs = await db.dataSubjectRequest.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      ownerId: ctx.actorId,
+      status: { in: openStatuses }
+    },
+    orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }],
+    take: 100,
+    select: {
+      id: true,
+      requestNumber: true,
+      type: true,
+      status: true,
+      dueAt: true,
+      createdAt: true
+    }
+  });
+
+  return dsrs.map((dsr) => ({
+    id: `privacy:dsr:${dsr.id}`,
+    kind: "privacy",
+    title: `DSR action · ${dsr.requestNumber}`,
+    subtitle: dsr.type.toLowerCase().replace(/_/g, " "),
+    module: "privacy",
+    href: `/module/privacy?dsr=${encodeURIComponent(dsr.id)}&mode=work`,
+    subjectType: "DataSubjectRequest",
+    subjectId: dsr.id,
+    status: dsr.status.toLowerCase().replace(/_/g, " "),
+    dueAt: dsr.dueAt.toISOString(),
+    createdAt: dsr.createdAt.toISOString(),
+    urgency: urgencyForDueDate(dsr.dueAt),
+    action: null
+  }));
+}
+
+export async function getPrivacyLifecycleActionCenterData(ctx: RequestContext) {
+  const base = await getWorkforcePlanningLifecycleActionCenterData(ctx);
+  let privacyItems: PrivacyLifecycleAttentionItem[] = [];
+  let privacyDegraded = false;
+
+  try {
+    privacyItems = await privacyDsrItems(ctx);
+  } catch (error) {
+    privacyDegraded = true;
+    console.error("[HRBP] Privacy DSR attention failed; preserving the governed Action Center.", error);
+  }
+
+  const items: PrivacyTopLevelItem[] = [...base.items, ...privacyItems].sort(sortItems).slice(0, 500);
+  const now = Date.now();
+  const soon = now + 24 * 60 * 60 * 1000;
+
+  return {
+    items,
+    summary: {
+      ...base.summary,
+      total: items.length,
+      overdue: items.filter((item) => item.dueAt && new Date(item.dueAt).getTime() < now).length,
+      dueSoon: items.filter((item) => {
+        if (!item.dueAt) return false;
+        const due = new Date(item.dueAt).getTime();
+        return due >= now && due <= soon;
+      }).length,
+      critical: items.filter((item) => item.urgency === "critical").length,
+      privacy: items.filter((item) => item.kind === "privacy").length
+    },
+    generatedAt: new Date(now).toISOString(),
+    growthDegraded: base.growthDegraded,
+    employeeLifecycleDegraded: base.employeeLifecycleDegraded,
+    documentSignatureDegraded: base.documentSignatureDegraded,
+    recruitingDegraded: base.recruitingDegraded,
+    policyDegraded: base.policyDegraded,
+    workforcePlanningDegraded: base.workforcePlanningDegraded,
+    privacyDegraded
+  };
+}
