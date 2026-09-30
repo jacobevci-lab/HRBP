@@ -34,18 +34,25 @@ expect(continuityPath, continuity, /kind:\s*"documents"/, "signature follow-up m
 expect(continuityPath, continuity, /documentSignatureDegraded/, "signature aggregation must fail soft without suppressing the core Action Center");
 reject(continuityPath, continuity, /contentHash|objectKey|scanMessage|scanReference|email:\s*true|employmentId:\s*true/, "Action Center signature aggregation must not load signer identity or storage evidence");
 
+// The Action Center may add newer continuity layers above Documents. Validate that
+// the current top-level Recruiting wrapper extends, rather than bypasses, signature continuity.
+const recruitingContinuityPath = "lib/recruiting-action-center-continuity.ts";
+const recruitingContinuity = await source(recruitingContinuityPath);
+expect(recruitingContinuityPath, recruitingContinuity, /getDocumentSignatureLifecycleActionCenterData\(ctx\)/, "the top-level lifecycle wrapper must preserve document-signature continuity");
+expect(recruitingContinuityPath, recruitingContinuity, /documentSignatureDegraded:\s*base\.documentSignatureDegraded/, "the top-level wrapper must preserve signature degradation state");
+
 const apiPath = "app/api/action-center/route.ts";
 const api = await source(apiPath);
-expect(apiPath, api, /document-signature-action-continuity/, "Action Center API must use the signature continuity wrapper");
+expect(apiPath, api, /recruiting-action-center-continuity/, "Action Center API must use the current top-level continuity wrapper that contains signature continuity");
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
-expect(dashboardPath, dashboard, /document-signature-action-continuity/, "Dashboard must use the same governed continuity source");
+expect(dashboardPath, dashboard, /recruiting-action-center-continuity/, "Dashboard must use the same current governed continuity source");
 reject(dashboardPath, dashboard, /SignatureEnvelope|documentVersion|participants|contentHash/, "Dashboard must remain aggregate-only");
 
 const analyticsPath = "lib/lifecycle-analytics-continuity.ts";
 const analytics = await source(analyticsPath);
-expect(analyticsPath, analytics, /document-signature-action-continuity/, "Analytics must use the same governed continuity source");
+expect(analyticsPath, analytics, /recruiting-action-center-continuity/, "Analytics must use the same current governed continuity source");
 reject(analyticsPath, analytics, /SignatureEnvelope|documentVersion|participants|contentHash/, "Analytics must not project signature evidence");
 
 if (failures.length) {

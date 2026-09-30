@@ -26,6 +26,7 @@ type ApprovalQueueItem = {
 };
 type DeepLinkTarget = { type: "requisition" | "offer" | "candidate" | "application"; id: string };
 type CandidateLookup = { id: string; applications?: Array<{ id: string; offer?: { id: string } | null }> };
+type NotificationSubject = { resourceType: "Requisition" | "Offer"; resourceId: string };
 
 type Props = {
   positions: PositionOption[];
@@ -87,6 +88,21 @@ function deepLinkTargetFromLocation(): DeepLinkTarget | null {
 function matchingNode(type: "requisition" | "offer" | "application", id: string) {
   const attribute = `data-recruiting-${type}`;
   return [...document.querySelectorAll<HTMLElement>(`[${attribute}]`)].find((element) => element.getAttribute(attribute) === id) ?? null;
+}
+
+async function acknowledgeRecruitingNotification(subject: NotificationSubject) {
+  try {
+    const response = await fetch("/api/notifications", {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resourceType: subject.resourceType, resourceId: subject.resourceId, read: true })
+    });
+    if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
+  } catch {
+    // Notification acknowledgement is best-effort. It must never roll back a
+    // Recruiting state transition that already committed successfully.
+  }
 }
 
 export function RecruitingOperationsConsole({ positions, users, requisitions, applications, canApprove }: Props) {
@@ -200,7 +216,7 @@ export function RecruitingOperationsConsole({ positions, users, requisitions, ap
     return () => { cancelled = true; };
   }, [approvalRefreshToken, locale]);
 
-  async function post(key: string, url: string, payload: Record<string, unknown>) {
+  async function post(key: string, url: string, payload: Record<string, unknown>, notificationSubject?: NotificationSubject) {
     setPending(key);
     setNotice(null);
     try {
@@ -212,6 +228,8 @@ export function RecruitingOperationsConsole({ positions, users, requisitions, ap
       });
       const body = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(body.error || c(`Request failed (${response.status})`,`İstek başarısız (${response.status})`));
+      if (notificationSubject) await acknowledgeRecruitingNotification(notificationSubject);
+      window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
       setNotice({ tone: "ok", text: c("Transaction completed and written to the governed HR record.","İşlem tamamlandı ve yönetişimli İK kaydına yazıldı.") });
       setApprovalRefreshToken((value) => value + 1);
       router.refresh();
@@ -256,16 +274,18 @@ export function RecruitingOperationsConsole({ positions, users, requisitions, ap
     if (item.selfPrepared) return <small>{c("Prepared by you · four-eyes control requires another approver","Sizin tarafınızdan hazırlandı · dört-göz kontrolü başka bir onaylayıcı gerektirir")}</small>;
     if (!canApprove) return <small>{c("Independent approver required","Bağımsız onaylayıcı gerekli")}</small>;
     if (item.type === "REQUISITION") {
+      const subject: NotificationSubject = { resourceType: "Requisition", resourceId: item.id };
       return <>
-        <button type="button" className="primary-mini" disabled={pending !== null} onClick={() => void post(`approval-${item.id}-OPEN`, `/api/recruiting/requisitions/${item.id}/status`, { status: "OPEN" })}>{pending === `approval-${item.id}-OPEN` ? "…" : c("Approve & open","Onayla & aç")}</button>
-        <button type="button" disabled={pending !== null} onClick={() => void post(`approval-${item.id}-DRAFT`, `/api/recruiting/requisitions/${item.id}/status`, { status: "DRAFT" })}>{c("Return","Geri gönder")}</button>
-        <button type="button" disabled={pending !== null} onClick={() => void post(`approval-${item.id}-CANCELLED`, `/api/recruiting/requisitions/${item.id}/status`, { status: "CANCELLED" })}>{c("Cancel","İptal")}</button>
+        <button type="button" className="primary-mini" disabled={pending !== null} onClick={() => void post(`approval-${item.id}-OPEN`, `/api/recruiting/requisitions/${item.id}/status`, { status: "OPEN" }, subject)}>{pending === `approval-${item.id}-OPEN` ? "…" : c("Approve & open","Onayla & aç")}</button>
+        <button type="button" disabled={pending !== null} onClick={() => void post(`approval-${item.id}-DRAFT`, `/api/recruiting/requisitions/${item.id}/status`, { status: "DRAFT" }, subject)}>{c("Return","Geri gönder")}</button>
+        <button type="button" disabled={pending !== null} onClick={() => void post(`approval-${item.id}-CANCELLED`, `/api/recruiting/requisitions/${item.id}/status`, { status: "CANCELLED" }, subject)}>{c("Cancel","İptal")}</button>
       </>;
     }
+    const subject: NotificationSubject = { resourceType: "Offer", resourceId: item.id };
     return <>
-      <button type="button" className="primary-mini" disabled={pending !== null} onClick={() => void post(`approval-${item.id}-SENT`, `/api/recruiting/offers/${item.id}/status`, { status: "SENT" })}>{pending === `approval-${item.id}-SENT` ? "…" : c("Approve & send","Onayla & gönder")}</button>
-      <button type="button" disabled={pending !== null} onClick={() => void post(`approval-${item.id}-DRAFT`, `/api/recruiting/offers/${item.id}/status`, { status: "DRAFT" })}>{c("Return","Geri gönder")}</button>
-      <button type="button" disabled={pending !== null} onClick={() => void post(`approval-${item.id}-WITHDRAWN`, `/api/recruiting/offers/${item.id}/status`, { status: "WITHDRAWN" })}>{c("Withdraw","Geri çek")}</button>
+      <button type="button" className="primary-mini" disabled={pending !== null} onClick={() => void post(`approval-${item.id}-SENT`, `/api/recruiting/offers/${item.id}/status`, { status: "SENT" }, subject)}>{pending === `approval-${item.id}-SENT` ? "…" : c("Approve & send","Onayla & gönder")}</button>
+      <button type="button" disabled={pending !== null} onClick={() => void post(`approval-${item.id}-DRAFT`, `/api/recruiting/offers/${item.id}/status`, { status: "DRAFT" }, subject)}>{c("Return","Geri gönder")}</button>
+      <button type="button" disabled={pending !== null} onClick={() => void post(`approval-${item.id}-WITHDRAWN`, `/api/recruiting/offers/${item.id}/status`, { status: "WITHDRAWN" }, subject)}>{c("Withdraw","Geri çek")}</button>
     </>;
   }
 
@@ -333,7 +353,7 @@ export function RecruitingOperationsConsole({ positions, users, requisitions, ap
   </section>;
 }
 
-function ApplicationOperation({ application, pending, post }: { application: ApplicationOperation; pending: string | null; post: (key: string, url: string, payload: Record<string, unknown>) => Promise<boolean> }) {
+function ApplicationOperation({ application, pending, post }: { application: ApplicationOperation; pending: string | null; post: (key: string, url: string, payload: Record<string, unknown>, notificationSubject?: NotificationSubject) => Promise<boolean> }) {
   const { locale } = useLocale();
   const c = (en:string,tr:string) => locale === "tr" ? tr : en;
   const [offerOpen, setOfferOpen] = useState(false);

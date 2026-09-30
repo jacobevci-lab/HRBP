@@ -1,4 +1,4 @@
-import { getDocumentSignatureLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/document-signature-action-continuity";
+import { getRecruitingLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/recruiting-action-center-continuity";
 import { getRequestContext, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
