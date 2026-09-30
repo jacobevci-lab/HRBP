@@ -1,15 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, BadgeDollarSign, BookOpenCheck, CalendarCheck2, CheckCircle2, ClipboardCheck, Clock3, ExternalLink, FileClock, HeartHandshake, ReceiptText, RefreshCw, ShieldAlert, Target, TimerReset, UserMinus, UserPlus, UsersRound, Workflow } from "lucide-react";
+import { AlertTriangle, BadgeDollarSign, BookOpenCheck, BriefcaseBusiness, CalendarCheck2, CheckCircle2, ClipboardCheck, Clock3, ExternalLink, FileClock, HeartHandshake, ReceiptText, RefreshCw, ShieldAlert, Target, TimerReset, UserMinus, UserPlus, UsersRound, Workflow } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
-type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "onboarding" | "offboarding" | "leave" | "time-attendance" | "compensation" | "payroll" | "benefits" | "performance" | "learning" | "development-plan" | "succession";
+type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "onboarding" | "offboarding" | "leave" | "time-attendance" | "compensation" | "payroll" | "benefits" | "performance" | "learning" | "development-plan" | "succession" | "recruiting";
 type Urgency = "normal" | "warning" | "critical";
 type Filter = "all" | "critical" | "overdue" | "due-soon" | ActionKind;
 
-const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents", "onboarding", "offboarding", "leave", "time-attendance", "compensation", "payroll", "benefits", "performance", "learning", "development-plan", "succession"]);
+const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents", "onboarding", "offboarding", "leave", "time-attendance", "compensation", "payroll", "benefits", "performance", "learning", "development-plan", "succession", "recruiting"]);
 
 function normalizeFilter(value?: string): Filter {
   return value && allowedFilters.has(value as Filter) ? value as Filter : "all";
@@ -55,6 +55,7 @@ type ActionSummary = {
   learning: number;
   developmentPlans: number;
   succession: number;
+  recruiting: number;
 };
 
 const emptySummary: ActionSummary = {
@@ -76,7 +77,8 @@ const emptySummary: ActionSummary = {
   performance: 0,
   learning: 0,
   developmentPlans: 0,
-  succession: 0
+  succession: 0,
+  recruiting: 0
 };
 
 type ActionQueueResponse = {
@@ -212,6 +214,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
     if (kind === "learning") return locale === "tr" ? "Eğitim" : "Learning";
     if (kind === "development-plan") return locale === "tr" ? "Gelişim Planı" : "Development Plan";
     if (kind === "succession") return locale === "tr" ? "Yedekleme" : "Succession";
+    if (kind === "recruiting") return locale === "tr" ? "İşe Alım" : "Recruiting";
     return locale === "tr" ? "Çalışan İlişkileri" : "Employee Relations";
   }
 
@@ -227,7 +230,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <div>
           <span className="section-kicker">{locale === "tr" ? "Yaşam döngüsü aksiyon merkezi" : "Lifecycle action center"}</span>
           <h3>{locale === "tr" ? "Bekleyen işlerim ve operasyonel blokajlar" : "My pending work and operational blockers"}</h3>
-          <p>{locale === "tr" ? "İş akışlarını, işe başlatma ve işten ayrılış kontrollerini, İK hizmet taleplerini, kısıtlı çalışan ilişkileri aksiyonlarını, doküman yaşam döngüsünü, iş-ücret ve yan hak kontrollerini ve gelişim aksiyonlarını tek yetkili kuyrukta takip et." : "Track workflows, onboarding and offboarding controls, HR service requests, restricted employee-relations actions, document lifecycle, work-pay and benefits controls, and growth actions in one authorized queue."}</p>
+          <p>{locale === "tr" ? "İş akışlarını, işe alım onaylarını, işe başlatma ve işten ayrılış kontrollerini, İK hizmet taleplerini, kısıtlı çalışan ilişkileri aksiyonlarını, doküman yaşam döngüsünü, iş-ücret ve yan hak kontrollerini ve gelişim aksiyonlarını tek yetkili kuyrukta takip et." : "Track workflows, recruiting approvals, onboarding and offboarding controls, HR service requests, restricted employee-relations actions, document lifecycle, work-pay and benefits controls, and growth actions in one authorized queue."}</p>
         </div>
         <button className="secondary-button" type="button" onClick={() => void refresh()} disabled={loading}>
           <RefreshCw size={15}/>{locale === "tr" ? "Yenile" : "Refresh"}
@@ -251,6 +254,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
 
       <div className="workflow-action-source-filters" role="group" aria-label={locale === "tr" ? "Kaynak filtresi" : "Source filter"}>
         <button type="button" className={filter === "workflow" ? "active" : ""} onClick={() => setFilter("workflow")}>{locale === "tr" ? "İş akışı" : "Workflow"} <strong>{summary.workflow}</strong></button>
+        <button type="button" className={filter === "recruiting" ? "active" : ""} onClick={() => setFilter("recruiting")}><BriefcaseBusiness size={14}/>{locale === "tr" ? "İşe Alım" : "Recruiting"} <strong>{summary.recruiting}</strong></button>
         <button type="button" className={filter === "hr-service" ? "active" : ""} onClick={() => setFilter("hr-service")}>{locale === "tr" ? "İK Hizmeti" : "HR Service"} <strong>{summary.hrService}</strong></button>
         <button type="button" className={filter === "employee-relations" ? "active" : ""} onClick={() => setFilter("employee-relations")}>{locale === "tr" ? "Çalışan İlişkileri" : "Employee Relations"} <strong>{summary.employeeRelations}</strong></button>
         <button type="button" className={filter === "documents" ? "active" : ""} onClick={() => setFilter("documents")}><FileClock size={14}/>{locale === "tr" ? "Dokümanlar" : "Documents"} <strong>{summary.documents}</strong></button>
