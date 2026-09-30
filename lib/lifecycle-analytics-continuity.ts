@@ -1,4 +1,4 @@
-import { getWorkforcePlanningLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/workforce-planning-action-center-continuity";
+import { getPrivacyLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/privacy-action-center-continuity";
 import type { RequestContext } from "@/lib/request-context";
 
 export type LifecycleAnalyticsContinuitySummary = {
@@ -24,6 +24,7 @@ export type LifecycleAnalyticsContinuitySummary = {
   recruiting: number;
   policies: number;
   workforcePlanning: number;
+  privacy: number;
 };
 
 const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
@@ -48,7 +49,8 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
   offboarding: 0,
   recruiting: 0,
   policies: 0,
-  workforcePlanning: 0
+  workforcePlanning: 0,
+  privacy: 0
 };
 
 /**
@@ -83,7 +85,8 @@ export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
       offboarding: source.summary.offboarding,
       recruiting: source.summary.recruiting,
       policies: source.summary.policies,
-      workforcePlanning: source.summary.workforcePlanning
+      workforcePlanning: source.summary.workforcePlanning,
+      privacy: source.summary.privacy
     };
 
     return {
