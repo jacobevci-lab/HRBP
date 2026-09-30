@@ -165,7 +165,9 @@ export async function getEngagementLiveData(ctx: RequestContext) {
         mode: campaign.anonymous ? "Anonymous" : "Confidential",
         suppressed,
         opensAt: formatDate(campaign.opensAt),
-        closesAt: formatDate(campaign.closesAt)
+        closesAt: formatDate(campaign.closesAt),
+        opensAtIso: campaign.opensAt?.toISOString() ?? null,
+        closesAtIso: campaign.closesAt?.toISOString() ?? null
       };
     });
     const visibleRows = rows.filter((row) => !row.suppressed);
