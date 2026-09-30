@@ -37,7 +37,7 @@ expect(recruitingContinuityPath, recruitingContinuity, /employeeLifecycleDegrade
 
 const apiPath = "app/api/action-center/route.ts";
 const api = await source(apiPath);
-expect(apiPath, api, /getRecruitingLifecycleActionCenterData/, "Action Center API must serve the latest layered governed queue");
+expect(apiPath, api, /getPolicyLifecycleActionCenterData/, "Action Center API must serve the latest layered governed queue");
 
 const uiPath = "components/workflow-action-center.tsx";
 const ui = await source(uiPath);
