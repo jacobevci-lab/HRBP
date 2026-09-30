@@ -35,7 +35,7 @@ function capabilityFor(slug: GovernanceSlug): Capability {
 
 function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
 
-export async function GovernancePlanningModulePage({ slug }: { slug: GovernanceSlug }) {
+export async function GovernancePlanningModulePage({ slug, focusId, mode }: { slug: GovernanceSlug; focusId?: string; mode?: string }) {
   const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   const meta = copy[slug][locale];
   const capability = capabilityFor(slug);
@@ -58,7 +58,7 @@ export async function GovernancePlanningModulePage({ slug }: { slug: GovernanceS
 
   try {
     const { GovernancePlanningLiveWorkspace } = await import("@/components/governance-planning-live-workspace");
-    const live = await GovernancePlanningLiveWorkspace({ slug });
+    const live = await GovernancePlanningLiveWorkspace({ slug, focusId, mode });
     const ownedDrafts = slug === "workforce-planning"
       ? await (await import("@/components/workforce-planning-owned-drafts")).WorkforcePlanningOwnedDrafts()
       : null;
