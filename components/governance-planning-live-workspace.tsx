@@ -18,6 +18,7 @@ import {
 import { can } from "@/lib/authorization";
 import { WorkforceScenarioActions } from "@/components/workforce-scenario-actions";
 import { DSRLifecycleActions } from "@/components/dsr-lifecycle-actions";
+import { EngagementCampaignActions } from "@/components/engagement-campaign-actions";
 import { getServerRequestContext } from "@/lib/server-session";
 import {
   getAIAssistantLiveData,
@@ -53,7 +54,9 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
   if (slug === "engagement") {
     const data = await getEngagementLiveData(ctx);
     const scopeLabel = data.relationshipScoped ? "Relationship scoped" : "Tenant authorized";
-    return <div className="gov-shell">
+    const campaignFocusVisible = focusId ? data.rows.some((row) => row.id === focusId) : true;
+    const engagementCanWrite = can(ctx, "engagement:write");
+    return <div className="gov-shell">{focusId && !campaignFocusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>Campaign focus is unavailable in your governed scope.</strong> The deep link failed closed and did not broaden the engagement query.</p></section> : null}
       <section className="gov-metrics">
         <Metric icon={<UsersRound size={18}/>} label="Active campaigns" value={String(data.activeCampaigns)} meta={`${scopeLabel} campaign view`}/>
         <Metric icon={<Gauge size={18}/>} label="Visible responses" value={String(data.responses)} meta={`${data.responseRate}% average visible response rate`}/>
@@ -63,14 +66,14 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
       <section className="gov-split">
         <div className="card gov-panel">
           <div className="gov-panel-head"><div><span className="section-kicker">Live employee listening</span><h3>Survey campaigns</h3></div><span className="matrix-note">{scopeLabel}</span></div>
-          <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Campaign</th><th>Survey</th><th>Responses</th><th>Rate</th><th>Threshold</th><th>Mode</th><th>Window</th><th>Status</th></tr></thead><tbody>
-            {data.rows.length ? data.rows.map((row) => <tr key={row.id}>
-              <td><strong>{row.name}</strong></td>
+          <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Campaign</th><th>Survey</th><th>Responses</th><th>Rate</th><th>Threshold</th><th>Mode</th><th>Window</th><th>Status</th><th>Lifecycle</th></tr></thead><tbody>
+            {data.rows.length ? data.rows.map((row) => <tr key={row.id} data-engagement-campaign-id={row.id} className={focusId === row.id ? "focused" : undefined}>
+              <td><strong>{row.name}</strong>{focusId === row.id ? <small className="cell-sub">{mode === "work" ? "Focused campaign action" : "Focused campaign"}</small> : null}</td>
               <td>{row.survey}<small className="cell-sub">{row.surveyCode}</small></td>
               <td>{row.suppressed ? "Suppressed" : `${row.responses}${row.target ? ` / ${row.target}` : ""}`}</td>
               <td>{row.suppressed ? "Suppressed" : row.rate === null ? "—" : `${row.rate}%`}</td>
-              <td>{row.threshold}</td><td>{row.mode}</td><td>{row.opensAt} → {row.closesAt}</td><td><Pill value={row.status}/></td>
-            </tr>) : <Empty text="No campaigns are visible inside your authorized population."/>}
+              <td>{row.threshold}</td><td>{row.mode}</td><td>{row.opensAt} → {row.closesAt}</td><td><Pill value={row.status}/></td><td><EngagementCampaignActions campaignId={row.id} status={row.rawStatus} createdById={row.createdById} actorId={ctx.actorId} canWrite={engagementCanWrite}/></td>
+            </tr>) : <Empty text="No campaigns are visible inside your authorized population." columns={9}/>}
           </tbody></table></div>
         </div>
         <aside className="card gov-side">
