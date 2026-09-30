@@ -43,6 +43,7 @@ expect(livePath, live, /data-engagement-campaign-id/, "Engagement workspace must
 expect(livePath, live, /campaignFocusVisible/, "invalid campaign focus must fail closed");
 expect(livePath, live, /EngagementCampaignActions/, "campaign lifecycle actions must stay in the owning Engagement workspace");
 expect(livePath, live, /EngagementCampaignWindowEditor/, "draft campaign scheduling must be configurable in the owning workspace");
+expect(livePath, live, /GovernedFocusScroller/, "governed lifecycle deep links must scroll exact focused records into view");
 
 const modulePath = "app/module/[slug]/page.tsx";
 const modulePage = await source(modulePath);
