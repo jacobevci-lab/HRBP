@@ -208,6 +208,7 @@ export async function getWorkforcePlanningLiveData(ctx: RequestContext) {
           horizonMonths: true,
           currency: true,
           ownerId: true,
+          approvedById: true,
           approvedAt: true,
           lines: {
             where: scopedLineWhere,
@@ -246,6 +247,9 @@ export async function getWorkforcePlanningLiveData(ctx: RequestContext) {
         costDelta: Math.round(costDelta),
         skillSignals,
         owner: ownerMap.get(scenario.ownerId) ?? scenario.ownerId,
+        ownerId: scenario.ownerId,
+        approvedById: scenario.approvedById,
+        rawStatus: scenario.status,
         baseDate: formatDate(scenario.baseDate)
       };
     });

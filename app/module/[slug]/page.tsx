@@ -46,7 +46,8 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const personId = typeof search.person === "string" ? search.person : undefined;
   const documentFocus = typeof search.document === "string" ? search.document : undefined;
   const policyFocus = typeof search.policy === "string" ? search.policy : undefined;
-  const policyMode = typeof search.mode === "string" ? search.mode : undefined;
+  const scenarioFocus = typeof search.scenario === "string" ? search.scenario : undefined;
+  const lifecycleMode = typeof search.mode === "string" ? search.mode : undefined;
   const documentLifecycleQuery = slug === "documents" ? (documentFocus || personId || "") : "";
   const policyLifecycleQuery = slug === "policies" ? (policyFocus || "") : "";
   const query = explicitQuery || requestFocus || documentLifecycleQuery || policyLifecycleQuery;
@@ -87,14 +88,14 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   if (slug === "analytics") return <AnalyticsModulePage/>;
   if (growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug} focusId={growthFocus}/>;
   if (workPaySlugs.has(slug as WorkPaySlug)) return <WorkPayModulePage slug={slug as WorkPaySlug} focusId={workPayFocus}/>;
-  if (governanceSlugs.has(slug as GovernanceSlug)) return <GovernancePlanningModulePage slug={slug as GovernanceSlug}/>;
+  if (governanceSlugs.has(slug as GovernanceSlug)) return <GovernancePlanningModulePage slug={slug as GovernanceSlug} focusId={slug === "workforce-planning" ? scenarioFocus : undefined} mode={lifecycleMode}/>;
 
   const workflowAdminVisible = can(ctx, "workflows:read");
 
   return (
     <AppShell>
       {slug === "workflows" ? <WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId} initialFilter={actionView}/> : null}
-      {slug !== "workflows" || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={slug === "policies" ? policyMode : tab}/> : null}
+      {slug !== "workflows" || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={slug === "policies" ? lifecycleMode : tab}/> : null}
       {slug === "offboarding" && can(ctx, "offboarding:write") ? <OffboardingClearanceLoader/> : null}
       {slug === "employee-relations" ? <EmployeeRelationsCaseLifecyclePanel focus={{ query, caseId: employeeRelationsCaseId, actionId: employeeRelationsActionId, appealId: employeeRelationsAppealId }}/> : null}
       {slug === "hr-service" ? <HRServiceLifecyclePanel focus={query}/> : null}
