@@ -4,7 +4,7 @@ import { CheckCircle2, LoaderCircle, Pause, Play, ShieldCheck, XCircle } from "l
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-type DSRAction = "VERIFY" | "START" | "WAIT" | "RESUME" | "COMPLETE" | "REJECT" | "CANCEL";
+type DSRAction = "BEGIN_VERIFICATION" | "VERIFY" | "WAIT" | "RESUME" | "COMPLETE" | "REJECT" | "CANCEL";
 
 export function DSRLifecycleActions({
   dsrId,
@@ -61,8 +61,8 @@ export function DSRLifecycleActions({
 
   return <div className="comp-decision-wrap">
     <div className="comp-decision-buttons">
-      {status === "RECEIVED" ? <button type="button" className="mini-action approve" disabled={!!busy} onClick={() => void transition("VERIFY")}>{busy === "VERIFY" ? <LoaderCircle size={13}/> : <ShieldCheck size={13}/>} Verify</button> : null}
-      {(status === "RECEIVED" || status === "IDENTITY_VERIFICATION") ? <button type="button" className="mini-action apply" disabled={!!busy} onClick={() => void transition("START")}>{busy === "START" ? <LoaderCircle size={13}/> : <Play size={13}/>} Start</button> : null}
+      {status === "RECEIVED" ? <button type="button" className="mini-action approve" disabled={!!busy} onClick={() => void transition("BEGIN_VERIFICATION")}>{busy === "BEGIN_VERIFICATION" ? <LoaderCircle size={13}/> : <ShieldCheck size={13}/>} Begin verification</button> : null}
+      {status === "IDENTITY_VERIFICATION" ? <button type="button" className="mini-action apply" disabled={!!busy} onClick={() => void transition("VERIFY")}>{busy === "VERIFY" ? <LoaderCircle size={13}/> : <Play size={13}/>} Verify & start</button> : null}
       {status === "IN_PROGRESS" ? <button type="button" className="mini-action reject" disabled={!!busy} onClick={() => void transition("WAIT")}>{busy === "WAIT" ? <LoaderCircle size={13}/> : <Pause size={13}/>} Wait</button> : null}
       {status === "WAITING" ? <button type="button" className="mini-action apply" disabled={!!busy} onClick={() => void transition("RESUME")}>{busy === "RESUME" ? <LoaderCircle size={13}/> : <Play size={13}/>} Resume</button> : null}
       {(status === "IN_PROGRESS" || status === "WAITING") ? <button type="button" className="mini-action approve" disabled={!!busy} onClick={() => void transition("COMPLETE")}>{busy === "COMPLETE" ? <LoaderCircle size={13}/> : <CheckCircle2 size={13}/>} Complete</button> : null}
