@@ -1,4 +1,4 @@
-import { getRecruitingLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/recruiting-action-center-continuity";
+import { getPolicyLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/policy-action-center-continuity";
 import type { RequestContext } from "@/lib/request-context";
 
 export type LifecycleAnalyticsContinuitySummary = {
@@ -22,6 +22,7 @@ export type LifecycleAnalyticsContinuitySummary = {
   onboarding: number;
   offboarding: number;
   recruiting: number;
+  policies: number;
 };
 
 const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
@@ -44,7 +45,8 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
   succession: 0,
   onboarding: 0,
   offboarding: 0,
-  recruiting: 0
+  recruiting: 0,
+  policies: 0
 };
 
 /**
@@ -52,7 +54,7 @@ const EMPTY_SUMMARY: LifecycleAnalyticsContinuitySummary = {
  * The source remains the governed Lifecycle Action Center. Only aggregate counters
  * cross this boundary; titles, employee names, ratings, learning evidence,
  * onboarding task detail, offboarding clearance detail, recruiting candidate detail,
- * pay data and document metadata remain in their owning domains.
+ * policy content/assignment detail, pay data and document metadata remain in their owning domains.
  */
 export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
   try {
@@ -77,7 +79,8 @@ export async function getLifecycleAnalyticsContinuity(ctx: RequestContext) {
       succession: source.summary.succession,
       onboarding: source.summary.onboarding,
       offboarding: source.summary.offboarding,
-      recruiting: source.summary.recruiting
+      recruiting: source.summary.recruiting,
+      policies: source.summary.policies
     };
 
     return {
