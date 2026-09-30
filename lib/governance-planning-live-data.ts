@@ -127,6 +127,7 @@ export async function getEngagementLiveData(ctx: RequestContext) {
         audienceFilter: true,
         opensAt: true,
         closesAt: true,
+        createdById: true,
         survey: { select: { code: true, name: true } }
       }
     });
@@ -155,6 +156,8 @@ export async function getEngagementLiveData(ctx: RequestContext) {
         survey: campaign.survey.name,
         surveyCode: campaign.survey.code,
         status: enumLabel(campaign.status),
+        rawStatus: campaign.status,
+        createdById: campaign.createdById,
         responses,
         target,
         rate: !suppressed && target ? percent(responses, target) : null,
