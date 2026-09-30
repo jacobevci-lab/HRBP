@@ -28,11 +28,16 @@ expect(continuityPath, continuity, /employeeLifecycleDegraded/, "new lifecycle a
 
 const signatureContinuityPath = "lib/document-signature-action-continuity.ts";
 const signatureContinuity = await source(signatureContinuityPath);
-expect(signatureContinuityPath, signatureContinuity, /getEmployeeLifecycleActionCenterData/, "later continuity layers must preserve the employee lifecycle queue as their governed base");
+expect(signatureContinuityPath, signatureContinuity, /getEmployeeLifecycleActionCenterData/, "document-signature continuity must preserve the employee lifecycle queue as its governed base");
+
+const recruitingContinuityPath = "lib/recruiting-action-center-continuity.ts";
+const recruitingContinuity = await source(recruitingContinuityPath);
+expect(recruitingContinuityPath, recruitingContinuity, /getDocumentSignatureLifecycleActionCenterData\(ctx\)/, "the current top-level Recruiting wrapper must preserve document-signature and employee lifecycle continuity");
+expect(recruitingContinuityPath, recruitingContinuity, /employeeLifecycleDegraded:\s*base\.employeeLifecycleDegraded/, "top-level continuity must preserve employee lifecycle degradation state");
 
 const apiPath = "app/api/action-center/route.ts";
 const api = await source(apiPath);
-expect(apiPath, api, /getDocumentSignatureLifecycleActionCenterData/, "Action Center API must serve the latest layered governed queue");
+expect(apiPath, api, /getRecruitingLifecycleActionCenterData/, "Action Center API must serve the latest layered governed queue");
 
 const uiPath = "components/workflow-action-center.tsx";
 const ui = await source(uiPath);
