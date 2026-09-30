@@ -17,6 +17,12 @@ expect(routePath, route, /SurveyStatus\.ARCHIVED/, "campaign lifecycle must pres
 expect(routePath, route, /opensAt[\s\S]*closesAt/, "scheduling must validate the campaign window");
 expect(routePath, route, /DataClassification\.CONFIDENTIAL/, "campaign lifecycle audit evidence must remain confidential");
 
+const windowRoutePath = "app/api/engagement/campaigns/[id]/window/route.ts";
+const windowRoute = await source(windowRoutePath);
+expect(windowRoutePath, windowRoute, /SurveyStatus\.DRAFT/, "only draft campaigns may change their scheduling window");
+expect(windowRoutePath, windowRoute, /current\.createdById !== ctx\.actorId/, "campaign window editing must remain creator-bound");
+expect(windowRoutePath, windowRoute, /opensAt <= new Date\(\)[\s\S]*closesAt <= opensAt/, "campaign window editing must enforce future ordered dates");
+
 const continuityPath = "lib/engagement-action-center-continuity.ts";
 const continuity = await source(continuityPath);
 expect(continuityPath, continuity, /getPrivacyLifecycleActionCenterData\(ctx\)/, "Engagement must extend the current Privacy continuity chain");
@@ -36,6 +42,7 @@ const live = await source(livePath);
 expect(livePath, live, /data-engagement-campaign-id/, "Engagement workspace must anchor exact campaign focus");
 expect(livePath, live, /campaignFocusVisible/, "invalid campaign focus must fail closed");
 expect(livePath, live, /EngagementCampaignActions/, "campaign lifecycle actions must stay in the owning Engagement workspace");
+expect(livePath, live, /EngagementCampaignWindowEditor/, "draft campaign scheduling must be configurable in the owning workspace");
 
 const modulePath = "app/module/[slug]/page.tsx";
 const modulePage = await source(modulePath);
