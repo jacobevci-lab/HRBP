@@ -41,6 +41,12 @@ expect(recruitingConsolePath, recruitingConsole, /for \(const type of \["requisi
 expect(recruitingConsolePath, recruitingConsole, /data-recruiting-requisition/, "requisition deep links must resolve to governed workspace records");
 expect(recruitingConsolePath, recruitingConsole, /data-recruiting-offer/, "offer deep links must resolve to governed workspace records");
 expect(recruitingConsolePath, recruitingConsole, /selfPrepared[\s\S]*four-eyes/, "Recruiting console must preserve the existing four-eyes lock");
+expect(recruitingConsolePath, recruitingConsole, /resourceType:\s*"Requisition"/, "Requisition decisions must target the matching notification resource");
+expect(recruitingConsolePath, recruitingConsole, /resourceType:\s*"Offer"/, "Offer decisions must target the matching notification resource");
+expect(recruitingConsolePath, recruitingConsole, /if \(!response\.ok\) throw[\s\S]*notificationSubject[\s\S]*acknowledgeRecruitingNotification/, "notification acknowledgement must happen only after the Recruiting business mutation succeeds");
+expect(recruitingConsolePath, recruitingConsole, /hrbp:notifications-changed/, "successful Recruiting notification cleanup must refresh the notification surface");
+expect(recruitingConsolePath, recruitingConsole, /hrbp:lifecycle-actions-changed/, "successful Recruiting mutations must invalidate the shared lifecycle queue");
+expect(recruitingConsolePath, recruitingConsole, /best-effort[\s\S]*must never roll back/, "notification cleanup must be explicitly non-transactional with the accepted Recruiting decision");
 
 const requisitionRoutePath = "app/api/recruiting/requisitions/[id]/status/route.ts";
 const requisitionRoute = await source(requisitionRoutePath);
@@ -66,6 +72,12 @@ expect(analyticsPath, analytics, /getRecruitingLifecycleActionCenterData/, "Anal
 expect(analyticsPath, analytics, /recruiting:\s*source\.summary\.recruiting/, "Analytics must project the Recruiting aggregate only");
 expect(analyticsPath, analytics, /aggregateOnly:\s*true/, "Analytics privacy contract must remain aggregate-only");
 reject(analyticsPath, analytics, /candidateName|annualBase|requisitionTitle|\.items/, "Analytics must not project Recruiting record detail");
+
+const analyticsPagePath = "components/analytics-module-page.tsx";
+const analyticsPage = await source(analyticsPagePath);
+expect(analyticsPagePath, analyticsPage, /continuity\.summary\.recruiting/, "Analytics UI must surface only the aggregate Recruiting approval count");
+expect(analyticsPagePath, analyticsPage, /\/module\/workflows\?view=recruiting/, "Analytics must deep-link Recruiting attention to the governed Action Center filter");
+reject(analyticsPagePath, analyticsPage, /recruitingAnnualBase|candidateEmail|bankAccount/, "Analytics UI must not render sensitive Recruiting/offer detail");
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);
