@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
+function lifecycleChanged() {
+  window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
+}
+
 export function PolicyExceptionRequest({ policyId }: { policyId: string }) {
   const router = useRouter();
   const { locale } = useLocale();
@@ -30,6 +34,7 @@ export function PolicyExceptionRequest({ policyId }: { policyId: string }) {
       if (!response.ok) return setError(value.error || c("Exception request failed.", "İstisna talebi başarısız oldu."));
       setReason(""); setControl(""); setExpiresAt(""); setOpen(false);
       setMessage(c("Exception request submitted for independent review.", "İstisna talebi bağımsız incelemeye gönderildi."));
+      lifecycleChanged();
       router.refresh();
     } catch { setError(c("Policy service could not be reached.", "Politika servisine ulaşılamadı.")); }
     finally { setBusy(false); }
@@ -60,6 +65,7 @@ export function PolicyExceptionDecisionButtons({ policyId, exceptionId, requeste
       });
       const value = await response.json() as { error?: string };
       if (!response.ok) return setError(value.error || c("Exception decision failed.", "İstisna kararı başarısız oldu."));
+      lifecycleChanged();
       router.refresh();
     } catch { setError(c("Policy service could not be reached.", "Politika servisine ulaşılamadı.")); }
     finally { setBusy(null); }
