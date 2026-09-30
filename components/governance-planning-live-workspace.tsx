@@ -16,6 +16,7 @@ import {
   UsersRound
 } from "lucide-react";
 import { can } from "@/lib/authorization";
+import { WorkforceScenarioActions } from "@/components/workforce-scenario-actions";
 import { getServerRequestContext } from "@/lib/server-session";
 import {
   getAIAssistantLiveData,
@@ -44,7 +45,7 @@ function AccessDenied({ slug }: { slug: GovernanceSlug }) {
   return <div className="gov-shell"><section className="card gov-panel" style={{ minHeight: 270, display: "grid", placeItems: "center", textAlign: "center", padding: 36 }}><div style={{ maxWidth: 560 }}><LockKeyhole size={30} style={{ margin: "0 auto 12px" }}/><span className="section-kicker">Policy enforced</span><h3 style={{ margin: "5px 0 8px" }}>{title} access is restricted</h3><p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.6 }}>The signed session does not include this governed capability. Privileged demo data is never substituted when authorization is denied.</p></div></section></div>;
 }
 
-export async function GovernancePlanningLiveWorkspace({ slug }: { slug: GovernanceSlug }) {
+export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: { slug: GovernanceSlug; focusId?: string; mode?: string }) {
   const ctx = await getServerRequestContext();
   if (!ctx || !can(ctx, governanceCapabilityFor(slug))) return <AccessDenied slug={slug}/>;
 
@@ -87,7 +88,10 @@ export async function GovernancePlanningLiveWorkspace({ slug }: { slug: Governan
     const data = await getWorkforcePlanningLiveData(ctx);
     const primary = data.primary;
     const scopeLabel = data.relationshipScoped ? "Relationship scoped" : "Tenant authorized";
-    return <div className="gov-shell">
+    const focusVisible = focusId ? data.rows.some((row) => row.id === focusId) : true;
+    const canWrite = can(ctx, "workforce-plan:write");
+    const canApprove = can(ctx, "workforce-plan:approve");
+    return <div className="gov-shell">{focusId && !focusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>Scenario focus is unavailable in your governed scope.</strong> The deep link failed closed and did not broaden the workforce planning query.</p></section> : null}
       <section className="gov-metrics">
         <Metric icon={<Target size={18}/>} label="Active workforce" value={String(data.activeEmployments)} meta={`${scopeLabel} active / leave population`}/>
         <Metric icon={<UsersRound size={18}/>} label="Visible scenarios" value={String(data.scenarioCount)} meta={`${data.approvedScenarios} approved`}/>
@@ -97,11 +101,11 @@ export async function GovernancePlanningLiveWorkspace({ slug }: { slug: Governan
       <section className="gov-split">
         <div className="card gov-panel">
           <div className="gov-panel-head"><div><span className="section-kicker">Live scenario planning</span><h3>Workforce scenarios</h3></div><span className="matrix-note">{scopeLabel}</span></div>
-          <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Scenario</th><th>Horizon</th><th>Current FTE</th><th>Planned FTE</th><th>Delta</th><th>Cost delta</th><th>Owner</th><th>Status</th></tr></thead><tbody>
-            {data.rows.length ? data.rows.map((row) => <tr key={row.id}>
-              <td><strong>{row.name}</strong><small className="cell-sub">{row.code} · base {row.baseDate}</small></td>
-              <td>{row.horizonMonths}m</td><td>{row.currentFte}</td><td>{row.plannedFte}</td><td>{row.delta >= 0 ? "+" : ""}{row.delta}</td><td>{row.currency} {row.costDelta.toLocaleString("en-US")}</td><td>{row.owner}</td><td><Pill value={row.status}/></td>
-            </tr>) : <Empty text="No workforce scenario lines intersect your authorized organization or position scope."/>}
+          <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Scenario</th><th>Horizon</th><th>Current FTE</th><th>Planned FTE</th><th>Delta</th><th>Cost delta</th><th>Owner</th><th>Status</th><th>Governance</th></tr></thead><tbody>
+            {data.rows.length ? data.rows.map((row) => <tr key={row.id} data-workforce-scenario-id={row.id} className={focusId === row.id ? "focused" : undefined}>
+              <td><strong>{row.name}</strong><small className="cell-sub">{row.code} · base {row.baseDate}{focusId === row.id ? ` · ${mode === "review" ? "focused review" : "focused scenario"}` : ""}</small></td>
+              <td>{row.horizonMonths}m</td><td>{row.currentFte}</td><td>{row.plannedFte}</td><td>{row.delta >= 0 ? "+" : ""}{row.delta}</td><td>{row.currency} {row.costDelta.toLocaleString("en-US")}</td><td>{row.owner}</td><td><Pill value={row.status}/></td><td><WorkforceScenarioActions scenarioId={row.id} status={row.rawStatus} ownerId={row.ownerId} actorId={ctx.actorId} canWrite={canWrite} canApprove={canApprove}/></td>
+            </tr>) : <Empty text="No workforce scenario lines intersect your authorized organization or position scope." columns={9}/>}
           </tbody></table></div>
         </div>
         <aside className="card gov-side">
