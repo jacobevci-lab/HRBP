@@ -13,7 +13,7 @@ expect(routePath, route, /WorkforceScenarioStatus\.REVIEW/, "approval must requi
 expect(routePath, route, /WorkforceScenarioStatus\.APPROVED/, "lock must require prior APPROVED state");
 expect(routePath, route, /no implicit workforce mutation/, "locking must explicitly preserve separation from authoritative workforce mutation");
 
-const continuityPath = "lib/privacy-action-center-continuity.ts";
+const continuityPath = "lib/workforce-planning-action-center-continuity.ts";
 const continuity = await source(continuityPath);
 expect(continuityPath, continuity, /getPolicyLifecycleActionCenterData\(ctx\)/, "Workforce Planning must extend the current Policy continuity chain");
 expect(continuityPath, continuity, /resolveEmploymentScope/, "review attention must respect relationship scope");
