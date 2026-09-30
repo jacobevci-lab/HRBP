@@ -22,7 +22,7 @@ export type Capability =
   | "hr-service:read" | "hr-service:write"
   | "policies:read" | "policies:write" | "policies:approve" | "policies:acknowledge"
   | "engagement:read" | "engagement:write"
-  | "workforce-plan:read" | "workforce-plan:write"
+  | "workforce-plan:read" | "workforce-plan:write" | "workforce-plan:approve"
   | "analytics:read"
   | "ai:use"
   | "privacy:read" | "privacy:write"
@@ -76,7 +76,7 @@ const grants: Record<PlatformRole, Capability[]> = {
     "learning:read", "learning:write", "learning:self-progress",
     "hr-service:read", "hr-service:write",
     "policies:read", "policies:write", "policies:approve",
-    "engagement:read", "engagement:write", "workforce-plan:read", "workforce-plan:write",
+    "engagement:read", "engagement:write", "workforce-plan:read", "workforce-plan:write", "workforce-plan:approve",
     "analytics:read", "ai:use",
     "workflows:read", "workflows:write", "workflows:run", "settings:read"
   ],
