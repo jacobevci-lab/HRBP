@@ -27,6 +27,10 @@ export function PolicyReviewActions({
   const c = (en: string, tr: string) => locale === "tr" ? tr : en;
   const isOwner = ownerId === actorId;
 
+  function lifecycleChanged() {
+    window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
+  }
+
   async function review(action: "SUBMIT" | "APPROVE" | "REQUEST_CHANGES") {
     setLoading(action);
     setError(null);
@@ -38,6 +42,7 @@ export function PolicyReviewActions({
       });
       const value = await response.json() as { error?: string };
       if (!response.ok) return setError(value.error || c("Policy review action failed.", "Politika inceleme aksiyonu başarısız."));
+      lifecycleChanged();
       router.refresh();
     } catch {
       setError(c("The policy service could not be reached.", "Politika servisine ulaşılamadı."));
@@ -56,6 +61,7 @@ export function PolicyReviewActions({
       });
       const value = await response.json() as { error?: string };
       if (!response.ok) return setError(value.error || c("Policy publication failed.", "Politika yayını başarısız."));
+      lifecycleChanged();
       router.refresh();
     } catch {
       setError(c("The policy service could not be reached.", "Politika servisine ulaşılamadı."));
