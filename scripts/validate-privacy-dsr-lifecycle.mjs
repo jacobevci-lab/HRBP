@@ -43,7 +43,7 @@ expect(livePath, live, /DSRLifecycleActions/, "DSR lifecycle actions must stay i
 const modulePath = "app/module/[slug]/page.tsx";
 const modulePage = await source(modulePath);
 expect(modulePath, modulePage, /search\.dsr/, "Privacy deep links must accept an exact DSR focus id");
-expect(modulePath, modulePage, /slug === "privacy" \? dsrFocus/, "DSR focus must route only into the Privacy workspace");
+expect(modulePath, modulePage, /slug === "privacy" \? \(privacyAssessmentFocus \|\| privacyTransferFocus \|\| dsrFocus\)/, "Privacy focus must route DSR and assurance records only into the Privacy workspace");
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
