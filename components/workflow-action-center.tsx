@@ -5,11 +5,11 @@ import { AlertTriangle, BadgeDollarSign, BookOpenCheck, BriefcaseBusiness, Calen
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
-type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "onboarding" | "offboarding" | "leave" | "time-attendance" | "compensation" | "payroll" | "benefits" | "performance" | "learning" | "development-plan" | "succession" | "recruiting" | "policies" | "workforce-planning" | "privacy";
+type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "onboarding" | "offboarding" | "leave" | "time-attendance" | "compensation" | "payroll" | "benefits" | "performance" | "learning" | "development-plan" | "succession" | "recruiting" | "policies" | "workforce-planning" | "privacy" | "engagement";
 type Urgency = "normal" | "warning" | "critical";
 type Filter = "all" | "critical" | "overdue" | "due-soon" | ActionKind;
 
-const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents", "onboarding", "offboarding", "leave", "time-attendance", "compensation", "payroll", "benefits", "performance", "learning", "development-plan", "succession", "recruiting", "policies", "workforce-planning", "privacy"]);
+const allowedFilters = new Set<Filter>(["all", "critical", "overdue", "due-soon", "workflow", "hr-service", "employee-relations", "documents", "onboarding", "offboarding", "leave", "time-attendance", "compensation", "payroll", "benefits", "performance", "learning", "development-plan", "succession", "recruiting", "policies", "workforce-planning", "privacy", "engagement"]);
 
 function normalizeFilter(value?: string): Filter {
   return value && allowedFilters.has(value as Filter) ? value as Filter : "all";
@@ -59,6 +59,7 @@ type ActionSummary = {
   policies: number;
   workforcePlanning: number;
   privacy: number;
+  engagement: number;
 };
 
 const emptySummary: ActionSummary = {
@@ -84,7 +85,8 @@ const emptySummary: ActionSummary = {
   recruiting: 0,
   policies: 0,
   workforcePlanning: 0,
-  privacy: 0
+  privacy: 0,
+  engagement: 0
 };
 
 type ActionQueueResponse = {
@@ -224,6 +226,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
     if (kind === "policies") return locale === "tr" ? "Politikalar" : "Policies";
     if (kind === "workforce-planning") return locale === "tr" ? "İşgücü Planlama" : "Workforce Planning";
     if (kind === "privacy") return locale === "tr" ? "Gizlilik" : "Privacy";
+    if (kind === "engagement") return locale === "tr" ? "Bağlılık" : "Engagement";
     return locale === "tr" ? "Çalışan İlişkileri" : "Employee Relations";
   }
 
@@ -267,6 +270,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <button type="button" className={filter === "policies" ? "active" : ""} onClick={() => setFilter("policies")}><BookOpenCheck size={14}/>{locale === "tr" ? "Politikalar" : "Policies"} <strong>{summary.policies}</strong></button>
         <button type="button" className={filter === "workforce-planning" ? "active" : ""} onClick={() => setFilter("workforce-planning")}><Target size={14}/>{locale === "tr" ? "İşgücü Planlama" : "Workforce Planning"} <strong>{summary.workforcePlanning}</strong></button>
         <button type="button" className={filter === "privacy" ? "active" : ""} onClick={() => setFilter("privacy")}><ShieldAlert size={14}/>{locale === "tr" ? "Gizlilik" : "Privacy"} <strong>{summary.privacy}</strong></button>
+        <button type="button" className={filter === "engagement" ? "active" : ""} onClick={() => setFilter("engagement")}><UsersRound size={14}/>{locale === "tr" ? "Bağlılık" : "Engagement"} <strong>{summary.engagement}</strong></button>
         <button type="button" className={filter === "hr-service" ? "active" : ""} onClick={() => setFilter("hr-service")}>{locale === "tr" ? "İK Hizmeti" : "HR Service"} <strong>{summary.hrService}</strong></button>
         <button type="button" className={filter === "employee-relations" ? "active" : ""} onClick={() => setFilter("employee-relations")}>{locale === "tr" ? "Çalışan İlişkileri" : "Employee Relations"} <strong>{summary.employeeRelations}</strong></button>
         <button type="button" className={filter === "documents" ? "active" : ""} onClick={() => setFilter("documents")}><FileClock size={14}/>{locale === "tr" ? "Dokümanlar" : "Documents"} <strong>{summary.documents}</strong></button>

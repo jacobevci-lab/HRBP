@@ -18,6 +18,9 @@ import {
 import { can } from "@/lib/authorization";
 import { WorkforceScenarioActions } from "@/components/workforce-scenario-actions";
 import { DSRLifecycleActions } from "@/components/dsr-lifecycle-actions";
+import { EngagementCampaignActions } from "@/components/engagement-campaign-actions";
+import { EngagementCampaignWindowEditor } from "@/components/engagement-campaign-window-editor";
+import { GovernedFocusScroller } from "@/components/governed-focus-scroller";
 import { getServerRequestContext } from "@/lib/server-session";
 import {
   getAIAssistantLiveData,
@@ -53,7 +56,9 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
   if (slug === "engagement") {
     const data = await getEngagementLiveData(ctx);
     const scopeLabel = data.relationshipScoped ? "Relationship scoped" : "Tenant authorized";
-    return <div className="gov-shell">
+    const campaignFocusVisible = focusId ? data.rows.some((row) => row.id === focusId) : true;
+    const engagementCanWrite = can(ctx, "engagement:write");
+    return <div className="gov-shell"><GovernedFocusScroller attribute="data-engagement-campaign-id" value={campaignFocusVisible ? focusId : undefined}/>{focusId && !campaignFocusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>Campaign focus is unavailable in your governed scope.</strong> The deep link failed closed and did not broaden the engagement query.</p></section> : null}
       <section className="gov-metrics">
         <Metric icon={<UsersRound size={18}/>} label="Active campaigns" value={String(data.activeCampaigns)} meta={`${scopeLabel} campaign view`}/>
         <Metric icon={<Gauge size={18}/>} label="Visible responses" value={String(data.responses)} meta={`${data.responseRate}% average visible response rate`}/>
@@ -63,14 +68,14 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
       <section className="gov-split">
         <div className="card gov-panel">
           <div className="gov-panel-head"><div><span className="section-kicker">Live employee listening</span><h3>Survey campaigns</h3></div><span className="matrix-note">{scopeLabel}</span></div>
-          <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Campaign</th><th>Survey</th><th>Responses</th><th>Rate</th><th>Threshold</th><th>Mode</th><th>Window</th><th>Status</th></tr></thead><tbody>
-            {data.rows.length ? data.rows.map((row) => <tr key={row.id}>
-              <td><strong>{row.name}</strong></td>
+          <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Campaign</th><th>Survey</th><th>Responses</th><th>Rate</th><th>Threshold</th><th>Mode</th><th>Window</th><th>Status</th><th>Lifecycle</th></tr></thead><tbody>
+            {data.rows.length ? data.rows.map((row) => <tr key={row.id} data-engagement-campaign-id={row.id} className={focusId === row.id ? "focused" : undefined}>
+              <td><strong>{row.name}</strong>{focusId === row.id ? <small className="cell-sub">{mode === "work" ? "Focused campaign action" : "Focused campaign"}</small> : null}</td>
               <td>{row.survey}<small className="cell-sub">{row.surveyCode}</small></td>
               <td>{row.suppressed ? "Suppressed" : `${row.responses}${row.target ? ` / ${row.target}` : ""}`}</td>
               <td>{row.suppressed ? "Suppressed" : row.rate === null ? "—" : `${row.rate}%`}</td>
-              <td>{row.threshold}</td><td>{row.mode}</td><td>{row.opensAt} → {row.closesAt}</td><td><Pill value={row.status}/></td>
-            </tr>) : <Empty text="No campaigns are visible inside your authorized population."/>}
+              <td>{row.threshold}</td><td>{row.mode}</td><td>{row.opensAt} → {row.closesAt}</td><td><Pill value={row.status}/></td><td><div style={{display:"grid",gap:5}}><EngagementCampaignWindowEditor campaignId={row.id} status={row.rawStatus} createdById={row.createdById} actorId={ctx.actorId} canWrite={engagementCanWrite} opensAt={row.opensAtIso} closesAt={row.closesAtIso}/><EngagementCampaignActions campaignId={row.id} status={row.rawStatus} createdById={row.createdById} actorId={ctx.actorId} canWrite={engagementCanWrite}/></div></td>
+            </tr>) : <Empty text="No campaigns are visible inside your authorized population." columns={9}/>}
           </tbody></table></div>
         </div>
         <aside className="card gov-side">
@@ -92,7 +97,7 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
     const focusVisible = focusId ? data.rows.some((row) => row.id === focusId) : true;
     const canWrite = can(ctx, "workforce-plan:write");
     const canApprove = can(ctx, "workforce-plan:approve");
-    return <div className="gov-shell">{focusId && !focusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>Scenario focus is unavailable in your governed scope.</strong> The deep link failed closed and did not broaden the workforce planning query.</p></section> : null}
+    return <div className="gov-shell"><GovernedFocusScroller attribute="data-workforce-scenario-id" value={focusVisible ? focusId : undefined}/>{focusId && !focusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>Scenario focus is unavailable in your governed scope.</strong> The deep link failed closed and did not broaden the workforce planning query.</p></section> : null}
       <section className="gov-metrics">
         <Metric icon={<Target size={18}/>} label="Active workforce" value={String(data.activeEmployments)} meta={`${scopeLabel} active / leave population`}/>
         <Metric icon={<UsersRound size={18}/>} label="Visible scenarios" value={String(data.scenarioCount)} meta={`${data.approvedScenarios} approved`}/>
@@ -145,7 +150,7 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
   const data = await getPrivacyLiveData(ctx);
   const privacyFocusVisible = focusId ? data.dsrs.some((row) => row.id === focusId) : true;
   const privacyCanWrite = can(ctx, "privacy:write");
-  return <div className="gov-shell">{focusId && !privacyFocusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>DSR focus is unavailable in your governed privacy scope.</strong> The deep link failed closed and did not broaden the privacy query.</p></section> : null}
+  return <div className="gov-shell"><GovernedFocusScroller attribute="data-dsr-id" value={privacyFocusVisible ? focusId : undefined}/>{focusId && !privacyFocusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>DSR focus is unavailable in your governed privacy scope.</strong> The deep link failed closed and did not broaden the privacy query.</p></section> : null}
     <section className="gov-metrics">
       <Metric icon={<FileKey2 size={18}/>} label="Processing activities" value={String(data.processingActivities)} meta="Active RoPA records"/>
       <Metric icon={<Activity size={18}/>} label="Open DSRs" value={String(data.openDsrs)} meta={`${data.dsrsDue7} due within 7 days`}/>

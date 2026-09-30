@@ -40,13 +40,13 @@ expect(modulePath, modulePage, /GovernancePlanningModulePage[\s\S]*focusId/, "ex
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
-expect(dashboardPath, dashboard, /getPrivacyLifecycleActionCenterData/, "Dashboard must use the current top-level continuity source");
+expect(dashboardPath, dashboard, /getEngagementLifecycleActionCenterData/, "Dashboard must use the current top-level continuity source");
 expect(dashboardPath, dashboard, /workforcePlanning:\s*number/, "Dashboard must carry aggregate Workforce Planning attention");
 reject(dashboardPath, dashboard, /costDelta|plannedFte|\.items/, "Dashboard must not receive scenario details");
 
 const analyticsPath = "lib/lifecycle-analytics-continuity.ts";
 const analytics = await source(analyticsPath);
-expect(analyticsPath, analytics, /getPrivacyLifecycleActionCenterData/, "Analytics must use the current top-level continuity source");
+expect(analyticsPath, analytics, /getEngagementLifecycleActionCenterData/, "Analytics must use the current top-level continuity source");
 expect(analyticsPath, analytics, /workforcePlanning:\s*source\.summary\.workforcePlanning/, "Analytics must project only the Workforce Planning aggregate");
 expect(analyticsPath, analytics, /aggregateOnly:\s*true/, "Analytics lifecycle continuity must remain aggregate-only");
 
