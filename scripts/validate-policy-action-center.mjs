@@ -43,6 +43,25 @@ const ackRoute = await source(ackRoutePath);
 expect(ackRoutePath, ackRoute, /ctx\.employmentId/, "acknowledgement mutation must stay bound to trusted employment context");
 expect(ackRoutePath, ackRoute, /PolicyStatus\.PUBLISHED/, "acknowledgement mutation must stay limited to published policies");
 
+const modulePagePath = "app/module/[slug]/page.tsx";
+const modulePage = await source(modulePagePath);
+expect(modulePagePath, modulePage, /search\.policy/, "Policy deep links must accept an exact policy focus id");
+expect(modulePagePath, modulePage, /search\.mode/, "Policy deep links must carry the requested governance mode");
+expect(modulePagePath, modulePage, /policyLifecycleQuery/, "Policy focus must be routed through the governed workspace query");
+
+const liveWorkspacePath = "components/employee-services-live-workspace.tsx";
+const liveWorkspace = await source(liveWorkspacePath);
+expect(liveWorkspacePath, liveWorkspace, /focusVisible/, "Policy workspace must verify exact focus remains visible in governed scope");
+expect(liveWorkspacePath, liveWorkspace, /failed closed/, "invalid Policy focus must fail closed without broadening scope");
+expect(liveWorkspacePath, liveWorkspace, /data-policy-id/, "Policy rows must expose exact focus anchors");
+expect(liveWorkspacePath, liveWorkspace, /PolicyAcknowledgementAction/, "self-service Policy workspace must expose governed acknowledgement action");
+
+const acknowledgementActionPath = "components/policy-acknowledgement-action.tsx";
+const acknowledgementAction = await source(acknowledgementActionPath);
+expect(acknowledgementActionPath, acknowledgementAction, /\/acknowledgements/, "Policy acknowledgement UI must call the owning domain route");
+expect(acknowledgementActionPath, acknowledgementAction, /hrbp:lifecycle-actions-changed/, "successful acknowledgement must invalidate lifecycle attention");
+expect(acknowledgementActionPath, acknowledgementAction, /hrbp:notifications-changed/, "successful acknowledgement must refresh notification state");
+
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
 expect(dashboardPath, dashboard, /getPolicyLifecycleActionCenterData/, "Dashboard must reuse the same governed Policy continuity source");
