@@ -13,7 +13,7 @@ expect(routePath, route, /WorkforceScenarioStatus\.REVIEW/, "approval must requi
 expect(routePath, route, /WorkforceScenarioStatus\.APPROVED/, "lock must require prior APPROVED state");
 expect(routePath, route, /no implicit workforce mutation/, "locking must explicitly preserve separation from authoritative workforce mutation");
 
-const continuityPath = "lib/workforce-planning-action-center-continuity.ts";
+const continuityPath = "lib/privacy-action-center-continuity.ts";
 const continuity = await source(continuityPath);
 expect(continuityPath, continuity, /getPolicyLifecycleActionCenterData\(ctx\)/, "Workforce Planning must extend the current Policy continuity chain");
 expect(continuityPath, continuity, /resolveEmploymentScope/, "review attention must respect relationship scope");
@@ -40,13 +40,13 @@ expect(modulePath, modulePage, /GovernancePlanningModulePage[\s\S]*focusId/, "ex
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
-expect(dashboardPath, dashboard, /getWorkforcePlanningLifecycleActionCenterData/, "Dashboard must use the current top-level continuity source");
+expect(dashboardPath, dashboard, /getPrivacyLifecycleActionCenterData/, "Dashboard must use the current top-level continuity source");
 expect(dashboardPath, dashboard, /workforcePlanning:\s*number/, "Dashboard must carry aggregate Workforce Planning attention");
 reject(dashboardPath, dashboard, /costDelta|plannedFte|\.items/, "Dashboard must not receive scenario details");
 
 const analyticsPath = "lib/lifecycle-analytics-continuity.ts";
 const analytics = await source(analyticsPath);
-expect(analyticsPath, analytics, /getWorkforcePlanningLifecycleActionCenterData/, "Analytics must use the current top-level continuity source");
+expect(analyticsPath, analytics, /getPrivacyLifecycleActionCenterData/, "Analytics must use the current top-level continuity source");
 expect(analyticsPath, analytics, /workforcePlanning:\s*source\.summary\.workforcePlanning/, "Analytics must project only the Workforce Planning aggregate");
 expect(analyticsPath, analytics, /aggregateOnly:\s*true/, "Analytics lifecycle continuity must remain aggregate-only");
 
