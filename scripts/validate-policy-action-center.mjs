@@ -55,6 +55,7 @@ expect(liveWorkspacePath, liveWorkspace, /focusVisible/, "Policy workspace must 
 expect(liveWorkspacePath, liveWorkspace, /failed closed/, "invalid Policy focus must fail closed without broadening scope");
 expect(liveWorkspacePath, liveWorkspace, /data-policy-id/, "Policy rows must expose exact focus anchors");
 expect(liveWorkspacePath, liveWorkspace, /PolicyAcknowledgementAction/, "self-service Policy workspace must expose governed acknowledgement action");
+expect(liveWorkspacePath, liveWorkspace, /PolicyFocusScroller/, "exact Policy focus must scroll into view when authorized");
 
 const acknowledgementActionPath = "components/policy-acknowledgement-action.tsx";
 const acknowledgementAction = await source(acknowledgementActionPath);
