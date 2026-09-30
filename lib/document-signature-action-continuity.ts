@@ -1,4 +1,8 @@
-import { SignatureEnvelopeStatus } from "@prisma/client";
+import {
+  SignatureEnvelopeStatus,
+  SignatureParticipantStatus,
+  VaultScanStatus
+} from "@prisma/client";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { documentVisibilityWhere } from "@/lib/document-access";
@@ -29,6 +33,85 @@ function sortItems(left: FullLifecycleActionItem, right: FullLifecycleActionItem
   const rightDue = right.dueAt ? new Date(right.dueAt).getTime() : Number.MAX_SAFE_INTEGER;
   if (leftDue !== rightDue) return leftDue - rightDue;
   return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+}
+
+async function signatureParticipantItems(ctx: RequestContext): Promise<FullLifecycleActionItem[]> {
+  if (!can(ctx, "documents:read") || !ctx.employmentId) return [];
+  const now = new Date();
+  const participants = await db.signatureParticipant.findMany({
+    where: {
+      tenantId: ctx.tenantId,
+      employmentId: ctx.employmentId,
+      status: { in: [SignatureParticipantStatus.PENDING, SignatureParticipantStatus.VIEWED] },
+      envelope: {
+        status: { in: [SignatureEnvelopeStatus.SENT, SignatureEnvelopeStatus.IN_PROGRESS] }
+      }
+    },
+    orderBy: [{ signingOrder: "asc" }, { id: "asc" }],
+    take: 100,
+    select: {
+      id: true,
+      signingOrder: true,
+      status: true,
+      envelope: {
+        select: {
+          id: true,
+          documentId: true,
+          title: true,
+          status: true,
+          expiresAt: true,
+          createdAt: true,
+          documentVersion: { select: { scanStatus: true, uploadedAt: true } },
+          participants: {
+            orderBy: [{ signingOrder: "asc" }, { id: "asc" }],
+            take: 100,
+            select: { id: true, signingOrder: true, status: true }
+          }
+        }
+      }
+    }
+  });
+  if (!participants.length) return [];
+
+  const actionable = participants.filter((participant) => {
+    const envelope = participant.envelope;
+    if (envelope.expiresAt && envelope.expiresAt <= now) return false;
+    if (!envelope.documentVersion || envelope.documentVersion.scanStatus !== VaultScanStatus.CLEAN || !envelope.documentVersion.uploadedAt) return false;
+    return !envelope.participants.some((entry) =>
+      entry.signingOrder < participant.signingOrder && entry.status !== SignatureParticipantStatus.SIGNED
+    );
+  });
+  if (!actionable.length) return [];
+
+  const visibility = await documentVisibilityWhere(db, ctx);
+  const documentIds = [...new Set(actionable.map((participant) => participant.envelope.documentId))];
+  const visibleDocuments = await db.documentRecord.findMany({
+    where: { AND: [visibility, { id: { in: documentIds } }] },
+    take: 100,
+    select: { id: true, fileName: true }
+  });
+  const documents = new Map(visibleDocuments.map((document) => [document.id, document]));
+
+  return actionable.flatMap((participant): FullLifecycleActionItem[] => {
+    const envelope = participant.envelope;
+    const document = documents.get(envelope.documentId);
+    if (!document) return [];
+    return [{
+      id: `documents:signature-participant:${participant.id}`,
+      kind: "documents",
+      title: `Signature required · ${document.fileName}`,
+      subtitle: `${envelope.title} · signing order ${participant.signingOrder}`,
+      module: "documents",
+      href: `/module/documents/sign/${encodeURIComponent(participant.id)}`,
+      subjectType: "SignatureParticipant",
+      subjectId: participant.id,
+      status: statusLabel(participant.status),
+      dueAt: envelope.expiresAt?.toISOString() ?? null,
+      createdAt: envelope.createdAt.toISOString(),
+      urgency: envelope.expiresAt ? urgencyForDueDate(envelope.expiresAt) : "warning",
+      action: null
+    }];
+  });
 }
 
 async function signatureFollowupItems(ctx: RequestContext): Promise<FullLifecycleActionItem[]> {
@@ -91,7 +174,11 @@ export async function getDocumentSignatureLifecycleActionCenterData(ctx: Request
   let documentSignatureDegraded = false;
 
   try {
-    signatureItems = await signatureFollowupItems(ctx);
+    const [participantItems, followupItems] = await Promise.all([
+      signatureParticipantItems(ctx),
+      signatureFollowupItems(ctx)
+    ]);
+    signatureItems = [...participantItems, ...followupItems];
   } catch (error) {
     documentSignatureDegraded = true;
     console.error("[HRBP] Document signature lifecycle attention failed; preserving the governed Action Center.", error);
