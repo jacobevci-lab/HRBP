@@ -32,7 +32,7 @@ expect(continuityPath, continuity, /href:\s*`\/module\/documents\?document=.*&en
 expect(continuityPath, continuity, /take:\s*100/, "signature attention queries must remain bounded");
 expect(continuityPath, continuity, /kind:\s*"documents"/, "signature follow-up must reuse the existing documents privacy/summary boundary");
 expect(continuityPath, continuity, /documentSignatureDegraded/, "signature aggregation must fail soft without suppressing the core Action Center");
-reject(continuityPath, continuity, /contentHash|objectKey|scanMessage|scanReference|participants:/, "Action Center signature aggregation must not load signer or storage evidence");
+reject(continuityPath, continuity, /contentHash|objectKey|scanMessage|scanReference|email:\s*true|employmentId:\s*true/, "Action Center signature aggregation must not load signer identity or storage evidence");
 
 const apiPath = "app/api/action-center/route.ts";
 const api = await source(apiPath);
