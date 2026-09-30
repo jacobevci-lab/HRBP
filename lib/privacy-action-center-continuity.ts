@@ -85,13 +85,15 @@ async function privacyAssuranceItems(ctx: RequestContext): Promise<PrivacyLifecy
   if (!can(ctx, "privacy:write")) return [];
 
   const now = new Date();
+  const assuranceHorizon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
   const [assessments, transfers] = await Promise.all([
     db.privacyRiskAssessment.findMany({
       where: {
         tenantId: ctx.tenantId,
         ownerId: ctx.actorId,
         completedAt: null,
-        dueAt: { not: null }
+        status: { notIn: ["COMPLETED", "CLOSED"] },
+        dueAt: { not: null, lte: assuranceHorizon }
       },
       orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }],
       take: 100,
@@ -109,7 +111,7 @@ async function privacyAssuranceItems(ctx: RequestContext): Promise<PrivacyLifecy
       where: {
         tenantId: ctx.tenantId,
         active: true,
-        transferImpactDueAt: { not: null }
+        transferImpactDueAt: { not: null, lte: assuranceHorizon }
       },
       orderBy: [{ transferImpactDueAt: "asc" }, { createdAt: "asc" }],
       take: 100,
@@ -140,9 +142,7 @@ async function privacyAssuranceItems(ctx: RequestContext): Promise<PrivacyLifecy
     action: null
   }));
 
-  const transferItems: PrivacyLifecycleAttentionItem[] = transfers
-    .filter((transfer) => transfer.transferImpactDueAt && transfer.transferImpactDueAt <= new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000))
-    .map((transfer) => ({
+  const transferItems: PrivacyLifecycleAttentionItem[] = transfers.map((transfer) => ({
       id: `privacy:transfer:${transfer.id}`,
       kind: "privacy",
       title: `Transfer impact review · ${transfer.name}`,
