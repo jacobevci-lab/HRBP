@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { can } from "@/lib/authorization";
 import { WorkforceScenarioActions } from "@/components/workforce-scenario-actions";
+import { DSRLifecycleActions } from "@/components/dsr-lifecycle-actions";
 import { getServerRequestContext } from "@/lib/server-session";
 import {
   getAIAssistantLiveData,
@@ -142,7 +143,9 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
   }
 
   const data = await getPrivacyLiveData(ctx);
-  return <div className="gov-shell">
+  const privacyFocusVisible = focusId ? data.dsrs.some((row) => row.id === focusId) : true;
+  const privacyCanWrite = can(ctx, "privacy:write");
+  return <div className="gov-shell">{focusId && !privacyFocusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>DSR focus is unavailable in your governed privacy scope.</strong> The deep link failed closed and did not broaden the privacy query.</p></section> : null}
     <section className="gov-metrics">
       <Metric icon={<FileKey2 size={18}/>} label="Processing activities" value={String(data.processingActivities)} meta="Active RoPA records"/>
       <Metric icon={<Activity size={18}/>} label="Open DSRs" value={String(data.openDsrs)} meta={`${data.dsrsDue7} due within 7 days`}/>
@@ -152,8 +155,8 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
     <section className="gov-split">
       <div className="card gov-panel">
         <div className="gov-panel-head"><div><span className="section-kicker">Live privacy operations</span><h3>Data subject requests</h3></div><span className="matrix-note">Privacy / Legal only</span></div>
-        <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Request</th><th>Type</th><th>State</th><th>Age</th><th>Due</th><th>Owner</th><th>Status</th></tr></thead><tbody>
-          {data.dsrs.length ? data.dsrs.map((row) => <tr key={row.id}><td><strong>{row.requestNumber}</strong></td><td>{row.type}</td><td>{row.state}</td><td>{row.age}d</td><td>{row.dueAt}</td><td>{row.owner}</td><td><Pill value={row.status}/></td></tr>) : <Empty text="No data subject requests are recorded." columns={7}/>} 
+        <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Request</th><th>Type</th><th>State</th><th>Age</th><th>Due</th><th>Owner</th><th>Status</th><th>Lifecycle</th></tr></thead><tbody>
+          {data.dsrs.length ? data.dsrs.map((row) => <tr key={row.id} data-dsr-id={row.id} className={focusId === row.id ? "focused" : undefined}><td><strong>{row.requestNumber}</strong>{focusId === row.id ? <small className="cell-sub">{mode === "work" ? "Focused DSR action" : "Focused DSR"}</small> : null}</td><td>{row.type}</td><td>{row.state}</td><td>{row.age}d</td><td>{row.dueAt}</td><td>{row.owner}</td><td><Pill value={row.status}/></td><td><DSRLifecycleActions dsrId={row.id} status={row.rawStatus} ownerId={row.ownerId} actorId={ctx.actorId} canWrite={privacyCanWrite}/></td></tr>) : <Empty text="No data subject requests are recorded." columns={8}/>} 
         </tbody></table></div>
       </div>
       <aside className="card gov-side">
