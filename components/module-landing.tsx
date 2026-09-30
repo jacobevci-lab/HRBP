@@ -136,10 +136,10 @@ async function renderLiveCompensation(locale: Locale): Promise<WorkspaceState> {
   }
 }
 
-async function renderLiveEmployeeServices(slug: string, locale: Locale): Promise<WorkspaceState> {
+async function renderLiveEmployeeServices(slug: string, locale: Locale, query: string, tab?: string): Promise<WorkspaceState> {
   try {
     const { EmployeeServicesLiveWorkspace } = await import("@/components/employee-services-live-workspace");
-    return { degraded: false, content: await EmployeeServicesLiveWorkspace({ slug }) };
+    return { degraded: false, content: await EmployeeServicesLiveWorkspace({ slug, focusId: query || undefined, mode: tab }) };
   } catch (error) {
     console.error(`[HRBP] Live employee-services ${slug} workspace failed. Falling back to the safe staging view.`, error);
     try {
@@ -228,7 +228,7 @@ export async function ModuleLanding({ slug, query = "", personId, tab }: { slug:
       : liveCompensation
         ? await renderLiveCompensation(locale)
         : liveEmployeeServices
-          ? await renderLiveEmployeeServices(slug, locale)
+          ? await renderLiveEmployeeServices(slug, locale, query, tab)
           : recruit
             ? await renderRecruiting(slug, locale)
             : await renderStandardWorkspace(slug, locale);
