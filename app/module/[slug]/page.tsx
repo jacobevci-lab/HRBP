@@ -45,8 +45,11 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const successionPlanFocus = typeof search.plan === "string" ? search.plan : "";
   const personId = typeof search.person === "string" ? search.person : undefined;
   const documentFocus = typeof search.document === "string" ? search.document : undefined;
+  const policyFocus = typeof search.policy === "string" ? search.policy : undefined;
+  const policyMode = typeof search.mode === "string" ? search.mode : undefined;
   const documentLifecycleQuery = slug === "documents" ? (documentFocus || personId || "") : "";
-  const query = explicitQuery || requestFocus || documentLifecycleQuery;
+  const policyLifecycleQuery = slug === "policies" ? (policyFocus || "") : "";
+  const query = explicitQuery || requestFocus || documentLifecycleQuery || policyLifecycleQuery;
   const tab = typeof search.tab === "string" ? search.tab : undefined;
   const escalation = typeof search.escalation === "string" ? search.escalation : undefined;
   const taskId = typeof search.task === "string" ? search.task : undefined;
@@ -91,7 +94,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   return (
     <AppShell>
       {slug === "workflows" ? <WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId} initialFilter={actionView}/> : null}
-      {slug !== "workflows" || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={tab}/> : null}
+      {slug !== "workflows" || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={slug === "policies" ? policyMode : tab}/> : null}
       {slug === "offboarding" && can(ctx, "offboarding:write") ? <OffboardingClearanceLoader/> : null}
       {slug === "employee-relations" ? <EmployeeRelationsCaseLifecyclePanel focus={{ query, caseId: employeeRelationsCaseId, actionId: employeeRelationsActionId, appealId: employeeRelationsAppealId }}/> : null}
       {slug === "hr-service" ? <HRServiceLifecyclePanel focus={query}/> : null}

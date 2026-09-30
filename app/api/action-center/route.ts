@@ -1,4 +1,4 @@
-import { getRecruitingLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/recruiting-action-center-continuity";
+import { getPolicyLifecycleActionCenterData as getLifecycleActionCenterContinuityData } from "@/lib/policy-action-center-continuity";
 import { getRequestContext, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {

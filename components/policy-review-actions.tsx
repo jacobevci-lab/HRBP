@@ -38,6 +38,8 @@ export function PolicyReviewActions({
       });
       const value = await response.json() as { error?: string };
       if (!response.ok) return setError(value.error || c("Policy review action failed.", "Politika inceleme aksiyonu başarısız."));
+      window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
+      window.dispatchEvent(new Event("hrbp:notifications-changed"));
       router.refresh();
     } catch {
       setError(c("The policy service could not be reached.", "Politika servisine ulaşılamadı."));
@@ -56,6 +58,8 @@ export function PolicyReviewActions({
       });
       const value = await response.json() as { error?: string };
       if (!response.ok) return setError(value.error || c("Policy publication failed.", "Politika yayını başarısız."));
+      window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
+      window.dispatchEvent(new Event("hrbp:notifications-changed"));
       router.refresh();
     } catch {
       setError(c("The policy service could not be reached.", "Politika servisine ulaşılamadı."));
