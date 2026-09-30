@@ -1,4 +1,4 @@
-import { Activity, BarChart3, BookOpenCheck, BriefcaseBusiness, CheckCircle2, CircleAlert, Clock3, EyeOff, FileClock, Fingerprint, Headphones, ShieldCheck, UsersRound, Workflow } from "lucide-react";
+import { Activity, BarChart3, BookOpenCheck, BriefcaseBusiness, CheckCircle2, CircleAlert, Clock3, EyeOff, FileClock, Fingerprint, Headphones, ShieldAlert, ShieldCheck, Target, UsersRound, Workflow } from "lucide-react";
 import Link from "next/link";
 import { AnalyticsRefreshButton } from "@/components/analytics-refresh-button";
 import { getGovernedAnalyticsMetrics, type AnalyticsPrivacyState } from "@/lib/analytics-privacy";
@@ -93,6 +93,8 @@ export async function AnalyticsModulePage() {
           <Metric icon={<Workflow size={18}/>} label={c(locale, "Workflow tasks", "İş akışı görevleri")} value={String(continuity.summary.workflow)} meta={c(locale, "Assigned or role-scoped", "Atanmış veya rol kapsamlı")}/>
           <Metric icon={<BriefcaseBusiness size={18}/>} label={c(locale, "Recruiting approvals", "İşe alım onayları")} value={String(continuity.summary.recruiting)} meta={c(locale, "Independent approval only", "Yalnızca bağımsız onay")}/>
           <Metric icon={<BookOpenCheck size={18}/>} label={c(locale, "Policy actions", "Politika aksiyonları")} value={String(continuity.summary.policies)} meta={c(locale, "Review + acknowledgement", "İnceleme + onaylama")}/>
+          <Metric icon={<Target size={18}/>} label={c(locale, "Workforce planning", "İşgücü planlama")} value={String(continuity.summary.workforcePlanning)} meta={c(locale, "Independent scenario review", "Bağımsız senaryo incelemesi")}/>
+          <Metric icon={<ShieldAlert size={18}/>} label={c(locale, "Privacy actions", "Gizlilik aksiyonları")} value={String(continuity.summary.privacy)} meta={c(locale, "Owner-bound DSR work", "Sahip bağlı DSR işleri")}/>
           <Metric icon={<Headphones size={18}/>} label={c(locale, "HR Service", "HR Service")} value={String(continuity.summary.hrService)} meta={c(locale, "Visible service attention", "Görünür servis dikkati")}/>
           <Metric icon={<ShieldCheck size={18}/>} label={c(locale, "Employee Relations", "Çalışan İlişkileri")} value={String(continuity.summary.employeeRelations)} meta={c(locale, "Case Wall governed", "Case Wall yönetişimli")}/>
           <Metric icon={<FileClock size={18}/>} label={c(locale, "Documents", "Dokümanlar")} value={String(continuity.summary.documents)} meta={c(locale, "Visible expiry attention", "Görünür süre sonu dikkati")}/>
@@ -101,6 +103,8 @@ export async function AnalyticsModulePage() {
           <Link className="secondary-button" href="/module/workflows?view=critical">{c(locale, "Open critical work", "Kritik işleri aç")}</Link>
           <Link className="secondary-button" href="/module/workflows?view=recruiting">{c(locale, "Open Recruiting approvals", "İşe alım onaylarını aç")}</Link>
           <Link className="secondary-button" href="/module/workflows?view=policies">{c(locale, "Open Policy actions", "Politika aksiyonlarını aç")}</Link>
+          <Link className="secondary-button" href="/module/workflows?view=workforce-planning">{c(locale, "Open Workforce Planning", "İşgücü planlamayı aç")}</Link>
+          <Link className="secondary-button" href="/module/workflows?view=privacy">{c(locale, "Open Privacy actions", "Gizlilik aksiyonlarını aç")}</Link>
           <Link className="secondary-button" href="/module/workflows?view=hr-service">{c(locale, "Open HR Service queue", "HR Service kuyruğunu aç")}</Link>
           <Link className="secondary-button" href="/module/workflows?view=employee-relations">{c(locale, "Open ER queue", "ER kuyruğunu aç")}</Link>
           <Link className="secondary-button" href="/module/workflows?view=documents">{c(locale, "Open document attention", "Doküman dikkat listesini aç")}</Link>

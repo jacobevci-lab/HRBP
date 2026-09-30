@@ -377,7 +377,7 @@ export async function getPrivacyLiveData(ctx: RequestContext) {
   return withDb(async (db) => {
     const [activities, requests, transfers, assessments] = await Promise.all([
       db.processingActivity.findMany({ where: { tenantId: ctx.tenantId, active: true }, orderBy: { updatedAt: "desc" }, take: 150, select: { id: true, code: true, name: true, purpose: true, legalBasis: true, riskRating: true, ownerId: true, specialCategories: true } }),
-      db.dataSubjectRequest.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }], take: 200, select: { id: true, requestNumber: true, subjectPersonId: true, type: true, status: true, ownerId: true, dueAt: true, verifiedAt: true, createdAt: true } }),
+      db.dataSubjectRequest.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }], take: 200, select: { id: true, requestNumber: true, subjectPersonId: true, type: true, status: true, ownerId: true, dueAt: true, verifiedAt: true, completedAt: true, createdAt: true } }),
       db.dataTransferRegister.findMany({ where: { tenantId: ctx.tenantId, active: true }, orderBy: { updatedAt: "desc" }, take: 100, select: { id: true, name: true, sourceCountry: true, destinationCountry: true, recipient: true, mechanism: true, transferImpactDueAt: true } }),
       db.privacyRiskAssessment.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }], take: 100, select: { id: true, name: true, riskLevel: true, requiresDpia: true, status: true, ownerId: true, dueAt: true } })
     ]);
@@ -400,6 +400,8 @@ export async function getPrivacyLiveData(ctx: RequestContext) {
         requestNumber: request.requestNumber,
         type: enumLabel(request.type),
         status: enumLabel(request.status),
+        rawStatus: request.status,
+        ownerId: request.ownerId,
         state: request.verifiedAt ? "Identity verified" : "Verification pending",
         owner: request.ownerId ? ownerMap.get(request.ownerId) ?? request.ownerId : "Unassigned",
         dueAt: formatDate(request.dueAt),

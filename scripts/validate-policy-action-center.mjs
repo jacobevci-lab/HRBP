@@ -22,7 +22,7 @@ reject(continuityPath, continuity, /contentMarkdown|contentHash|compensatingCont
 
 const apiPath = "app/api/action-center/route.ts";
 const api = await source(apiPath);
-expect(apiPath, api, /workforce-planning-action-center-continuity/, "Action Center API must use the current top-level continuity wrapper that preserves Policy continuity");
+expect(apiPath, api, /privacy-action-center-continuity/, "Action Center API must use the current top-level continuity wrapper that preserves Policy continuity");
 expect(apiPath, api, /cache-control[\s\S]*no-store/, "personal action queues must remain non-cacheable");
 
 const uiPath = "components/workflow-action-center.tsx";
@@ -65,13 +65,13 @@ expect(acknowledgementActionPath, acknowledgementAction, /hrbp:notifications-cha
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
-expect(dashboardPath, dashboard, /getWorkforcePlanningLifecycleActionCenterData/, "Dashboard must reuse the current top-level continuity source that preserves Policy continuity");
+expect(dashboardPath, dashboard, /getPrivacyLifecycleActionCenterData/, "Dashboard must reuse the current top-level continuity source that preserves Policy continuity");
 expect(dashboardPath, dashboard, /policies:\s*number/, "Dashboard summary must carry aggregate Policy attention only");
 reject(dashboardPath, dashboard, /contentMarkdown|contentHash|policy\.title|\.items/, "Dashboard must not receive Policy record detail");
 
 const analyticsPath = "lib/lifecycle-analytics-continuity.ts";
 const analytics = await source(analyticsPath);
-expect(analyticsPath, analytics, /getWorkforcePlanningLifecycleActionCenterData/, "Analytics must reuse the current top-level continuity source that preserves Policy continuity");
+expect(analyticsPath, analytics, /getPrivacyLifecycleActionCenterData/, "Analytics must reuse the current top-level continuity source that preserves Policy continuity");
 expect(analyticsPath, analytics, /policies:\s*source\.summary\.policies/, "Analytics must project the Policy aggregate only");
 expect(analyticsPath, analytics, /aggregateOnly:\s*true/, "Analytics privacy contract must remain aggregate-only");
 reject(analyticsPath, analytics, /contentMarkdown|contentHash|policy\.title|\.items/, "Analytics must not project Policy detail");
