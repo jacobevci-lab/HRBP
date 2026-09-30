@@ -11,6 +11,7 @@ expect(routePath, route, /privacy:write/, "DSR lifecycle transitions must requir
 expect(routePath, route, /current\.ownerId !== ctx\.actorId/, "DSR lifecycle must remain owner-bound");
 expect(routePath, route, /BEGIN_VERIFICATION[\s\S]*IDENTITY_VERIFICATION/, "DSR lifecycle must enter identity verification explicitly");
 expect(routePath, route, /VERIFY[\s\S]*IDENTITY_VERIFICATION[\s\S]*IN_PROGRESS/, "DSR processing must start only after identity verification");
+expect(routePath, route, /verifiedAt:\s*action === "VERIFY" \? now : current\.verifiedAt/, "verifiedAt evidence must be written only when verification completes");
 expect(routePath, route, /IN_PROGRESS/, "DSR lifecycle must preserve in-progress state");
 expect(routePath, route, /WAITING/, "DSR lifecycle must support waiting/resume state");
 expect(routePath, route, /COMPLETED/, "DSR lifecycle must support completion");
