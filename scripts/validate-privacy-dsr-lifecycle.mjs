@@ -46,13 +46,13 @@ expect(modulePath, modulePage, /slug === "privacy" \? dsrFocus/, "DSR focus must
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
-expect(dashboardPath, dashboard, /getPrivacyLifecycleActionCenterData/, "Dashboard must use the current top-level Privacy continuity source");
+expect(dashboardPath, dashboard, /getEngagementLifecycleActionCenterData/, "Dashboard must use the current top-level continuity source that preserves Privacy");
 expect(dashboardPath, dashboard, /privacy:\s*number/, "Dashboard must carry aggregate Privacy attention only");
 reject(dashboardPath, dashboard, /subjectPersonId|rejectionReason|\.items/, "Dashboard must not receive DSR detail");
 
 const analyticsPath = "lib/lifecycle-analytics-continuity.ts";
 const analytics = await source(analyticsPath);
-expect(analyticsPath, analytics, /getPrivacyLifecycleActionCenterData/, "Analytics must use the current top-level Privacy continuity source");
+expect(analyticsPath, analytics, /getEngagementLifecycleActionCenterData/, "Analytics must use the current top-level continuity source that preserves Privacy");
 expect(analyticsPath, analytics, /privacy:\s*source\.summary\.privacy/, "Analytics must project only the Privacy aggregate");
 expect(analyticsPath, analytics, /aggregateOnly:\s*true/, "Analytics lifecycle continuity must remain aggregate-only");
 
