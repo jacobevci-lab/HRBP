@@ -68,7 +68,7 @@ expect(apiPath, api, /cache-control[\s\S]*no-store/, "actor-specific Action Cent
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
 expect(dashboardPath, dashboard, /getWorkflowDefinitionLifecycleActionCenterData/, "Dashboard must use the current top-level workflow definition continuity source");
-reject(dashboardPath, dashboard, /WorkflowDefinition|configuration|\.items/, "Dashboard must remain aggregate-only");
+reject(dashboardPath, dashboard, /configuration|stepKey|assigneeRole|slaMinutes|data\.items|items:\s*data/, "Dashboard must remain aggregate-only");
 
 const analyticsPath = "lib/lifecycle-analytics-continuity.ts";
 const analytics = await source(analyticsPath);
