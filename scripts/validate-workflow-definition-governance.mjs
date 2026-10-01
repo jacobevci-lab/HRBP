@@ -17,6 +17,8 @@ expect(intakePath, intake, /stepKey values must be unique/, "workflow definition
 expect(intakePath, intake, /Object\.values\(PlatformRole\)/, "workflow assignee roles must be validated against platform roles");
 expect(intakePath, intake, /MAX_SLA_MINUTES = 43_200/, "workflow step SLA must be bounded");
 expect(intakePath, intake, /version must be an integer between 1 and 1000/, "workflow definition version must be bounded");
+expect(intakePath, intake, /PrismaClientKnownRequestError[\s\S]*P2002/, "duplicate workflow key/version creation must return a governed conflict");
+expect(intakePath, intake, /This workflow key and version already exist/, "duplicate workflow versions must return an explicit conflict message");
 
 const routePath = "app/api/workflows/definitions/[id]/lifecycle/route.ts";
 const route = await source(routePath);
@@ -55,6 +57,12 @@ expect(editorPath, editor, /removeStep/, "workflow editor must support bounded s
 expect(editorPath, editor, /assigneeRole/, "workflow editor must support role-bound steps");
 expect(editorPath, editor, /slaMinutes/, "workflow editor must expose bounded SLA authoring");
 expect(editorPath, editor, /Only DRAFT definitions are editable|Yalnızca DRAFT/, "workflow editor must disclose draft-only mutation semantics");
+expect(editorPath, editor, /cloneDefinition/, "workflow editor must support creating a new governed version from immutable versions");
+expect(editorPath, editor, /cloneSources[\s\S]*status !== "DRAFT"/, "workflow version cloning must source only immutable non-draft definitions");
+expect(editorPath, editor, /Math\.max\([\s\S]*definition\.version[\s\S]*highestVersion \+ 1/, "workflow clone must prepare the next tenant-visible version number");
+expect(editorPath, editor, /highestVersion >= 1000/, "workflow version cloning must enforce the maximum supported version ceiling");
+expect(editorPath, editor, /setSelectedId\(""\)[\s\S]*setKey\(definition\.key\)/, "cloning must create a new draft rather than editing the immutable source");
+expect(editorPath, editor, /Create next version from|Yeni sürümü şundan oluştur/, "workflow editor must expose version cloning in the UI");
 
 const continuityPath = "lib/workflow-definition-action-continuity.ts";
 const continuity = await source(continuityPath);
