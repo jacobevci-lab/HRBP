@@ -37,6 +37,12 @@ type LifecycleActionItem = {
   } | {
     type: "reject-compensation";
     changeId: string;
+  } | {
+    type: "return-requisition";
+    requisitionId: string;
+  } | {
+    type: "return-offer";
+    offerId: string;
   };
   action: null | {
     type: "complete-workflow";
@@ -60,6 +66,12 @@ type LifecycleActionItem = {
   } | {
     type: "mark-payroll-paid";
     runId: string;
+  } | {
+    type: "approve-requisition";
+    requisitionId: string;
+  } | {
+    type: "approve-offer";
+    offerId: string;
   };
 };
 
@@ -237,6 +249,18 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? "Bu bordro çalıştırmasını bağımsız olarak onaylamak istiyor musun?" : "Independently approve this payroll run?",
       success: locale === "tr" ? "Bordro çalıştırması onaylandı." : "Payroll run approved."
     };
+    if (item.action.type === "approve-requisition") return {
+      label: locale === "tr" ? "Talebi onayla" : "Approve requisition",
+      busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını onaylayıp açmak istiyor musun?` : `Approve and open “${item.title}”?`,
+      success: locale === "tr" ? "İşe alım talebi onaylandı ve açıldı." : "Requisition approved and opened."
+    };
+    if (item.action.type === "approve-offer") return {
+      label: locale === "tr" ? "Teklifi onayla" : "Approve offer",
+      busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını onaylayıp gönderime çıkarmak istiyor musun?` : `Approve and release “${item.title}” for sending?`,
+      success: locale === "tr" ? "Teklif bağımsız olarak onaylandı." : "Offer independently approved."
+    };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
       busy: locale === "tr" ? "İşleniyor…" : "Processing…",
@@ -258,6 +282,18 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       busy: locale === "tr" ? "Reddediliyor…" : "Rejecting…",
       confirm: locale === "tr" ? `“${item.title}” kaydını reddetmek istiyor musun?` : `Reject “${item.title}”?`,
       success: locale === "tr" ? "Zaman kaydı reddedildi." : "Time entry rejected."
+    };
+    if (item.secondaryAction.type === "return-requisition") return {
+      label: locale === "tr" ? "Taslağa döndür" : "Return to draft",
+      busy: locale === "tr" ? "Döndürülüyor…" : "Returning…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını düzeltme için taslağa döndürmek istiyor musun?` : `Return “${item.title}” to draft for revision?`,
+      success: locale === "tr" ? "İşe alım talebi taslağa döndürüldü." : "Requisition returned to draft."
+    };
+    if (item.secondaryAction.type === "return-offer") return {
+      label: locale === "tr" ? "Taslağa döndür" : "Return to draft",
+      busy: locale === "tr" ? "Döndürülüyor…" : "Returning…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını düzeltme için taslağa döndürmek istiyor musun?` : `Return “${item.title}” to draft for revision?`,
+      success: locale === "tr" ? "Teklif taslağa döndürüldü." : "Offer returned to draft."
     };
     return {
       label: locale === "tr" ? "Reddet" : "Reject",
@@ -287,6 +323,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.secondaryAction.type === "reject-compensation") {
         endpoint = `/api/compensation/changes/${encodeURIComponent(item.secondaryAction.changeId)}/decision`;
         payload = { decision: "REJECT" };
+      } else if (item.secondaryAction.type === "return-requisition") {
+        endpoint = `/api/recruiting/requisitions/${encodeURIComponent(item.secondaryAction.requisitionId)}/status`;
+        payload = { status: "DRAFT" };
+      } else if (item.secondaryAction.type === "return-offer") {
+        endpoint = `/api/recruiting/offers/${encodeURIComponent(item.secondaryAction.offerId)}/status`;
+        payload = { status: "DRAFT" };
       }
 
       const response = await fetch(endpoint, {
@@ -336,9 +378,15 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "approve-payroll") {
         endpoint = `/api/payroll/runs/${encodeURIComponent(item.action.runId)}/transition`;
         payload = { status: "APPROVED" };
-      } else {
+      } else if (item.action.type === "mark-payroll-paid") {
         endpoint = `/api/payroll/runs/${encodeURIComponent(item.action.runId)}/transition`;
         payload = { status: "PAID" };
+      } else if (item.action.type === "approve-requisition") {
+        endpoint = `/api/recruiting/requisitions/${encodeURIComponent(item.action.requisitionId)}/status`;
+        payload = { status: "OPEN" };
+      } else if (item.action.type === "approve-offer") {
+        endpoint = `/api/recruiting/offers/${encodeURIComponent(item.action.offerId)}/status`;
+        payload = { status: "SENT" };
       }
 
       const response = await fetch(endpoint, {
