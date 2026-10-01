@@ -77,7 +77,7 @@ export async function getEngagementCampaignResults(ctx: RequestContext, campaign
         suppressed: true,
         suppressionReason: "Anonymous campaign results require full authorized audience coverage.",
         threshold: campaign.anonymityThreshold,
-        responseCount: 0,
+        responseCount: null,
         targetCount: null,
         responseRate: null,
         questions: []
@@ -90,7 +90,7 @@ export async function getEngagementCampaignResults(ctx: RequestContext, campaign
         suppressed: true,
         suppressionReason: "Anonymous campaign results are suppressed because the audience extends beyond your relationship scope.",
         threshold: campaign.anonymityThreshold,
-        responseCount: 0,
+        responseCount: null,
         targetCount: null,
         responseRate: null,
         questions: []
@@ -131,9 +131,9 @@ export async function getEngagementCampaignResults(ctx: RequestContext, campaign
       suppressed: true,
       suppressionReason: `Results require at least ${threshold} responses in the authorized cohort.`,
       threshold,
-      responseCount,
-      targetCount,
-      responseRate: targetCount ? round((responseCount / targetCount) * 100) : null,
+      responseCount: null,
+      targetCount: null,
+      responseRate: null,
       questions: []
     };
   }
@@ -164,7 +164,7 @@ export async function getEngagementCampaignResults(ctx: RequestContext, campaign
         prompt: question.prompt,
         type: question.type,
         dimension: question.dimension,
-        answered: 0,
+        answered: null,
         suppressed: true,
         suppressionReason: "Free-text responses are never displayed in aggregate engagement results.",
         metric: null,
@@ -180,7 +180,7 @@ export async function getEngagementCampaignResults(ctx: RequestContext, campaign
         prompt: question.prompt,
         type: question.type,
         dimension: question.dimension,
-        answered: values.length,
+        answered: null,
         suppressed: true,
         suppressionReason: `Question result requires at least ${threshold} answers.`,
         metric: null,
@@ -196,7 +196,7 @@ export async function getEngagementCampaignResults(ctx: RequestContext, campaign
         prompt: question.prompt,
         type: question.type,
         dimension: question.dimension,
-        answered: numbers.length,
+        answered: numbers.length >= threshold ? numbers.length : null,
         suppressed: numbers.length < threshold,
         suppressionReason: numbers.length < threshold ? `Question result requires at least ${threshold} numeric answers.` : null,
         metric: numbers.length >= threshold ? { label: "Average", value: round(numbers.reduce((sum, value) => sum + value, 0) / numbers.length, 2) } : null,
@@ -209,7 +209,7 @@ export async function getEngagementCampaignResults(ctx: RequestContext, campaign
       if (numbers.length < threshold) {
         return {
           id: question.id, questionKey: question.questionKey, prompt: question.prompt, type: question.type, dimension: question.dimension,
-          answered: numbers.length, suppressed: true, suppressionReason: `Question result requires at least ${threshold} numeric answers.`, metric: null, distribution: []
+          answered: null, suppressed: true, suppressionReason: `Question result requires at least ${threshold} numeric answers.`, metric: null, distribution: []
         };
       }
       const promoters = numbers.filter((value) => value >= 9).length;
@@ -247,7 +247,7 @@ export async function getEngagementCampaignResults(ctx: RequestContext, campaign
         prompt: question.prompt,
         type: question.type,
         dimension: question.dimension,
-        answered: 0,
+        answered: null,
         suppressed: true,
         suppressionReason: `Choice distribution is suppressed because one or more non-empty options are below the privacy threshold of ${threshold}.`,
         metric: null,
