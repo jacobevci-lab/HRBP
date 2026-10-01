@@ -7,10 +7,10 @@ import {
   SurveyStatus
 } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
-import { sessionSecret } from "@/lib/auth-session";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
+import { runtimeString } from "@/lib/runtime-env";
 
 const MAX_ANSWERS = 100;
 
@@ -80,8 +80,8 @@ async function loadCampaignForRespondent(
   campaignId: string
 ) {
   if (!ctx.employmentId) throw new Error("EMPLOYMENT");
-  const secret = sessionSecret();
-  if (!secret) throw new Error("SECRET");
+  const secret = runtimeString("HRBP_ENGAGEMENT_RESPONSE_SECRET");
+  if (!secret || secret.length < 32) throw new Error("SECRET");
 
   const [campaign, employment] = await Promise.all([
     db.surveyCampaign.findFirst({
@@ -153,7 +153,7 @@ function campaignError(error: unknown) {
   if (code === "WINDOW") return Response.json({ error: "Campaign is outside its response window." }, { status: 409 });
   if (code === "AUDIENCE") return forbidden("This campaign is outside your authorized response audience.");
   if (code === "TOO_LARGE") return Response.json({ error: "Survey exceeds the supported response question limit." }, { status: 409 });
-  if (code === "SECRET") return Response.json({ error: "Anonymous response protection is not configured." }, { status: 503 });
+  if (code === "SECRET") return Response.json({ error: "Engagement response token protection is not configured." }, { status: 503 });
   return null;
 }
 
