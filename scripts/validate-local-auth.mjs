@@ -87,6 +87,21 @@ expect(settingsPagePath, settingsPage, /LocalAccountAdmin/, "tenant settings mus
 expect(settingsPagePath, settingsPage, /HRBP_LOCAL_AUTH_ENABLED/, "tenant settings must surface the local authentication runtime gate");
 expect(settingsPagePath, settingsPage, /localAuthEnabled:\s*true/, "tenant settings readiness must count explicitly enabled local accounts");
 
+
+const authConfigPath = "lib/auth-config.ts";
+const authConfig = await source(authConfigPath);
+expect(authConfigPath, authConfig, /localAuthConfigurationStatus/, "local authentication readiness must be exposed through the shared auth configuration helper");
+expect(authConfigPath, authConfig, /HRBP_LOCAL_AUTH_ENABLED/, "local authentication readiness must respect the runtime feature gate");
+expect(authConfigPath, authConfig, /HRBP_SESSION_SECRET/, "local authentication readiness must require the shared signed-session secret");
+
+const authHealthPath = "app/api/health/auth/route.ts";
+const authHealth = await source(authHealthPath);
+expect(authHealthPath, authHealth, /localAuthConfigurationStatus/, "authentication health must include local authentication readiness");
+expect(authHealthPath, authHealth, /mode:\s*"oidc"[\s\S]*mode:\s*"local"/, "authentication health must publish both supported modes");
+expect(authHealthPath, authHealth, /configured:\s*anyReady/, "authentication health must be healthy when any configured authentication mode is usable");
+expect(authHealthPath, authHealth, /cache-control[\s\S]*no-store/, "authentication health must remain uncached");
+reject(authHealthPath, authHealth, /HRBP_SESSION_SECRET|HRBP_TEST_ADMIN_PASSWORD/, "authentication health must never expose secret names or values directly");
+
 const packagePath = "package.json";
 const pkg = await source(packagePath);
 expect(packagePath, pkg, /local-auth:validate/, "local auth validator must be registered");
