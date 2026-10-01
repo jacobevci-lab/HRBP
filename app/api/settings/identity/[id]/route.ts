@@ -6,10 +6,10 @@ import { asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { identityActivationIssues } from "@/lib/settings-connection-validation";
 
-type LifecycleAction = "activate" | "disable" | "reopen";
+type LifecycleAction = "validate" | "activate" | "disable" | "reopen";
 
 function actionValue(value: unknown): LifecycleAction | null {
-  return value === "activate" || value === "disable" || value === "reopen" ? value : null;
+  return value === "validate" || value === "activate" || value === "disable" || value === "reopen" ? value : null;
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -24,10 +24,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
   const action = actionValue(body.action);
-  if (!action) return Response.json({ error: "action must be activate, disable or reopen." }, { status: 400 });
+  if (!action) return Response.json({ error: "action must be validate, activate, disable or reopen." }, { status: 400 });
 
   const current = await db.identityProviderConnection.findFirst({ where: { id, tenantId: ctx.tenantId } });
   if (!current) return Response.json({ error: "Identity provider was not found." }, { status: 404 });
+
+  if (action === "validate") {
+    if (current.status !== ConnectionStatus.DRAFT) return Response.json({ error: "Only DRAFT identity providers can be configuration-validated." }, { status: 409 });
+    const issues = identityActivationIssues(current);
+    if (issues.length) return Response.json({ error: `Identity provider configuration is incomplete. Missing: ${issues.join(", ")}.` }, { status: 409 });
+    const data = await db.$transaction(async (tx) => {
+      const updated = await tx.identityProviderConnection.update({ where: { id }, data: { lastValidatedAt: new Date() } });
+      await appendAudit(tx, ctx, {
+        action: "settings.identity-provider-config-validated",
+        resourceType: "IdentityProviderConnection",
+        resourceId: id,
+        classification: DataClassification.RESTRICTED,
+        purpose: "Identity-provider configuration metadata validated before governed activation"
+      });
+      return updated;
+    });
+    return Response.json({ data });
+  }
 
   if (action === "activate") {
     if (current.status === ConnectionStatus.ACTIVE) return Response.json({ data: current });
@@ -37,11 +55,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     const issues = identityActivationIssues(current);
     if (issues.length) return Response.json({ error: `Identity provider is not activation-ready. Missing: ${issues.join(", ")}.` }, { status: 409 });
+    if (!current.lastValidatedAt) return Response.json({ error: "Validate the identity-provider configuration before activation." }, { status: 409 });
 
     const data = await db.$transaction(async (tx) => {
       const updated = await tx.identityProviderConnection.update({
         where: { id },
-        data: { status: ConnectionStatus.ACTIVE, lastValidatedAt: new Date() }
+        data: { status: ConnectionStatus.ACTIVE }
       });
       await appendAudit(tx, ctx, {
         action: "settings.identity-provider-activated",
