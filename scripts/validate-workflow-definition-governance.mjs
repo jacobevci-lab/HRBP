@@ -61,7 +61,7 @@ expect(editorPath, editor, /cloneDefinition/, "workflow editor must support crea
 expect(editorPath, editor, /cloneSources[\s\S]*status !== "DRAFT"/, "workflow version cloning must source only immutable non-draft definitions");
 expect(editorPath, editor, /Math\.max\([\s\S]*definition\.version[\s\S]*highestVersion \+ 1/, "workflow clone must prepare the next tenant-visible version number");
 expect(editorPath, editor, /highestVersion >= 1000/, "workflow version cloning must enforce the maximum supported version ceiling");
-expect(editorPath, editor, /setSelectedId\("")[\s\S]*setKey\(definition\.key\)/, "cloning must create a new draft rather than editing the immutable source");
+expect(editorPath, editor, /setSelectedId\(""\)[\s\S]*setKey\(definition\.key\)/, "cloning must create a new draft rather than editing the immutable source");
 expect(editorPath, editor, /Create next version from|Yeni sürümü şundan oluştur/, "workflow editor must expose version cloning in the UI");
 
 const continuityPath = "lib/workflow-definition-action-continuity.ts";
