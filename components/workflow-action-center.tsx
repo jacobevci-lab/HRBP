@@ -131,6 +131,9 @@ type LifecycleActionItem = {
   } | {
     type: "activate-benefit-enrollment";
     enrollmentId: string;
+  } | {
+    type: "start-learning-assignment";
+    assignmentId: string;
   };
 };
 
@@ -232,6 +235,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "advance-hr-service") return { resourceType: "HRServiceRequest", resourceId: action.requestId };
   if (action?.type === "advance-onboarding-task") return { resourceType: "OnboardingTask", resourceId: action.taskId };
   if (action?.type === "activate-benefit-enrollment") return { resourceType: "BenefitEnrollment", resourceId: action.enrollmentId };
+  if (action?.type === "start-learning-assignment") return { resourceType: "LearningAssignment", resourceId: action.assignmentId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -445,6 +449,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” seçimini aktif kapsama almak istiyor musun?` : `Activate “${item.title}” coverage?`,
       success: locale === "tr" ? "Yan hak seçimi aktif kapsama alındı." : "Benefit enrollment activated."
     };
+    if (item.action.type === "start-learning-assignment") return {
+      label: locale === "tr" ? "Eğitime başla" : "Start learning",
+      busy: locale === "tr" ? "Başlatılıyor…" : "Starting…",
+      confirm: locale === "tr" ? `“${item.title}” eğitimini devam ediyor durumuna almak istiyor musun?` : `Start “${item.title}” learning?`,
+      success: locale === "tr" ? "Eğitim devam ediyor durumuna alındı." : "Learning assignment moved in progress."
+    };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
       busy: locale === "tr" ? "İşleniyor…" : "Processing…",
@@ -654,6 +664,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "activate-benefit-enrollment") {
         endpoint = `/api/benefits/enrollments/${encodeURIComponent(item.action.enrollmentId)}/transition`;
         payload = { status: "ACTIVE" };
+      } else if (item.action.type === "start-learning-assignment") {
+        endpoint = `/api/learning/assignments/${encodeURIComponent(item.action.assignmentId)}/self-transition`;
+        payload = { status: "IN_PROGRESS" };
       }
 
       const response = await fetch(endpoint, {
