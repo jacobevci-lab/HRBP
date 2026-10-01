@@ -15,6 +15,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const code = error instanceof Error ? error.message : "UNKNOWN";
     if (code === "FORBIDDEN") return forbidden();
     if (code === "NOT_FOUND") return Response.json({ error: "Campaign not found." }, { status: 404 });
+    if (code === "STATE") return Response.json({ error: "Campaign results are not available before the campaign opens." }, { status: 409 });
     if (code === "TOO_LARGE") return Response.json({ error: "Survey exceeds the supported result question limit." }, { status: 409 });
     if (code === "RESULT_SET_TOO_LARGE") return Response.json({ error: "Campaign exceeds the interactive result set limit. Use governed analytics export instead." }, { status: 409 });
     console.error("Engagement result aggregation failed", error);
