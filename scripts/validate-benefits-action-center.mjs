@@ -15,6 +15,7 @@ expect(growthPath, growth, /take:\s*100/, "benefits attention must remain bounde
 expect(growthPath, growth, /href:\s*`\/module\/benefits\?enrollment=/, "benefits attention must deep-link to the exact governed enrollment");
 expect(growthPath, growth, /dueAt:\s*enrollment\.effectiveFrom\.toISOString\(\)/, "pending election effective date must drive operational urgency");
 expect(growthPath, growth, /benefits:\s*items\.filter\(\(item\) => item\.kind === "benefits"\)\.length/, "summary must expose aggregate benefits attention");
+expect(growthPath, growth, /type:\s*"activate-benefit-enrollment"/, "pending benefit elections must expose bounded activation quick actions");
 reject(growthPath, growth, /employerContribution|employeeContribution|coverageTier/, "shared Action Center aggregation must not load benefit contribution or coverage detail");
 
 const dataPath = "lib/growth-lifecycle-data.ts";
@@ -53,7 +54,10 @@ const actionPath = "components/workflow-action-center.tsx";
 const action = await source(actionPath);
 expect(actionPath, action, /"benefits"/, "Action Center must understand benefits as its own source");
 expect(actionPath, action, /summary\.benefits/, "Action Center must expose the benefits counter");
-expect(actionPath, action, /item\.action\?\.type === "complete-workflow"/, "benefits entries must remain deep-link only, not direct decision actions");
+expect(actionPath, action, /item\.action\.type === "activate-benefit-enrollment"[\s\S]*\/api\/benefits\/enrollments\//, "benefit activation must reuse the governed transition endpoint");
+expect(actionPath, action, /payload = \{ status: "ACTIVE" \}/, "benefit quick action must only activate pending coverage");
+expect(actionPath, action, /resourceType:\s*"BenefitEnrollment"/, "benefit quick actions must clear matching notifications best-effort");
+reject(actionPath, action, /activate-benefit-enrollment[\s\S]*WAIVED|activate-benefit-enrollment[\s\S]*ENDED|activate-benefit-enrollment[\s\S]*SUSPENDED/, "Action Center must not expose contextual benefit terminal/suspension transitions");
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
