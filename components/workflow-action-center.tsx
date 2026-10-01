@@ -52,6 +52,9 @@ type LifecycleActionItem = {
   } | {
     type: "retire-workflow-definition";
     definitionId: string;
+  } | {
+    type: "return-engagement-draft";
+    campaignId: string;
   };
   action: null | {
     type: "complete-workflow";
@@ -90,6 +93,12 @@ type LifecycleActionItem = {
   } | {
     type: "activate-workflow-definition";
     definitionId: string;
+  } | {
+    type: "open-engagement-campaign";
+    campaignId: string;
+  } | {
+    type: "close-engagement-campaign";
+    campaignId: string;
   };
 };
 
@@ -185,6 +194,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "approve-policy") return { resourceType: "PolicyRecord", resourceId: action.policyId };
   if (action?.type === "approve-workforce-scenario") return { resourceType: "WorkforceScenario", resourceId: action.scenarioId };
   if (action?.type === "activate-workflow-definition") return { resourceType: "WorkflowDefinition", resourceId: action.definitionId };
+  if (action?.type === "open-engagement-campaign" || action?.type === "close-engagement-campaign") return { resourceType: "SurveyCampaign", resourceId: action.campaignId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -195,6 +205,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (secondary?.type === "request-policy-changes") return { resourceType: "PolicyRecord", resourceId: secondary.policyId };
   if (secondary?.type === "request-workforce-changes") return { resourceType: "WorkforceScenario", resourceId: secondary.scenarioId };
   if (secondary?.type === "retire-workflow-definition") return { resourceType: "WorkflowDefinition", resourceId: secondary.definitionId };
+  if (secondary?.type === "return-engagement-draft") return { resourceType: "SurveyCampaign", resourceId: secondary.campaignId };
   return null;
 }
 
@@ -325,6 +336,18 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” tanımını bağımsız olarak aktifleştirmek istiyor musun?` : `Independently activate “${item.title}”?`,
       success: locale === "tr" ? "İş akışı tanımı aktifleştirildi." : "Workflow definition activated."
     };
+    if (item.action.type === "open-engagement-campaign") return {
+      label: locale === "tr" ? "Kampanyayı aç" : "Open campaign",
+      busy: locale === "tr" ? "Açılıyor…" : "Opening…",
+      confirm: locale === "tr" ? `“${item.title}” kampanyasını açmak istiyor musun?` : `Open “${item.title}”?`,
+      success: locale === "tr" ? "Bağlılık kampanyası açıldı." : "Engagement campaign opened."
+    };
+    if (item.action.type === "close-engagement-campaign") return {
+      label: locale === "tr" ? "Kampanyayı kapat" : "Close campaign",
+      busy: locale === "tr" ? "Kapatılıyor…" : "Closing…",
+      confirm: locale === "tr" ? `“${item.title}” kampanyasını kapatmak istiyor musun?` : `Close “${item.title}”?`,
+      success: locale === "tr" ? "Bağlılık kampanyası kapatıldı." : "Engagement campaign closed."
+    };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
       busy: locale === "tr" ? "İşleniyor…" : "Processing…",
@@ -377,6 +400,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” taslağını emekliye ayırmak istiyor musun?` : `Retire “${item.title}” draft?`,
       success: locale === "tr" ? "İş akışı taslağı emekliye ayrıldı." : "Workflow definition draft retired."
     };
+    if (item.secondaryAction.type === "return-engagement-draft") return {
+      label: locale === "tr" ? "Taslağa döndür" : "Return to draft",
+      busy: locale === "tr" ? "Döndürülüyor…" : "Returning…",
+      confirm: locale === "tr" ? `“${item.title}” kampanyasını taslağa döndürmek istiyor musun?` : `Return “${item.title}” to draft?`,
+      success: locale === "tr" ? "Bağlılık kampanyası taslağa döndürüldü." : "Engagement campaign returned to draft."
+    };
     return {
       label: locale === "tr" ? "Reddet" : "Reject",
       busy: locale === "tr" ? "Reddediliyor…" : "Rejecting…",
@@ -420,6 +449,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.secondaryAction.type === "retire-workflow-definition") {
         endpoint = `/api/workflows/definitions/${encodeURIComponent(item.secondaryAction.definitionId)}/lifecycle`;
         payload = { action: "RETIRE" };
+      } else if (item.secondaryAction.type === "return-engagement-draft") {
+        endpoint = `/api/engagement/campaigns/${encodeURIComponent(item.secondaryAction.campaignId)}/lifecycle`;
+        payload = { action: "RETURN_DRAFT" };
       }
 
       const response = await fetch(endpoint, {
@@ -489,6 +521,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "activate-workflow-definition") {
         endpoint = `/api/workflows/definitions/${encodeURIComponent(item.action.definitionId)}/lifecycle`;
         payload = { action: "ACTIVATE" };
+      } else if (item.action.type === "open-engagement-campaign") {
+        endpoint = `/api/engagement/campaigns/${encodeURIComponent(item.action.campaignId)}/lifecycle`;
+        payload = { action: "OPEN" };
+      } else if (item.action.type === "close-engagement-campaign") {
+        endpoint = `/api/engagement/campaigns/${encodeURIComponent(item.action.campaignId)}/lifecycle`;
+        payload = { action: "CLOSE" };
       }
 
       const response = await fetch(endpoint, {
