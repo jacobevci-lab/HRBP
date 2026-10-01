@@ -105,6 +105,18 @@ export type LifecycleActionItem = {
   } | {
     type: "close-engagement-campaign";
     campaignId: string;
+  } | {
+    type: "begin-dsr-verification";
+    dsrId: string;
+  } | {
+    type: "verify-dsr";
+    dsrId: string;
+  } | {
+    type: "wait-dsr";
+    dsrId: string;
+  } | {
+    type: "resume-dsr";
+    dsrId: string;
   };
 };
 

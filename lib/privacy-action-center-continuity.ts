@@ -77,7 +77,13 @@ async function privacyDsrItems(ctx: RequestContext): Promise<PrivacyLifecycleAtt
     dueAt: dsr.dueAt.toISOString(),
     createdAt: dsr.createdAt.toISOString(),
     urgency: urgencyForDueDate(dsr.dueAt),
-    action: null
+    action: dsr.status === DSRStatus.RECEIVED
+      ? { type: "begin-dsr-verification", dsrId: dsr.id }
+      : dsr.status === DSRStatus.IDENTITY_VERIFICATION
+        ? { type: "verify-dsr", dsrId: dsr.id }
+        : dsr.status === DSRStatus.IN_PROGRESS
+          ? { type: "wait-dsr", dsrId: dsr.id }
+          : { type: "resume-dsr", dsrId: dsr.id }
   }));
 }
 

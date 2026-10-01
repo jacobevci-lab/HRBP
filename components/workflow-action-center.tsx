@@ -99,6 +99,18 @@ type LifecycleActionItem = {
   } | {
     type: "close-engagement-campaign";
     campaignId: string;
+  } | {
+    type: "begin-dsr-verification";
+    dsrId: string;
+  } | {
+    type: "verify-dsr";
+    dsrId: string;
+  } | {
+    type: "wait-dsr";
+    dsrId: string;
+  } | {
+    type: "resume-dsr";
+    dsrId: string;
   };
 };
 
@@ -195,6 +207,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "approve-workforce-scenario") return { resourceType: "WorkforceScenario", resourceId: action.scenarioId };
   if (action?.type === "activate-workflow-definition") return { resourceType: "WorkflowDefinition", resourceId: action.definitionId };
   if (action?.type === "open-engagement-campaign" || action?.type === "close-engagement-campaign") return { resourceType: "SurveyCampaign", resourceId: action.campaignId };
+  if (action?.type === "begin-dsr-verification" || action?.type === "verify-dsr" || action?.type === "wait-dsr" || action?.type === "resume-dsr") return { resourceType: "DataSubjectRequest", resourceId: action.dsrId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -347,6 +360,30 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       busy: locale === "tr" ? "Kapatılıyor…" : "Closing…",
       confirm: locale === "tr" ? `“${item.title}” kampanyasını kapatmak istiyor musun?` : `Close “${item.title}”?`,
       success: locale === "tr" ? "Bağlılık kampanyası kapatıldı." : "Engagement campaign closed."
+    };
+    if (item.action.type === "begin-dsr-verification") return {
+      label: locale === "tr" ? "Kimlik doğrulamayı başlat" : "Begin verification",
+      busy: locale === "tr" ? "Başlatılıyor…" : "Starting…",
+      confirm: locale === "tr" ? `“${item.title}” için kimlik doğrulama aşamasını başlatmak istiyor musun?` : `Begin identity verification for “${item.title}”?`,
+      success: locale === "tr" ? "DSR kimlik doğrulama aşamasına alındı." : "DSR moved to identity verification."
+    };
+    if (item.action.type === "verify-dsr") return {
+      label: locale === "tr" ? "Kimliği doğrula" : "Verify identity",
+      busy: locale === "tr" ? "Doğrulanıyor…" : "Verifying…",
+      confirm: locale === "tr" ? `“${item.title}” kaydında kimliğin doğrulandığını onaylıyor musun?` : `Confirm identity verification for “${item.title}”?`,
+      success: locale === "tr" ? "DSR kimliği doğrulandı ve işleme alındı." : "DSR identity verified and moved in progress."
+    };
+    if (item.action.type === "wait-dsr") return {
+      label: locale === "tr" ? "Beklemeye al" : "Put on hold",
+      busy: locale === "tr" ? "Güncelleniyor…" : "Updating…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını beklemeye almak istiyor musun?` : `Put “${item.title}” on hold?`,
+      success: locale === "tr" ? "DSR beklemeye alındı." : "DSR put on hold."
+    };
+    if (item.action.type === "resume-dsr") return {
+      label: locale === "tr" ? "Devam ettir" : "Resume",
+      busy: locale === "tr" ? "Devam ettiriliyor…" : "Resuming…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını yeniden işleme almak istiyor musun?` : `Resume “${item.title}”?`,
+      success: locale === "tr" ? "DSR yeniden işleme alındı." : "DSR resumed."
     };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
@@ -527,6 +564,18 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "close-engagement-campaign") {
         endpoint = `/api/engagement/campaigns/${encodeURIComponent(item.action.campaignId)}/lifecycle`;
         payload = { action: "CLOSE" };
+      } else if (item.action.type === "begin-dsr-verification") {
+        endpoint = `/api/privacy/dsrs/${encodeURIComponent(item.action.dsrId)}/lifecycle`;
+        payload = { action: "BEGIN_VERIFICATION" };
+      } else if (item.action.type === "verify-dsr") {
+        endpoint = `/api/privacy/dsrs/${encodeURIComponent(item.action.dsrId)}/lifecycle`;
+        payload = { action: "VERIFY" };
+      } else if (item.action.type === "wait-dsr") {
+        endpoint = `/api/privacy/dsrs/${encodeURIComponent(item.action.dsrId)}/lifecycle`;
+        payload = { action: "WAIT" };
+      } else if (item.action.type === "resume-dsr") {
+        endpoint = `/api/privacy/dsrs/${encodeURIComponent(item.action.dsrId)}/lifecycle`;
+        payload = { action: "RESUME" };
       }
 
       const response = await fetch(endpoint, {

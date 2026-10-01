@@ -27,12 +27,19 @@ expect(continuityPath, continuity, /ownerId:\s*ctx\.actorId/, "Privacy attention
 expect(continuityPath, continuity, /status:\s*\{\s*in:\s*openStatuses/, "only open DSR states may enter attention");
 expect(continuityPath, continuity, /\/module\/privacy\?dsr=/, "DSR attention must deep-link to exact governed privacy focus");
 expect(continuityPath, continuity, /privacy:\s*items\.filter/, "summary must expose aggregate Privacy attention");
+expect(continuityPath, continuity, /type:\s*"begin-dsr-verification"[\s\S]*type:\s*"verify-dsr"[\s\S]*type:\s*"wait-dsr"[\s\S]*type:\s*"resume-dsr"/, "DSR attention must expose bounded state-specific owner actions");
 reject(continuityPath, continuity, /subjectPersonId|rejectionReason/, "central Privacy attention must not load data-subject identity or rejection narrative");
 
 const uiPath = "components/workflow-action-center.tsx";
 const ui = await source(uiPath);
 expect(uiPath, ui, /"privacy"/, "Action Center must expose Privacy as a source");
 expect(uiPath, ui, /summary\.privacy/, "Action Center must surface aggregate Privacy attention");
+expect(uiPath, ui, /item\.action\.type === "begin-dsr-verification"[\s\S]*BEGIN_VERIFICATION/, "received DSRs must use the governed lifecycle route to begin verification");
+expect(uiPath, ui, /item\.action\.type === "verify-dsr"[\s\S]*action:\s*"VERIFY"/, "verification completion must use the governed DSR lifecycle route");
+expect(uiPath, ui, /item\.action\.type === "wait-dsr"[\s\S]*action:\s*"WAIT"/, "in-progress DSRs must use the governed lifecycle route to enter waiting");
+expect(uiPath, ui, /item\.action\.type === "resume-dsr"[\s\S]*action:\s*"RESUME"/, "waiting DSRs must use the governed lifecycle route to resume");
+expect(uiPath, ui, /resourceType:\s*"DataSubjectRequest"/, "DSR quick actions must clear matching notifications best-effort");
+expect(uiPath, ui, /window\.confirm\(copy\.confirm\)/, "DSR quick actions must require explicit confirmation");
 
 const livePath = "components/governance-planning-live-workspace.tsx";
 const live = await source(livePath);
