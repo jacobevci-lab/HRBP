@@ -1,11 +1,20 @@
 import { PrismaClient } from "@prisma/client";
+import { randomBytes, scryptSync } from "node:crypto";
 
 const db = new PrismaClient();
 
 const TENANT_ID = "tenant-acme-global";
 const ADMIN_USER_ID = "user-yakup-evci";
+const LOCAL_TEST_ADMIN_ID = "user-local-test-admin";
 const effectiveFrom = new Date("2026-01-01T00:00:00.000Z");
 const now = new Date();
+
+function hashSeedPassword(password) {
+  if (typeof password !== "string" || password.length < 12 || password.length > 256) throw new Error("HRBP_TEST_ADMIN_PASSWORD must be 12-256 characters.");
+  const salt = randomBytes(16);
+  const derived = scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+  return `scrypt$16384$8$1${salt.toString("base64url")}${derived.toString("base64url")}`;
+}
 
 function addDays(date, days) {
   const next = new Date(date);
@@ -45,6 +54,41 @@ async function main() {
       active: true
     }
   });
+
+  const localAdminPassword = process.env.HRBP_TEST_ADMIN_PASSWORD;
+  const localPasswordHash = localAdminPassword ? hashSeedPassword(localAdminPassword) : null;
+  await db.userAccount.upsert({
+    where: { id: LOCAL_TEST_ADMIN_ID },
+    update: {
+      tenantId: TENANT_ID,
+      subject: "local.admin",
+      displayName: "Local Test Admin",
+      email: "local.admin@acme.example",
+      role: "TENANT_ADMIN",
+      active: true,
+      localAuthEnabled: Boolean(localPasswordHash),
+      localPasswordHash,
+      localPasswordUpdatedAt: localPasswordHash ? now : null,
+      localFailedAttempts: 0,
+      localLockedUntil: null
+    },
+    create: {
+      id: LOCAL_TEST_ADMIN_ID,
+      tenantId: TENANT_ID,
+      subject: "local.admin",
+      displayName: "Local Test Admin",
+      email: "local.admin@acme.example",
+      role: "TENANT_ADMIN",
+      active: true,
+      localAuthEnabled: Boolean(localPasswordHash),
+      localPasswordHash,
+      localPasswordUpdatedAt: localPasswordHash ? now : null
+    }
+  });
+  console.log(localPasswordHash
+    ? "Local test admin enabled: identifier=local.admin (password sourced from HRBP_TEST_ADMIN_PASSWORD)."
+    : "Local test admin created but local sign-in is disabled until HRBP_TEST_ADMIN_PASSWORD is supplied.");
+
 
   const orgUnits = [
     { id: "org-acme-global", code: "ACME", name: "Acme Global", type: "LEGAL_ENTITY", parentId: null },

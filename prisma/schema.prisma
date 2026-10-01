@@ -224,13 +224,19 @@ model Tenant {
 }
 
 model UserAccount {
-  id          String @id @default(cuid())
-  tenantId    String
-  subject     String
-  displayName String
-  email       String?
-  role        PlatformRole
-  active      Boolean @default(true)
+  id                     String @id @default(cuid())
+  tenantId               String
+  subject                String
+  displayName            String
+  email                  String?
+  role                   PlatformRole
+  active                 Boolean @default(true)
+  localAuthEnabled       Boolean @default(false)
+  localPasswordHash      String?
+  localPasswordUpdatedAt DateTime?
+  localFailedAttempts    Int @default(0)
+  localLockedUntil       DateTime?
+  lastLocalLoginAt       DateTime?
   tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assignments CaseAssignment[]
 
