@@ -80,6 +80,13 @@ expect(adminUiPath, adminUi, /type="password"/, "local account administration mu
 expect(adminUiPath, adminUi, /\/api\/settings\/local-accounts/, "local account administration UI must use the governed tenant API");
 expect(adminUiPath, adminUi, /reset-password/, "local account administration UI must support password rotation");
 
+
+const settingsPagePath = "components/settings-live-page.tsx";
+const settingsPage = await source(settingsPagePath);
+expect(settingsPagePath, settingsPage, /LocalAccountAdmin/, "tenant settings must expose governed local account administration");
+expect(settingsPagePath, settingsPage, /HRBP_LOCAL_AUTH_ENABLED/, "tenant settings must surface the local authentication runtime gate");
+expect(settingsPagePath, settingsPage, /localAuthEnabled:\s*true/, "tenant settings readiness must count explicitly enabled local accounts");
+
 const packagePath = "package.json";
 const pkg = await source(packagePath);
 expect(packagePath, pkg, /local-auth:validate/, "local auth validator must be registered");
