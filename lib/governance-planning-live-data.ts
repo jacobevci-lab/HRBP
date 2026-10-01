@@ -430,7 +430,7 @@ export async function getPrivacyLiveData(ctx: RequestContext) {
       db.processingActivity.findMany({ where: { tenantId: ctx.tenantId, active: true }, orderBy: { updatedAt: "desc" }, take: 150, select: { id: true, code: true, name: true, purpose: true, legalBasis: true, riskRating: true, ownerId: true, specialCategories: true } }),
       db.dataSubjectRequest.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }], take: 200, select: { id: true, requestNumber: true, subjectPersonId: true, type: true, status: true, ownerId: true, dueAt: true, verifiedAt: true, completedAt: true, createdAt: true } }),
       db.dataTransferRegister.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ active: "desc" }, { updatedAt: "desc" }], take: 100, select: { id: true, name: true, sourceCountry: true, destinationCountry: true, recipient: true, mechanism: true, transferImpactDueAt: true, active: true } }),
-      db.privacyRiskAssessment.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }], take: 100, select: { id: true, name: true, riskLevel: true, requiresDpia: true, status: true, ownerId: true, dueAt: true, completedAt: true, createdAt: true } })
+      db.privacyRiskAssessment.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }], take: 100, select: { id: true, processingActivityId: true, name: true, riskLevel: true, requiresDpia: true, status: true, ownerId: true, dueAt: true, completedAt: true, createdAt: true } })
     ]);
 
     const openStatuses = new Set<DSRStatus>([DSRStatus.RECEIVED, DSRStatus.IDENTITY_VERIFICATION, DSRStatus.IN_PROGRESS, DSRStatus.WAITING]);
@@ -469,6 +469,7 @@ export async function getPrivacyLiveData(ctx: RequestContext) {
       })),
       assessments: assessments.slice(0, 20).map((assessment) => ({
         id: assessment.id,
+        processingActivityId: assessment.processingActivityId,
         name: assessment.name,
         riskLevel: assessment.riskLevel,
         requiresDpia: assessment.requiresDpia,
