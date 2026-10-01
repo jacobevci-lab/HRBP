@@ -13,10 +13,12 @@ expect(resultsPath, results, /campaign\.anonymous && scope !== null/, "anonymous
 expect(resultsPath, results, /canonicalAudience\.some\(\(employmentId\) => !allowed\.has\(employmentId\)\)/, "anonymous results must require full authorized audience coverage");
 expect(resultsPath, results, /Math\.max\(5, campaign\.anonymityThreshold\)/, "results must enforce a minimum privacy threshold");
 expect(resultsPath, results, /responseCount < threshold/, "low-volume campaign results must be suppressed");
+expect(resultsPath, results, /responseCount:\s*null[\s\S]*targetCount:\s*null[\s\S]*responseRate:\s*null/, "suppressed campaign payloads must not expose exact counts or rates");
 expect(resultsPath, results, /question\.type === SurveyQuestionType\.TEXT/, "free-text questions must have an explicit suppression path");
 expect(resultsPath, results, /Free-text responses are never displayed/, "free-text answer content must never be exposed in aggregate results");
 expect(resultsPath, results, /lowVolumeBucket/, "choice distributions must detect low-volume non-empty buckets");
 expect(resultsPath, results, /Choice distribution is suppressed/, "choice questions with low-volume buckets must be fully suppressed");
+expect(resultsPath, results, /answered:\s*null[\s\S]*suppressed:\s*true/, "suppressed question payloads must not expose exact answer counts");
 expect(resultsPath, results, /RESULT_SET_TOO_LARGE/, "interactive result aggregation must remain bounded");
 expect(resultsPath, results, /\["OPEN", "CLOSED", "ARCHIVED"\]\.includes\(campaign\.status\)/, "results must not be available before campaign opening");
 reject(resultsPath, results, /respondentTokenHash/, "result aggregation must not load respondent pseudonyms");
