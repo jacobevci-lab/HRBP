@@ -137,7 +137,8 @@ export async function getEngagementLiveData(ctx: RequestContext) {
       select: {
         id: true, code: true, name: true, description: true, createdById: true,
         questions: { orderBy: { orderIndex: "asc" }, select: { id: true, questionKey: true, prompt: true, type: true, required: true, orderIndex: true, options: true, dimension: true } },
-        campaigns: { select: { status: true }, take: 100 }
+        campaigns: { where: { status: { not: SurveyStatus.DRAFT } }, select: { id: true }, take: 1 },
+        _count: { select: { campaigns: true } }
       }
     })]);
 
@@ -194,8 +195,8 @@ export async function getEngagementLiveData(ctx: RequestContext) {
         name: survey.name,
         description: survey.description,
         createdById: survey.createdById,
-        editable: survey.createdById === ctx.actorId && !survey.campaigns.some((campaign) => campaign.status !== SurveyStatus.DRAFT),
-        campaignCount: survey.campaigns.length,
+        editable: survey.createdById === ctx.actorId && survey.campaigns.length === 0,
+        campaignCount: survey._count.campaigns,
         questions: survey.questions.map((question) => ({
           id: question.id,
           questionKey: question.questionKey,
