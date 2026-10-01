@@ -45,3 +45,17 @@ export function authConfigurationStatus() {
   if (!secret || secret.length < 32) missing.push("HRBP_SESSION_SECRET (32+ chars)");
   return { configured: missing.length === 0, missing };
 }
+
+
+export function localAuthConfigurationStatus() {
+  const enabled = runtimeBoolean("HRBP_LOCAL_AUTH_ENABLED", false);
+  const missing: string[] = [];
+  if (!runtimeString("HRBP_AUTH_TENANT_ID")) missing.push("HRBP_AUTH_TENANT_ID");
+  const secret = runtimeString("HRBP_SESSION_SECRET");
+  if (!secret || secret.length < 32) missing.push("HRBP_SESSION_SECRET (32+ chars)");
+  return {
+    enabled,
+    configured: enabled && missing.length === 0,
+    missing
+  };
+}
