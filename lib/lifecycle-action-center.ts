@@ -117,6 +117,15 @@ export type LifecycleActionItem = {
   } | {
     type: "resume-dsr";
     dsrId: string;
+  } | {
+    type: "start-privacy-assessment";
+    assessmentId: string;
+  } | {
+    type: "wait-privacy-assessment";
+    assessmentId: string;
+  } | {
+    type: "resume-privacy-assessment";
+    assessmentId: string;
   };
 };
 
