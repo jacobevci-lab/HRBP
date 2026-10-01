@@ -34,6 +34,16 @@ export type LifecycleActionItem = {
   dueAt: string | null;
   createdAt: string;
   urgency: LifecycleActionUrgency;
+  secondaryAction?: null | {
+    type: "reject-leave";
+    requestId: string;
+  } | {
+    type: "reject-time";
+    entryId: string;
+  } | {
+    type: "reject-compensation";
+    changeId: string;
+  };
   action: null | {
     type: "complete-workflow";
     instanceId: string;
@@ -354,7 +364,8 @@ async function leaveApprovalItems(ctx: RequestContext): Promise<LifecycleActionI
     dueAt: row.startsAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     urgency: urgencyForDueDate(row.startsAt, "warning"),
-    action: { type: "approve-leave", requestId: row.id }
+    action: { type: "approve-leave", requestId: row.id },
+    secondaryAction: { type: "reject-leave", requestId: row.id }
   }));
 }
 
@@ -394,7 +405,8 @@ async function timeApprovalItems(ctx: RequestContext): Promise<LifecycleActionIt
     dueAt: row.workDate.toISOString(),
     createdAt: row.createdAt.toISOString(),
     urgency: urgencyForDueDate(row.workDate, "warning"),
-    action: { type: "approve-time", entryId: row.id }
+    action: { type: "approve-time", entryId: row.id },
+    secondaryAction: { type: "reject-time", entryId: row.id }
   }));
 }
 
@@ -443,7 +455,10 @@ async function compensationItems(ctx: RequestContext): Promise<LifecycleActionIt
     urgency: urgencyForDueDate(row.effectiveAt, "warning"),
     action: row.status === CompensationChangeStatus.APPROVAL
       ? { type: "approve-compensation", changeId: row.id }
-      : { type: "apply-compensation", changeId: row.id }
+      : { type: "apply-compensation", changeId: row.id },
+    secondaryAction: row.status === CompensationChangeStatus.APPROVAL
+      ? { type: "reject-compensation", changeId: row.id }
+      : null
   }));
 }
 

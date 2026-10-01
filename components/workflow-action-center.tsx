@@ -28,6 +28,16 @@ type LifecycleActionItem = {
   dueAt: string | null;
   createdAt: string;
   urgency: Urgency;
+  secondaryAction?: null | {
+    type: "reject-leave";
+    requestId: string;
+  } | {
+    type: "reject-time";
+    entryId: string;
+  } | {
+    type: "reject-compensation";
+    changeId: string;
+  };
   action: null | {
     type: "complete-workflow";
     instanceId: string;
@@ -235,6 +245,68 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
     };
   }
 
+  function secondaryActionCopy(item: LifecycleActionItem) {
+    if (!item.secondaryAction) return null;
+    if (item.secondaryAction.type === "reject-leave") return {
+      label: locale === "tr" ? "Reddet" : "Reject",
+      busy: locale === "tr" ? "Reddediliyor…" : "Rejecting…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını reddetmek istiyor musun?` : `Reject “${item.title}”?`,
+      success: locale === "tr" ? "İzin talebi reddedildi." : "Leave request rejected."
+    };
+    if (item.secondaryAction.type === "reject-time") return {
+      label: locale === "tr" ? "Reddet" : "Reject",
+      busy: locale === "tr" ? "Reddediliyor…" : "Rejecting…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını reddetmek istiyor musun?` : `Reject “${item.title}”?`,
+      success: locale === "tr" ? "Zaman kaydı reddedildi." : "Time entry rejected."
+    };
+    return {
+      label: locale === "tr" ? "Reddet" : "Reject",
+      busy: locale === "tr" ? "Reddediliyor…" : "Rejecting…",
+      confirm: locale === "tr" ? "Bu ücret değişikliğini reddetmek istiyor musun?" : "Reject this compensation change?",
+      success: locale === "tr" ? "Ücret değişikliği reddedildi." : "Compensation change rejected."
+    };
+  }
+
+  async function executeSecondaryAction(item: LifecycleActionItem) {
+    if (!item.secondaryAction) return;
+    const copy = secondaryActionCopy(item);
+    if (!copy || !window.confirm(copy.confirm)) return;
+
+    setBusyId(item.id);
+    setError(null);
+    setSuccess(null);
+    try {
+      let endpoint = "";
+      let payload: Record<string, unknown> = {};
+      if (item.secondaryAction.type === "reject-leave") {
+        endpoint = `/api/leave/requests/${encodeURIComponent(item.secondaryAction.requestId)}/decision`;
+        payload = { decision: "REJECTED" };
+      } else if (item.secondaryAction.type === "reject-time") {
+        endpoint = `/api/time/entries/${encodeURIComponent(item.secondaryAction.entryId)}/transition`;
+        payload = { status: "REJECTED" };
+      } else if (item.secondaryAction.type === "reject-compensation") {
+        endpoint = `/api/compensation/changes/${encodeURIComponent(item.secondaryAction.changeId)}/decision`;
+        payload = { decision: "REJECT" };
+      }
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+      setSuccess(copy.success);
+      window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
+      window.dispatchEvent(new Event("hrbp:notifications-changed"));
+      await refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : (locale === "tr" ? "Aksiyon tamamlanamadı." : "Action could not be completed."));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function executeQuickAction(item: LifecycleActionItem) {
     if (!item.action) return;
     const copy = quickActionCopy(item);
@@ -395,7 +467,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
                 <td><span className={`workflow-due ${item.urgency}`}>{formatDate(item.dueAt)}</span></td>
                 <td><span className={`workflow-urgency ${item.urgency}`}>{urgencyLabel(item.urgency)}</span></td>
                 <td><span className="workflow-task-status">{item.status}</span></td>
-                <td>{item.action ? <button className="primary-button compact" type="button" disabled={busyId === item.id} onClick={() => void executeQuickAction(item)}>{busyId === item.id ? quickActionCopy(item)?.busy : quickActionCopy(item)?.label}</button> : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>}</td>
+                <td>{item.action ? <div className="workflow-row-actions"><button className="primary-button compact" type="button" disabled={busyId === item.id} onClick={() => void executeQuickAction(item)}>{busyId === item.id ? quickActionCopy(item)?.busy : quickActionCopy(item)?.label}</button>{item.secondaryAction ? <button className="secondary-button compact" type="button" disabled={busyId === item.id} onClick={() => void executeSecondaryAction(item)}>{busyId === item.id ? secondaryActionCopy(item)?.busy : secondaryActionCopy(item)?.label}</button> : null}</div> : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>}</td>
               </tr>;
             })}
           </tbody>
