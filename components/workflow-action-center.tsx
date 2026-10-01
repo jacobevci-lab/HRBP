@@ -138,18 +138,40 @@ type ActionQueueResponse = {
   error?: string;
 };
 
-async function acknowledgeTaskNotifications(taskId: string) {
+async function acknowledgeResourceNotifications(resourceType: string, resourceId: string) {
   try {
     const response = await fetch("/api/notifications", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ resourceType: "WorkflowTask", resourceId: taskId, read: true })
+      body: JSON.stringify({ resourceType, resourceId, read: true })
     });
     if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
   } catch {
     // Notification acknowledgement is best-effort and must never roll back an
-    // already completed workflow task.
+    // already accepted domain decision.
   }
+}
+
+async function acknowledgeTaskNotifications(taskId: string) {
+  return acknowledgeResourceNotifications("WorkflowTask", taskId);
+}
+
+function actionNotificationSubject(item: LifecycleActionItem) {
+  const action = item.action;
+  if (action?.type === "approve-leave") return { resourceType: "LeaveRequest", resourceId: action.requestId };
+  if (action?.type === "approve-time") return { resourceType: "TimeEntry", resourceId: action.entryId };
+  if (action?.type === "approve-compensation" || action?.type === "apply-compensation") return { resourceType: "CompensationChange", resourceId: action.changeId };
+  if (action?.type === "approve-payroll" || action?.type === "mark-payroll-paid") return { resourceType: "PayrollRun", resourceId: action.runId };
+  if (action?.type === "approve-requisition") return { resourceType: "Requisition", resourceId: action.requisitionId };
+  if (action?.type === "approve-offer") return { resourceType: "Offer", resourceId: action.offerId };
+
+  const secondary = item.secondaryAction;
+  if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
+  if (secondary?.type === "reject-time") return { resourceType: "TimeEntry", resourceId: secondary.entryId };
+  if (secondary?.type === "reject-compensation") return { resourceType: "CompensationChange", resourceId: secondary.changeId };
+  if (secondary?.type === "return-requisition") return { resourceType: "Requisition", resourceId: secondary.requisitionId };
+  if (secondary?.type === "return-offer") return { resourceType: "Offer", resourceId: secondary.offerId };
+  return null;
 }
 
 export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initialFilter }: { initialTaskId?: string; initialInstanceId?: string; initialFilter?: string }) {
@@ -339,6 +361,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
       setSuccess(copy.success);
+      const notificationSubject = actionNotificationSubject(item);
+      if (notificationSubject) await acknowledgeResourceNotifications(notificationSubject.resourceType, notificationSubject.resourceId);
       window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
       window.dispatchEvent(new Event("hrbp:notifications-changed"));
       await refresh();
@@ -397,7 +421,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
       setSuccess(copy.success);
-      if (item.action.type === "complete-workflow") await acknowledgeTaskNotifications(item.action.taskId);
+      if (item.action.type === "complete-workflow") {
+        await acknowledgeTaskNotifications(item.action.taskId);
+      } else {
+        const notificationSubject = actionNotificationSubject(item);
+        if (notificationSubject) await acknowledgeResourceNotifications(notificationSubject.resourceType, notificationSubject.resourceId);
+      }
       window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
       window.dispatchEvent(new Event("hrbp:notifications-changed"));
       await refresh();
