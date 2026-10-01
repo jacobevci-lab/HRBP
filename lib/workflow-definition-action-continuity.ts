@@ -67,7 +67,8 @@ async function workflowDefinitionApprovalItems(ctx: RequestContext): Promise<Wor
     dueAt: null,
     createdAt: definition.updatedAt.toISOString(),
     urgency: "warning",
-    action: null
+    action: { type: "activate-workflow-definition", definitionId: definition.id },
+    secondaryAction: { type: "retire-workflow-definition", definitionId: definition.id }
   }));
 }
 
