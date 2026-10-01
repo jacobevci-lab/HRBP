@@ -18,6 +18,7 @@ const actionPrefixes = [
   "ONBOARDING_TASK_",
   "benefit-enrollment.transition.",
   "learning-assignment.self-transition.",
+  "performance-review.self-started",
   "workflow.task-"
 ];
 
@@ -44,6 +45,7 @@ function decisionHref(resourceType: string, resourceId: string) {
   if (resourceType === "OnboardingTask") return `/module/onboarding?task=${id}`;
   if (resourceType === "BenefitEnrollment") return `/module/benefits?enrollment=${id}`;
   if (resourceType === "LearningAssignment") return `/module/learning?assignment=${id}`;
+  if (resourceType === "PerformanceReview") return `/module/performance?review=${id}`;
   if (resourceType === "WorkflowTask") return `/module/workflows?task=${id}`;
   return null;
 }

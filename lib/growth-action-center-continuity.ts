@@ -132,7 +132,9 @@ async function performanceParticipantItems(ctx: RequestContext): Promise<Expande
       dueAt: review.cycle.endsAt.toISOString(),
       createdAt: review.updatedAt.toISOString(),
       urgency: urgencyForDueDate(review.cycle.endsAt, "warning"),
-      action: null
+      action: review.status === ReviewStatus.NOT_STARTED
+        ? { type: "start-performance-self-review", reviewId: review.id }
+        : null
     })),
     ...managerReviews.map((review): ExpandedLifecycleActionItem => ({
       id: `performance:manager:${review.id}`,

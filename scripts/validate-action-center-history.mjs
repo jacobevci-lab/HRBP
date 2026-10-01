@@ -17,6 +17,7 @@ expect(routePath, route, /"hr-service\."/ , "decision history must include gover
 expect(routePath, route, /"ONBOARDING_TASK_"/, "decision history must include governed onboarding task decisions");
 expect(routePath, route, /"benefit-enrollment\.transition\."/ , "decision history must include governed benefit enrollment decisions");
 expect(routePath, route, /"learning-assignment\.self-transition\."/ , "decision history must include governed participant learning decisions");
+expect(routePath, route, /"performance-review\.self-started"/, "decision history must include governed performance self-review starts");
 expect(routePath, route, /classification:\s*true/, "decision history may expose classification metadata");
 reject(routePath, route, /purpose:\s*true|ipAddress:\s*true|hash:\s*true|previousHash:\s*true/, "decision history must not project purpose, network or chain internals");
 reject(routePath, route, /person|employee|annualBase|payload/i, "decision history API must not project person, pay or payload detail");
@@ -34,6 +35,7 @@ expect(exportPath, exported, /"hr-service\."/ , "decision evidence export must i
 expect(exportPath, exported, /"ONBOARDING_TASK_"/, "decision evidence export must include governed onboarding task decisions");
 expect(exportPath, exported, /"benefit-enrollment\.transition\."/ , "decision evidence export must include governed benefit enrollment decisions");
 expect(exportPath, exported, /"learning-assignment\.self-transition\."/ , "decision evidence export must include governed participant learning decisions");
+expect(exportPath, exported, /"performance-review\.self-started"/, "decision evidence export must include governed performance self-review starts");
 reject(exportPath, exported, /purpose:\s*true|ipAddress:\s*true|hash:\s*true|previousHash:\s*true|payload:\s*true/, "decision evidence export must not include sensitive audit internals");
 
 const componentPath = "components/action-center-decision-history.tsx";
@@ -49,6 +51,7 @@ expect(componentPath, component, /HRServiceRequest/, "decision history must labe
 expect(componentPath, component, /OnboardingTask/, "decision history must label onboarding task evidence");
 expect(componentPath, component, /BenefitEnrollment/, "decision history must label benefit enrollment evidence");
 expect(componentPath, component, /LearningAssignment/, "decision history must label participant learning evidence");
+expect(componentPath, component, /PerformanceReview/, "decision history must label performance self-review evidence");
 reject(componentPath, component, /item\.purpose|item\.ipAddress|item\.previousHash|item\.hash\b/, "decision history UI must not render sensitive audit internals");
 
 const modulePath = "app/module/[slug]/page.tsx";

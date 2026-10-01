@@ -56,6 +56,16 @@ expect(presentationPath, presentation, /PERFORMANCE_SELF_REVIEW_READY/, "notific
 expect(presentationPath, presentation, /PERFORMANCE_MANAGER_REVIEW_READY/, "notification center must present manager-review actions");
 expect(presentationPath, presentation, /resourceType\s*===\s*"PerformanceReview"/, "performance notifications must deep-link back to the performance module");
 
+
+const selfStartPath = "app/api/performance/reviews/[id]/self-start/route.ts";
+const selfStart = await source(selfStartPath);
+expect(selfStartPath, selfStart, /can\(ctx,\s*"performance:self-submit"\)/, "self-review start must require self-submit capability");
+expect(selfStartPath, selfStart, /review\.employmentId !== ctx\.employmentId/, "self-review start must be bound to the signed employment");
+expect(selfStartPath, selfStart, /ReviewCycleStatus\.OPEN/, "self-review start must require an open cycle");
+expect(selfStartPath, selfStart, /review\.status !== ReviewStatus\.NOT_STARTED/, "self-review start must only consume NOT_STARTED state");
+expect(selfStartPath, selfStart, /data:\s*\{ status:\s*ReviewStatus\.SELF_REVIEW \}/, "self-review start must only advance to SELF_REVIEW");
+expect(selfStartPath, selfStart, /performance-review\.self-started/, "self-review start must emit audit evidence");
+
 const selfPath = "app/api/performance/reviews/[id]/self-submit/route.ts";
 const selfRoute = await source(selfPath);
 expect(selfPath, selfRoute, /can\(ctx,\s*"performance:self-submit"\)/, "self submission must require the self-submit capability");

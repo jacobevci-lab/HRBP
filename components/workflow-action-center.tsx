@@ -134,6 +134,9 @@ type LifecycleActionItem = {
   } | {
     type: "start-learning-assignment";
     assignmentId: string;
+  } | {
+    type: "start-performance-self-review";
+    reviewId: string;
   };
 };
 
@@ -236,6 +239,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "advance-onboarding-task") return { resourceType: "OnboardingTask", resourceId: action.taskId };
   if (action?.type === "activate-benefit-enrollment") return { resourceType: "BenefitEnrollment", resourceId: action.enrollmentId };
   if (action?.type === "start-learning-assignment") return { resourceType: "LearningAssignment", resourceId: action.assignmentId };
+  if (action?.type === "start-performance-self-review") return { resourceType: "PerformanceReview", resourceId: action.reviewId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -455,6 +459,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” eğitimini devam ediyor durumuna almak istiyor musun?` : `Start “${item.title}” learning?`,
       success: locale === "tr" ? "Eğitim devam ediyor durumuna alındı." : "Learning assignment moved in progress."
     };
+    if (item.action.type === "start-performance-self-review") return {
+      label: locale === "tr" ? "Öz değerlendirmeyi başlat" : "Start self review",
+      busy: locale === "tr" ? "Başlatılıyor…" : "Starting…",
+      confirm: locale === "tr" ? `“${item.title}” öz değerlendirmesini başlatmak istiyor musun?` : `Start “${item.title}” self review?`,
+      success: locale === "tr" ? "Öz değerlendirme başlatıldı." : "Self review started."
+    };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
       busy: locale === "tr" ? "İşleniyor…" : "Processing…",
@@ -667,6 +677,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "start-learning-assignment") {
         endpoint = `/api/learning/assignments/${encodeURIComponent(item.action.assignmentId)}/self-transition`;
         payload = { status: "IN_PROGRESS" };
+      } else if (item.action.type === "start-performance-self-review") {
+        endpoint = `/api/performance/reviews/${encodeURIComponent(item.action.reviewId)}/self-start`;
+        payload = {};
       }
 
       const response = await fetch(endpoint, {
