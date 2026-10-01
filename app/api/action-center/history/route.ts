@@ -15,6 +15,7 @@ const actionPrefixes = [
   "privacy.dsr-",
   "privacy-assessment.",
   "hr-service.",
+  "ONBOARDING_TASK_",
   "workflow.task-"
 ];
 
@@ -38,6 +39,7 @@ function decisionHref(resourceType: string, resourceId: string) {
   if (resourceType === "DataSubjectRequest") return `/module/privacy?dsr=${id}`;
   if (resourceType === "PrivacyRiskAssessment") return `/module/privacy?assessment=${id}`;
   if (resourceType === "HRServiceRequest") return `/module/hr-service?request=${id}`;
+  if (resourceType === "OnboardingTask") return `/module/onboarding?task=${id}`;
   if (resourceType === "WorkflowTask") return `/module/workflows?task=${id}`;
   return null;
 }
