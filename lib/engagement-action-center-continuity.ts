@@ -10,6 +10,7 @@ import type { PolicyLifecycleAttentionItem } from "@/lib/policy-action-center-co
 import type { WorkforcePlanningLifecycleAttentionItem } from "@/lib/workforce-planning-action-center-continuity";
 import type { LifecycleActionUrgency } from "@/lib/lifecycle-action-center";
 import type { RequestContext } from "@/lib/request-context";
+import { getPendingEngagementResponseCampaigns } from "@/lib/engagement-response-attention";
 
 export type EngagementLifecycleAttentionItem = Omit<PrivacyLifecycleAttentionItem, "kind"> & {
   kind: "engagement";
@@ -81,16 +82,39 @@ async function engagementCampaignItems(ctx: RequestContext): Promise<EngagementL
   });
 }
 
+async function engagementResponseItems(ctx: RequestContext): Promise<EngagementLifecycleAttentionItem[]> {
+  const campaigns = await getPendingEngagementResponseCampaigns(ctx);
+  return campaigns.map((campaign) => ({
+    id: `engagement:response:${campaign.id}`,
+    kind: "engagement" as const,
+    title: `Engagement response · ${campaign.name}`,
+    subtitle: "Your response is pending",
+    module: "engagement",
+    href: `/module/engagement?campaign=${encodeURIComponent(campaign.id)}&mode=respond`,
+    subjectType: "SurveyCampaign",
+    subjectId: campaign.id,
+    status: "response pending",
+    dueAt: campaign.closesAt?.toISOString() ?? null,
+    createdAt: campaign.createdAt.toISOString(),
+    urgency: urgencyForDate(campaign.closesAt),
+    action: null
+  }));
+}
+
 export async function getEngagementLifecycleActionCenterData(ctx: RequestContext) {
   const base = await getPrivacyLifecycleActionCenterData(ctx);
   let engagementItems: EngagementLifecycleAttentionItem[] = [];
   let engagementDegraded = false;
 
   try {
-    engagementItems = await engagementCampaignItems(ctx);
+    const [campaignItems, responseItems] = await Promise.all([
+      engagementCampaignItems(ctx),
+      engagementResponseItems(ctx)
+    ]);
+    engagementItems = [...campaignItems, ...responseItems];
   } catch (error) {
     engagementDegraded = true;
-    console.error("[HRBP] Engagement campaign attention failed; preserving the governed Action Center.", error);
+    console.error("[HRBP] Engagement attention failed; preserving the governed Action Center.", error);
   }
 
   const items: EngagementTopLevelItem[] = [...base.items, ...engagementItems].sort(sortItems).slice(0, 550);
