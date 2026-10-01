@@ -134,6 +134,9 @@ export type LifecycleActionItem = {
     type: "advance-onboarding-task";
     taskId: string;
     status: "IN_PROGRESS" | "COMPLETED";
+  } | {
+    type: "activate-benefit-enrollment";
+    enrollmentId: string;
   };
 };
 

@@ -128,6 +128,9 @@ type LifecycleActionItem = {
     type: "advance-onboarding-task";
     taskId: string;
     status: "IN_PROGRESS" | "COMPLETED";
+  } | {
+    type: "activate-benefit-enrollment";
+    enrollmentId: string;
   };
 };
 
@@ -228,6 +231,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "start-privacy-assessment" || action?.type === "wait-privacy-assessment" || action?.type === "resume-privacy-assessment") return { resourceType: "PrivacyRiskAssessment", resourceId: action.assessmentId };
   if (action?.type === "advance-hr-service") return { resourceType: "HRServiceRequest", resourceId: action.requestId };
   if (action?.type === "advance-onboarding-task") return { resourceType: "OnboardingTask", resourceId: action.taskId };
+  if (action?.type === "activate-benefit-enrollment") return { resourceType: "BenefitEnrollment", resourceId: action.enrollmentId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -435,6 +439,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” görevini ${item.action.status === "COMPLETED" ? "tamamlamak" : "işleme almak"} istiyor musun?` : `${item.action.status === "COMPLETED" ? "Complete" : "Start"} “${item.title}”?`,
       success: item.action.status === "COMPLETED" ? (locale === "tr" ? "Onboarding görevi tamamlandı." : "Onboarding task completed.") : (locale === "tr" ? "Onboarding görevi işleme alındı." : "Onboarding task moved in progress.")
     };
+    if (item.action.type === "activate-benefit-enrollment") return {
+      label: locale === "tr" ? "Yan hakkı aktifleştir" : "Activate benefit",
+      busy: locale === "tr" ? "Aktifleştiriliyor…" : "Activating…",
+      confirm: locale === "tr" ? `“${item.title}” seçimini aktif kapsama almak istiyor musun?` : `Activate “${item.title}” coverage?`,
+      success: locale === "tr" ? "Yan hak seçimi aktif kapsama alındı." : "Benefit enrollment activated."
+    };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
       busy: locale === "tr" ? "İşleniyor…" : "Processing…",
@@ -641,6 +651,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "advance-onboarding-task") {
         endpoint = `/api/onboarding/tasks/${encodeURIComponent(item.action.taskId)}/status`;
         payload = { status: item.action.status };
+      } else if (item.action.type === "activate-benefit-enrollment") {
+        endpoint = `/api/benefits/enrollments/${encodeURIComponent(item.action.enrollmentId)}/transition`;
+        payload = { status: "ACTIVE" };
       }
 
       const response = await fetch(endpoint, {
