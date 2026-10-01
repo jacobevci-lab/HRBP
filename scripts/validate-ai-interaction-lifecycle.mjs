@@ -21,10 +21,15 @@ expect(dispatchPath, dispatch, /HRBP_AI_PROCESSOR_TOKEN/, "AI processor dispatch
 expect(dispatchPath, dispatch, /url\.protocol !== "https:"/, "production AI dispatch must require HTTPS");
 expect(dispatchPath, dispatch, /setTimeout\(\(\) => controller\.abort\(\), 10_000\)/, "AI processor dispatch must be time bounded");
 expect(dispatchPath, dispatch, /prompt:\s*input\.prompt/, "raw prompt may exist only in the transient processor dispatch payload");
+expect(dispatchPath, dispatch, /response\.status === 202/, "AI processor dispatch must support asynchronous acceptance");
+expect(dispatchPath, dispatch, /validSynchronousResult/, "AI processor dispatch must validate bounded synchronous response payloads");
 
 expect(intakePath, intake, /dispatchAIInteraction/, "AI intake must dispatch transient prompt content after audit record creation");
 expect(intakePath, intake, /ai\.interaction-dispatch-failed/, "AI dispatch failure must be recorded on the audit chain");
 expect(intakePath, intake, /status:\s*AIInteractionStatus\.FAILED/, "undeliverable AI requests must not remain indefinitely RECEIVED");
+expect(intakePath, intake, /dispatch\.mode === "sync"/, "AI intake must support one-time synchronous completions");
+expect(intakePath, intake, /responseHash:\s*createHash\("sha256"\)\.update\(dispatch\.completed\.response\)/, "synchronous completion must persist only the response hash");
+expect(intakePath, intake, /response:\s*dispatch\.completed\.response/, "synchronous raw output may be returned once to the caller without persistence");
 
 const routePath = "app/api/internal/ai/interactions/[id]/lifecycle/route.ts";
 const route = await source(routePath);
@@ -52,6 +57,7 @@ const uiPath = "components/ai-interaction-request-form.tsx";
 const ui = await source(uiPath);
 expect(uiPath, ui, /\/api\/ai\/interactions/, "AI request form must use the governed intake route");
 expect(uiPath, ui, /Raw prompts and raw responses are not retained/, "AI UI must communicate minimal-retention behavior");
+expect(uiPath, ui, /Shown once in this browser state/, "AI UI must make one-time non-retained response semantics explicit");
 expect(uiPath, ui, /HIGHLY_RESTRICTED|Restricted/, "AI request form must expose controlled classification choices");
 
 const workspacePath = "components/governance-planning-live-workspace.tsx";
