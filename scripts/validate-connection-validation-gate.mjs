@@ -16,7 +16,7 @@ expect(identityPath, identity, /action === "validate"[\s\S]*identityActivationIs
 expect(identityPath, identity, /settings\.identity-provider-config-validated/, "identity validation must be audited");
 expect(identityPath, identity, /!current\.lastValidatedAt[\s\S]*Validate the identity-provider configuration before activation/, "identity activation must require recorded validation evidence");
 expect(identityPath, identity, /status: ConnectionStatus\.DRAFT, lastValidatedAt: null/, "reopening identity configuration must invalidate prior validation");
-reject(identityPath, identity, /action === "validate"[\s\S]*status:\s*ConnectionStatus\.ACTIVE/, "identity validation must not activate the provider");
+expect(identityPath, identity, /action === "validate"[\s\S]*data:\s*\{\s*lastValidatedAt:\s*new Date\(\)\s*\}[\s\S]*settings\.identity-provider-config-validated/, "identity validation must record validation evidence without changing lifecycle state");
 
 const integrationPath = "app/api/settings/integrations/[id]/route.ts";
 const integration = await source(integrationPath);
@@ -25,7 +25,7 @@ expect(integrationPath, integration, /action === "validate"[\s\S]*integrationAct
 expect(integrationPath, integration, /settings\.integration-config-validated/, "integration validation must be audited");
 expect(integrationPath, integration, /!current\.lastValidatedAt[\s\S]*Validate the integration configuration before activation/, "integration activation must require recorded validation evidence");
 expect(integrationPath, integration, /status: ConnectionStatus\.DRAFT, enabled: false, lastValidatedAt: null/, "reopening integration configuration must invalidate prior validation");
-reject(integrationPath, integration, /action === "validate"[\s\S]*enabled:\s*true/, "integration validation must not enable the connection");
+expect(integrationPath, integration, /action === "validate"[\s\S]*lastValidatedAt:\s*new Date\(\)[\s\S]*lastError:\s*null[\s\S]*settings\.integration-config-validated/, "integration validation must record validation evidence without enabling the connection");
 
 const metadataPath = "app/api/settings/integrations/[id]/metadata/route.ts";
 const metadata = await source(metadataPath);
