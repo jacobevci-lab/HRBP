@@ -10,27 +10,36 @@ export async function POST(request: Request) {
   if (!can(ctx, "settings:write")) return forbidden();
   if (!mutationOriginAllowed(request)) return Response.json({ error: "Mutation origin is not allowed." }, { status: 403 });
 
-  let body: { limit?: unknown } = {};
+  let body: { limit?: unknown; id?: unknown } = {};
   try {
-    body = await request.json() as { limit?: unknown };
+    body = await request.json() as { limit?: unknown; id?: unknown };
   } catch {
     // An empty body uses the safe default batch size.
   }
 
   const requestedLimit = Number(body.limit ?? 100);
   const limit = Number.isFinite(requestedLimit) ? Math.min(500, Math.max(1, Math.floor(requestedLimit))) : 100;
-  const ids = (await db.notificationOutbox.findMany({
-    where: { tenantId: ctx.tenantId, status: NotificationOutboxStatus.DEAD_LETTER },
-    orderBy: { updatedAt: "asc" },
-    take: limit,
-    select: { id: true }
-  })).map((row) => row.id);
+  const requestedId = typeof body.id === "string" ? body.id.trim() : "";
+  if (requestedId && requestedId.length > 128) return Response.json({ error: "A valid notification id is required." }, { status: 400 });
+  const retryableStatuses = [NotificationOutboxStatus.DEAD_LETTER, NotificationOutboxStatus.FAILED];
+  const ids = requestedId
+    ? (await db.notificationOutbox.findMany({
+        where: { tenantId: ctx.tenantId, id: requestedId, status: { in: retryableStatuses } },
+        take: 1,
+        select: { id: true }
+      })).map((row) => row.id)
+    : (await db.notificationOutbox.findMany({
+        where: { tenantId: ctx.tenantId, status: NotificationOutboxStatus.DEAD_LETTER },
+        orderBy: { updatedAt: "asc" },
+        take: limit,
+        select: { id: true }
+      })).map((row) => row.id);
 
-  if (ids.length === 0) return Response.json({ data: { requeued: 0 } });
+  if (ids.length === 0) return Response.json({ data: { requeued: 0 }, error: requestedId ? "Retryable notification was not found." : undefined }, { status: requestedId ? 404 : 200 });
 
   const requeued = await db.$transaction(async (tx) => {
     const result = await tx.notificationOutbox.updateMany({
-      where: { tenantId: ctx.tenantId, id: { in: ids }, status: NotificationOutboxStatus.DEAD_LETTER },
+      where: { tenantId: ctx.tenantId, id: { in: ids }, status: { in: retryableStatuses } },
       data: {
         status: NotificationOutboxStatus.PENDING,
         attempts: 0,
@@ -41,11 +50,11 @@ export async function POST(request: Request) {
       }
     });
     await appendAudit(tx, ctx, {
-      action: "settings.notifications-dead-letter-requeued",
+      action: requestedId ? "settings.notification-requeued" : "settings.notifications-dead-letter-requeued",
       resourceType: "NotificationOutbox",
-      resourceId: "dead-letter-batch",
+      resourceId: requestedId || "dead-letter-batch",
       classification: DataClassification.INTERNAL,
-      purpose: `Requeued ${result.count} dead-letter notification(s) for retry`
+      purpose: requestedId ? `Requeued notification ${requestedId} for retry` : `Requeued ${result.count} dead-letter notification(s) for retry`
     });
     return result.count;
   });
