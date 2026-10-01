@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { AIInteractionStatus, DataClassification, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
-import { appendAudit } from "@/lib/audit";
+import { appendAudit, appendSystemAudit } from "@/lib/audit";
+import { dispatchAIInteraction } from "@/lib/ai-processor-dispatch";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 const MAX_PROMPT_LENGTH = 12_000;
@@ -70,8 +71,48 @@ export async function POST(request: Request) {
     return interaction;
   });
 
+  const dispatch = await dispatchAIInteraction({
+    interactionId: data.id,
+    tenantId: ctx.tenantId,
+    actorId: ctx.actorId,
+    prompt,
+    module: moduleName,
+    purpose,
+    classification,
+    restrictedDataAccess: Boolean(body.restrictedDataAccess),
+    sourceRefs
+  });
+
+  if (!dispatch.dispatched) {
+    const failed = await db.$transaction(async (tx) => {
+      const updated = await tx.aIInteraction.update({
+        where: { id: data.id },
+        data: {
+          status: AIInteractionStatus.FAILED,
+          blockedReason: dispatch.reason,
+          completedAt: new Date()
+        }
+      });
+      await appendSystemAudit(tx, ctx.tenantId, "system:ai-dispatch", {
+        action: "ai.interaction-dispatch-failed",
+        resourceType: "AIInteraction",
+        resourceId: data.id,
+        classification,
+        purpose: dispatch.reason
+      });
+      return updated;
+    });
+
+    return Response.json({
+      error: "AI processor dispatch failed.",
+      data: { id: failed.id, status: failed.status },
+      retryable: ["PROCESSOR_TIMEOUT", "PROCESSOR_UNAVAILABLE"].includes(dispatch.reason)
+    }, { status: 503 });
+  }
+
   return Response.json({
     data,
+    dispatch: { accepted: true },
     guardrails: {
       autonomousEmploymentDecision: false,
       rawPromptRetained: false,
