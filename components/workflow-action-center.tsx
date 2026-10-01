@@ -46,6 +46,9 @@ type LifecycleActionItem = {
   } | {
     type: "request-policy-changes";
     policyId: string;
+  } | {
+    type: "request-workforce-changes";
+    scenarioId: string;
   };
   action: null | {
     type: "complete-workflow";
@@ -78,6 +81,9 @@ type LifecycleActionItem = {
   } | {
     type: "approve-policy";
     policyId: string;
+  } | {
+    type: "approve-workforce-scenario";
+    scenarioId: string;
   };
 };
 
@@ -171,6 +177,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "approve-requisition") return { resourceType: "Requisition", resourceId: action.requisitionId };
   if (action?.type === "approve-offer") return { resourceType: "Offer", resourceId: action.offerId };
   if (action?.type === "approve-policy") return { resourceType: "PolicyRecord", resourceId: action.policyId };
+  if (action?.type === "approve-workforce-scenario") return { resourceType: "WorkforceScenario", resourceId: action.scenarioId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -179,6 +186,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (secondary?.type === "return-requisition") return { resourceType: "Requisition", resourceId: secondary.requisitionId };
   if (secondary?.type === "return-offer") return { resourceType: "Offer", resourceId: secondary.offerId };
   if (secondary?.type === "request-policy-changes") return { resourceType: "PolicyRecord", resourceId: secondary.policyId };
+  if (secondary?.type === "request-workforce-changes") return { resourceType: "WorkforceScenario", resourceId: secondary.scenarioId };
   return null;
 }
 
@@ -297,6 +305,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” kaydı için bağımsız onayı vermek istiyor musun?` : `Give independent approval for “${item.title}”?`,
       success: locale === "tr" ? "Politika bağımsız olarak onaylandı." : "Policy independently approved."
     };
+    if (item.action.type === "approve-workforce-scenario") return {
+      label: locale === "tr" ? "Planı onayla" : "Approve plan",
+      busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
+      confirm: locale === "tr" ? `“${item.title}” senaryosu için bağımsız onayı vermek istiyor musun?` : `Give independent approval for “${item.title}”?`,
+      success: locale === "tr" ? "İşgücü planı bağımsız olarak onaylandı." : "Workforce plan independently approved."
+    };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
       busy: locale === "tr" ? "İşleniyor…" : "Processing…",
@@ -337,6 +351,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” kaydını kontrollü revizyon için taslağa döndürmek istiyor musun?` : `Return “${item.title}” to draft for controlled revision?`,
       success: locale === "tr" ? "Politika düzeltme için taslağa döndürüldü." : "Policy returned to draft for revision."
     };
+    if (item.secondaryAction.type === "request-workforce-changes") return {
+      label: locale === "tr" ? "Düzeltme iste" : "Request changes",
+      busy: locale === "tr" ? "Döndürülüyor…" : "Returning…",
+      confirm: locale === "tr" ? `“${item.title}” senaryosunu kontrollü revizyon için taslağa döndürmek istiyor musun?` : `Return “${item.title}” to draft for controlled revision?`,
+      success: locale === "tr" ? "İşgücü planı düzeltme için taslağa döndürüldü." : "Workforce plan returned to draft for revision."
+    };
     return {
       label: locale === "tr" ? "Reddet" : "Reject",
       busy: locale === "tr" ? "Reddediliyor…" : "Rejecting…",
@@ -373,6 +393,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         payload = { status: "DRAFT" };
       } else if (item.secondaryAction.type === "request-policy-changes") {
         endpoint = `/api/policies/${encodeURIComponent(item.secondaryAction.policyId)}/review`;
+        payload = { action: "REQUEST_CHANGES" };
+      } else if (item.secondaryAction.type === "request-workforce-changes") {
+        endpoint = `/api/workforce-planning/scenarios/${encodeURIComponent(item.secondaryAction.scenarioId)}/review`;
         payload = { action: "REQUEST_CHANGES" };
       }
 
@@ -436,6 +459,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         payload = { status: "SENT" };
       } else if (item.action.type === "approve-policy") {
         endpoint = `/api/policies/${encodeURIComponent(item.action.policyId)}/review`;
+        payload = { action: "APPROVE" };
+      } else if (item.action.type === "approve-workforce-scenario") {
+        endpoint = `/api/workforce-planning/scenarios/${encodeURIComponent(item.action.scenarioId)}/review`;
         payload = { action: "APPROVE" };
       }
 

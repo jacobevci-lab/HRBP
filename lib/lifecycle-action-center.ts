@@ -52,6 +52,9 @@ export type LifecycleActionItem = {
   } | {
     type: "request-policy-changes";
     policyId: string;
+  } | {
+    type: "request-workforce-changes";
+    scenarioId: string;
   };
   action: null | {
     type: "complete-workflow";
@@ -84,6 +87,9 @@ export type LifecycleActionItem = {
   } | {
     type: "approve-policy";
     policyId: string;
+  } | {
+    type: "approve-workforce-scenario";
+    scenarioId: string;
   };
 };
 

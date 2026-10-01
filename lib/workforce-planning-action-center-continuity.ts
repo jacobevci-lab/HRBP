@@ -80,7 +80,8 @@ async function workforcePlanningReviewItems(ctx: RequestContext): Promise<Workfo
     dueAt: null,
     createdAt: scenario.updatedAt.toISOString(),
     urgency: "warning",
-    action: null
+    action: { type: "approve-workforce-scenario", scenarioId: scenario.id },
+    secondaryAction: { type: "request-workforce-changes", scenarioId: scenario.id }
   }));
 }
 
