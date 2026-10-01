@@ -4,16 +4,16 @@ import { db } from "@/lib/db";
 const actionPrefixes = [
   "leave-request.",
   "time-entry.",
-  "compensation-change.",
+  "COMPENSATION_CHANGE_",
   "payroll-run.",
-  "requisition.",
-  "offer.",
+  "REQUISITION_STATUS_",
+  "OFFER_STATUS_",
   "policy.",
   "workforce-scenario.",
   "workflow-definition.",
   "engagement.campaign-",
   "privacy.dsr-",
-  "workflow-task."
+  "workflow.task-"
 ];
 
 function daysFrom(request: Request) {
