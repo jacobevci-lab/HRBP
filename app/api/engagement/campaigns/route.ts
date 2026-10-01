@@ -75,15 +75,17 @@ export async function POST(request: Request) {
   if (!body.surveyId || !name) return Response.json({ error: "surveyId and name are required." }, { status: 400 });
   const threshold = Math.max(5, body.anonymityThreshold ?? 7);
   const data = await db.$transaction(async (tx) => {
-    const survey = await tx.engagementSurvey.findFirst({ where: { id: body.surveyId, tenantId: ctx.tenantId }, select: { id: true } });
+    const survey = await tx.engagementSurvey.findFirst({ where: { id: body.surveyId, tenantId: ctx.tenantId }, select: { id: true, _count: { select: { questions: true } } } });
     if (!survey) throw new Error("NOT_FOUND");
+    if (!survey._count.questions) throw new Error("EMPTY_SURVEY");
     const audienceFilter = await normalizedAudience(tx, ctx, body.audienceFilter);
     const campaign = await tx.surveyCampaign.create({ data: { tenantId: ctx.tenantId, surveyId: survey.id, name, anonymous: body.anonymous ?? true, anonymityThreshold: threshold, status: SurveyStatus.DRAFT, opensAt: body.opensAt ? new Date(body.opensAt) : undefined, closesAt: body.closesAt ? new Date(body.closesAt) : undefined, audienceFilter, createdById: ctx.actorId } });
     const targetCount = audienceTargetCount(audienceFilter);
     await appendAudit(tx, ctx, { action: "engagement-campaign.created", resourceType: "SurveyCampaign", resourceId: campaign.id, classification: DataClassification.CONFIDENTIAL, purpose: targetCount === null ? "Governed engagement campaign creation" : `Governed engagement campaign creation; audience=${targetCount}` });
     return campaign;
-  }).catch((error) => error instanceof Error && ["NOT_FOUND", "EMPTY_SCOPE", "OUT_OF_SCOPE", "EMPTY_AUDIENCE"].includes(error.message) ? error.message : Promise.reject(error));
+  }).catch((error) => error instanceof Error && ["NOT_FOUND", "EMPTY_SURVEY", "EMPTY_SCOPE", "OUT_OF_SCOPE", "EMPTY_AUDIENCE"].includes(error.message) ? error.message : Promise.reject(error));
   if (data === "NOT_FOUND") return Response.json({ error: "Survey not found in tenant." }, { status: 404 });
+  if (data === "EMPTY_SURVEY") return Response.json({ error: "Add at least one survey question before creating a campaign." }, { status: 409 });
   if (data === "EMPTY_SCOPE") return forbidden("No authorized employment population is available for this campaign.");
   if (data === "OUT_OF_SCOPE") return forbidden("Campaign audience cannot include employments outside your authorized relationship scope.");
   if (data === "EMPTY_AUDIENCE") return Response.json({ error: "Campaign audience resolves to no active employments." }, { status: 400 });
