@@ -73,6 +73,7 @@ expect(continuityPath, continuity, /createdById:\s*\{\s*not:\s*ctx\.actorId\s*\}
 expect(continuityPath, continuity, /\/module\/workflows\?definition=/, "definition approval attention must deep-link to exact governed focus");
 expect(continuityPath, continuity, /kind:\s*"workflow"/, "definition approvals must reuse the existing Workflow source");
 expect(continuityPath, continuity, /workflow:\s*items\.filter\(\(item\) => item\.kind === "workflow"\)\.length/, "Workflow summary must include both task and definition attention");
+expect(continuityPath, continuity, /type:\s*"activate-workflow-definition"[\s\S]*type:\s*"retire-workflow-definition"/, "workflow definition approval attention must expose bounded activate and retire actions");
 reject(continuityPath, continuity, /configuration|steps:|assigneeRole|slaMinutes/, "central definition attention must not load workflow configuration or step detail");
 
 const liveDataPath = "lib/employee-services-live-data.ts";
@@ -98,6 +99,13 @@ const apiPath = "app/api/action-center/route.ts";
 const api = await source(apiPath);
 expect(apiPath, api, /workflow-definition-action-continuity/, "Action Center API must use the workflow-definition top-level continuity wrapper");
 expect(apiPath, api, /cache-control[\s\S]*no-store/, "actor-specific Action Center output must remain non-cacheable");
+
+const actionCenterPath = "components/workflow-action-center.tsx";
+const actionCenter = await source(actionCenterPath);
+expect(actionCenterPath, actionCenter, /item\.action\.type === "activate-workflow-definition"[\s\S]*\/api\/workflows\/definitions\//, "workflow definition activation must use the governed lifecycle route");
+expect(actionCenterPath, actionCenter, /item\.secondaryAction\.type === "retire-workflow-definition"[\s\S]*action:\s*"RETIRE"/, "workflow definition retirement must use the governed lifecycle route");
+expect(actionCenterPath, actionCenter, /resourceType:\s*"WorkflowDefinition"/, "workflow definition quick decisions must clear matching notifications best-effort");
+expect(actionCenterPath, actionCenter, /window\.confirm\(copy\.confirm\)/, "workflow definition quick decisions must require explicit confirmation");
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
