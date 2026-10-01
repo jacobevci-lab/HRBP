@@ -119,7 +119,9 @@ async function onboardingItems(ctx: RequestContext): Promise<EmployeeLifecycleAt
       urgency: task.status === OnboardingTaskStatus.BLOCKED
         ? "critical"
         : urgencyForDueDate(dueAt, "warning"),
-      action: null
+      action: task.status === OnboardingTaskStatus.IN_PROGRESS
+        ? { type: "advance-onboarding-task", taskId: task.id, status: "COMPLETED" }
+        : { type: "advance-onboarding-task", taskId: task.id, status: "IN_PROGRESS" }
     };
   }));
 }
