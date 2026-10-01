@@ -1,4 +1,4 @@
-import { DataClassification, PlatformRole, WorkflowDefinitionStatus } from "@prisma/client";
+import { DataClassification, PlatformRole, Prisma, WorkflowDefinitionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
@@ -88,8 +88,9 @@ export async function POST(request: Request) {
     return Response.json({ error: `slaMinutes must be an integer between 1 and ${MAX_SLA_MINUTES}.` }, { status: 400 });
   }
 
-  const data = await db.$transaction(async (tx) => {
-    const definition = await tx.workflowDefinition.create({
+  try {
+    const data = await db.$transaction(async (tx) => {
+      const definition = await tx.workflowDefinition.create({
       data: {
         tenantId: ctx.tenantId,
         key,
@@ -114,15 +115,21 @@ export async function POST(request: Request) {
       },
       include: { steps: { orderBy: { orderIndex: "asc" } } }
     });
-    await appendAudit(tx, ctx, {
-      action: "workflow-definition.created",
-      resourceType: "WorkflowDefinition",
-      resourceId: definition.id,
-      classification: DataClassification.INTERNAL,
-      purpose: `Created governed workflow draft with ${normalizedSteps.length} steps`
+      await appendAudit(tx, ctx, {
+        action: "workflow-definition.created",
+        resourceType: "WorkflowDefinition",
+        resourceId: definition.id,
+        classification: DataClassification.INTERNAL,
+        purpose: `Created governed workflow draft ${key} v${version} with ${normalizedSteps.length} steps`
+      });
+      return definition;
     });
-    return definition;
-  });
 
-  return Response.json({ data }, { status: 201 });
+    return Response.json({ data }, { status: 201 });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      return Response.json({ error: "This workflow key and version already exist in the tenant." }, { status: 409 });
+    }
+    throw error;
+  }
 }
