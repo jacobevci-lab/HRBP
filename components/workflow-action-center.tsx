@@ -386,8 +386,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
             {loading && items.length === 0 ? <tr><td colSpan={7} className="workflow-action-empty">{locale === "tr" ? "Aksiyon merkezi yükleniyor…" : "Loading action center…"}</td></tr> : null}
             {!loading && visibleItems.length === 0 ? <tr><td colSpan={7} className="workflow-action-empty"><CheckCircle2 size={17}/>{locale === "tr" ? "Bu görünümde bekleyen aksiyon yok." : "No pending actions in this view."}</td></tr> : null}
             {visibleItems.map((item) => {
-              const focused = item.kind === "workflow" && (item.action?.taskId === initialTaskId || item.action?.instanceId === initialInstanceId);
-              return <tr key={item.id} id={`action-item-${item.id}`} data-workflow-instance={item.action?.instanceId} className={focused ? "focused" : undefined}>
+              const workflowAction = item.action?.type === "complete-workflow" ? item.action : null;
+              const focused = item.kind === "workflow" && (workflowAction?.taskId === initialTaskId || workflowAction?.instanceId === initialInstanceId);
+              return <tr key={item.id} id={`action-item-${item.id}`} data-workflow-instance={workflowAction?.instanceId} className={focused ? "focused" : undefined}>
                 <td><span className={`workflow-source ${item.kind}`}>{sourceLabel(item.kind)}</span></td>
                 <td><strong>{item.title}</strong><small>{item.subtitle}</small></td>
                 <td><span>{item.subjectType}</span><small>{item.subjectId}</small></td>
