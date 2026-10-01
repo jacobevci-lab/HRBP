@@ -29,6 +29,9 @@ expect(routePath, route, /verifyLocalPassword/, "local sign-in must use governed
 expect(routePath, route, /createSessionCookie/, "local sign-in must issue the same signed application session as SSO");
 expect(routePath, route, /auth\.local-succeeded/, "successful local sign-in must be audited");
 expect(routePath, route, /auth\.local-failed|auth\.local-locked/, "failed local sign-ins must be audited");
+expect(routePath, route, /LOCAL_AUTH_ACCOUNT_LOCKED/, "lockout threshold events must notify tenant administrators");
+expect(routePath, route, /recipientRole:\s*"TENANT_ADMIN"/, "local lockout alerts must route to tenant administrators");
+expect(routePath, route, /dedupeKey:\s*`local-auth-lock:/, "local lockout alerts must be idempotently deduplicated");
 reject(routePath, route, /passwordHash:\s*password|localPasswordHash:\s*password/, "plaintext passwords must never be persisted");
 
 const pagePath = "app/auth/sign-in/page.tsx";
@@ -86,6 +89,16 @@ const settingsPage = await source(settingsPagePath);
 expect(settingsPagePath, settingsPage, /LocalAccountAdmin/, "tenant settings must expose governed local account administration");
 expect(settingsPagePath, settingsPage, /HRBP_LOCAL_AUTH_ENABLED/, "tenant settings must surface the local authentication runtime gate");
 expect(settingsPagePath, settingsPage, /localAuthEnabled:\s*true/, "tenant settings readiness must count explicitly enabled local accounts");
+
+
+const notificationPresentationPath = "lib/notification-presentation.ts";
+const notificationPresentation = await source(notificationPresentationPath);
+expect(notificationPresentationPath, notificationPresentation, /LOCAL_AUTH_ACCOUNT_LOCKED/, "local lockout notifications must have localized presentation");
+expect(notificationPresentationPath, notificationPresentation, /accountSubject[\s\S]*lockedUntil/, "local lockout notifications must summarize only bounded account and lockout metadata");
+
+const notificationDisplayPath = "lib/notification-display.ts";
+const notificationDisplay = await source(notificationDisplayPath);
+expect(notificationDisplayPath, notificationDisplay, /resourceType === "UserAccount"[\s\S]*\/module\/settings/, "local account alerts must deep-link to tenant settings");
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);
