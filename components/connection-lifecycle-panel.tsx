@@ -27,7 +27,7 @@ export async function ConnectionLifecyclePanel() {
 
   return <section className="connection-lifecycle-panel">
     <div className="connection-lifecycle-heading">
-      <div><span className="section-kicker">{c(locale, "Governed activation", "Yönetişim kontrollü aktivasyon")}</span><h2>{c(locale, "Connection Lifecycle Control", "Bağlantı Yaşam Döngüsü Kontrolü")}</h2><p>{c(locale, "Draft connections are activated only after required metadata is present and an administrator records an explicit attestation. All transitions are tenant-scoped and audited.", "Taslak bağlantılar yalnızca gerekli metadata tamamlandıktan ve bir yönetici açık teyit girdikten sonra etkinleştirilir. Tüm geçişler tenant kapsamındadır ve denetlenir.")}</p></div>
+      <div><span className="section-kicker">{c(locale, "Governed activation", "Yönetişim kontrollü aktivasyon")}</span><h2>{c(locale, "Connection Lifecycle Control", "Bağlantı Yaşam Döngüsü Kontrolü")}</h2><p>{c(locale, "Draft connections are activated only after required metadata is present, configuration validation is recorded and an administrator provides an explicit attestation. All transitions are tenant-scoped and audited.", "Taslak bağlantılar yalnızca gerekli metadata tamamlandıktan, yapılandırma doğrulaması kaydedildikten ve bir yönetici açık teyit girdikten sonra etkinleştirilir. Tüm geçişler tenant kapsamındadır ve denetlenir.")}</p></div>
       <ShieldCheck size={20}/>
     </div>
 
