@@ -13,6 +13,16 @@ expect(createAssessmentPath, createAssessment, /ownerId:\s*ctx\.actorId/, "new p
 expect(createAssessmentPath, createAssessment, /status:\s*"OPEN"/, "new privacy assessments must enter an open lifecycle");
 expect(createAssessmentPath, createAssessment, /DataClassification\.RESTRICTED/, "privacy assessment creation audit evidence must remain restricted");
 
+const assessmentEditPath = "app/api/privacy/assessments/[id]/route.ts";
+const assessmentEdit = await source(assessmentEditPath);
+expect(assessmentEditPath, assessmentEdit, /mutationOriginAllowed\(request\)/, "assessment metadata edits must enforce origin checks");
+expect(assessmentEditPath, assessmentEdit, /current\.ownerId !== ctx\.actorId/, "assessment metadata edits must remain owner-bound");
+expect(assessmentEditPath, assessmentEdit, /terminalStatuses\.has\(current\.status\.toUpperCase\(\)\)/, "terminal assessments must be reopened before metadata edits");
+expect(assessmentEditPath, assessmentEdit, /processingActivity\.findFirst[\s\S]*tenantId:\s*ctx\.tenantId[\s\S]*active:\s*true/, "assessment processing activity links must remain tenant-bound and active");
+expect(assessmentEditPath, assessmentEdit, /where:\s*\{\s*id:\s*current\.id,\s*status:\s*current\.status\s*\}/, "assessment metadata edits must be concurrency protected");
+expect(assessmentEditPath, assessmentEdit, /privacy-assessment\.updated/, "assessment metadata edits must be audited");
+expect(assessmentEditPath, assessmentEdit, /DataClassification\.RESTRICTED/, "assessment metadata audit evidence must remain restricted");
+
 const assessmentPath = "app/api/privacy/assessments/[id]/lifecycle/route.ts";
 const assessment = await source(assessmentPath);
 expect(assessmentPath, assessment, /START[\s\S]*WAIT[\s\S]*COMPLETE[\s\S]*REOPEN/, "assessment lifecycle must support start, wait, complete and reopen");
@@ -48,6 +58,7 @@ const data = await source(dataPath);
 expect(dataPath, data, /dataTransferRegister\.findMany\(\{ where: \{ tenantId: ctx\.tenantId \}/, "Privacy workspace must keep the complete transfer register visible");
 expect(dataPath, data, /activeTransfers:\s*transfers\.filter\(\(transfer\) => transfer\.active\)\.length/, "Privacy metrics must count only active transfers");
 expect(dataPath, data, /active:\s*transfer\.active/, "transfer rows must preserve activation state for lifecycle controls");
+expect(dataPath, data, /processingActivityId:\s*assessment\.processingActivityId/, "assessment rows must preserve their processing activity link for connected assurance UX");
 reject(dataPath, data, /findings:\s*assessment\.findings/, "default Privacy workspace must not project restricted assessment findings");
 
 const uiPath = "components/privacy-assurance-actions.tsx";
@@ -55,6 +66,8 @@ const ui = await source(uiPath);
 expect(uiPath, ui, /\/api\/privacy\/assessments/, "Privacy workspace must create assessments through governed API");
 expect(uiPath, ui, /\/lifecycle/, "Privacy assurance UI must invoke governed lifecycle routes");
 expect(uiPath, ui, /Findings summary/, "assessment completion must require human findings");
+expect(uiPath, ui, /Processing activity/, "privacy assessment authoring must expose the connected processing activity");
+expect(uiPath, ui, /Save metadata/, "non-terminal owned assessments must expose governed metadata edits");
 expect(uiPath, ui, /SCHEDULE_REVIEW/, "transfer UI must expose TIA review scheduling");
 expect(uiPath, ui, /COMPLETE_REVIEW/, "transfer UI must expose TIA review completion");
 expect(uiPath, ui, /DEACTIVATE/, "transfer UI must expose deactivation");
@@ -62,7 +75,7 @@ expect(uiPath, ui, /REACTIVATE/, "transfer UI must expose reactivation");
 
 const workspacePath = "components/governance-planning-live-workspace.tsx";
 const workspace = await source(workspacePath);
-expect(workspacePath, workspace, /PrivacyAssessmentCreateForm/, "assessment creation must be mounted in Privacy workspace");
+expect(workspacePath, workspace, /PrivacyAssessmentCreateForm[\s\S]*activities=\{data\.activities\.map/, "assessment creation must receive active processing activity options from the Privacy workspace");
 expect(workspacePath, workspace, /PrivacyAssessmentActions/, "assessment lifecycle must be mounted in Privacy workspace");
 expect(workspacePath, workspace, /PrivacyTransferCreateForm/, "transfer creation must be mounted in Privacy workspace");
 expect(workspacePath, workspace, /PrivacyTransferActions/, "transfer lifecycle must be mounted in Privacy workspace");
