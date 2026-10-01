@@ -13,6 +13,7 @@ const actionPrefixes = [
   "workflow-definition.",
   "engagement.campaign-",
   "privacy.dsr-",
+  "privacy-assessment.",
   "workflow.task-"
 ];
 
@@ -34,6 +35,7 @@ function decisionHref(resourceType: string, resourceId: string) {
   if (resourceType === "WorkflowDefinition") return `/module/workflows?definition=${id}`;
   if (resourceType === "SurveyCampaign") return `/module/engagement?campaign=${id}`;
   if (resourceType === "DataSubjectRequest") return `/module/privacy?dsr=${id}`;
+  if (resourceType === "PrivacyRiskAssessment") return `/module/privacy?assessment=${id}`;
   if (resourceType === "WorkflowTask") return `/module/workflows?task=${id}`;
   return null;
 }
