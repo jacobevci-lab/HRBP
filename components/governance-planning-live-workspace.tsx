@@ -25,6 +25,7 @@ import { EngagementCampaignWindowEditor } from "@/components/engagement-campaign
 import { EngagementSurveyAuthoring } from "@/components/engagement-survey-authoring";
 import { EngagementCampaignCreateForm } from "@/components/engagement-campaign-create-form";
 import { EngagementResponseAction } from "@/components/engagement-response-action";
+import { EngagementResultsPanel } from "@/components/engagement-results-panel";
 import { AIInteractionRequestForm } from "@/components/ai-interaction-request-form";
 import { GovernedFocusScroller } from "@/components/governed-focus-scroller";
 import { getServerRequestContext } from "@/lib/server-session";
@@ -80,7 +81,7 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
               <td>{row.survey}<small className="cell-sub">{row.surveyCode}</small></td>
               <td>{row.suppressed ? "Suppressed" : `${row.responses}${row.target ? ` / ${row.target}` : ""}`}</td>
               <td>{row.suppressed ? "Suppressed" : row.rate === null ? "—" : `${row.rate}%`}</td>
-              <td>{row.threshold}</td><td>{row.mode}</td><td>{row.opensAt} → {row.closesAt}</td><td><Pill value={row.status}/></td><td><div style={{display:"grid",gap:5}}>{row.rawStatus==="OPEN"&&ctx.employmentId?<EngagementResponseAction campaignId={row.id}/>:null}<EngagementCampaignWindowEditor campaignId={row.id} status={row.rawStatus} createdById={row.createdById} actorId={ctx.actorId} canWrite={engagementCanWrite} opensAt={row.opensAtIso} closesAt={row.closesAtIso}/><EngagementCampaignActions campaignId={row.id} status={row.rawStatus} createdById={row.createdById} actorId={ctx.actorId} canWrite={engagementCanWrite}/></div></td>
+              <td>{row.threshold}</td><td>{row.mode}</td><td>{row.opensAt} → {row.closesAt}</td><td><Pill value={row.status}/></td><td><div style={{display:"grid",gap:5}}>{row.rawStatus==="OPEN"&&ctx.employmentId?<EngagementResponseAction campaignId={row.id}/>:null}<EngagementCampaignWindowEditor campaignId={row.id} status={row.rawStatus} createdById={row.createdById} actorId={ctx.actorId} canWrite={engagementCanWrite} opensAt={row.opensAtIso} closesAt={row.closesAtIso}/>{engagementCanWrite&&["OPEN","CLOSED","ARCHIVED"].includes(row.rawStatus)?<EngagementResultsPanel campaignId={row.id}/>:null}<EngagementCampaignActions campaignId={row.id} status={row.rawStatus} createdById={row.createdById} actorId={ctx.actorId} canWrite={engagementCanWrite}/></div></td>
             </tr>) : <Empty text="No campaigns are visible inside your authorized population." columns={9}/>}
           </tbody></table></div>
         </div>

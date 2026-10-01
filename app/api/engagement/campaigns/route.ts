@@ -19,7 +19,15 @@ async function normalizedAudience(client: PrismaClient | Prisma.TransactionClien
   const hasSelectors = employmentIds.length > 0 || orgUnitIds.length > 0 || positionIds.length > 0;
 
   if (!hasSelectors) {
-    if (scope === null) return {};
+    if (scope === null) {
+      const active = await client.employment.findMany({
+        where: { tenantId: ctx.tenantId, status: { not: EmploymentStatus.TERMINATED } },
+        select: { id: true }
+      });
+      if (!active.length) throw new Error("EMPTY_AUDIENCE");
+      const canonicalIds = active.map((employment) => employment.id);
+      return { employmentIds: canonicalIds, targetCount: canonicalIds.length };
+    }
     if (!scope.length) throw new Error("EMPTY_SCOPE");
     return { employmentIds: scope, targetCount: scope.length };
   }
