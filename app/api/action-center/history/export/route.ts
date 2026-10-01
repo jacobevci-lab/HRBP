@@ -17,6 +17,7 @@ const actionPrefixes = [
   "hr-service.",
   "ONBOARDING_TASK_",
   "benefit-enrollment.transition.",
+  "learning-assignment.self-transition.",
   "workflow.task-"
 ];
 
