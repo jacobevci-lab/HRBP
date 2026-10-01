@@ -87,6 +87,15 @@ expect(settingsPagePath, settingsPage, /LocalAccountAdmin/, "tenant settings mus
 expect(settingsPagePath, settingsPage, /HRBP_LOCAL_AUTH_ENABLED/, "tenant settings must surface the local authentication runtime gate");
 expect(settingsPagePath, settingsPage, /localAuthEnabled:\s*true/, "tenant settings readiness must count explicitly enabled local accounts");
 
+
+const settingsObservabilityPath = "components/settings-live-page.tsx";
+const settingsObservability = await source(settingsObservabilityPath);
+expect(settingsObservabilityPath, settingsObservability, /auth\.local-succeeded[\s\S]*auth\.local-failed[\s\S]*auth\.local-locked/, "settings must expose bounded local authentication audit telemetry");
+expect(settingsObservabilityPath, settingsObservability, /take:\s*50/, "local authentication telemetry must remain bounded");
+expect(settingsObservabilityPath, settingsObservability, /tenantId:\s*ctx\.tenantId/, "local authentication telemetry must remain tenant scoped");
+expect(settingsObservabilityPath, settingsObservability, /resourceType:\s*"UserAccount"/, "local authentication telemetry must read only user-account audit evidence");
+reject(settingsObservabilityPath, settingsObservability, /select:\s*\{[^}]*localPasswordHash|event\.localPasswordHash/, "local authentication telemetry must not select or render password hashes");
+
 const packagePath = "package.json";
 const pkg = await source(packagePath);
 expect(packagePath, pkg, /local-auth:validate/, "local auth validator must be registered");
