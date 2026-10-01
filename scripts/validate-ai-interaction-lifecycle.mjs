@@ -14,6 +14,18 @@ expect(intakePath, intake, /HIGHLY_RESTRICTED/, "general AI assistant must rejec
 expect(intakePath, intake, /promptHash:\s*createHash\("sha256"\)/, "raw prompts must not be persisted");
 reject(intakePath, intake, /prompt:\s*prompt[,}]/, "raw prompt content must not be written to the AIInteraction record");
 
+const dispatchPath = "lib/ai-processor-dispatch.ts";
+const dispatch = await source(dispatchPath);
+expect(dispatchPath, dispatch, /HRBP_AI_PROCESSOR_URL/, "AI intake must dispatch raw prompts only to a configured processor endpoint");
+expect(dispatchPath, dispatch, /HRBP_AI_PROCESSOR_TOKEN/, "AI processor dispatch must use bearer credentials");
+expect(dispatchPath, dispatch, /url\.protocol !== "https:"/, "production AI dispatch must require HTTPS");
+expect(dispatchPath, dispatch, /setTimeout\(\(\) => controller\.abort\(\), 10_000\)/, "AI processor dispatch must be time bounded");
+expect(dispatchPath, dispatch, /prompt:\s*input\.prompt/, "raw prompt may exist only in the transient processor dispatch payload");
+
+expect(intakePath, intake, /dispatchAIInteraction/, "AI intake must dispatch transient prompt content after audit record creation");
+expect(intakePath, intake, /ai\.interaction-dispatch-failed/, "AI dispatch failure must be recorded on the audit chain");
+expect(intakePath, intake, /status:\s*AIInteractionStatus\.FAILED/, "undeliverable AI requests must not remain indefinitely RECEIVED");
+
 const routePath = "app/api/internal/ai/interactions/[id]/lifecycle/route.ts";
 const route = await source(routePath);
 expect(routePath, route, /internalBearerAuthorized\(request,\s*"HRBP_AI_PROCESSOR_TOKEN"\)/, "AI lifecycle must require an internal processor token");
@@ -55,6 +67,7 @@ reject(dataPath, data, /responseText|rawPrompt|rawResponse/, "AI live data must 
 const envPath = ".env.example";
 const env = await source(envPath);
 expect(envPath, env, /HRBP_AI_PROCESSOR_TOKEN=replace-with-at-least-24-random-characters/, "AI processor token must be documented");
+expect(envPath, env, /HRBP_AI_PROCESSOR_URL=https:\/\//, "AI processor endpoint must be documented");
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);
