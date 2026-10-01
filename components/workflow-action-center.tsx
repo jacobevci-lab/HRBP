@@ -120,6 +120,10 @@ type LifecycleActionItem = {
   } | {
     type: "resume-privacy-assessment";
     assessmentId: string;
+  } | {
+    type: "advance-hr-service";
+    requestId: string;
+    status: "TRIAGE" | "IN_PROGRESS";
   };
 };
 
@@ -218,6 +222,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "open-engagement-campaign" || action?.type === "close-engagement-campaign") return { resourceType: "SurveyCampaign", resourceId: action.campaignId };
   if (action?.type === "begin-dsr-verification" || action?.type === "verify-dsr" || action?.type === "wait-dsr" || action?.type === "resume-dsr") return { resourceType: "DataSubjectRequest", resourceId: action.dsrId };
   if (action?.type === "start-privacy-assessment" || action?.type === "wait-privacy-assessment" || action?.type === "resume-privacy-assessment") return { resourceType: "PrivacyRiskAssessment", resourceId: action.assessmentId };
+  if (action?.type === "advance-hr-service") return { resourceType: "HRServiceRequest", resourceId: action.requestId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -412,6 +417,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       busy: locale === "tr" ? "Devam ettiriliyor…" : "Resuming…",
       confirm: locale === "tr" ? `“${item.title}” değerlendirmesine devam etmek istiyor musun?` : `Resume “${item.title}”?`,
       success: locale === "tr" ? "Gizlilik değerlendirmesi yeniden işleme alındı." : "Privacy assessment resumed."
+    };
+    if (item.action.type === "advance-hr-service") return {
+      label: item.action.status === "TRIAGE" ? (locale === "tr" ? "Triyaja al" : "Move to triage") : (locale === "tr" ? "İşleme al" : "Start work"),
+      busy: locale === "tr" ? "Güncelleniyor…" : "Updating…",
+      confirm: locale === "tr" ? `“${item.title}” talebini ${item.action.status === "TRIAGE" ? "triyaja" : "işleme"} almak istiyor musun?` : `Move “${item.title}” to ${item.action.status === "TRIAGE" ? "triage" : "in progress"}?`,
+      success: item.action.status === "TRIAGE" ? (locale === "tr" ? "İK hizmet talebi triyaja alındı." : "HR service request moved to triage.") : (locale === "tr" ? "İK hizmet talebi işleme alındı." : "HR service request moved in progress.")
     };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
@@ -613,6 +624,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "resume-privacy-assessment") {
         endpoint = `/api/privacy/assessments/${encodeURIComponent(item.action.assessmentId)}/lifecycle`;
         payload = { action: "START" };
+      } else if (item.action.type === "advance-hr-service") {
+        endpoint = `/api/hr-service/requests/${encodeURIComponent(item.action.requestId)}/status`;
+        payload = { status: item.action.status };
       }
 
       const response = await fetch(endpoint, {

@@ -14,6 +14,7 @@ const actionPrefixes = [
   "engagement.campaign-",
   "privacy.dsr-",
   "privacy-assessment.",
+  "hr-service.",
   "workflow.task-"
 ];
 

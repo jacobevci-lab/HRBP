@@ -15,7 +15,7 @@ import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { documentVisibilityWhere } from "@/lib/document-access";
 import { employmentIdFilter, resolveEmploymentScope } from "@/lib/employment-scope";
-import { hrServiceRequestWhere, isHRServiceSelfServiceRole, visibleHRServiceQueueKeys } from "@/lib/hr-service-access";
+import { hrServiceRequestWhere, isHRServiceSelfServiceRole, isHRServiceStaffRole, visibleHRServiceQueueKeys } from "@/lib/hr-service-access";
 import type { RequestContext } from "@/lib/request-context";
 
 export type LifecycleActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "leave" | "time-attendance" | "compensation" | "payroll";
@@ -126,6 +126,10 @@ export type LifecycleActionItem = {
   } | {
     type: "resume-privacy-assessment";
     assessmentId: string;
+  } | {
+    type: "advance-hr-service";
+    requestId: string;
+    status: "TRIAGE" | "IN_PROGRESS";
   };
 };
 
@@ -264,7 +268,13 @@ async function hrServiceItems(ctx: RequestContext): Promise<LifecycleActionItem[
     dueAt: row.slaDueAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     urgency: serviceUrgency(row.priority, row.slaDueAt, row.escalationLevel),
-    action: null
+    action: !selfService && isHRServiceStaffRole(ctx.role)
+      ? row.status === ServiceRequestStatus.OPEN
+        ? { type: "advance-hr-service", requestId: row.id, status: "TRIAGE" }
+        : row.status === ServiceRequestStatus.TRIAGE || row.status === ServiceRequestStatus.WAITING_EMPLOYEE || row.status === ServiceRequestStatus.WAITING_THIRD_PARTY
+          ? { type: "advance-hr-service", requestId: row.id, status: "IN_PROGRESS" }
+          : null
+      : null
   }));
 }
 
