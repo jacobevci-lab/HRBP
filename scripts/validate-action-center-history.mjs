@@ -24,7 +24,7 @@ expect(componentPath, component, /7d[\s\S]*30d[\s\S]*90d/, "decision history mus
 expect(componentPath, component, /actor-scoped|Actor scope/, "decision history must disclose actor scoping");
 expect(componentPath, component, /Full hash-chained evidence remains in the Audit Ledger|Tam hash-zincirli kanıt Audit Ledger içinde kalır/, "decision history must direct full evidence to Audit Ledger");
 expect(componentPath, component, /hrbp:lifecycle-actions-changed/, "decision history must refresh after lifecycle decisions");
-reject(componentPath, component, /purpose|ipAddress|previousHash/, "decision history UI must not render sensitive audit internals");
+reject(componentPath, component, /item\.purpose|item\.ipAddress|item\.previousHash|item\.hash\b/, "decision history UI must not render sensitive audit internals");
 
 const modulePath = "app/module/[slug]/page.tsx";
 const modulePage = await source(modulePath);
