@@ -6,6 +6,7 @@ import { internalBearerAuthorized } from "@/lib/internal-auth";
 
 type ProcessorAction = "START" | "COMPLETE" | "BLOCK" | "FAIL";
 const actions: ProcessorAction[] = ["START", "COMPLETE", "BLOCK", "FAIL"];
+const terminalizable = new Set<AIInteractionStatus>([AIInteractionStatus.RECEIVED, AIInteractionStatus.PROCESSING]);
 
 function boundedText(value: unknown, max: number) {
   if (value === undefined || value === null) return undefined;
@@ -101,7 +102,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     if (action === "BLOCK") {
-      if (![AIInteractionStatus.RECEIVED, AIInteractionStatus.PROCESSING].includes(current.status)) throw new Error("STATE");
+      if (!terminalizable.has(current.status)) throw new Error("STATE");
       const updated = await tx.aIInteraction.update({
         where: { id: current.id },
         data: {
@@ -122,7 +123,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return updated;
     }
 
-    if (![AIInteractionStatus.RECEIVED, AIInteractionStatus.PROCESSING].includes(current.status)) throw new Error("STATE");
+    if (!terminalizable.has(current.status)) throw new Error("STATE");
     const updated = await tx.aIInteraction.update({
       where: { id: current.id },
       data: {
