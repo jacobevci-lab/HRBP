@@ -45,6 +45,8 @@ const campaignPath = "app/api/engagement/campaigns/route.ts";
 const campaign = await source(campaignPath);
 expect(campaignPath, campaign, /_count:\s*\{\s*select:\s*\{\s*questions:\s*true/, "campaign creation must inspect survey question count");
 expect(campaignPath, campaign, /EMPTY_SURVEY/, "campaign creation must reject surveys without authored questions");
+expect(campaignPath, campaign, /anonymityThreshold must be an integer between 5 and 1000/, "campaign anonymity threshold must be bounded");
+expect(campaignPath, campaign, /closesAt must be later than opensAt/, "campaign date windows must be ordered");
 
 const dataPath = "lib/governance-planning-live-data.ts";
 const data = await source(dataPath);
@@ -64,9 +66,16 @@ expect(uiPath, ui, /method:\s*"PATCH"/, "authoring UI must support survey metada
 expect(uiPath, ui, /Delete survey/, "authoring UI must surface unused-survey deletion");
 expect(uiPath, ui, /selectedSurvey\.campaignCount > 0/, "survey deletion UI must fail closed when campaigns reference the survey");
 
+const campaignUiPath = "components/engagement-campaign-create-form.tsx";
+const campaignUi = await source(campaignUiPath);
+expect(campaignUiPath, campaignUi, /\/api\/engagement\/campaigns/, "Engagement workspace must create governed draft campaigns");
+expect(campaignUiPath, campaignUi, /eligibleSurveys/, "campaign creation UI must allow only surveys with authored questions");
+expect(campaignUiPath, campaignUi, /Create draft campaign/, "campaign creation UI must preserve DRAFT lifecycle entry");
+
 const workspacePath = "components/governance-planning-live-workspace.tsx";
 const workspace = await source(workspacePath);
 expect(workspacePath, workspace, /EngagementSurveyAuthoring/, "survey authoring must be mounted in the governed Engagement workspace");
+expect(workspacePath, workspace, /EngagementCampaignCreateForm/, "campaign creation must be mounted in the governed Engagement workspace");
 expect(workspacePath, workspace, /surveys=\{data\.surveys\}/, "Engagement workspace must pass owning-domain survey detail only to authoring");
 
 const continuityPath = "lib/engagement-action-center-continuity.ts";
