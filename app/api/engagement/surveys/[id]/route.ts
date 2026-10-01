@@ -15,7 +15,8 @@ async function loadOwnedSurvey(tx: Prisma.TransactionClient, ctx: NonNullable<Re
     where: { id, tenantId: ctx.tenantId },
     select: {
       id: true, createdById: true,
-      campaigns: { select: { id: true, status: true }, take: 100 }
+      campaigns: { where: { status: { not: "DRAFT" } }, select: { id: true }, take: 1 },
+      _count: { select: { campaigns: true } }
     }
   });
   if (!survey) throw new Error("NOT_FOUND");
@@ -39,7 +40,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const result = await db.$transaction(async (tx) => {
     const survey = await loadOwnedSurvey(tx, ctx, id);
-    if (survey.campaigns.some((campaign) => campaign.status !== "DRAFT")) throw new Error("LOCKED");
+    if (survey.campaigns.length) throw new Error("LOCKED");
 
     const data: Prisma.EngagementSurveyUncheckedUpdateInput = {};
     if (code !== undefined) data.code = code.toUpperCase();
@@ -77,7 +78,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params;
   const result = await db.$transaction(async (tx) => {
     const survey = await loadOwnedSurvey(tx, ctx, id);
-    if (survey.campaigns.length) throw new Error("USED");
+    if (survey._count.campaigns) throw new Error("USED");
     await tx.engagementSurvey.delete({ where: { id: survey.id } });
     await appendAudit(tx, ctx, {
       action: "engagement-survey.deleted",
