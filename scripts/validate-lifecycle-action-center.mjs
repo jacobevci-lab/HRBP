@@ -16,9 +16,9 @@ expect(dataPath, data, /can\(ctx,\s*"time:approve"\)/, "time attention must requ
 expect(dataPath, data, /requestedById:\s*\{\s*not:\s*ctx\.actorId\s*\}/, "compensation attention must preserve requester four-eyes separation");
 expect(dataPath, data, /creators\.get\(row\.id\) !== ctx\.actorId/, "payroll approval attention must exclude the run creator");
 expect(dataPath, data, /row\.approvedById !== ctx\.actorId/, "payroll payment attention must exclude the approver");
-expect(dataPath, data, /action:\s*\{\s*type:\s*"approve-leave"/, "leave approvals must expose a bounded governed quick action");
-expect(dataPath, data, /action:\s*\{\s*type:\s*"approve-time"/, "time approvals must expose a bounded governed quick action");
-expect(dataPath, data, /type:\s*"approve-compensation"[\s\S]*type:\s*"apply-compensation"/, "compensation approvals and application must expose state-specific quick actions");
+expect(dataPath, data, /action:\s*\{\s*type:\s*"approve-leave"[\s\S]*secondaryAction:\s*\{\s*type:\s*"reject-leave"/, "leave decisions must expose bounded approve and reject actions");
+expect(dataPath, data, /action:\s*\{\s*type:\s*"approve-time"[\s\S]*secondaryAction:\s*\{\s*type:\s*"reject-time"/, "time decisions must expose bounded approve and reject actions");
+expect(dataPath, data, /type:\s*"approve-compensation"[\s\S]*type:\s*"apply-compensation"[\s\S]*type:\s*"reject-compensation"/, "compensation approval must expose independent approve/reject decisions while applied state keeps its state-specific action");
 expect(dataPath, data, /type:\s*"approve-payroll"[\s\S]*type:\s*"mark-payroll-paid"/, "payroll approval and payment must expose separated state-specific quick actions");
 reject(dataPath, data, /objectKey|contentHash|scanMessage|currentAnnualBase|proposedAnnualBase|grossPay|netPay|employerCost/, "core aggregation must not load restricted storage, compensation amounts or payroll results");
 
@@ -58,12 +58,16 @@ expect(componentPath, component, /summary\.learning/, "Action Center must expose
 expect(componentPath, component, /hrbp:lifecycle-actions-changed/, "Action Center must refresh when an owning domain commits a lifecycle mutation");
 expect(componentPath, component, /item\.action\.type === "complete-workflow"[\s\S]*\/api\/workflows\/instances\//, "workflow completion must keep using the governed workflow endpoint");
 expect(componentPath, component, /item\.action\.type === "approve-leave"[\s\S]*\/api\/leave\/requests\//, "leave quick approval must use the governed leave decision endpoint");
+expect(componentPath, component, /item\.secondaryAction\.type === "reject-leave"[\s\S]*decision:\s*"REJECTED"/, "leave quick rejection must use the governed leave decision endpoint");
 expect(componentPath, component, /item\.action\.type === "approve-time"[\s\S]*\/api\/time\/entries\//, "time quick approval must use the governed time transition endpoint");
+expect(componentPath, component, /item\.secondaryAction\.type === "reject-time"[\s\S]*status:\s*"REJECTED"/, "time quick rejection must use the governed time transition endpoint");
 expect(componentPath, component, /item\.action\.type === "approve-compensation"[\s\S]*decision:\s*"APPROVE"/, "compensation quick approval must preserve the independent decision API");
+expect(componentPath, component, /item\.secondaryAction\.type === "reject-compensation"[\s\S]*decision:\s*"REJECT"/, "compensation rejection must preserve the independent decision API");
 expect(componentPath, component, /item\.action\.type === "apply-compensation"[\s\S]*decision:\s*"APPLY"/, "compensation apply must use the governed application path");
 expect(componentPath, component, /item\.action\.type === "approve-payroll"[\s\S]*status:\s*"APPROVED"/, "payroll approval must preserve the separated approval transition");
 expect(componentPath, component, /status:\s*"PAID"/, "payroll payment completion must use the governed paid transition");
 expect(componentPath, component, /window\.confirm\(copy\.confirm\)/, "state-changing Action Center quick actions must require explicit confirmation");
+expect(componentPath, component, /workflow-row-actions[\s\S]*executeSecondaryAction/, "paired decisions must render both governed primary and rejection controls");
 expect(componentPath, component, /if \(!response\.ok\) throw[\s\S]*await refresh\(\)/, "quick actions must refresh only after a successful governed mutation");
 expect(componentPath, component, /<Link[\s\S]*href=\{item\.href\}/, "actions without a safe quick mutation must continue to deep-link into their owning governed module");
 
