@@ -50,7 +50,8 @@ function sourceLabel(resourceType: string, tr: boolean) {
     SurveyCampaign: ["Engagement campaign", "Bağlılık kampanyası"],
     DataSubjectRequest: ["Privacy DSR", "Gizlilik DSR"],
     PrivacyRiskAssessment: ["Privacy assessment", "Gizlilik değerlendirmesi"],
-    HRServiceRequest: ["HR service", "İK hizmeti"]
+    HRServiceRequest: ["HR service", "İK hizmeti"],
+    OnboardingTask: ["Onboarding task", "İşe başlatma görevi"]
   };
   const label = labels[resourceType];
   return label ? (tr ? label[1] : label[0]) : resourceType;
