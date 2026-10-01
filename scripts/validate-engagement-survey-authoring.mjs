@@ -13,6 +13,16 @@ expect(surveyPath, survey, /code may contain letters, numbers, underscore and da
 expect(surveyPath, survey, /P2002/, "duplicate survey codes must return a conflict");
 expect(surveyPath, survey, /engagement-survey\.created/, "survey creation must be audited");
 
+const surveyItemPath = "app/api/engagement/surveys/[id]/route.ts";
+const surveyItem = await source(surveyItemPath);
+expect(surveyItemPath, surveyItem, /export async function PATCH/, "survey metadata must support governed edits");
+expect(surveyItemPath, surveyItem, /export async function DELETE/, "unused surveys must support governed deletion");
+expect(surveyItemPath, surveyItem, /survey\.createdById !== ctx\.actorId/, "survey metadata changes must remain creator-bound");
+expect(surveyItemPath, surveyItem, /campaign\.status !== "DRAFT"/, "survey metadata must lock after a campaign leaves DRAFT");
+expect(surveyItemPath, surveyItem, /if \(survey\.campaigns\.length\) throw new Error\("USED"\)/, "surveys referenced by any campaign must not be deletable");
+expect(surveyItemPath, surveyItem, /engagement-survey\.updated/, "survey metadata updates must be audited");
+expect(surveyItemPath, surveyItem, /engagement-survey\.deleted/, "survey deletion must be audited");
+
 const createQuestionPath = "app/api/engagement/surveys/[id]/questions/route.ts";
 const createQuestion = await source(createQuestionPath);
 expect(createQuestionPath, createQuestion, /Object\.values\(SurveyQuestionType\)/, "question type must be validated");
@@ -40,6 +50,7 @@ const dataPath = "lib/governance-planning-live-data.ts";
 const data = await source(dataPath);
 expect(dataPath, data, /engagementSurvey\.findMany/, "Engagement live data must include bounded survey authoring data");
 expect(dataPath, data, /editable:\s*survey\.createdById === ctx\.actorId/, "survey editing state must remain creator-bound");
+expect(dataPath, data, /campaignCount:\s*survey\.campaigns\.length/, "survey authoring data must expose campaign usage count for deletion safety");
 expect(dataPath, data, /questions:\s*survey\.questions\.map/, "owning Engagement workspace must receive question detail");
 
 const uiPath = "components/engagement-survey-authoring.tsx";
@@ -49,6 +60,9 @@ expect(uiPath, ui, /\/questions/, "authoring UI must create and edit questions")
 expect(uiPath, ui, /method:\s*question\.questionId \? "PATCH" : "POST"/, "authoring UI must support question create/edit");
 expect(uiPath, ui, /method:\s*"DELETE"/, "authoring UI must support question deletion");
 expect(uiPath, ui, /canEditSelected/, "authoring UI must respect server-computed editability");
+expect(uiPath, ui, /method:\s*"PATCH"/, "authoring UI must support survey metadata updates");
+expect(uiPath, ui, /Delete survey/, "authoring UI must surface unused-survey deletion");
+expect(uiPath, ui, /selectedSurvey\.campaignCount > 0/, "survey deletion UI must fail closed when campaigns reference the survey");
 
 const workspacePath = "components/governance-planning-live-workspace.tsx";
 const workspace = await source(workspacePath);
