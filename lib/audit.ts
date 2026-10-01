@@ -38,7 +38,14 @@ export function computeAuditHash(input: AuditHashInput, previousHash: string | n
   return createHash("sha256").update(`${previousHash ?? "GENESIS"}|${payload}`).digest("hex");
 }
 
-export async function appendAudit(tx: Prisma.TransactionClient, ctx: RequestContext, input: AuditInput) {
+type AuditActorContext = {
+  tenantId: string;
+  actorId: string;
+  purpose?: string;
+  ipAddress?: string;
+};
+
+async function appendAuditActor(tx: Prisma.TransactionClient, ctx: AuditActorContext, input: AuditInput) {
   const occurredAt = new Date();
   const previous = await tx.auditEvent.findFirst({
     where: { tenantId: ctx.tenantId },
@@ -75,6 +82,19 @@ export async function appendAudit(tx: Prisma.TransactionClient, ctx: RequestCont
       previousHash: previous?.hash
     }
   });
+}
+
+export async function appendAudit(tx: Prisma.TransactionClient, ctx: RequestContext, input: AuditInput) {
+  return appendAuditActor(tx, ctx, input);
+}
+
+export async function appendSystemAudit(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  actorId: string,
+  input: AuditInput
+) {
+  return appendAuditActor(tx, { tenantId, actorId }, input);
 }
 
 export async function recordAudit({ ctx, ...input }: { ctx: RequestContext } & AuditInput) {
