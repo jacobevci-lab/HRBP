@@ -55,6 +55,9 @@ export type LifecycleActionItem = {
   } | {
     type: "request-workforce-changes";
     scenarioId: string;
+  } | {
+    type: "retire-workflow-definition";
+    definitionId: string;
   };
   action: null | {
     type: "complete-workflow";
@@ -90,6 +93,9 @@ export type LifecycleActionItem = {
   } | {
     type: "approve-workforce-scenario";
     scenarioId: string;
+  } | {
+    type: "activate-workflow-definition";
+    definitionId: string;
   };
 };
 
