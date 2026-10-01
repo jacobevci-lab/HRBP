@@ -63,6 +63,11 @@ expect(editorPath, editor, /Math\.max\([\s\S]*definition\.version[\s\S]*highestV
 expect(editorPath, editor, /highestVersion >= 1000/, "workflow version cloning must enforce the maximum supported version ceiling");
 expect(editorPath, editor, /setSelectedId\(""\)[\s\S]*setKey\(definition\.key\)/, "cloning must create a new draft rather than editing the immutable source");
 expect(editorPath, editor, /Create next version from|Yeni sürümü şundan oluştur/, "workflow editor must expose version cloning in the UI");
+expect(editorPath, editor, /Version comparison|Sürüm karşılaştırma/, "workflow editor must expose read-only version comparison");
+expect(editorPath, editor, /compareLeftId[\s\S]*compareRightId/, "workflow version comparison must require two explicit versions");
+expect(editorPath, editor, /left\.name !== right\.name[\s\S]*left\.actionType !== right\.actionType[\s\S]*left\.assigneeRole !== right\.assigneeRole[\s\S]*left\.slaMinutes !== right\.slaMinutes/, "workflow comparison must detect governed step-control changes");
+expect(editorPath, editor, /left\.index !== right\.index/, "workflow comparison must detect step reordering");
+expect(editorPath, editor, /compareLeft\.key !== compareRight\.key/, "workflow comparison must warn when unrelated workflow keys are selected");
 
 const continuityPath = "lib/workflow-definition-action-continuity.ts";
 const continuity = await source(continuityPath);

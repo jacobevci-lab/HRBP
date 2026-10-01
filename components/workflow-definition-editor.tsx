@@ -60,6 +60,8 @@ export function WorkflowDefinitionEditor() {
   const [definitions, setDefinitions] = useState<Definition[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [cloneSourceId, setCloneSourceId] = useState<string>("");
+  const [compareLeftId, setCompareLeftId] = useState<string>("");
+  const [compareRightId, setCompareRightId] = useState<string>("");
   const [key, setKey] = useState("");
   const [name, setName] = useState("");
   const [version, setVersion] = useState("1");
@@ -73,6 +75,36 @@ export function WorkflowDefinitionEditor() {
   const drafts = useMemo(() => definitions.filter((item) => item.status === "DRAFT"), [definitions]);
   const cloneSources = useMemo(() => definitions.filter((item) => item.status !== "DRAFT"), [definitions]);
   const editing = Boolean(selectedId);
+  const compareLeft = useMemo(() => definitions.find((item) => item.id === compareLeftId) ?? null, [compareLeftId, definitions]);
+  const compareRight = useMemo(() => definitions.find((item) => item.id === compareRightId) ?? null, [compareRightId, definitions]);
+  const comparison = useMemo(() => {
+    if (!compareLeft || !compareRight) return null;
+    const leftSteps = new Map(compareLeft.steps.map((step, index) => [step.stepKey, { ...step, index }]));
+    const rightSteps = new Map(compareRight.steps.map((step, index) => [step.stepKey, { ...step, index }]));
+    const keys = [...new Set([...leftSteps.keys(), ...rightSteps.keys()])];
+    const rows = keys.map((stepKey) => {
+      const left = leftSteps.get(stepKey);
+      const right = rightSteps.get(stepKey);
+      if (!left) return { stepKey, state: "added" as const, left: null, right };
+      if (!right) return { stepKey, state: "removed" as const, left, right: null };
+      const changed = left.name !== right.name
+        || left.actionType !== right.actionType
+        || left.assigneeRole !== right.assigneeRole
+        || left.approvalMode !== right.approvalMode
+        || left.slaMinutes !== right.slaMinutes
+        || left.index !== right.index;
+      return { stepKey, state: changed ? "changed" as const : "same" as const, left, right };
+    });
+    return {
+      metadata: {
+        name: compareLeft.name !== compareRight.name,
+        triggerType: compareLeft.triggerType !== compareRight.triggerType,
+        description: (compareLeft.description ?? "") !== (compareRight.description ?? "")
+      },
+      rows,
+      changed: rows.filter((row) => row.state !== "same").length
+    };
+  }, [compareLeft, compareRight]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -235,6 +267,31 @@ export function WorkflowDefinitionEditor() {
         </select>
       </label>
       {editing ? <button type="button" className="secondary-button compact" onClick={resetForm}><Plus size={14}/>{c("New definition","Yeni tanım")}</button> : cloneSourceId ? <button type="button" className="secondary-button compact" onClick={() => cloneDefinition(cloneSourceId)}><CopyPlus size={14}/>{c("Reload version","Sürümü yeniden yükle")}</button> : null}
+    </div>
+
+    <div className="workflow-version-compare">
+      <div className="workflow-version-compare-head">
+        <div><GitBranch size={16}/><span>{c("Version comparison", "Sürüm karşılaştırma")}</span><small>{c("Read-only diff across metadata, order and governed step controls.", "Metadata, sıra ve yönetişimli adım kontrolleri için salt-okunur fark görünümü.")}</small></div>
+      </div>
+      <div className="workflow-version-compare-selects">
+        <label><span>{c("Base version", "Temel sürüm")}</span><select value={compareLeftId} onChange={(event) => setCompareLeftId(event.target.value)}><option value="">{c("Select version", "Sürüm seç")}</option>{definitions.map((definition) => <option key={definition.id} value={definition.id}>{definition.key} · v{definition.version} · {definition.status}</option>)}</select></label>
+        <label><span>{c("Compare with", "Şununla karşılaştır")}</span><select value={compareRightId} onChange={(event) => setCompareRightId(event.target.value)}><option value="">{c("Select version", "Sürüm seç")}</option>{definitions.map((definition) => <option key={definition.id} value={definition.id}>{definition.key} · v{definition.version} · {definition.status}</option>)}</select></label>
+      </div>
+      {compareLeft && compareRight ? compareLeft.key !== compareRight.key ? <div className="workflow-editor-message error">{c("Select versions with the same workflow key for a meaningful governed comparison.", "Anlamlı bir yönetişim karşılaştırması için aynı workflow key'e sahip sürümleri seçin.")}</div> : comparison ? <>
+        <div className="workflow-version-summary">
+          <div><small>{c("Base", "Temel")}</small><strong>v{compareLeft.version}</strong><span>{compareLeft.status}</span></div>
+          <div><small>{c("Target", "Hedef")}</small><strong>v{compareRight.version}</strong><span>{compareRight.status}</span></div>
+          <div><small>{c("Changed steps", "Değişen adımlar")}</small><strong>{comparison.changed}</strong><span>{comparison.rows.length} {c("step keys", "adım anahtarı")}</span></div>
+          <div><small>{c("Metadata changes", "Metadata değişikliği")}</small><strong>{Object.values(comparison.metadata).filter(Boolean).length}</strong><span>{c("name · trigger · description", "ad · tetik · açıklama")}</span></div>
+        </div>
+        <div className="workflow-version-diff-list">
+          {comparison.rows.map((row) => <div className={`workflow-version-diff-row ${row.state}`} key={row.stepKey}>
+            <div><strong>{row.stepKey}</strong><span>{row.state.toUpperCase()}</span></div>
+            <div>{row.left ? <><small>{c("Base", "Temel")}</small><span>#{row.left.index + 1} · {row.left.name} · {row.left.actionType} · {row.left.assigneeRole ?? c("runtime", "runtime")} · SLA {row.left.slaMinutes ?? "—"}</span></> : <span>—</span>}</div>
+            <div>{row.right ? <><small>{c("Target", "Hedef")}</small><span>#{row.right.index + 1} · {row.right.name} · {row.right.actionType} · {row.right.assigneeRole ?? c("runtime", "runtime")} · SLA {row.right.slaMinutes ?? "—"}</span></> : <span>—</span>}</div>
+          </div>)}
+        </div>
+      </> : null : <p className="workflow-version-compare-empty">{c("Select two versions of the same workflow key to inspect governed differences before activation.", "Aktivasyon öncesinde yönetişim farklarını incelemek için aynı workflow key'e ait iki sürüm seçin.")}</p>}
     </div>
 
     <form onSubmit={submit} className="workflow-editor-form">
