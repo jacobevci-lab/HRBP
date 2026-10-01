@@ -186,7 +186,7 @@ export function WorkforcePlanLineManager({
     <button type="button" className="secondary-button" onClick={() => setOpen((value) => !value)}>
       {open ? <X size={13}/> : <Plus size={13}/>} {open ? "Close lines" : `Manage lines (${lines.length})`}
     </button>
-    {open ? <div className="card" style={{ padding: 10, display: "grid", gap: 9, minWidth: 620 }}>
+    {open ? <div className="card" style={{ padding: 10, display: "grid", gap: 9, width: "min(760px, 82vw)", maxWidth: "82vw" }}>
       {loadingOptions ? <span className="matrix-note"><LoaderCircle size={12}/> Loading planning scope…</span> : null}
       {options?.relationshipScoped ? <span className="matrix-note">Relationship-scoped organization and position options</span> : null}
 
