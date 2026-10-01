@@ -64,6 +64,7 @@ export async function getEngagementCampaignResults(ctx: RequestContext, campaign
     }
   });
   if (!campaign) throw new Error("NOT_FOUND");
+  if (!["OPEN", "CLOSED", "ARCHIVED"].includes(campaign.status)) throw new Error("STATE");
   if (campaign.survey._count.questions > 100) throw new Error("TOO_LARGE");
 
   const scope = await resolveEmploymentScope(db, ctx);
