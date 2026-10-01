@@ -116,7 +116,8 @@ async function recruitingApprovalItems(ctx: RequestContext): Promise<RecruitingL
       dueAt: null,
       createdAt: creator.occurredAt.toISOString(),
       urgency: "warning",
-      action: null
+      action: { type: "approve-requisition", requisitionId: requisition.id },
+      secondaryAction: { type: "return-requisition", requisitionId: requisition.id }
     });
   }
 
@@ -138,7 +139,8 @@ async function recruitingApprovalItems(ctx: RequestContext): Promise<RecruitingL
       dueAt: offer.expiresAt?.toISOString() ?? null,
       createdAt: creator.occurredAt.toISOString(),
       urgency: offerUrgency(offer.expiresAt),
-      action: null
+      action: { type: "approve-offer", offerId: offer.id },
+      secondaryAction: { type: "return-offer", offerId: offer.id }
     });
   }
 
