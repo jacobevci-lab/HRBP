@@ -9,6 +9,7 @@ import {
   validLocalPassword,
   verifyLocalPassword
 } from "@/lib/local-auth";
+import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { mutationOriginAllowed } from "@/lib/request-context";
 import { runtimeBoolean, runtimeString } from "@/lib/runtime-env";
 
@@ -91,6 +92,22 @@ export async function POST(request: Request) {
         classification: DataClassification.RESTRICTED,
         purpose: lock ? "Local sign-in lockout threshold reached" : "Local sign-in credential failure"
       });
+      if (lock) {
+        await enqueueNotificationOutbox(tx, {
+          tenantId: user.tenantId,
+          eventType: "LOCAL_AUTH_ACCOUNT_LOCKED",
+          recipientRole: "TENANT_ADMIN",
+          resourceType: "UserAccount",
+          resourceId: user.id,
+          dedupeKey: `local-auth-lock:${user.id}:${lock.toISOString()}`,
+          classification: DataClassification.RESTRICTED,
+          payload: {
+            accountSubject: user.subject,
+            accountDisplayName: user.displayName,
+            lockedUntil: lock.toISOString()
+          }
+        });
+      }
     });
     return Response.json({ error: "Invalid credentials." }, { status: 401 });
   }
