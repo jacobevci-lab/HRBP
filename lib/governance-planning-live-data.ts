@@ -200,7 +200,12 @@ export async function getWorkforcePlanningLiveData(ctx: RequestContext) {
       db.workforceScenario.findMany({
         where: {
           tenantId: ctx.tenantId,
-          ...(projection.relationshipScoped ? { lines: { some: scopedLineWhere } } : {})
+          ...(projection.relationshipScoped ? {
+            OR: [
+              { ownerId: ctx.actorId },
+              { lines: { some: scopedLineWhere } }
+            ]
+          } : {})
         },
         orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
         take: 100,
@@ -217,7 +222,7 @@ export async function getWorkforcePlanningLiveData(ctx: RequestContext) {
           approvedAt: true,
           lines: {
             where: scopedLineWhere,
-            select: { currentFte: true, plannedFte: true, avgAnnualCost: true, skillsRequired: true }
+            select: { id: true, orgUnitId: true, positionId: true, roleLabel: true, location: true, currentFte: true, plannedFte: true, avgAnnualCost: true, demandDriver: true, skillsRequired: true }
           }
         }
       }),
@@ -251,6 +256,18 @@ export async function getWorkforcePlanningLiveData(ctx: RequestContext) {
         delta: Math.round((plannedFte - currentFte) * 100) / 100,
         costDelta: Math.round(costDelta),
         skillSignals,
+        lines: scenario.lines.map((line) => ({
+          id: line.id,
+          orgUnitId: line.orgUnitId,
+          positionId: line.positionId,
+          roleLabel: line.roleLabel,
+          location: line.location,
+          currentFte: Number(line.currentFte),
+          plannedFte: Number(line.plannedFte),
+          avgAnnualCost: line.avgAnnualCost === null ? null : Number(line.avgAnnualCost),
+          demandDriver: line.demandDriver,
+          skillsRequired: Array.isArray(line.skillsRequired) ? line.skillsRequired.filter((item): item is string => typeof item === "string") : []
+        })),
         owner: ownerMap.get(scenario.ownerId) ?? scenario.ownerId,
         ownerId: scenario.ownerId,
         approvedById: scenario.approvedById,
