@@ -43,6 +43,12 @@ export type LifecycleActionItem = {
   } | {
     type: "reject-compensation";
     changeId: string;
+  } | {
+    type: "return-requisition";
+    requisitionId: string;
+  } | {
+    type: "return-offer";
+    offerId: string;
   };
   action: null | {
     type: "complete-workflow";
@@ -66,6 +72,12 @@ export type LifecycleActionItem = {
   } | {
     type: "mark-payroll-paid";
     runId: string;
+  } | {
+    type: "approve-requisition";
+    requisitionId: string;
+  } | {
+    type: "approve-offer";
+    offerId: string;
   };
 };
 

@@ -20,7 +20,8 @@ expect(continuityPath, continuity, /kind:\s*"recruiting"/, "Recruiting must be a
 expect(continuityPath, continuity, /recruiting:\s*items\.filter\(\(item\) => item\.kind === "recruiting"\)\.length/, "summary must expose aggregate Recruiting attention");
 expect(continuityPath, continuity, /slice\(0,\s*350\)/, "combined Action Center output must remain bounded");
 reject(continuityPath, continuity, /annualBase|currency|proposedAnnualBase|currentAnnualBase|bank|accountNumber/, "central Recruiting attention must not load offer compensation or payment data");
-reject(continuityPath, continuity, /\/status["'`]/, "the central Action Center must not perform Recruiting decisions directly");
+expect(continuityPath, continuity, /type:\s*"approve-requisition"[\s\S]*type:\s*"return-requisition"/, "requisition approvals must expose bounded approve and return actions");
+expect(continuityPath, continuity, /type:\s*"approve-offer"[\s\S]*type:\s*"return-offer"/, "offer approvals must expose bounded approve and return actions");
 
 const policyContinuityPath = "lib/policy-action-center-continuity.ts";
 const policyContinuity = await source(policyContinuityPath);
@@ -38,7 +39,14 @@ expect(uiPath, ui, /ActionKind[\s\S]*"recruiting"/, "the Action Center UI must u
 expect(uiPath, ui, /allowedFilters[\s\S]*"recruiting"/, "Recruiting must be an allow-listed Action Center filter");
 expect(uiPath, ui, /summary\.recruiting/, "the UI must expose the aggregate Recruiting source count");
 expect(uiPath, ui, /filter === "recruiting"/, "the UI must provide a Recruiting source filter");
-expect(uiPath, ui, /href=\{item\.href\}/, "Recruiting attention must stay deep-link only in the central queue");
+expect(uiPath, ui, /item\.action\.type === "approve-requisition"[\s\S]*\/api\/recruiting\/requisitions\//, "requisition approval must call the governed recruiting status endpoint");
+expect(uiPath, ui, /item\.secondaryAction\.type === "return-requisition"[\s\S]*status:\s*"DRAFT"/, "requisition return must reuse the governed recruiting transition");
+expect(uiPath, ui, /item\.action\.type === "approve-offer"[\s\S]*\/api\/recruiting\/offers\//, "offer approval must call the governed offer status endpoint");
+expect(uiPath, ui, /item\.secondaryAction\.type === "return-offer"[\s\S]*status:\s*"DRAFT"/, "offer return must reuse the governed offer transition");
+expect(uiPath, ui, /window\.confirm\(copy\.confirm\)/, "Recruiting quick decisions must remain explicitly confirmed");
+expect(uiPath, ui, /resourceType:\s*"Requisition"[\s\S]*resourceType:\s*"Offer"/, "Recruiting quick decisions must identify matching notification resources");
+expect(uiPath, ui, /if \(!response\.ok\) throw[\s\S]*acknowledgeResourceNotifications/, "Recruiting notification acknowledgement must occur only after the business mutation succeeds");
+expect(uiPath, ui, /href=\{item\.href\}/, "records without safe quick actions must continue to deep-link to the owning domain");
 
 const recruitingConsolePath = "components/recruiting-operations-console.tsx";
 const recruitingConsole = await source(recruitingConsolePath);

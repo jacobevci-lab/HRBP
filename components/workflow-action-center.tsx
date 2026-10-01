@@ -37,6 +37,12 @@ type LifecycleActionItem = {
   } | {
     type: "reject-compensation";
     changeId: string;
+  } | {
+    type: "return-requisition";
+    requisitionId: string;
+  } | {
+    type: "return-offer";
+    offerId: string;
   };
   action: null | {
     type: "complete-workflow";
@@ -60,6 +66,12 @@ type LifecycleActionItem = {
   } | {
     type: "mark-payroll-paid";
     runId: string;
+  } | {
+    type: "approve-requisition";
+    requisitionId: string;
+  } | {
+    type: "approve-offer";
+    offerId: string;
   };
 };
 
@@ -126,18 +138,40 @@ type ActionQueueResponse = {
   error?: string;
 };
 
-async function acknowledgeTaskNotifications(taskId: string) {
+async function acknowledgeResourceNotifications(resourceType: string, resourceId: string) {
   try {
     const response = await fetch("/api/notifications", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ resourceType: "WorkflowTask", resourceId: taskId, read: true })
+      body: JSON.stringify({ resourceType, resourceId, read: true })
     });
     if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
   } catch {
     // Notification acknowledgement is best-effort and must never roll back an
-    // already completed workflow task.
+    // already accepted domain decision.
   }
+}
+
+async function acknowledgeTaskNotifications(taskId: string) {
+  return acknowledgeResourceNotifications("WorkflowTask", taskId);
+}
+
+function actionNotificationSubject(item: LifecycleActionItem) {
+  const action = item.action;
+  if (action?.type === "approve-leave") return { resourceType: "LeaveRequest", resourceId: action.requestId };
+  if (action?.type === "approve-time") return { resourceType: "TimeEntry", resourceId: action.entryId };
+  if (action?.type === "approve-compensation" || action?.type === "apply-compensation") return { resourceType: "CompensationChange", resourceId: action.changeId };
+  if (action?.type === "approve-payroll" || action?.type === "mark-payroll-paid") return { resourceType: "PayrollRun", resourceId: action.runId };
+  if (action?.type === "approve-requisition") return { resourceType: "Requisition", resourceId: action.requisitionId };
+  if (action?.type === "approve-offer") return { resourceType: "Offer", resourceId: action.offerId };
+
+  const secondary = item.secondaryAction;
+  if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
+  if (secondary?.type === "reject-time") return { resourceType: "TimeEntry", resourceId: secondary.entryId };
+  if (secondary?.type === "reject-compensation") return { resourceType: "CompensationChange", resourceId: secondary.changeId };
+  if (secondary?.type === "return-requisition") return { resourceType: "Requisition", resourceId: secondary.requisitionId };
+  if (secondary?.type === "return-offer") return { resourceType: "Offer", resourceId: secondary.offerId };
+  return null;
 }
 
 export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initialFilter }: { initialTaskId?: string; initialInstanceId?: string; initialFilter?: string }) {
@@ -237,6 +271,18 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? "Bu bordro çalıştırmasını bağımsız olarak onaylamak istiyor musun?" : "Independently approve this payroll run?",
       success: locale === "tr" ? "Bordro çalıştırması onaylandı." : "Payroll run approved."
     };
+    if (item.action.type === "approve-requisition") return {
+      label: locale === "tr" ? "Talebi onayla" : "Approve requisition",
+      busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını onaylayıp açmak istiyor musun?` : `Approve and open “${item.title}”?`,
+      success: locale === "tr" ? "İşe alım talebi onaylandı ve açıldı." : "Requisition approved and opened."
+    };
+    if (item.action.type === "approve-offer") return {
+      label: locale === "tr" ? "Teklifi onayla" : "Approve offer",
+      busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını onaylayıp gönderime çıkarmak istiyor musun?` : `Approve and release “${item.title}” for sending?`,
+      success: locale === "tr" ? "Teklif bağımsız olarak onaylandı." : "Offer independently approved."
+    };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
       busy: locale === "tr" ? "İşleniyor…" : "Processing…",
@@ -258,6 +304,18 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       busy: locale === "tr" ? "Reddediliyor…" : "Rejecting…",
       confirm: locale === "tr" ? `“${item.title}” kaydını reddetmek istiyor musun?` : `Reject “${item.title}”?`,
       success: locale === "tr" ? "Zaman kaydı reddedildi." : "Time entry rejected."
+    };
+    if (item.secondaryAction.type === "return-requisition") return {
+      label: locale === "tr" ? "Taslağa döndür" : "Return to draft",
+      busy: locale === "tr" ? "Döndürülüyor…" : "Returning…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını düzeltme için taslağa döndürmek istiyor musun?` : `Return “${item.title}” to draft for revision?`,
+      success: locale === "tr" ? "İşe alım talebi taslağa döndürüldü." : "Requisition returned to draft."
+    };
+    if (item.secondaryAction.type === "return-offer") return {
+      label: locale === "tr" ? "Taslağa döndür" : "Return to draft",
+      busy: locale === "tr" ? "Döndürülüyor…" : "Returning…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını düzeltme için taslağa döndürmek istiyor musun?` : `Return “${item.title}” to draft for revision?`,
+      success: locale === "tr" ? "Teklif taslağa döndürüldü." : "Offer returned to draft."
     };
     return {
       label: locale === "tr" ? "Reddet" : "Reject",
@@ -287,6 +345,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.secondaryAction.type === "reject-compensation") {
         endpoint = `/api/compensation/changes/${encodeURIComponent(item.secondaryAction.changeId)}/decision`;
         payload = { decision: "REJECT" };
+      } else if (item.secondaryAction.type === "return-requisition") {
+        endpoint = `/api/recruiting/requisitions/${encodeURIComponent(item.secondaryAction.requisitionId)}/status`;
+        payload = { status: "DRAFT" };
+      } else if (item.secondaryAction.type === "return-offer") {
+        endpoint = `/api/recruiting/offers/${encodeURIComponent(item.secondaryAction.offerId)}/status`;
+        payload = { status: "DRAFT" };
       }
 
       const response = await fetch(endpoint, {
@@ -297,6 +361,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
       setSuccess(copy.success);
+      const notificationSubject = actionNotificationSubject(item);
+      if (notificationSubject) await acknowledgeResourceNotifications(notificationSubject.resourceType, notificationSubject.resourceId);
       window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
       window.dispatchEvent(new Event("hrbp:notifications-changed"));
       await refresh();
@@ -336,9 +402,15 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "approve-payroll") {
         endpoint = `/api/payroll/runs/${encodeURIComponent(item.action.runId)}/transition`;
         payload = { status: "APPROVED" };
-      } else {
+      } else if (item.action.type === "mark-payroll-paid") {
         endpoint = `/api/payroll/runs/${encodeURIComponent(item.action.runId)}/transition`;
         payload = { status: "PAID" };
+      } else if (item.action.type === "approve-requisition") {
+        endpoint = `/api/recruiting/requisitions/${encodeURIComponent(item.action.requisitionId)}/status`;
+        payload = { status: "OPEN" };
+      } else if (item.action.type === "approve-offer") {
+        endpoint = `/api/recruiting/offers/${encodeURIComponent(item.action.offerId)}/status`;
+        payload = { status: "SENT" };
       }
 
       const response = await fetch(endpoint, {
@@ -349,7 +421,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
       setSuccess(copy.success);
-      if (item.action.type === "complete-workflow") await acknowledgeTaskNotifications(item.action.taskId);
+      if (item.action.type === "complete-workflow") {
+        await acknowledgeTaskNotifications(item.action.taskId);
+      } else {
+        const notificationSubject = actionNotificationSubject(item);
+        if (notificationSubject) await acknowledgeResourceNotifications(notificationSubject.resourceType, notificationSubject.resourceId);
+      }
       window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
       window.dispatchEvent(new Event("hrbp:notifications-changed"));
       await refresh();
