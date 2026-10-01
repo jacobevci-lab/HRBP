@@ -67,10 +67,23 @@ expect(uiPath, ui, /method:\s*"PATCH"/, "authoring UI must support survey metada
 expect(uiPath, ui, /Delete survey/, "authoring UI must surface unused-survey deletion");
 expect(uiPath, ui, /selectedSurvey\.campaignCount > 0/, "survey deletion UI must fail closed when campaigns reference the survey");
 
+const audienceOptionsPath = "app/api/engagement/audience-options/route.ts";
+const audienceOptions = await source(audienceOptionsPath);
+expect(audienceOptionsPath, audienceOptions, /can\(ctx,\s*"engagement:read"\)/, "audience options must require engagement read authority");
+expect(audienceOptionsPath, audienceOptions, /resolveEmploymentScope\(db, ctx\)/, "audience options must remain relationship scoped");
+expect(audienceOptionsPath, audienceOptions, /status:\s*\{\s*not:\s*EmploymentStatus\.TERMINATED/, "terminated employments must not contribute to audience options");
+reject(audienceOptionsPath, audienceOptions, /givenName|familyName|email|employeeNumber/, "campaign audience options must not expose employee identity");
+
+expect(campaignPath, campaign, /if \(!hasSelectors\)[\s\S]*scope === null[\s\S]*return \{\}/, "tenant-wide blank audiences must not persist raw selector payloads");
+expect(campaignPath, campaign, /tenantId:\s*ctx\.tenantId[\s\S]*status:\s*\{\s*not:\s*EmploymentStatus\.TERMINATED/, "all audience selectors must canonicalize through active tenant employments");
+expect(campaignPath, campaign, /return \{ employmentIds:\s*canonicalIds, targetCount:\s*canonicalIds\.length \}/, "selected audiences must persist only canonical employment ids and target count");
+
 const campaignUiPath = "components/engagement-campaign-create-form.tsx";
 const campaignUi = await source(campaignUiPath);
 expect(campaignUiPath, campaignUi, /\/api\/engagement\/campaigns/, "Engagement workspace must create governed draft campaigns");
 expect(campaignUiPath, campaignUi, /eligibleSurveys/, "campaign creation UI must allow only surveys with authored questions");
+expect(campaignUiPath, campaignUi, /\/api\/engagement\/audience-options/, "campaign creation UI must load governed audience options");
+expect(campaignUiPath, campaignUi, /orgUnitIds:[\s\S]*positionIds:/, "campaign creation UI must support organization and position targeting");
 expect(campaignUiPath, campaignUi, /Create draft campaign/, "campaign creation UI must preserve DRAFT lifecycle entry");
 
 const workspacePath = "components/governance-planning-live-workspace.tsx";
