@@ -32,6 +32,30 @@ expect(routePath, route, /activeSibling[\s\S]*WorkflowDefinitionStatus\.ACTIVE/,
 expect(routePath, route, /ACTIVE_VERSION/, "active-version conflicts must return a governed conflict");
 reject(routePath, route, /workflowInstance\.(?:update|updateMany|delete|deleteMany)/, "definition lifecycle transitions must not silently mutate running workflow instances");
 
+
+const editorRoutePath = "app/api/workflows/definitions/[id]/route.ts";
+const editorRoute = await source(editorRoutePath);
+expect(editorRoutePath, editorRoute, /mutationOriginAllowed\(request\)/, "workflow draft editing must enforce origin checks");
+expect(editorRoutePath, editorRoute, /can\(ctx,\s*"workflows:write"\)/, "workflow draft editing must require workflow write authority");
+expect(editorRoutePath, editorRoute, /current\.status !== WorkflowDefinitionStatus\.DRAFT/, "only draft definitions may be edited");
+expect(editorRoutePath, editorRoute, /updatedAt:\s*current\.updatedAt/, "draft editing must use optimistic concurrency");
+expect(editorRoutePath, editorRoute, /workflowStepDefinition\.deleteMany[\s\S]*workflowStepDefinition\.createMany/, "draft step replacement must occur inside the governed transaction");
+expect(editorRoutePath, editorRoute, /TransactionIsolationLevel\.Serializable/, "workflow draft editing must be serializable");
+expect(editorRoutePath, editorRoute, /MAX_STEPS = 50/, "workflow draft editing must preserve the step bound");
+expect(editorRoutePath, editorRoute, /Object\.values\(PlatformRole\)/, "workflow draft editing must validate assignee roles");
+expect(editorRoutePath, editorRoute, /workflow-definition\.draft-updated/, "workflow draft edits must be audited");
+reject(editorRoutePath, editorRoute, /WorkflowDefinitionStatus\.ACTIVE[\s\S]*data:\s*\{\s*name/, "active definitions must not be edited in place");
+
+const editorPath = "components/workflow-definition-editor.tsx";
+const editor = await source(editorPath);
+expect(editorPath, editor, /\/api\/workflows\/definitions/, "workflow editor must use the governed definition API");
+expect(editorPath, editor, /Add step|Adım ekle/, "workflow editor must expose step creation");
+expect(editorPath, editor, /moveStep/, "workflow editor must support explicit step ordering");
+expect(editorPath, editor, /removeStep/, "workflow editor must support bounded step removal");
+expect(editorPath, editor, /assigneeRole/, "workflow editor must support role-bound steps");
+expect(editorPath, editor, /slaMinutes/, "workflow editor must expose bounded SLA authoring");
+expect(editorPath, editor, /Only DRAFT definitions are editable|Yalnızca DRAFT/, "workflow editor must disclose draft-only mutation semantics");
+
 const continuityPath = "lib/workflow-definition-action-continuity.ts";
 const continuity = await source(continuityPath);
 expect(continuityPath, continuity, /getEngagementLifecycleActionCenterData\(ctx\)/, "Workflow Definition continuity must extend the current Engagement continuity chain");
@@ -53,6 +77,8 @@ const live = await source(livePath);
 expect(livePath, live, /data-workflow-definition-id/, "workflow definition rows must expose exact focus anchors");
 expect(livePath, live, /focusVisible/, "workflow definition focus must fail closed when unavailable");
 expect(livePath, live, /WorkflowDefinitionActions/, "definition lifecycle actions must remain in the owning Workflows workspace");
+expect(livePath, live, /WorkflowDefinitionEditor/, "workflow authoring must be mounted in the governed Workflows workspace");
+expect(livePath, live, /can\(ctx,"workflows:write"\)/, "workflow editor visibility must require workflow write authority");
 expect(livePath, live, /GovernedFocusScroller/, "exact definition focus must scroll into view");
 
 const modulePath = "app/module/[slug]/page.tsx";
