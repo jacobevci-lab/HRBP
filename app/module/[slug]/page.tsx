@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { AnalyticsModulePage } from "@/components/analytics-module-page";
 import { AuditLivePage } from "@/components/audit-live-page";
 import { ConnectionLifecyclePanel } from "@/components/connection-lifecycle-panel";
+import { ConnectionMetadataEditor } from "@/components/connection-metadata-editor";
 import { EmployeeRelationsCaseLifecyclePanel } from "@/components/employee-relations-case-lifecycle-panel";
 import { GovernancePlanningModulePage } from "@/components/governance-planning-module-page";
 import { GrowthModulePage } from "@/components/growth-module-page";
@@ -89,7 +90,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   if (!ctx) return <AppShell><PublicModuleLanding slug={slug}/></AppShell>;
 
   if (slug === "notifications") return <AppShell><NotificationsModulePage/></AppShell>;
-  if (slug === "settings") return <AppShell><SettingsLivePage/><SecurityPolicyEditorLoader/><ConnectionLifecyclePanel/>{can(ctx, "settings:write") ? <SettingsConnectionsManager/> : null}</AppShell>;
+  if (slug === "settings") return <AppShell><SettingsLivePage/><SecurityPolicyEditorLoader/><ConnectionLifecyclePanel/>{can(ctx, "settings:write") ? <><SettingsConnectionsManager/><ConnectionMetadataEditor/></> : null}</AppShell>;
   if (slug === "audit") return <AppShell><AuditLivePage searchParams={search}/></AppShell>;
   if (slug === "analytics") return <AnalyticsModulePage/>;
   if (growthSlugs.has(slug as GrowthSlug)) return <GrowthModulePage slug={slug as GrowthSlug} focusId={growthFocus}/>;
