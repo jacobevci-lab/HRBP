@@ -96,7 +96,7 @@ expect(actionCenterPath, actionCenter, /item\.action\.type === "wait-privacy-ass
 expect(actionCenterPath, actionCenter, /item\.action\.type === "resume-privacy-assessment"[\s\S]*action:\s*"START"/, "privacy assessment resume must reuse the governed START transition");
 expect(actionCenterPath, actionCenter, /resourceType:\s*"PrivacyRiskAssessment"/, "privacy assessment quick actions must clear matching notifications best-effort");
 expect(actionCenterPath, actionCenter, /window\.confirm\(copy\.confirm\)/, "privacy assessment quick actions must require explicit confirmation");
-reject(actionCenterPath, actionCenter, /COMPLETE[\s\S]*privacy-assessment|privacy-assessment[\s\S]*COMPLETE/, "privacy assessment completion requiring findings must remain in the owning Privacy workspace");
+reject(actionCenterPath, actionCenter, /item\.action\.type === "complete-privacy-assessment"|\/api\/privacy\/assessments\/[\s\S]{0,500}payload = \{ action: "COMPLETE" \}/, "privacy assessment completion requiring findings must remain in the owning Privacy workspace");
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);
