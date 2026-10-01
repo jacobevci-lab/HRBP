@@ -3,6 +3,7 @@ import { AccessScopeAdmin } from "@/components/access-scope-admin";
 import { JurisdictionAdmin } from "@/components/jurisdiction-admin";
 import { LocalAccountAdmin } from "@/components/local-account-admin";
 import { NotificationDeadLetterAction } from "@/components/notification-dead-letter-action";
+import { NotificationOperationsConsole } from "@/components/notification-operations-console";
 import { authConfigurationStatus, getOidcConfig } from "@/lib/auth-config";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
@@ -144,6 +145,8 @@ export async function SettingsLivePage() {
         </tbody></table></div>
       </div>
     </section>
+
+    <NotificationOperationsConsole canWrite={canWrite}/>
 
     <section className="card settings-live-panel settings-notification-ops">
       <div className="settings-live-panel-head"><div><span className="section-kicker">{c(locale, "Notification operations", "Bildirim operasyonları")}</span><h3>{c(locale, "Durable outbox health", "Dayanıklı outbox sağlığı")}</h3></div><BellRing size={18}/></div>
