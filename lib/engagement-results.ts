@@ -238,11 +238,27 @@ export async function getEngagementCampaignResults(ctx: RequestContext, campaign
         : stringValues(value);
       for (const option of selected) if (counts.has(option)) counts.set(option, (counts.get(option) ?? 0) + 1);
     }
+    const lowVolumeBucket = [...counts.values()].some((count) => count > 0 && count < threshold);
+    if (lowVolumeBucket) {
+      return {
+        id: question.id,
+        questionKey: question.questionKey,
+        prompt: question.prompt,
+        type: question.type,
+        dimension: question.dimension,
+        answered: 0,
+        suppressed: true,
+        suppressionReason: `Choice distribution is suppressed because one or more non-empty options are below the privacy threshold of ${threshold}.`,
+        metric: null,
+        distribution: []
+      };
+    }
+
     const distribution = [...counts.entries()].map(([option, count]) => ({
       option,
-      count: count >= threshold ? count : null,
-      percent: count >= threshold ? round((count / values.length) * 100) : null,
-      suppressed: count < threshold
+      count,
+      percent: round((count / values.length) * 100),
+      suppressed: false
     }));
 
     return {
