@@ -145,7 +145,11 @@ async function privacyAssuranceItems(ctx: RequestContext): Promise<PrivacyLifecy
     dueAt: assessment.dueAt?.toISOString() ?? null,
     createdAt: assessment.createdAt.toISOString(),
     urgency: assessment.dueAt ? urgencyForDueDate(assessment.dueAt) : "normal",
-    action: null
+    action: assessment.status.toUpperCase() === "WAITING"
+      ? { type: "resume-privacy-assessment", assessmentId: assessment.id }
+      : assessment.status.toUpperCase() === "IN_PROGRESS"
+        ? { type: "wait-privacy-assessment", assessmentId: assessment.id }
+        : { type: "start-privacy-assessment", assessmentId: assessment.id }
   }));
 
   const transferItems: PrivacyLifecycleAttentionItem[] = transfers.map((transfer) => ({
