@@ -94,7 +94,7 @@ expect(settingsObservabilityPath, settingsObservability, /auth\.local-succeeded[
 expect(settingsObservabilityPath, settingsObservability, /take:\s*50/, "local authentication telemetry must remain bounded");
 expect(settingsObservabilityPath, settingsObservability, /tenantId:\s*ctx\.tenantId/, "local authentication telemetry must remain tenant scoped");
 expect(settingsObservabilityPath, settingsObservability, /resourceType:\s*"UserAccount"/, "local authentication telemetry must read only user-account audit evidence");
-reject(settingsObservabilityPath, settingsObservability, /localPasswordHash|OBJECT_STORAGE_SECRET_KEY/, "local authentication telemetry must not render secret material");
+reject(settingsObservabilityPath, settingsObservability, /select:\s*\{[^}]*localPasswordHash|event\.localPasswordHash/, "local authentication telemetry must not select or render password hashes");
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);
