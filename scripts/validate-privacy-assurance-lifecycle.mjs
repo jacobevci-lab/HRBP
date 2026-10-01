@@ -84,7 +84,9 @@ const continuityPath = "lib/privacy-action-center-continuity.ts";
 const continuity = await source(continuityPath);
 expect(continuityPath, continuity, /active:\s*true/, "central TIA attention must continue to include only active transfers");
 expect(continuityPath, continuity, /completedAt:\s*null/, "completed assessments must leave active Privacy attention");
-expect(continuityPath, continuity, /type:\s*"start-privacy-assessment"[\s\S]*type:\s*"wait-privacy-assessment"[\s\S]*type:\s*"resume-privacy-assessment"/, "privacy assessment attention must expose bounded state-specific progression actions");
+expect(continuityPath, continuity, /type:\s*"start-privacy-assessment"/, "privacy assessment attention must expose start action");
+expect(continuityPath, continuity, /type:\s*"wait-privacy-assessment"/, "privacy assessment attention must expose wait action");
+expect(continuityPath, continuity, /type:\s*"resume-privacy-assessment"/, "privacy assessment attention must expose resume action");
 reject(continuityPath, continuity, /findings|dataCategories|specialCategories/, "central Privacy attention must not receive restricted assurance content");
 
 const actionCenterPath = "components/workflow-action-center.tsx";
