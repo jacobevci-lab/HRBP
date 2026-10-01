@@ -6,10 +6,10 @@ import { asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { integrationActivationIssues } from "@/lib/settings-connection-validation";
 
-type LifecycleAction = "activate" | "disable" | "reopen";
+type LifecycleAction = "validate" | "activate" | "disable" | "reopen";
 
 function actionValue(value: unknown): LifecycleAction | null {
-  return value === "activate" || value === "disable" || value === "reopen" ? value : null;
+  return value === "validate" || value === "activate" || value === "disable" || value === "reopen" ? value : null;
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -24,10 +24,31 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
   const action = actionValue(body.action);
-  if (!action) return Response.json({ error: "action must be activate, disable or reopen." }, { status: 400 });
+  if (!action) return Response.json({ error: "action must be validate, activate, disable or reopen." }, { status: 400 });
 
   const current = await db.integrationConnection.findFirst({ where: { id, tenantId: ctx.tenantId } });
   if (!current) return Response.json({ error: "Integration was not found." }, { status: 404 });
+
+  if (action === "validate") {
+    if (current.status !== ConnectionStatus.DRAFT) return Response.json({ error: "Only DRAFT integrations can be configuration-validated." }, { status: 409 });
+    const issues = integrationActivationIssues(current);
+    if (issues.length) return Response.json({ error: `Integration configuration is incomplete. Missing: ${issues.join(", ")}.` }, { status: 409 });
+    const data = await db.$transaction(async (tx) => {
+      const updated = await tx.integrationConnection.update({
+        where: { id },
+        data: { lastValidatedAt: new Date(), lastError: null }
+      });
+      await appendAudit(tx, ctx, {
+        action: "settings.integration-config-validated",
+        resourceType: "IntegrationConnection",
+        resourceId: id,
+        classification: DataClassification.RESTRICTED,
+        purpose: "Integration configuration metadata validated before governed activation"
+      });
+      return updated;
+    });
+    return Response.json({ data });
+  }
 
   if (action === "activate") {
     if (current.status === ConnectionStatus.ACTIVE && current.enabled) return Response.json({ data: current });
@@ -37,6 +58,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     const issues = integrationActivationIssues(current);
     if (issues.length) return Response.json({ error: `Integration is not activation-ready. Missing: ${issues.join(", ")}.` }, { status: 409 });
+    if (!current.lastValidatedAt) return Response.json({ error: "Validate the integration configuration before activation." }, { status: 409 });
 
     const data = await db.$transaction(async (tx) => {
       const updated = await tx.integrationConnection.update({
@@ -84,7 +106,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const data = await db.$transaction(async (tx) => {
     const updated = await tx.integrationConnection.update({
       where: { id },
-      data: { status: ConnectionStatus.DRAFT, enabled: false, lastError: null }
+      data: { status: ConnectionStatus.DRAFT, enabled: false, lastValidatedAt: null, lastError: null }
     });
     await appendAudit(tx, ctx, {
       action: "settings.integration-reopened",
