@@ -131,6 +131,105 @@
 .auth-screen .auth-footnote>div{display:flex;flex-direction:column;gap:5px}
 .auth-screen .auth-footnote strong{font-size:10.5px;color:#e9ece8}
 .auth-screen .auth-footnote span:not(.auth-footnote-icon){font-size:8.8px;color:#819089;line-height:1.65}
+
+html[data-theme="light"] .auth-screen{
+  --auth-bg:#eef3ef;
+  --auth-panel:#fbfcfa;
+  --auth-panel-soft:#f6f8f5;
+  --auth-surface:#ffffff;
+  --auth-line:#d6dfd9;
+  --auth-line-strong:#b7c7bf;
+  --auth-text:#17231f;
+  --auth-muted:#6f7f78;
+  --auth-accent:#2fae98;
+  --auth-accent-strong:#248f7d;
+  --auth-accent-soft:rgba(47,174,152,.10);
+  background:
+    radial-gradient(circle at 18% 8%,rgba(47,174,152,.10),transparent 30%),
+    radial-gradient(circle at 88% 0%,rgba(47,174,152,.05),transparent 28%),
+    linear-gradient(145deg,#eef3ef 0%,#e9efeb 58%,#e5ece7 100%);
+  color:var(--auth-text)
+}
+html[data-theme="light"] .auth-screen .auth-panel{
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.86),rgba(255,255,255,.93)),
+    var(--auth-panel);
+  border-color:#d5ddd8;
+  box-shadow:0 26px 70px rgba(40,60,52,.10),0 0 0 1px rgba(255,255,255,.65) inset
+}
+html[data-theme="light"] .auth-screen .auth-panel:before{
+  background:linear-gradient(120deg,rgba(47,174,152,.035),transparent 30%,transparent 70%,rgba(47,174,152,.02))
+}
+html[data-theme="light"] .auth-screen .auth-brand strong{color:#15211d}
+html[data-theme="light"] .auth-brand-trail{color:#687972}
+html[data-theme="light"] .auth-brand-trail i{color:#87968f}
+html[data-theme="light"] .auth-screen .auth-kicker{color:#299d88}
+html[data-theme="light"] .auth-screen .auth-panel h1{color:#17231f}
+html[data-theme="light"] .auth-screen .auth-intro>p{color:#74837c}
+html[data-theme="light"] .auth-screen .auth-primary{
+  background:linear-gradient(135deg,#2e8f7e,#3b9c89);
+  border-color:#2b8a79;
+  color:#fff;
+  box-shadow:0 10px 24px rgba(47,142,124,.14),inset 0 1px 0 rgba(255,255,255,.15)
+}
+html[data-theme="light"] .auth-screen .auth-primary:hover{
+  background:linear-gradient(135deg,#2b8878,#36927f);
+  box-shadow:0 13px 28px rgba(47,142,124,.18)
+}
+html[data-theme="light"] .auth-method-divider{color:#77877f}
+html[data-theme="light"] .auth-method-divider:before{background:linear-gradient(90deg,transparent,#c6d0cb)}
+html[data-theme="light"] .auth-method-divider:after{background:linear-gradient(90deg,#c6d0cb,transparent)}
+html[data-theme="light"] .local-auth-card{
+  background:linear-gradient(180deg,#f5f7f4,#f0f4f1);
+  border-color:#cfd9d3;
+  box-shadow:0 10px 28px rgba(53,76,66,.06),inset 0 1px 0 rgba(255,255,255,.85)
+}
+html[data-theme="light"] .local-auth-head>span{color:#7a8982}
+html[data-theme="light"] .auth-field>label{color:#26332e}
+html[data-theme="light"] .auth-input-shell{
+  background:#ffffff;
+  border-color:#c8d3cd;
+  box-shadow:0 1px 0 rgba(255,255,255,.8) inset
+}
+html[data-theme="light"] .auth-input-shell:focus-within{
+  background:#ffffff;
+  border-color:#58ad9c;
+  box-shadow:0 0 0 3px rgba(47,174,152,.10)
+}
+html[data-theme="light"] .auth-input-shell>svg{color:#70817a}
+html[data-theme="light"] .auth-input-shell input{color:#17231f}
+html[data-theme="light"] .auth-input-shell input::placeholder{color:#8a9791}
+html[data-theme="light"] .auth-password-toggle{color:#74857e}
+html[data-theme="light"] .auth-password-toggle:hover{background:rgba(47,174,152,.08);color:#278f7d}
+html[data-theme="light"] .auth-screen .auth-secondary{
+  background:#ffffff;
+  color:#26332e;
+  border-color:#d1dad5
+}
+html[data-theme="light"] .auth-screen .auth-secondary:hover{
+  background:#f6f8f5;
+  border-color:#b7c5be
+}
+html[data-theme="light"] .auth-screen .auth-message.error{
+  background:#fff3f1;
+  color:#9e5148;
+  border-color:#edd3ce
+}
+html[data-theme="light"] .auth-screen .auth-message.success{
+  background:#edf8f3;
+  color:#2e7666;
+  border-color:#d2eadd
+}
+html[data-theme="light"] .auth-screen .auth-footnote{
+  border-top-color:#d7dfda
+}
+html[data-theme="light"] .auth-footnote-icon{
+  background:#edf5f1;
+  color:#62776e
+}
+html[data-theme="light"] .auth-screen .auth-footnote strong{color:#24312c}
+html[data-theme="light"] .auth-screen .auth-footnote span:not(.auth-footnote-icon){color:#72837b}
+
 @media(max-width:760px){
   .auth-screen{padding:18px}
   .auth-screen .auth-panel{padding:30px 24px 26px;border-radius:20px}
