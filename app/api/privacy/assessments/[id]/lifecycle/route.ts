@@ -55,7 +55,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (action === "START") {
       if (terminalStatuses.has(current.status.toUpperCase())) throw new Error("STATE");
       const updated = await tx.privacyRiskAssessment.update({
-        where: { id: current.id },
+        where: { id: current.id, status: current.status },
         data: { status: "IN_PROGRESS", completedAt: null }
       });
       await appendAudit(tx, ctx, {
@@ -71,7 +71,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (action === "WAIT") {
       if (terminalStatuses.has(current.status.toUpperCase())) throw new Error("STATE");
       const updated = await tx.privacyRiskAssessment.update({
-        where: { id: current.id },
+        where: { id: current.id, status: current.status },
         data: { status: "WAITING" }
       });
       await appendAudit(tx, ctx, {
@@ -87,7 +87,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (action === "COMPLETE") {
       if (terminalStatuses.has(current.status.toUpperCase())) throw new Error("STATE");
       const updated = await tx.privacyRiskAssessment.update({
-        where: { id: current.id },
+        where: { id: current.id, status: current.status },
         data: {
           status: "COMPLETED",
           completedAt: new Date(),
@@ -109,7 +109,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     if (!terminalStatuses.has(current.status.toUpperCase())) throw new Error("STATE");
     const updated = await tx.privacyRiskAssessment.update({
-      where: { id: current.id },
+      where: { id: current.id, status: current.status },
       data: { status: "IN_PROGRESS", completedAt: null }
     });
     await appendAudit(tx, ctx, {
