@@ -87,9 +87,9 @@ expect(audienceOptionsPath, audienceOptions, /resolveEmploymentScope\(db, ctx\)/
 expect(audienceOptionsPath, audienceOptions, /status:\s*\{\s*not:\s*EmploymentStatus\.TERMINATED/, "terminated employments must not contribute to audience options");
 reject(audienceOptionsPath, audienceOptions, /givenName|familyName|email|employeeNumber/, "campaign audience options must not expose employee identity");
 
-expect(campaignPath, campaign, /if \(!hasSelectors\)[\s\S]*scope === null[\s\S]*return \{\}/, "tenant-wide blank audiences must not persist raw selector payloads");
+expect(campaignPath, campaign, /if \(!hasSelectors\)[\s\S]*scope === null[\s\S]*employment\.findMany[\s\S]*status:\s*\{\s*not:\s*EmploymentStatus\.TERMINATED/, "tenant-wide blank audiences must freeze the active employment population");
 expect(campaignPath, campaign, /tenantId:\s*ctx\.tenantId[\s\S]*status:\s*\{\s*not:\s*EmploymentStatus\.TERMINATED/, "all audience selectors must canonicalize through active tenant employments");
-expect(campaignPath, campaign, /return \{ employmentIds:\s*canonicalIds, targetCount:\s*canonicalIds\.length \}/, "selected audiences must persist only canonical employment ids and target count");
+expect(campaignPath, campaign, /return \{ employmentIds:\s*canonicalIds, targetCount:\s*canonicalIds\.length \}/, "campaign audiences must persist canonical employment ids and target count");
 
 const campaignUiPath = "components/engagement-campaign-create-form.tsx";
 const campaignUi = await source(campaignUiPath);
