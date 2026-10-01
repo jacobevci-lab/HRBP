@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle, Pencil, Plus, Save, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, LoaderCircle, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -51,6 +51,7 @@ export function EngagementSurveyAuthoring({ surveys, canWrite }: { surveys: Surv
   const [savingSurvey, setSavingSurvey] = useState(false);
   const [savingQuestion, setSavingQuestion] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
   const [surveyForm, setSurveyForm] = useState({ code: "", name: "", description: "" });
   const [selectedSurveyId, setSelectedSurveyId] = useState(surveys[0]?.id ?? "");
   const [question, setQuestion] = useState<QuestionDraft>(emptyQuestion);
@@ -144,6 +145,36 @@ export function EngagementSurveyAuthoring({ surveys, canWrite }: { surveys: Surv
       setError("Engagement service could not be reached.");
     } finally {
       setSavingQuestion(false);
+    }
+  }
+
+  async function moveQuestion(questionId: string, direction: -1 | 1) {
+    if (!selectedSurvey || !canEditSelected || reordering) return;
+    const ordered = [...selectedSurvey.questions].sort((left, right) => left.orderIndex - right.orderIndex);
+    const index = ordered.findIndex((item) => item.id === questionId);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= ordered.length) return;
+    const next = [...ordered];
+    [next[index], next[target]] = [next[target], next[index]];
+
+    setReordering(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/engagement/surveys/${encodeURIComponent(selectedSurvey.id)}/questions/reorder`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-purpose": "Engagement survey question ordering" },
+        body: JSON.stringify({ questionIds: next.map((item) => item.id) })
+      });
+      const value = await response.json() as { error?: string };
+      if (!response.ok) {
+        setError(value.error || "Question order could not be updated.");
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("Engagement service could not be reached.");
+    } finally {
+      setReordering(false);
     }
   }
 
@@ -277,7 +308,7 @@ export function EngagementSurveyAuthoring({ surveys, canWrite }: { surveys: Surv
           <tbody>{selectedSurvey.questions.length ? selectedSurvey.questions.map((item) => <tr key={item.id}>
             <td>{item.orderIndex}</td><td><strong>{item.questionKey}</strong></td><td>{item.prompt}</td><td>{item.type}</td><td>{item.dimension ?? "—"}</td><td>{item.required ? "Yes" : "No"}</td>
             <td>{canEditSelected ? <div className="comp-decision-buttons">
-              <button type="button" className="mini-action apply" onClick={() => editQuestion(item)}><Pencil size={12}/> Edit</button>
+              <button type="button" className="mini-action apply" disabled={reordering || item.orderIndex === 1} onClick={() => void moveQuestion(item.id, -1)}><ArrowUp size={12}/> Up</button><button type="button" className="mini-action apply" disabled={reordering || item.orderIndex === selectedSurvey.questions.length} onClick={() => void moveQuestion(item.id, 1)}><ArrowDown size={12}/> Down</button><button type="button" className="mini-action apply" onClick={() => editQuestion(item)}><Pencil size={12}/> Edit</button>
               <button type="button" className="mini-action reject" disabled={deleting === item.id} onClick={() => void removeQuestion(item.id)}>{deleting === item.id ? <LoaderCircle size={12}/> : <Trash2 size={12}/>} Delete</button>
             </div> : <span className="matrix-note">Locked</span>}</td>
           </tr>) : <tr><td colSpan={7} style={{ textAlign: "center", padding: 18 }}>No questions authored yet.</td></tr>}</tbody>
