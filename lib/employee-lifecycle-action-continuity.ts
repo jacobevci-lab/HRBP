@@ -1,7 +1,9 @@
 import {
   AccessRevocationStatus,
   AssetReturnStatus,
+  EmploymentStatus,
   ExitTaskStatus,
+  OnboardingStatus,
   OnboardingTaskStatus,
   SeparationStatus
 } from "@prisma/client";
@@ -65,44 +67,66 @@ function sortItems(left: FullLifecycleActionItem, right: FullLifecycleActionItem
 async function onboardingItems(ctx: RequestContext): Promise<EmployeeLifecycleAttentionItem[]> {
   if (!can(ctx, "onboarding:write")) return [];
   const scope = await resolveOnboardingPopulationScope(db, ctx);
-  const plans = await db.onboardingPlan.findMany({
-    where: {
-      tenantId: ctx.tenantId,
-      ...onboardingPlanPopulationFilter(scope),
-      tasks: {
-        some: {
-          sensitive: false,
-          status: { in: OPEN_ONBOARDING_TASKS }
-        }
-      }
-    },
-    orderBy: [{ targetStartDate: "asc" }, { createdAt: "asc" }],
-    take: 100,
-    select: {
-      id: true,
-      targetStartDate: true,
-      createdAt: true,
-      person: { select: { givenName: true, familyName: true } },
-      tasks: {
-        where: {
-          sensitive: false,
-          status: { in: OPEN_ONBOARDING_TASKS }
-        },
-        orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
-        take: 50,
-        select: {
-          id: true,
-          title: true,
-          ownerType: true,
-          status: true,
-          dueDate: true,
-          createdAt: true
-        }
-      }
-    }
-  });
+  const canActivateEmployment = can(ctx, "people:write");
 
-  return plans.flatMap((plan) => plan.tasks.map((task): EmployeeLifecycleAttentionItem => {
+  const [plans, activationPlans] = await Promise.all([
+    db.onboardingPlan.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        ...onboardingPlanPopulationFilter(scope),
+        tasks: {
+          some: {
+            sensitive: false,
+            status: { in: OPEN_ONBOARDING_TASKS }
+          }
+        }
+      },
+      orderBy: [{ targetStartDate: "asc" }, { createdAt: "asc" }],
+      take: 100,
+      select: {
+        id: true,
+        targetStartDate: true,
+        createdAt: true,
+        person: { select: { givenName: true, familyName: true } },
+        tasks: {
+          where: {
+            sensitive: false,
+            status: { in: OPEN_ONBOARDING_TASKS }
+          },
+          orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+          take: 50,
+          select: {
+            id: true,
+            title: true,
+            ownerType: true,
+            status: true,
+            dueDate: true,
+            createdAt: true
+          }
+        }
+      }
+    }),
+    canActivateEmployment ? db.onboardingPlan.findMany({
+      where: {
+        tenantId: ctx.tenantId,
+        ...onboardingPlanPopulationFilter(scope),
+        status: OnboardingStatus.COMPLETED,
+        employment: { is: { status: EmploymentStatus.PREBOARDING } }
+      },
+      orderBy: [{ targetStartDate: "asc" }, { createdAt: "asc" }],
+      take: 100,
+      select: {
+        id: true,
+        status: true,
+        targetStartDate: true,
+        createdAt: true,
+        person: { select: { givenName: true, familyName: true } },
+        employment: { select: { id: true, status: true, startDate: true } }
+      }
+    }) : Promise.resolve([])
+  ]);
+
+  const taskItems = plans.flatMap((plan) => plan.tasks.map((task): EmployeeLifecycleAttentionItem => {
     const dueAt = task.dueDate ?? plan.targetStartDate;
     return {
       id: `onboarding:${task.id}`,
@@ -124,6 +148,31 @@ async function onboardingItems(ctx: RequestContext): Promise<EmployeeLifecycleAt
         : { type: "advance-onboarding-task", taskId: task.id, status: "IN_PROGRESS" }
     };
   }));
+
+  const now = Date.now();
+  const activationItems = activationPlans.map((plan): EmployeeLifecycleAttentionItem => {
+    const startReached = plan.targetStartDate.getTime() <= now
+      && Boolean(plan.employment && plan.employment.startDate.getTime() <= now);
+    return {
+      id: `onboarding:activation:${plan.id}`,
+      kind: "onboarding",
+      title: `Employment activation · ${plan.person.givenName} ${plan.person.familyName}`,
+      subtitle: startReached
+        ? "Completed onboarding · preboarding employment ready for governed activation"
+        : "Completed onboarding · awaiting governed start date",
+      module: "onboarding",
+      href: `/module/onboarding?plan=${encodeURIComponent(plan.id)}`,
+      subjectType: "OnboardingPlan",
+      subjectId: plan.id,
+      status: "activation ready",
+      dueAt: plan.targetStartDate.toISOString(),
+      createdAt: plan.createdAt.toISOString(),
+      urgency: startReached ? "warning" : urgencyForDueDate(plan.targetStartDate, "normal"),
+      action: startReached ? { type: "activate-onboarding-employment", planId: plan.id } : null
+    };
+  });
+
+  return [...taskItems, ...activationItems];
 }
 
 async function offboardingItems(ctx: RequestContext): Promise<EmployeeLifecycleAttentionItem[]> {
