@@ -48,7 +48,8 @@ function sourceLabel(resourceType: string, tr: boolean) {
     WorkflowDefinition: ["Workflow definition", "İş akışı tanımı"],
     WorkflowTask: ["Workflow task", "İş akışı görevi"],
     SurveyCampaign: ["Engagement campaign", "Bağlılık kampanyası"],
-    DataSubjectRequest: ["Privacy DSR", "Gizlilik DSR"]
+    DataSubjectRequest: ["Privacy DSR", "Gizlilik DSR"],
+    PrivacyRiskAssessment: ["Privacy assessment", "Gizlilik değerlendirmesi"]
   };
   const label = labels[resourceType];
   return label ? (tr ? label[1] : label[0]) : resourceType;
