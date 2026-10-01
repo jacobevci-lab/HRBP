@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.HRBP_STAGING_DATABASE_URL }}
+      HRBP_TEST_ADMIN_PASSWORD: ${{ secrets.HRBP_TEST_ADMIN_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -59,7 +60,7 @@ jobs:
           import { PrismaClient } from '@prisma/client';
           const db = new PrismaClient();
           const [
-            tenants, people, positions,
+            tenants, people, positions, localAdmins,
             timeEntries, leaveRequests, compChanges, payrollRuns, payrollResults,
             accessGrants, jurisdictions, goals, reviews, serviceRequests, serviceQueues, queueMembers,
             policies, policyExceptions, workflows,
@@ -69,6 +70,7 @@ jobs:
             db.tenant.count(),
             db.person.count(),
             db.position.count(),
+            db.userAccount.count({ where: { subject: "local.admin", role: "TENANT_ADMIN", active: true } }),
             db.timeEntry.count(),
             db.leaveRequest.count(),
             db.compensationChange.count(),
@@ -116,7 +118,7 @@ jobs:
             })
           ]);
           const counts = {
-            tenants, people, positions,
+            tenants, people, positions, localAdmins,
             timeEntries, leaveRequests, compChanges, payrollRuns, payrollResults,
             accessGrants, jurisdictions, goals, reviews, serviceRequests, serviceQueues, queueMembers,
             policies, policyExceptions, workflows,
