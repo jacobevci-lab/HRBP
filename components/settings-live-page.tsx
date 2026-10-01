@@ -1,6 +1,7 @@
 import { Activity, BellRing, CloudCog, Database, KeyRound, Link2, LockKeyhole, ShieldCheck, UsersRound, Workflow } from "lucide-react";
 import { AccessScopeAdmin } from "@/components/access-scope-admin";
 import { JurisdictionAdmin } from "@/components/jurisdiction-admin";
+import { LocalAccountAdmin } from "@/components/local-account-admin";
 import { NotificationDeadLetterAction } from "@/components/notification-dead-letter-action";
 import { authConfigurationStatus, getOidcConfig } from "@/lib/auth-config";
 import { can } from "@/lib/authorization";
@@ -127,6 +128,6 @@ export async function SettingsLivePage() {
       {canWrite ? <NotificationDeadLetterAction count={deadLetters}/> : <p className="settings-live-footnote">{c(locale, "Read-only settings access: dead-letter retry requires settings:write.", "Salt-okunur ayar erişimi: dead-letter yeniden deneme settings:write gerektirir.")}</p>}
     </section>
 
-    {canWrite ? <><AccessScopeAdmin/><JurisdictionAdmin/></> : null}
+    {canWrite ? <><LocalAccountAdmin/><AccessScopeAdmin/><JurisdictionAdmin/></> : null}
   </div>;
 }
