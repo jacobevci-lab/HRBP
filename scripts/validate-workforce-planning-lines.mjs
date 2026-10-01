@@ -28,6 +28,12 @@ expect(editPath, edit, /ensureScope\(tx, ctx/, "update/delete must revalidate re
 expect(editPath, edit, /workforce-plan-line\.updated/, "line updates must be audited");
 expect(editPath, edit, /workforce-plan-line\.deleted/, "line deletions must be audited");
 
+const reviewPath = "app/api/workforce-planning/scenarios/[id]/review/route.ts";
+const review = await source(reviewPath);
+expect(reviewPath, review, /current\.ownerId !== ctx\.actorId/, "only the scenario owner may submit or lock a plan");
+expect(reviewPath, review, /workforcePlanLine\.count/, "scenario submission must require at least one plan line");
+expect(reviewPath, review, /throw new Error\("EMPTY"\)/, "empty workforce scenarios must fail closed before review");
+
 const optionsPath = "app/api/workforce-planning/options/route.ts";
 const options = await source(optionsPath);
 expect(optionsPath, options, /can\(ctx,\s*"workforce-plan:read"\)/, "planning options must require workforce plan read authority");
@@ -38,6 +44,7 @@ reject(optionsPath, options, /personId|displayName|email/, "planning options mus
 
 const dataPath = "lib/governance-planning-live-data.ts";
 const data = await source(dataPath);
+expect(dataPath, data, /ownerId:\s*ctx\.actorId[\s\S]*lines:\s*\{\s*some:\s*scopedLineWhere/, "owned empty draft scenarios must remain visible without widening scoped line detail");
 expect(dataPath, data, /lines:\s*scenario\.lines\.map/, "owning Workforce Planning workspace must receive line detail");
 expect(dataPath, data, /demandDriver:\s*line\.demandDriver/, "owning workspace must expose demand drivers");
 expect(dataPath, data, /skillsRequired:/, "owning workspace must expose requested skills");
