@@ -18,6 +18,7 @@ import {
 import { can } from "@/lib/authorization";
 import { WorkforceScenarioActions } from "@/components/workforce-scenario-actions";
 import { WorkforcePlanLineManager } from "@/components/workforce-plan-line-manager";
+import { WorkforceScenarioCreateForm } from "@/components/workforce-scenario-create-form";
 import { DSRLifecycleActions } from "@/components/dsr-lifecycle-actions";
 import { EngagementCampaignActions } from "@/components/engagement-campaign-actions";
 import { EngagementCampaignWindowEditor } from "@/components/engagement-campaign-window-editor";
@@ -107,7 +108,7 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
       </section>
       <section className="gov-split">
         <div className="card gov-panel">
-          <div className="gov-panel-head"><div><span className="section-kicker">Live scenario planning</span><h3>Workforce scenarios</h3></div><span className="matrix-note">{scopeLabel}</span></div>
+          <div className="gov-panel-head"><div><span className="section-kicker">Live scenario planning</span><h3>Workforce scenarios</h3></div><div style={{display:"flex",gap:8,alignItems:"center"}}><span className="matrix-note">{scopeLabel}</span><WorkforceScenarioCreateForm canWrite={canWrite}/></div></div>
           <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Scenario</th><th>Horizon</th><th>Current FTE</th><th>Planned FTE</th><th>Delta</th><th>Cost delta</th><th>Owner</th><th>Status</th><th>Governance</th></tr></thead><tbody>
             {data.rows.length ? data.rows.map((row) => <tr key={row.id} data-workforce-scenario-id={row.id} className={focusId === row.id ? "focused" : undefined}>
               <td><strong>{row.name}</strong><small className="cell-sub">{row.code} · base {row.baseDate}{focusId === row.id ? ` · ${mode === "review" ? "focused review" : "focused scenario"}` : ""}</small></td>
