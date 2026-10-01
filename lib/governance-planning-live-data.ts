@@ -200,7 +200,12 @@ export async function getWorkforcePlanningLiveData(ctx: RequestContext) {
       db.workforceScenario.findMany({
         where: {
           tenantId: ctx.tenantId,
-          ...(projection.relationshipScoped ? { lines: { some: scopedLineWhere } } : {})
+          ...(projection.relationshipScoped ? {
+            OR: [
+              { ownerId: ctx.actorId },
+              { lines: { some: scopedLineWhere } }
+            ]
+          } : {})
         },
         orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
         take: 100,
