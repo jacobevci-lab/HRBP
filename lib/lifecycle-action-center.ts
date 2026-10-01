@@ -140,6 +140,9 @@ export type LifecycleActionItem = {
   } | {
     type: "start-learning-assignment";
     assignmentId: string;
+  } | {
+    type: "start-performance-self-review";
+    reviewId: string;
   };
 };
 
