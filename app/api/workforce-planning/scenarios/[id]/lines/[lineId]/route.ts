@@ -79,10 +79,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const positionIdInput = body.positionId === null ? null : boundedText(body.positionId, 128);
   const currentFte = boundedNumber(body.currentFte, 0, 1_000_000);
   const plannedFte = boundedNumber(body.plannedFte, 0, 1_000_000);
-  const avgAnnualCost = boundedNumber(body.avgAnnualCost, 0, 1_000_000_000);
+  let avgAnnualCost: number | null | undefined;
+  if (body.avgAnnualCost === undefined) avgAnnualCost = undefined;
+  else if (body.avgAnnualCost === null || body.avgAnnualCost === "") avgAnnualCost = null;
+  else {
+    const parsedCost = boundedNumber(body.avgAnnualCost, 0, 1_000_000_000);
+    avgAnnualCost = parsedCost === null || parsedCost === undefined ? Number.NaN : parsedCost;
+  }
   const skillsRequired = normalizeSkills(body.skillsRequired);
 
-  if ([roleLabel, location, demandDriver, orgUnitIdInput, positionIdInput, currentFte, plannedFte, avgAnnualCost, skillsRequired].some((value) => value === null)) {
+  if ([roleLabel, location, demandDriver, orgUnitIdInput, currentFte, plannedFte, skillsRequired].some((value) => value === null) || Number.isNaN(avgAnnualCost)) {
     return Response.json({ error: "Invalid workforce plan line values." }, { status: 400 });
   }
 
@@ -101,7 +107,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         ...(body.location !== undefined ? { location: location ?? null } : {}),
         ...(currentFte !== undefined ? { currentFte: new Prisma.Decimal(currentFte) } : {}),
         ...(plannedFte !== undefined ? { plannedFte: new Prisma.Decimal(plannedFte) } : {}),
-        ...(body.avgAnnualCost !== undefined ? { avgAnnualCost: avgAnnualCost === undefined || avgAnnualCost === null ? null : new Prisma.Decimal(avgAnnualCost) } : {}),
+        ...(body.avgAnnualCost !== undefined ? { avgAnnualCost: avgAnnualCost === null ? null : avgAnnualCost === undefined ? undefined : new Prisma.Decimal(avgAnnualCost) } : {}),
         ...(body.demandDriver !== undefined ? { demandDriver: demandDriver ?? null } : {}),
         ...(skillsRequired !== undefined ? { skillsRequired: skillsRequired as Prisma.InputJsonValue } : {})
       }
