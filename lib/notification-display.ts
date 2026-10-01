@@ -130,5 +130,6 @@ export function notificationDisplayResourceHref(resourceType: string, resourceId
   if (resourceType === "CaseAction") return id ? `/module/employee-relations?action=${encodeURIComponent(id)}` : "/module/employee-relations";
   if (resourceType === "EmployeeCaseAppeal" || resourceType === "CaseAppeal") return id ? `/module/employee-relations?appeal=${encodeURIComponent(id)}` : "/module/employee-relations";
   if (resourceType === "DocumentRecord") return id ? `/module/documents?document=${encodeURIComponent(id)}` : "/module/documents";
+  if (resourceType === "UserAccount") return "/module/settings";
   return notificationResourceHref(resourceType, resourceId);
 }
