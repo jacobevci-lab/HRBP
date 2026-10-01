@@ -65,7 +65,7 @@ async function benefitsPendingItems(ctx: RequestContext): Promise<ExpandedLifecy
     dueAt: enrollment.effectiveFrom.toISOString(),
     createdAt: enrollment.createdAt.toISOString(),
     urgency: urgencyForDueDate(enrollment.effectiveFrom, "normal"),
-    action: null
+    action: { type: "activate-benefit-enrollment", enrollmentId: enrollment.id }
   }));
 }
 
