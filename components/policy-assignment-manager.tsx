@@ -141,7 +141,7 @@ export function PolicyAssignmentManager({
       {open ? <X size={13}/> : <UsersRound size={13}/>} {open ? "Close assignments" : "Assign policy"}
     </button>
 
-    {open ? <div className="card" style={{ padding: 10, display: "grid", gap: 8, minWidth: 560 }}>
+    {open ? <div className="card" style={{ padding: 10, display: "grid", gap: 8, width: "min(760px, 82vw)", maxWidth: "82vw" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
         <span className="matrix-note">
           {options?.relationshipScoped ? "Relationship-scoped employees" : "Tenant-authorized employees"}
