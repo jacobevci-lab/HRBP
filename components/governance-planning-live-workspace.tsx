@@ -25,6 +25,7 @@ import { EngagementCampaignWindowEditor } from "@/components/engagement-campaign
 import { EngagementSurveyAuthoring } from "@/components/engagement-survey-authoring";
 import { EngagementCampaignCreateForm } from "@/components/engagement-campaign-create-form";
 import { EngagementResponseAction } from "@/components/engagement-response-action";
+import { AIInteractionRequestForm } from "@/components/ai-interaction-request-form";
 import { GovernedFocusScroller } from "@/components/governed-focus-scroller";
 import { getServerRequestContext } from "@/lib/server-session";
 import {
@@ -139,7 +140,7 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
       </section>
       <section className="ai-governance-grid">
         <div className="card gov-panel">
-          <div className="gov-panel-head"><div><span className="section-kicker">My interaction ledger</span><h3>Minimal-retention AI telemetry</h3></div><span className="matrix-note">Actor scoped</span></div>
+          <div className="gov-panel-head"><div><span className="section-kicker">My interaction ledger</span><h3>Minimal-retention AI telemetry</h3></div><div style={{display:"flex",gap:8,alignItems:"center"}}><span className="matrix-note">Actor scoped</span><AIInteractionRequestForm/></div></div>
           <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Purpose</th><th>Module</th><th>Class</th><th>Prompt fingerprint</th><th>Model</th><th>Created</th><th>Status</th></tr></thead><tbody>
             {data.rows.length ? data.rows.map((row) => <tr key={row.id}><td><strong>{row.purpose}</strong>{row.blockedReason ? <small className="cell-sub">{row.blockedReason}</small> : null}</td><td>{row.module}</td><td>{row.classification}</td><td><code>{row.promptFingerprint}</code></td><td>{row.model}</td><td>{row.createdAt}</td><td><Pill value={row.status}/></td></tr>) : <Empty text="No AI interaction telemetry is recorded for your account in the last 7 days." columns={7}/>} 
           </tbody></table></div>
