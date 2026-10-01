@@ -27,6 +27,22 @@ expect(routePath, route, /P2002/, "duplicate response tokens must return a confl
 expect(routePath, route, /questions:\s*existing \? \[\]/, "submitted respondents must not receive answer-form questions again");
 reject(routePath, route, /promptHash|responseHash/, "engagement response intake must not reuse AI telemetry fields");
 
+const attentionHelperPath = "lib/engagement-response-attention.ts";
+const attentionHelper = await source(attentionHelperPath);
+expect(attentionHelperPath, attentionHelper, /HRBP_ENGAGEMENT_RESPONSE_SECRET/, "pending response attention must use the same stable HMAC secret");
+expect(attentionHelperPath, attentionHelper, /status:\s*SurveyStatus\.OPEN/, "response attention must include only OPEN campaigns");
+expect(attentionHelperPath, attentionHelper, /status:\s*\{\s*not:\s*EmploymentStatus\.TERMINATED/, "response attention must require active employment context");
+expect(attentionHelperPath, attentionHelper, /canonicalAudienceIds/, "response attention must enforce canonical audience membership");
+expect(attentionHelperPath, attentionHelper, /surveyResponse\.findMany/, "response attention must suppress already-submitted campaigns");
+expect(attentionHelperPath, attentionHelper, /respondentTokenHash/, "response attention must match pseudonymous submission tokens inside the owning Engagement helper");
+
+const continuityPath = "lib/engagement-action-center-continuity.ts";
+const continuity = await source(continuityPath);
+expect(continuityPath, continuity, /getPendingEngagementResponseCampaigns\(ctx\)/, "Engagement continuity must consume privacy-safe pending-response candidates");
+expect(continuityPath, continuity, /\/module\/engagement\?campaign=.*mode=respond/, "pending response attention must deep-link to the exact Engagement campaign");
+expect(continuityPath, continuity, /Your response is pending/, "Action Center must identify pending participant response work");
+reject(continuityPath, continuity, /audienceFilter|respondentTokenHash|SurveyAnswer|questionKey|prompt:/, "central Engagement continuity must not expose audience, pseudonym or answer content");
+
 const envPath = ".env.example";
 const env = await source(envPath);
 expect(envPath, env, /HRBP_ENGAGEMENT_RESPONSE_SECRET=replace-with-at-least-32-random-characters/, "engagement response HMAC secret must be documented");
