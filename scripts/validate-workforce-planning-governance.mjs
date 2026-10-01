@@ -20,12 +20,17 @@ expect(continuityPath, continuity, /resolveEmploymentScope/, "review attention m
 expect(continuityPath, continuity, /status:\s*WorkforceScenarioStatus\.REVIEW/, "only review-ready scenarios may enter attention");
 expect(continuityPath, continuity, /ownerId:\s*\{\s*not:\s*ctx\.actorId\s*\}/, "Action Center must preserve four-eyes self-review prevention");
 expect(continuityPath, continuity, /workforcePlanning:\s*items\.filter/, "summary must expose aggregate Workforce Planning attention");
+expect(continuityPath, continuity, /type:\s*"approve-workforce-scenario"[\s\S]*type:\s*"request-workforce-changes"/, "Workforce Planning review attention must expose bounded approve and request-changes actions");
 reject(continuityPath, continuity, /avgAnnualCost|currentFte|plannedFte|skillsRequired|costDelta/, "central attention must not load planning cost, FTE or skill detail");
 
 const uiPath = "components/workflow-action-center.tsx";
 const ui = await source(uiPath);
 expect(uiPath, ui, /"workforce-planning"/, "Action Center must expose Workforce Planning as a source");
 expect(uiPath, ui, /summary\.workforcePlanning/, "Action Center must show aggregate Workforce Planning attention");
+expect(uiPath, ui, /item\.action\.type === "approve-workforce-scenario"[\s\S]*\/api\/workforce-planning\/scenarios\//, "Workforce Planning approval must use the governed scenario review endpoint");
+expect(uiPath, ui, /item\.secondaryAction\.type === "request-workforce-changes"[\s\S]*REQUEST_CHANGES/, "Workforce Planning change requests must reuse the governed scenario review endpoint");
+expect(uiPath, ui, /resourceType:\s*"WorkforceScenario"/, "Workforce Planning quick decisions must clear matching notifications best-effort");
+expect(uiPath, ui, /window\.confirm\(copy\.confirm\)/, "Workforce Planning quick decisions must require explicit confirmation");
 
 const livePath = "components/governance-planning-live-workspace.tsx";
 const live = await source(livePath);
