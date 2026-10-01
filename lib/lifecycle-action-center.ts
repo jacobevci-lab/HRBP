@@ -49,6 +49,9 @@ export type LifecycleActionItem = {
   } | {
     type: "return-offer";
     offerId: string;
+  } | {
+    type: "request-policy-changes";
+    policyId: string;
   };
   action: null | {
     type: "complete-workflow";
@@ -78,6 +81,9 @@ export type LifecycleActionItem = {
   } | {
     type: "approve-offer";
     offerId: string;
+  } | {
+    type: "approve-policy";
+    policyId: string;
   };
 };
 
