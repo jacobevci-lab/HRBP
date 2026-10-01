@@ -46,7 +46,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (action === "SCHEDULE_REVIEW") {
       if (!current.active) throw new Error("STATE");
       const updated = await tx.dataTransferRegister.update({
-        where: { id: current.id },
+        where: { id: current.id, active: current.active },
         data: { transferImpactDueAt: nextDueAt }
       });
       await appendAudit(tx, ctx, {
@@ -62,7 +62,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (action === "COMPLETE_REVIEW") {
       if (!current.active || !current.transferImpactDueAt) throw new Error("STATE");
       const updated = await tx.dataTransferRegister.update({
-        where: { id: current.id },
+        where: { id: current.id, active: current.active },
         data: { transferImpactDueAt: nextDueAt ?? null }
       });
       await appendAudit(tx, ctx, {
@@ -78,7 +78,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (action === "DEACTIVATE") {
       if (!current.active) throw new Error("STATE");
       const updated = await tx.dataTransferRegister.update({
-        where: { id: current.id },
+        where: { id: current.id, active: current.active },
         data: { active: false }
       });
       await appendAudit(tx, ctx, {
@@ -93,7 +93,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     if (current.active) throw new Error("STATE");
     const updated = await tx.dataTransferRegister.update({
-      where: { id: current.id },
+      where: { id: current.id, active: current.active },
       data: { active: true, transferImpactDueAt: nextDueAt }
     });
     await appendAudit(tx, ctx, {
