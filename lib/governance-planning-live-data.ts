@@ -114,7 +114,7 @@ function scopedCampaignTarget(audience: ReturnType<typeof audienceDefinition>, p
 export async function getEngagementLiveData(ctx: RequestContext) {
   return withDb(async (db) => {
     const projection = await resolveWorkforceProjection(db, ctx);
-    const campaigns = await db.surveyCampaign.findMany({
+    const [campaigns, surveys] = await Promise.all([db.surveyCampaign.findMany({
       where: { tenantId: ctx.tenantId },
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       take: 100,
@@ -130,7 +130,16 @@ export async function getEngagementLiveData(ctx: RequestContext) {
         createdById: true,
         survey: { select: { code: true, name: true } }
       }
-    });
+    }), db.engagementSurvey.findMany({
+      where: { tenantId: ctx.tenantId },
+      orderBy: [{ updatedAt: "desc" }, { name: "asc" }],
+      take: 100,
+      select: {
+        id: true, code: true, name: true, description: true, createdById: true,
+        questions: { orderBy: { orderIndex: "asc" }, select: { id: true, questionKey: true, prompt: true, type: true, required: true, orderIndex: true, options: true, dimension: true } },
+        campaigns: { select: { status: true }, take: 100 }
+      }
+    })]);
 
     const visibleCampaigns = campaigns.filter((campaign) => campaignVisible(audienceDefinition(campaign.audienceFilter), projection));
     const visibleCampaignIds = visibleCampaigns.map((campaign) => campaign.id);
@@ -179,6 +188,24 @@ export async function getEngagementLiveData(ctx: RequestContext) {
       suppressedCampaigns: rows.filter((row) => row.suppressed).length,
       anonymousCampaigns: visibleCampaigns.filter((campaign) => campaign.anonymous).length,
       relationshipScoped: projection.relationshipScoped,
+      surveys: surveys.map((survey) => ({
+        id: survey.id,
+        code: survey.code,
+        name: survey.name,
+        description: survey.description,
+        createdById: survey.createdById,
+        editable: survey.createdById === ctx.actorId && !survey.campaigns.some((campaign) => campaign.status !== SurveyStatus.DRAFT),
+        questions: survey.questions.map((question) => ({
+          id: question.id,
+          questionKey: question.questionKey,
+          prompt: question.prompt,
+          type: question.type,
+          required: question.required,
+          orderIndex: question.orderIndex,
+          options: Array.isArray(question.options) ? question.options.filter((item): item is string => typeof item === "string") : [],
+          dimension: question.dimension
+        }))
+      })),
       rows
     };
   });
