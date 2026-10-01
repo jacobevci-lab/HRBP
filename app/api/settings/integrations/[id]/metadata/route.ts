@@ -57,6 +57,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           secretRef,
           ...(scopes === undefined ? {} : { scopes }),
           enabled: false,
+          lastValidatedAt: null,
           lastSyncAt: null,
           lastError: null
         }

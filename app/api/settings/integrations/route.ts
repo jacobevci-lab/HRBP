@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     orderBy: { name: "asc" },
     select: {
       id: true, name: true, systemType: true, baseUrl: true, authType: true, secretRef: true,
-      scopes: true, enabled: true, status: true, lastSyncAt: true, lastError: true,
+      scopes: true, enabled: true, status: true, lastValidatedAt: true, lastSyncAt: true, lastError: true,
       createdAt: true, updatedAt: true
     }
   });

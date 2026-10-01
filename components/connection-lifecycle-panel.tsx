@@ -10,6 +10,8 @@ function c(locale: "en" | "tr", en: string, tr: string) {
   return locale === "tr" ? tr : en;
 }
 
+function fmt(locale: "en" | "tr", value: Date | null | undefined) { if (!value) return "—"; return new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(value); }
+
 function statusTone(status: string) {
   return status === "ACTIVE" ? "ok" : status === "DEGRADED" ? "danger" : status === "DRAFT" ? "draft" : "muted";
 }
@@ -25,7 +27,7 @@ export async function ConnectionLifecyclePanel() {
 
   return <section className="connection-lifecycle-panel">
     <div className="connection-lifecycle-heading">
-      <div><span className="section-kicker">{c(locale, "Governed activation", "Yönetişim kontrollü aktivasyon")}</span><h2>{c(locale, "Connection Lifecycle Control", "Bağlantı Yaşam Döngüsü Kontrolü")}</h2><p>{c(locale, "Draft connections are activated only after required metadata is present and an administrator records an explicit attestation. All transitions are tenant-scoped and audited.", "Taslak bağlantılar yalnızca gerekli metadata tamamlandıktan ve bir yönetici açık teyit girdikten sonra etkinleştirilir. Tüm geçişler tenant kapsamındadır ve denetlenir.")}</p></div>
+      <div><span className="section-kicker">{c(locale, "Governed activation", "Yönetişim kontrollü aktivasyon")}</span><h2>{c(locale, "Connection Lifecycle Control", "Bağlantı Yaşam Döngüsü Kontrolü")}</h2><p>{c(locale, "Draft connections are activated only after required metadata is present, configuration validation is recorded and an administrator provides an explicit attestation. All transitions are tenant-scoped and audited.", "Taslak bağlantılar yalnızca gerekli metadata tamamlandıktan, yapılandırma doğrulaması kaydedildikten ve bir yönetici açık teyit girdikten sonra etkinleştirilir. Tüm geçişler tenant kapsamındadır ve denetlenir.")}</p></div>
       <ShieldCheck size={20}/>
     </div>
 
@@ -35,7 +37,7 @@ export async function ConnectionLifecyclePanel() {
         <div className="connection-lifecycle-table-wrap"><table className="connection-lifecycle-table"><thead><tr><th>{c(locale, "Provider", "Sağlayıcı")}</th><th>{c(locale, "Type", "Tür")}</th><th>{c(locale, "Readiness", "Hazırlık")}</th><th>{c(locale, "Status", "Durum")}</th>{canWrite ? <th>{c(locale, "Action", "Aksiyon")}</th> : null}</tr></thead><tbody>
           {identities.length ? identities.map((row) => {
             const issues = identityActivationIssues(row);
-            return <tr key={row.id}><td><strong>{row.name}</strong><small>{row.issuer ?? row.metadataUrl ?? "—"}</small></td><td>{row.type.replaceAll("_", " ")}</td><td>{issues.length ? <span className="connection-readiness attention">{c(locale, `Missing ${issues.join(", ")}`, `Eksik: ${issues.join(", ")}`)}</span> : <span className="connection-readiness ready">{c(locale, "Ready", "Hazır")}</span>}</td><td><span className={`connection-status ${statusTone(row.status)}`}>{row.status}</span></td>{canWrite ? <td><ConnectionLifecycleActions kind="identity" id={row.id} name={row.name} status={row.status}/></td> : null}</tr>;
+            return <tr key={row.id}><td><strong>{row.name}</strong><small>{row.issuer ?? row.metadataUrl ?? "—"}</small></td><td>{row.type.replaceAll("_", " ")}</td><td>{issues.length ? <span className="connection-readiness attention">{c(locale, `Missing ${issues.join(", ")}`, `Eksik: ${issues.join(", ")}`)}</span> : row.lastValidatedAt ? <span className="connection-readiness ready">{c(locale, "Validated", "Doğrulandı")} · {fmt(locale, row.lastValidatedAt)}</span> : <span className="connection-readiness attention">{c(locale, "Validation required", "Doğrulama gerekli")}</span>}</td><td><span className={`connection-status ${statusTone(row.status)}`}>{row.status}</span></td>{canWrite ? <td><ConnectionLifecycleActions kind="identity" id={row.id} name={row.name} status={row.status} validated={Boolean(row.lastValidatedAt)}/></td> : null}</tr>;
           }) : <tr><td colSpan={canWrite ? 5 : 4} className="connection-lifecycle-empty">{c(locale, "No identity provider records.", "Kimlik sağlayıcı kaydı yok.")}</td></tr>}
         </tbody></table></div>
       </div>
@@ -45,7 +47,7 @@ export async function ConnectionLifecyclePanel() {
         <div className="connection-lifecycle-table-wrap"><table className="connection-lifecycle-table"><thead><tr><th>{c(locale, "Connection", "Bağlantı")}</th><th>{c(locale, "System", "Sistem")}</th><th>{c(locale, "Readiness", "Hazırlık")}</th><th>{c(locale, "Status", "Durum")}</th>{canWrite ? <th>{c(locale, "Action", "Aksiyon")}</th> : null}</tr></thead><tbody>
           {integrations.length ? integrations.map((row) => {
             const issues = integrationActivationIssues(row);
-            return <tr key={row.id}><td><strong>{row.name}</strong><small>{row.baseUrl ?? "—"}</small></td><td>{row.systemType}<small>{row.authType}</small></td><td>{issues.length ? <span className="connection-readiness attention">{c(locale, `Missing ${issues.join(", ")}`, `Eksik: ${issues.join(", ")}`)}</span> : <span className="connection-readiness ready">{c(locale, "Ready", "Hazır")}</span>}</td><td><span className={`connection-status ${statusTone(row.status)}`}>{row.status}</span></td>{canWrite ? <td><ConnectionLifecycleActions kind="integration" id={row.id} name={row.name} status={row.status}/></td> : null}</tr>;
+            return <tr key={row.id}><td><strong>{row.name}</strong><small>{row.baseUrl ?? "—"}</small></td><td>{row.systemType}<small>{row.authType}</small></td><td>{issues.length ? <span className="connection-readiness attention">{c(locale, `Missing ${issues.join(", ")}`, `Eksik: ${issues.join(", ")}`)}</span> : row.lastValidatedAt ? <span className="connection-readiness ready">{c(locale, "Validated", "Doğrulandı")} · {fmt(locale, row.lastValidatedAt)}</span> : <span className="connection-readiness attention">{c(locale, "Validation required", "Doğrulama gerekli")}</span>}</td><td><span className={`connection-status ${statusTone(row.status)}`}>{row.status}</span></td>{canWrite ? <td><ConnectionLifecycleActions kind="integration" id={row.id} name={row.name} status={row.status} validated={Boolean(row.lastValidatedAt)}/></td> : null}</tr>;
           }) : <tr><td colSpan={canWrite ? 5 : 4} className="connection-lifecycle-empty">{c(locale, "No integration records.", "Entegrasyon kaydı yok.")}</td></tr>}
         </tbody></table></div>
       </div>
