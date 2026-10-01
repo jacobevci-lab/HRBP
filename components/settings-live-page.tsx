@@ -41,7 +41,8 @@ export async function SettingsLivePage() {
   const maintenanceConfigured = Boolean(runtimeString("HRBP_MAINTENANCE_TOKEN"));
   const localAuthRuntimeEnabled = runtimeBoolean("HRBP_LOCAL_AUTH_ENABLED", false);
 
-  const [tenant, security, idps, integrations, userGroups, notificationGroups, activeQueues, workflowGroups, quarantineCount, localAccountCount] = await Promise.all([
+  const localAuthSince = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [tenant, security, idps, integrations, userGroups, notificationGroups, activeQueues, workflowGroups, quarantineCount, localAccountCount, localAuthEvents, localAuthEventGroups, localAuthUsers] = await Promise.all([
     db.tenant.findUnique({ where: { id: ctx.tenantId }, select: { id: true, name: true, region: true, createdAt: true } }),
     db.tenantSecurityPolicy.findUnique({ where: { tenantId: ctx.tenantId } }),
     db.identityProviderConnection.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ status: "asc" }, { name: "asc" }], take: 50 }),
@@ -51,7 +52,23 @@ export async function SettingsLivePage() {
     db.hRServiceQueue.count({ where: { tenantId: ctx.tenantId, active: true } }),
     db.workflowDefinition.groupBy({ by: ["status"], where: { tenantId: ctx.tenantId }, _count: { _all: true } }),
     db.documentVersion.count({ where: { tenantId: ctx.tenantId, scanStatus: { in: ["PENDING", "QUARANTINED", "FAILED"] } } }),
-    db.userAccount.count({ where: { tenantId: ctx.tenantId, active: true, localAuthEnabled: true, localPasswordHash: { not: null } } })
+    db.userAccount.count({ where: { tenantId: ctx.tenantId, active: true, localAuthEnabled: true, localPasswordHash: { not: null } } }),
+    db.auditEvent.findMany({
+      where: { tenantId: ctx.tenantId, resourceType: "UserAccount", action: { in: ["auth.local-succeeded", "auth.local-failed", "auth.local-locked"] } },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      take: 50,
+      select: { id: true, action: true, resourceId: true, purpose: true, occurredAt: true }
+    }),
+    db.auditEvent.groupBy({
+      by: ["action"],
+      where: { tenantId: ctx.tenantId, resourceType: "UserAccount", action: { in: ["auth.local-succeeded", "auth.local-failed", "auth.local-locked"] }, occurredAt: { gte: localAuthSince } },
+      _count: { _all: true }
+    }),
+    db.userAccount.findMany({
+      where: { tenantId: ctx.tenantId, OR: [{ localAuthEnabled: true }, { localPasswordHash: { not: null } }] },
+      take: 200,
+      select: { id: true, subject: true, displayName: true }
+    })
   ]);
 
   const activeUsers = userGroups.filter((row) => row.active).reduce((sum, row) => sum + row._count._all, 0);
@@ -62,6 +79,11 @@ export async function SettingsLivePage() {
   const attentionIntegrations = integrations.filter((row) => row.status === "DEGRADED" || (row.enabled && row.status !== "ACTIVE")).length;
   const deadLetters = notificationCounts.DEAD_LETTER ?? 0;
   const notificationBacklog = (notificationCounts.PENDING ?? 0) + (notificationCounts.FAILED ?? 0) + (notificationCounts.PROCESSING ?? 0);
+  const localAuthCounts = Object.fromEntries(localAuthEventGroups.map((row) => [row.action, row._count._all])) as Record<string, number>;
+  const localAuthAccountNames = new Map(localAuthUsers.map((row) => [row.id, `${row.displayName} · ${row.subject}`]));
+  const localAuthSuccess24h = localAuthCounts["auth.local-succeeded"] ?? 0;
+  const localAuthFailure24h = localAuthCounts["auth.local-failed"] ?? 0;
+  const localAuthLocked24h = localAuthCounts["auth.local-locked"] ?? 0;
 
   return <div className="settings-live-page">
     <div className="page-heading settings-live-heading">
@@ -129,6 +151,21 @@ export async function SettingsLivePage() {
         {["PENDING", "PROCESSING", "FAILED", "DEAD_LETTER", "DELIVERED"].map((status) => <div key={status}><small>{status.replaceAll("_", " ")}</small><strong>{notificationCounts[status] ?? 0}</strong></div>)}
       </div>
       {canWrite ? <NotificationDeadLetterAction count={deadLetters}/> : <p className="settings-live-footnote">{c(locale, "Read-only settings access: dead-letter retry requires settings:write.", "Salt-okunur ayar erişimi: dead-letter yeniden deneme settings:write gerektirir.")}</p>}
+    </section>
+
+
+    <section className="card settings-live-panel settings-local-auth-observability">
+      <div className="settings-live-panel-head"><div><span className="section-kicker">{c(locale, "Local authentication telemetry", "Yerel kimlik doğrulama telemetrisi")}</span><h3>{c(locale, "Recent local sign-in activity", "Son yerel giriş aktivitesi")}</h3><p>{c(locale, "Bounded authentication evidence from the append-only audit ledger. Passwords and hashes are never included.", "Değiştirilemez denetim zincirinden sınırlı kimlik doğrulama kanıtı. Parolalar ve hash değerleri hiçbir zaman gösterilmez.")}</p></div><KeyRound size={18}/></div>
+      <div className="settings-notification-counts settings-local-auth-counts">
+        <div><small>{c(locale, "SUCCESS · 24H", "BAŞARILI · 24S")}</small><strong>{localAuthSuccess24h}</strong></div>
+        <div><small>{c(locale, "FAILED · 24H", "HATALI · 24S")}</small><strong>{localAuthFailure24h}</strong></div>
+        <div><small>{c(locale, "LOCKED · 24H", "KİLİTLİ · 24S")}</small><strong>{localAuthLocked24h}</strong></div>
+        <div><small>{c(locale, "EVENTS SHOWN", "GÖSTERİLEN OLAY")}</small><strong>{localAuthEvents.length}</strong></div>
+      </div>
+      <div className="settings-live-table-wrap"><table className="settings-live-table"><thead><tr><th>{c(locale, "Account", "Hesap")}</th><th>{c(locale, "Event", "Olay")}</th><th>{c(locale, "Purpose", "Amaç")}</th><th>{c(locale, "Occurred", "Zaman")}</th></tr></thead><tbody>
+        {localAuthEvents.length ? localAuthEvents.map((event) => <tr key={event.id}><td><strong>{localAuthAccountNames.get(event.resourceId) ?? c(locale, "Local account", "Yerel hesap")}</strong></td><td><State ok={event.action === "auth.local-succeeded"} label={event.action.replace("auth.local-", "").toUpperCase()}/></td><td>{event.purpose ?? "—"}</td><td>{fmt(locale, event.occurredAt)}</td></tr>) : <tr><td colSpan={4} className="settings-live-empty">{c(locale, "No local authentication events have been recorded yet.", "Henüz yerel kimlik doğrulama olayı kaydedilmedi.")}</td></tr>}
+      </tbody></table></div>
+      <p className="settings-live-footnote">{c(locale, "Only the latest 50 tenant-scoped local authentication events are shown here; the full immutable history remains available in Audit.", "Burada yalnızca tenant kapsamındaki son 50 yerel kimlik doğrulama olayı gösterilir; tam değiştirilemez geçmiş Audit alanında kalır.")}</p>
     </section>
 
     {canWrite ? <><LocalAccountAdmin/><AccessScopeAdmin/><JurisdictionAdmin/></> : null}
