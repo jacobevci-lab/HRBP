@@ -56,7 +56,8 @@ export function notificationTitle(eventType: string, locale: Locale) {
     DEVELOPMENT_PLAN_OVERDUE: { en: "Development plan target overdue", tr: "Gelişim planı hedef tarihi gecikti" },
     DEVELOPMENT_PLAN_REASSESSMENT_REQUIRED: { en: "Development plan evidence ready", tr: "Gelişim planı kanıtı hazır" },
     BENEFIT_PLAN_EXPIRED: { en: "Benefit plan expired", tr: "Yan hak planının süresi doldu" },
-    AUDIT_INTEGRITY_FAILURE: { en: "Audit ledger integrity failure", tr: "Denetim defteri bütünlük hatası" }
+    AUDIT_INTEGRITY_FAILURE: { en: "Audit ledger integrity failure", tr: "Denetim defteri bütünlük hatası" },
+    LOCAL_AUTH_ACCOUNT_LOCKED: { en: "Local account locked", tr: "Yerel hesap kilitlendi" }
   };
   const known = titles[eventType];
   if (known) return known[locale];
@@ -127,7 +128,15 @@ export function notificationSummary(payload: unknown, locale: Locale) {
   const benefitPlanEffectiveTo = text(data.benefitPlanEffectiveTo);
   const endedEnrollments = numberValue(data.endedEnrollments);
   const anomalousEnrollments = numberValue(data.anomalousEnrollments);
+  const localAccountSubject = text(data.accountSubject);
+  const localAccountDisplayName = text(data.accountDisplayName);
+  const localLockedUntil = text(data.lockedUntil);
 
+  if (localAccountSubject && localLockedUntil) {
+    const until = new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(localLockedUntil));
+    const account = localAccountDisplayName ? `${localAccountDisplayName} · ${localAccountSubject}` : localAccountSubject;
+    return locale === "tr" ? `${account} çok sayıda başarısız giriş sonrası ${until} tarihine kadar kilitlendi.` : `${account} was locked after repeated failed sign-ins until ${until}.`;
+  }
   if (brokenEventId) {
     const detail = integrityReason ?? (locale === "tr" ? "Hash-zinciri doğrulaması başarısız oldu." : "Hash-chain verification failed.");
     return `${brokenEventId}: ${detail}`;
