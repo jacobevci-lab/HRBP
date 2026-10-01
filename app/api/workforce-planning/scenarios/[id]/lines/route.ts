@@ -75,7 +75,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const avgAnnualCost = body.avgAnnualCost === null || body.avgAnnualCost === "" ? undefined : boundedNumber(body.avgAnnualCost, 0, 1_000_000_000);
   const skillsRequired = skills(body.skillsRequired);
 
-  if (!orgUnitId || !roleLabel || currentFte === null || plannedFte === null || avgAnnualCost === null || skillsRequired === null) {
+  if (!orgUnitId || positionId === null || !roleLabel || currentFte == null || plannedFte == null || avgAnnualCost === null || skillsRequired === null) {
     return Response.json({ error: "Invalid workforce plan line values." }, { status: 400 });
   }
 
