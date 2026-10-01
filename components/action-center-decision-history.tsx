@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CheckCircle2, Clock3, ExternalLink, History, RefreshCw, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Clock3, Download, ExternalLink, History, RefreshCw, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
@@ -109,6 +109,7 @@ export function ActionCenterDecisionHistory() {
           <option value={90}>90d</option>
         </select>
         <button className="secondary-button compact" type="button" onClick={() => void load(days)} disabled={loading}><RefreshCw size={14}/>{tr ? "Yenile" : "Refresh"}</button>
+        <a className="secondary-button compact" href={`/api/action-center/history/export?days=${days}`}><Download size={14}/>{tr ? "CSV kanıt" : "Export CSV"}</a>
       </div>
     </div>
 
