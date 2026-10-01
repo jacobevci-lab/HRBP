@@ -16,7 +16,7 @@ type QuestionResult = {
   prompt: string;
   type: string;
   dimension: string | null;
-  answered: number;
+  answered: number | null;
   suppressed: boolean;
   suppressionReason: string | null;
   metric: { label: string; value: number } | null;
@@ -28,7 +28,7 @@ type ResultData = {
   suppressed: boolean;
   suppressionReason: string | null;
   threshold: number;
-  responseCount: number;
+  responseCount: number | null;
   targetCount: number | null;
   responseRate: number | null;
   questions: QuestionResult[];
