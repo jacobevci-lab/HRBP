@@ -84,7 +84,17 @@ const continuityPath = "lib/privacy-action-center-continuity.ts";
 const continuity = await source(continuityPath);
 expect(continuityPath, continuity, /active:\s*true/, "central TIA attention must continue to include only active transfers");
 expect(continuityPath, continuity, /completedAt:\s*null/, "completed assessments must leave active Privacy attention");
+expect(continuityPath, continuity, /type:\s*"start-privacy-assessment"[\s\S]*type:\s*"wait-privacy-assessment"[\s\S]*type:\s*"resume-privacy-assessment"/, "privacy assessment attention must expose bounded state-specific progression actions");
 reject(continuityPath, continuity, /findings|dataCategories|specialCategories/, "central Privacy attention must not receive restricted assurance content");
+
+const actionCenterPath = "components/workflow-action-center.tsx";
+const actionCenter = await source(actionCenterPath);
+expect(actionCenterPath, actionCenter, /item\.action\.type === "start-privacy-assessment"[\s\S]*\/api\/privacy\/assessments\//, "privacy assessment start must use the governed lifecycle route");
+expect(actionCenterPath, actionCenter, /item\.action\.type === "wait-privacy-assessment"[\s\S]*action:\s*"WAIT"/, "privacy assessment waiting must use the governed lifecycle route");
+expect(actionCenterPath, actionCenter, /item\.action\.type === "resume-privacy-assessment"[\s\S]*action:\s*"START"/, "privacy assessment resume must reuse the governed START transition");
+expect(actionCenterPath, actionCenter, /resourceType:\s*"PrivacyRiskAssessment"/, "privacy assessment quick actions must clear matching notifications best-effort");
+expect(actionCenterPath, actionCenter, /window\.confirm\(copy\.confirm\)/, "privacy assessment quick actions must require explicit confirmation");
+reject(actionCenterPath, actionCenter, /COMPLETE[\s\S]*privacy-assessment|privacy-assessment[\s\S]*COMPLETE/, "privacy assessment completion requiring findings must remain in the owning Privacy workspace");
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);
