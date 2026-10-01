@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
 import { getServerLocale } from "@/lib/i18n-server";
 import { runtimeBoolean } from "@/lib/runtime-env";
 import { LocalSignInForm } from "@/components/local-sign-in-form";
@@ -41,16 +41,50 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
   const localizedMessages = messages[locale];
   const localAuthEnabled = runtimeBoolean("HRBP_LOCAL_AUTH_ENABLED", false);
 
-  return <main className="auth-screen"><section className="auth-panel">
-    <div className="auth-brand"><span className="auth-brand-mark"><span/><span/><span/></span><div><strong>HRBP</strong><small>ONE</small></div></div>
-    <div className="auth-kicker"><ShieldCheck size={15}/> {c("Enterprise identity","Kurumsal kimlik")}</div>
-    <h1>{c("Sign in to your people workspace","Çalışan çalışma alanınıza giriş yapın")}</h1>
-    <p>{c("Use your organization identity provider. HRBP validates the OIDC response, maps it to a tenant-scoped platform role and issues a short-lived signed application session.","Kuruluşunuzun kimlik sağlayıcısını kullanın. HRBP OIDC yanıtını doğrular, tenant kapsamlı platform rolüne eşler ve kısa ömürlü imzalı uygulama oturumu oluşturur.")}</p>
-    {error ? <div className="auth-message error"><LockKeyhole size={17}/><span>{localizedMessages[error as keyof typeof localizedMessages] ?? c("Sign-in failed.","Giriş başarısız.")}</span></div> : null}
-    {signedOut ? <div className="auth-message success"><ShieldCheck size={17}/><span>{c("Your HRBP session has been closed.","HRBP oturumunuz kapatıldı.")}</span></div> : null}
-    <Link className="auth-primary" href={loginHref}><Sparkles size={17}/> {c("Continue with enterprise SSO","Kurumsal SSO ile devam et")}</Link>
-    {localAuthEnabled ? <><div style={{height:1,background:"var(--border)",margin:"6px 0"}}/><LocalSignInForm returnTo={returnTo} locale={locale}/></> : null}
-    <Link className="auth-secondary" href="/">{c("Back to public staging dashboard","Herkese açık staging dashboard'a dön")}</Link>
-    <div className="auth-footnote"><strong>{c("Security model","Güvenlik modeli")}</strong><span>{c("PKCE · state + nonce validation · provider JWT verification · local scrypt credentials with lockout · tenant role mapping · HttpOnly signed session · no caller-supplied production role headers","PKCE · state + nonce doğrulaması · sağlayıcı JWT doğrulaması · kilitlenme korumalı yerel scrypt kimlik bilgileri · tenant rol eşleme · HttpOnly imzalı oturum · istemciden sağlanan production rol header'ı yok")}</span></div>
-  </section></main>;
+  return <main className="auth-screen">
+    <section className="auth-panel">
+      <div className="auth-panel-top">
+        <div className="auth-brand">
+          <span className="auth-brand-mark"><span/><span/><span/></span>
+          <div><strong>HRBP</strong><small>ONE</small></div>
+        </div>
+        <div className="auth-brand-trail" aria-hidden="true">
+          <span>{c("People","İnsan")}</span><i>→</i><span>{c("Insights","İçgörü")}</span><i>→</i><span>{c("Impact","Etki")}</span>
+        </div>
+      </div>
+
+      <div className="auth-intro">
+        <div className="auth-kicker"><ShieldCheck size={15}/> {c("Enterprise identity","Kurumsal kimlik")}</div>
+        <h1>{c("Sign in to your people workspace","Çalışan çalışma alanınıza giriş yapın")}</h1>
+        <p>{c("Use your organization identity provider. HRBP validates the OIDC response, maps it to a tenant-scoped platform role and issues a short-lived signed application session.","Kuruluşunuzun kimlik sağlayıcısını kullanın. HRBP OIDC yanıtını doğrular, tenant kapsamlı platform rolüne eşler ve kısa ömürlü imzalı uygulama oturumu oluşturur.")}</p>
+      </div>
+
+      {error ? <div className="auth-message error"><LockKeyhole size={17}/><span>{localizedMessages[error as keyof typeof localizedMessages] ?? c("Sign-in failed.","Giriş başarısız.")}</span></div> : null}
+      {signedOut ? <div className="auth-message success"><ShieldCheck size={17}/><span>{c("Your HRBP session has been closed.","HRBP oturumunuz kapatıldı.")}</span></div> : null}
+
+      <Link className="auth-primary auth-sso" href={loginHref}>
+        <span className="auth-action-icon"><Sparkles size={18}/></span>
+        <span>{c("Continue with enterprise SSO","Kurumsal SSO ile devam et")}</span>
+        <ArrowRight size={18} className="auth-action-arrow"/>
+      </Link>
+
+      {localAuthEnabled ? <>
+        <div className="auth-method-divider"><span>{c("or","veya")}</span></div>
+        <LocalSignInForm returnTo={returnTo} locale={locale}/>
+      </> : null}
+
+      <Link className="auth-secondary" href="/">
+        <ArrowLeft size={16}/>
+        <span>{c("Back to public staging dashboard","Herkese açık staging dashboard'a dön")}</span>
+      </Link>
+
+      <div className="auth-footnote">
+        <span className="auth-footnote-icon"><LockKeyhole size={15}/></span>
+        <div>
+          <strong>{c("Security model","Güvenlik modeli")}</strong>
+          <span>{c("PKCE · state + nonce validation · provider JWT verification · local scrypt credentials with lockout · tenant role mapping · HttpOnly signed session · no caller-supplied production role headers","PKCE · state + nonce doğrulaması · sağlayıcı JWT doğrulaması · kilitlenme korumalı yerel scrypt kimlik bilgileri · tenant rol eşleme · HttpOnly imzalı oturum · istemciden sağlanan production rol header'ı yok")}</span>
+        </div>
+      </div>
+    </section>
+  </main>;
 }
