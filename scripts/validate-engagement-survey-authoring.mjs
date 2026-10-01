@@ -27,6 +27,8 @@ expect(surveyItemPath, surveyItem, /engagement-survey\.deleted/, "survey deletio
 const createQuestionPath = "app/api/engagement/surveys/[id]/questions/route.ts";
 const createQuestion = await source(createQuestionPath);
 expect(createQuestionPath, createQuestion, /Object\.values\(SurveyQuestionType\)/, "question type must be validated");
+expect(createQuestionPath, createQuestion, /MAX_QUESTIONS = 100/, "survey question count must be bounded");
+expect(createQuestionPath, createQuestion, /survey\._count\.questions >= MAX_QUESTIONS/, "question creation must reject surveys at the maximum question count");
 expect(createQuestionPath, createQuestion, /choiceTypes/, "choice questions must use explicit type-aware option validation");
 expect(createQuestionPath, createQuestion, /value\.length < 2 \|\| value\.length > 20/, "choice option count must be bounded");
 expect(createQuestionPath, createQuestion, /survey\.createdById !== ctx\.actorId/, "survey authoring must be creator-bound");
