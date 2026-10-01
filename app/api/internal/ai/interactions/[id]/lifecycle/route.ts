@@ -86,7 +86,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           status: AIInteractionStatus.COMPLETED,
           modelProvider,
           modelName,
-          responseHash: createHash("sha256").update(response).digest("hex"),
+          responseHash: createHash("sha256").update(response!).digest("hex"),
           completedAt: new Date(),
           blockedReason: null
         }
@@ -107,7 +107,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         where: { id: current.id },
         data: {
           status: AIInteractionStatus.BLOCKED,
-          blockedReason,
+          blockedReason: blockedReason!,
           ...(modelProvider ? { modelProvider } : {}),
           ...(modelName ? { modelName } : {}),
           completedAt: new Date()
@@ -118,7 +118,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         resourceType: "AIInteraction",
         resourceId: current.id,
         classification: current.classification,
-        purpose: blockedReason
+        purpose: blockedReason!
       });
       return updated;
     }
@@ -128,7 +128,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       where: { id: current.id },
       data: {
         status: AIInteractionStatus.FAILED,
-        blockedReason: failureReason,
+        blockedReason: failureReason!,
         ...(modelProvider ? { modelProvider } : {}),
         ...(modelName ? { modelName } : {}),
         completedAt: new Date()
@@ -139,12 +139,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       resourceType: "AIInteraction",
       resourceId: current.id,
       classification: DataClassification.INTERNAL,
-      purpose: failureReason
+      purpose: failureReason!
     });
     return updated;
   }).catch((error) => {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") return "CONFLICT" as const;
-    if (error instanceof Error && ["NOT_FOUND", "STATE"].includes(error.message)) return error.message;
+    if (error instanceof Error && error.message === "NOT_FOUND") return "NOT_FOUND" as const;
+    if (error instanceof Error && error.message === "STATE") return "STATE" as const;
     return Promise.reject(error);
   });
 
