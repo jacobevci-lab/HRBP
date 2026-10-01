@@ -22,6 +22,8 @@ import { WorkforceScenarioCreateForm } from "@/components/workforce-scenario-cre
 import { DSRLifecycleActions } from "@/components/dsr-lifecycle-actions";
 import { EngagementCampaignActions } from "@/components/engagement-campaign-actions";
 import { EngagementCampaignWindowEditor } from "@/components/engagement-campaign-window-editor";
+import { EngagementSurveyAuthoring } from "@/components/engagement-survey-authoring";
+import { EngagementCampaignCreateForm } from "@/components/engagement-campaign-create-form";
 import { GovernedFocusScroller } from "@/components/governed-focus-scroller";
 import { getServerRequestContext } from "@/lib/server-session";
 import {
@@ -69,7 +71,7 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
       </section>
       <section className="gov-split">
         <div className="card gov-panel">
-          <div className="gov-panel-head"><div><span className="section-kicker">Live employee listening</span><h3>Survey campaigns</h3></div><span className="matrix-note">{scopeLabel}</span></div>
+          <div className="gov-panel-head"><div><span className="section-kicker">Live employee listening</span><h3>Survey campaigns</h3></div><div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span className="matrix-note">{scopeLabel}</span><EngagementSurveyAuthoring surveys={data.surveys} canWrite={engagementCanWrite}/><EngagementCampaignCreateForm surveys={data.surveys} canWrite={engagementCanWrite}/></div></div>
           <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Campaign</th><th>Survey</th><th>Responses</th><th>Rate</th><th>Threshold</th><th>Mode</th><th>Window</th><th>Status</th><th>Lifecycle</th></tr></thead><tbody>
             {data.rows.length ? data.rows.map((row) => <tr key={row.id} data-engagement-campaign-id={row.id} className={focusId === row.id ? "focused" : undefined}>
               <td><strong>{row.name}</strong>{focusId === row.id ? <small className="cell-sub">{mode === "work" ? "Focused campaign action" : "Focused campaign"}</small> : null}</td>
