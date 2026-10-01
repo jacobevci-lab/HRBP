@@ -110,9 +110,49 @@ export async function POST(request: Request) {
     }, { status: 503 });
   }
 
+  if (dispatch.mode === "sync") {
+    const completed = await db.$transaction(async (tx) => {
+      const updated = await tx.aIInteraction.update({
+        where: { id: data.id },
+        data: {
+          status: AIInteractionStatus.COMPLETED,
+          modelProvider: dispatch.completed.modelProvider,
+          modelName: dispatch.completed.modelName,
+          responseHash: createHash("sha256").update(dispatch.completed.response).digest("hex"),
+          completedAt: new Date()
+        }
+      });
+      await appendSystemAudit(tx, ctx.tenantId, "system:ai-processor", {
+        action: "ai.interaction-completed",
+        resourceType: "AIInteraction",
+        resourceId: data.id,
+        classification,
+        purpose: "Synchronous decision-support AI completion"
+      });
+      return updated;
+    });
+
+    return Response.json({
+      data: {
+        id: completed.id,
+        status: completed.status,
+        response: dispatch.completed.response,
+        modelProvider: completed.modelProvider,
+        modelName: completed.modelName
+      },
+      dispatch: { accepted: true, mode: "sync" },
+      guardrails: {
+        autonomousEmploymentDecision: false,
+        rawPromptRetained: false,
+        rawResponseRetained: false,
+        highlyRestrictedAllowed: false
+      }
+    });
+  }
+
   return Response.json({
     data,
-    dispatch: { accepted: true },
+    dispatch: { accepted: true, mode: "async" },
     guardrails: {
       autonomousEmploymentDecision: false,
       rawPromptRetained: false,
