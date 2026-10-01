@@ -32,6 +32,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     if (action === "SUBMIT") {
       if (current.status !== WorkforceScenarioStatus.DRAFT) throw new Error("STATE");
+      if (current.ownerId !== ctx.actorId) throw new Error("OWNER");
+      const lineCount = await tx.workforcePlanLine.count({ where: { tenantId: ctx.tenantId, scenarioId: current.id } });
+      if (!lineCount) throw new Error("EMPTY");
       const updated = await tx.workforceScenario.update({
         where: { id: current.id, tenantId: ctx.tenantId, status: WorkforceScenarioStatus.DRAFT },
         data: { status: WorkforceScenarioStatus.REVIEW, approvedById: null, approvedAt: null }
@@ -61,6 +64,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return updated;
     }
 
+    if (current.ownerId !== ctx.actorId) throw new Error("OWNER");
     if (current.status !== WorkforceScenarioStatus.APPROVED || !current.approvedById || !current.approvedAt || current.approvedById === current.ownerId) throw new Error("STATE");
     const updated = await tx.workforceScenario.update({
       where: { id: current.id, tenantId: ctx.tenantId, status: WorkforceScenarioStatus.APPROVED },
@@ -70,12 +74,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return updated;
   }).catch((error) => {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") return "CONFLICT" as const;
-    if (error instanceof Error && ["NOT_FOUND", "STATE", "FOUR_EYES"].includes(error.message)) return error.message;
+    if (error instanceof Error && ["NOT_FOUND", "STATE", "FOUR_EYES", "OWNER", "EMPTY"].includes(error.message)) return error.message;
     return Promise.reject(error);
   });
 
   if (result === "NOT_FOUND") return Response.json({ error: "Workforce scenario not found." }, { status: 404 });
   if (result === "STATE") return Response.json({ error: "The requested workforce scenario transition is not allowed from the current state." }, { status: 409 });
+  if (result === "OWNER") return forbidden("Only the scenario owner may submit or lock this workforce plan.");
+  if (result === "EMPTY") return Response.json({ error: "Add at least one workforce plan line before submitting the scenario for review." }, { status: 409 });
   if (result === "FOUR_EYES") return forbidden("Scenario owners cannot approve their own workforce plan.");
   if (result === "CONFLICT") return Response.json({ error: "Scenario state changed concurrently. Refresh and retry." }, { status: 409 });
   return Response.json({ data: result });
