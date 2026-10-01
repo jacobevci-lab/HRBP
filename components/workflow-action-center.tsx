@@ -284,7 +284,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.secondaryAction.type === "reject-time") {
         endpoint = `/api/time/entries/${encodeURIComponent(item.secondaryAction.entryId)}/transition`;
         payload = { status: "REJECTED" };
-      } else {
+      } else if (item.secondaryAction.type === "reject-compensation") {
         endpoint = `/api/compensation/changes/${encodeURIComponent(item.secondaryAction.changeId)}/decision`;
         payload = { decision: "REJECT" };
       }
