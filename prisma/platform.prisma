@@ -160,6 +160,7 @@ model IntegrationConnection {
   scopes       Json?
   enabled      Boolean @default(false)
   status       ConnectionStatus @default(DRAFT)
+  lastValidatedAt DateTime?
   lastSyncAt   DateTime?
   lastError    String?
   createdById  String
