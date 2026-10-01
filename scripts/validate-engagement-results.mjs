@@ -21,7 +21,8 @@ expect(resultsPath, results, /RESULT_SET_TOO_LARGE/, "interactive result aggrega
 expect(resultsPath, results, /\["OPEN", "CLOSED", "ARCHIVED"\]\.includes\(campaign\.status\)/, "results must not be available before campaign opening");
 reject(resultsPath, results, /respondentTokenHash/, "result aggregation must not load respondent pseudonyms");
 reject(resultsPath, results, /personId|givenName|familyName|workEmail|employeeNumber/, "result aggregation must not load employee identity");
-reject(resultsPath, results, /SurveyQuestionType\.TEXT[\s\S]*surveyAnswer\.findMany/, "text answers must not be queried into result aggregation");
+expect(resultsPath, results, /aggregatableQuestions = campaign\.survey\.questions\.filter\(\(question\) => question\.type !== SurveyQuestionType\.TEXT\)/, "text question ids must be excluded before loading answer values");
+expect(resultsPath, results, /questionId:\s*\{\s*in:\s*questionIds\s*\}/, "answer aggregation must query only explicitly aggregatable question ids");
 
 const routePath = "app/api/engagement/campaigns/[id]/results/route.ts";
 const route = await source(routePath);
