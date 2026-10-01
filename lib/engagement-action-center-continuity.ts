@@ -77,7 +77,12 @@ async function engagementCampaignItems(ctx: RequestContext): Promise<EngagementL
       dueAt: dueAt?.toISOString() ?? null,
       createdAt: campaign.createdAt.toISOString(),
       urgency: urgencyForDate(dueAt),
-      action: null
+      action: campaign.status === SurveyStatus.SCHEDULED
+        ? { type: "open-engagement-campaign", campaignId: campaign.id }
+        : { type: "close-engagement-campaign", campaignId: campaign.id },
+      secondaryAction: campaign.status === SurveyStatus.SCHEDULED
+        ? { type: "return-engagement-draft", campaignId: campaign.id }
+        : null
     };
   });
 }
