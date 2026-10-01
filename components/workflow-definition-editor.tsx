@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp, GitBranch, LoaderCircle, Plus, RefreshCw, Save, Trash2, Workflow } from "lucide-react";
+import { ArrowDown, ArrowUp, CopyPlus, GitBranch, LoaderCircle, Plus, RefreshCw, Save, Trash2, Workflow } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
@@ -59,6 +59,7 @@ export function WorkflowDefinitionEditor() {
 
   const [definitions, setDefinitions] = useState<Definition[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
+  const [cloneSourceId, setCloneSourceId] = useState<string>("");
   const [key, setKey] = useState("");
   const [name, setName] = useState("");
   const [version, setVersion] = useState("1");
@@ -70,6 +71,7 @@ export function WorkflowDefinitionEditor() {
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   const drafts = useMemo(() => definitions.filter((item) => item.status === "DRAFT"), [definitions]);
+  const cloneSources = useMemo(() => definitions.filter((item) => item.status !== "DRAFT"), [definitions]);
   const editing = Boolean(selectedId);
 
   const load = useCallback(async () => {
@@ -90,6 +92,7 @@ export function WorkflowDefinitionEditor() {
 
   function resetForm() {
     setSelectedId("");
+    setCloneSourceId("");
     setKey("");
     setName("");
     setVersion("1");
@@ -119,6 +122,28 @@ export function WorkflowDefinitionEditor() {
       slaMinutes: step.slaMinutes ? String(step.slaMinutes) : ""
     })));
     setNotice(null);
+  }
+
+  function cloneDefinition(id: string) {
+    setCloneSourceId(id);
+    const definition = definitions.find((item) => item.id === id);
+    if (!definition) return;
+    const nextVersion = Math.min(1000, Math.max(...definitions.filter((item) => item.key === definition.key).map((item) => item.version), definition.version) + 1);
+    setSelectedId("");
+    setKey(definition.key);
+    setName(definition.name);
+    setVersion(String(nextVersion));
+    setTriggerType(definition.triggerType);
+    setDescription(definition.description ?? "");
+    setSteps(definition.steps.map((step) => ({
+      stepKey: step.stepKey,
+      name: step.name,
+      actionType: step.actionType,
+      assigneeRole: step.assigneeRole ?? "",
+      approvalMode: step.approvalMode ?? "",
+      slaMinutes: step.slaMinutes ? String(step.slaMinutes) : ""
+    })));
+    setNotice({ kind: "ok", text: c(`Prepared ${definition.key} v${nextVersion} as a new DRAFT based on v${definition.version}.`, `${definition.key} v${nextVersion}, v${definition.version} sürümünden yeni DRAFT olarak hazırlandı.`) });
   }
 
   function updateStep(index: number, patch: Partial<Step>) {
@@ -197,7 +222,14 @@ export function WorkflowDefinitionEditor() {
           {drafts.map((definition) => <option key={definition.id} value={definition.id}>{definition.key} · v{definition.version} · {definition.name}</option>)}
         </select>
       </label>
-      {editing ? <button type="button" className="secondary-button compact" onClick={resetForm}><Plus size={14}/>{c("New definition","Yeni tanım")}</button> : null}
+      <label>
+        <span>{c("Create next version from", "Yeni sürümü şundan oluştur")}</span>
+        <select value={cloneSourceId} onChange={(event) => cloneDefinition(event.target.value)}>
+          <option value="">{c("Select an active, paused or retired version", "Aktif, duraklatılmış veya emekli sürüm seç")}</option>
+          {cloneSources.map((definition) => <option key={definition.id} value={definition.id}>{definition.key} · v{definition.version} · {definition.status}</option>)}
+        </select>
+      </label>
+      {editing ? <button type="button" className="secondary-button compact" onClick={resetForm}><Plus size={14}/>{c("New definition","Yeni tanım")}</button> : cloneSourceId ? <button type="button" className="secondary-button compact" onClick={() => cloneDefinition(cloneSourceId)}><CopyPlus size={14}/>{c("Reload version","Sürümü yeniden yükle")}</button> : null}
     </div>
 
     <form onSubmit={submit} className="workflow-editor-form">
@@ -234,7 +266,7 @@ export function WorkflowDefinitionEditor() {
       {notice ? <div className={`workflow-editor-message ${notice.kind}`}>{notice.text}</div> : null}
 
       <div className="workflow-editor-footer">
-        <small>{c("Only DRAFT definitions are editable. Active definitions remain immutable; create a new version for governed changes.", "Yalnızca DRAFT tanımları düzenlenebilir. Aktif tanımlar değiştirilemez; yönetişimli değişiklikler için yeni sürüm oluşturun.")}</small>
+        <small>{c("Only DRAFT definitions are editable. Active, paused and retired versions remain immutable; clone one into the next DRAFT version for governed changes.", "Yalnızca DRAFT tanımları düzenlenebilir. Aktif, duraklatılmış ve emekli sürümler değiştirilemez; yönetişimli değişiklik için bir sonraki DRAFT sürümüne klonlayın.")}</small>
         <button type="submit" className="primary-button" disabled={busy}>{busy ? <LoaderCircle size={15}/> : editing ? <Save size={15}/> : <Workflow size={15}/>} {busy ? c("Saving…","Kaydediliyor…") : editing ? c("Save draft","Taslağı kaydet") : c("Create workflow draft","İş akışı taslağı oluştur")}</button>
       </div>
     </form>
