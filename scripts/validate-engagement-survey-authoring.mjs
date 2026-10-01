@@ -52,7 +52,8 @@ const dataPath = "lib/governance-planning-live-data.ts";
 const data = await source(dataPath);
 expect(dataPath, data, /engagementSurvey\.findMany/, "Engagement live data must include bounded survey authoring data");
 expect(dataPath, data, /editable:\s*survey\.createdById === ctx\.actorId/, "survey editing state must remain creator-bound");
-expect(dataPath, data, /campaignCount:\s*survey\.campaigns\.length/, "survey authoring data must expose campaign usage count for deletion safety");
+expect(dataPath, data, /campaigns:\s*\{\s*where:\s*\{\s*status:\s*\{\s*not:\s*SurveyStatus\.DRAFT/, "survey editability must use an unbounded non-DRAFT campaign existence check");
+expect(dataPath, data, /campaignCount:\s*survey\._count\.campaigns/, "survey authoring data must expose the full campaign usage count for deletion safety");
 expect(dataPath, data, /questions:\s*survey\.questions\.map/, "owning Engagement workspace must receive question detail");
 
 const uiPath = "components/engagement-survey-authoring.tsx";
