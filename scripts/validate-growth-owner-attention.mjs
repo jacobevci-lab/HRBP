@@ -63,6 +63,9 @@ expect(componentPath, component, /summary\.succession/, "Action Center UI must e
 expect(componentPath, component, /item\.action\.type === "start-learning-assignment"[\s\S]*\/api\/learning\/assignments\//, "participant learning quick-start must use the governed self-transition endpoint");
 expect(componentPath, component, /payload = \{ status: "IN_PROGRESS" \}/, "learning quick-start must only move assignments into in-progress state");
 expect(componentPath, component, /resourceType:\s*"LearningAssignment"/, "learning quick-start must clear matching notifications best-effort");
+expect(growthPath, growth, /ReviewStatus\.NOT_STARTED[\s\S]*start-performance-self-review/, "only not-started self reviews may expose bounded quick-start progression");
+expect(componentPath, component, /item\.action\.type === "start-performance-self-review"[\s\S]*\/api\/performance\/reviews\//, "performance self-review quick-start must use the governed self-start endpoint");
+expect(componentPath, component, /resourceType:\s*"PerformanceReview"/, "performance self-review quick-start must clear matching notifications best-effort");
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
