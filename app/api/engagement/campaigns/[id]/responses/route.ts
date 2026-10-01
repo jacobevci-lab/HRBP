@@ -66,7 +66,7 @@ function validatedAnswer(question: QuestionShape, value: unknown): Prisma.InputJ
   }
 
   if (question.type === SurveyQuestionType.MULTI_CHOICE) {
-    if (!Array.isArray(value) || !value.length || value.length > options.length) throw new Error("ANSWER");
+    if (!Array.isArray(value) || !value.length || value.length > Math.min(options.length, 20)) throw new Error("ANSWER");
     const selected = value.filter((item): item is string => typeof item === "string");
     if (selected.length !== value.length || new Set(selected).size !== selected.length || selected.some((item) => !options.includes(item))) throw new Error("ANSWER");
     return selected;
