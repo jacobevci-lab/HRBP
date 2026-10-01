@@ -6,6 +6,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": true,
+  "vars": {
+    "HRBP_LOCAL_AUTH_ENABLED": "true",
+    "HRBP_AUTH_TENANT_ID": "tenant-acme-global"
+  },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
