@@ -38,6 +38,24 @@ export type LifecycleActionItem = {
     type: "complete-workflow";
     instanceId: string;
     taskId: string;
+  } | {
+    type: "approve-leave";
+    requestId: string;
+  } | {
+    type: "approve-time";
+    entryId: string;
+  } | {
+    type: "approve-compensation";
+    changeId: string;
+  } | {
+    type: "apply-compensation";
+    changeId: string;
+  } | {
+    type: "approve-payroll";
+    runId: string;
+  } | {
+    type: "mark-payroll-paid";
+    runId: string;
   };
 };
 
@@ -336,7 +354,7 @@ async function leaveApprovalItems(ctx: RequestContext): Promise<LifecycleActionI
     dueAt: row.startsAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     urgency: urgencyForDueDate(row.startsAt, "warning"),
-    action: null
+    action: { type: "approve-leave", requestId: row.id }
   }));
 }
 
@@ -376,7 +394,7 @@ async function timeApprovalItems(ctx: RequestContext): Promise<LifecycleActionIt
     dueAt: row.workDate.toISOString(),
     createdAt: row.createdAt.toISOString(),
     urgency: urgencyForDueDate(row.workDate, "warning"),
-    action: null
+    action: { type: "approve-time", entryId: row.id }
   }));
 }
 
@@ -423,7 +441,9 @@ async function compensationItems(ctx: RequestContext): Promise<LifecycleActionIt
     dueAt: row.effectiveAt.toISOString(),
     createdAt: row.createdAt.toISOString(),
     urgency: urgencyForDueDate(row.effectiveAt, "warning"),
-    action: null
+    action: row.status === CompensationChangeStatus.APPROVAL
+      ? { type: "approve-compensation", changeId: row.id }
+      : { type: "apply-compensation", changeId: row.id }
   }));
 }
 
@@ -487,7 +507,9 @@ async function payrollItems(ctx: RequestContext): Promise<LifecycleActionItem[]>
     dueAt: row.payrollPeriod.payDate.toISOString(),
     createdAt: row.startedAt.toISOString(),
     urgency: urgencyForDueDate(row.payrollPeriod.payDate, "warning"),
-    action: null
+    action: row.status === PayrollRunStatus.APPROVAL
+      ? { type: "approve-payroll", runId: row.id }
+      : { type: "mark-payroll-paid", runId: row.id }
   }));
 }
 

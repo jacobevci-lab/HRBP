@@ -32,6 +32,24 @@ type LifecycleActionItem = {
     type: "complete-workflow";
     instanceId: string;
     taskId: string;
+  } | {
+    type: "approve-leave";
+    requestId: string;
+  } | {
+    type: "approve-time";
+    entryId: string;
+  } | {
+    type: "approve-compensation";
+    changeId: string;
+  } | {
+    type: "apply-compensation";
+    changeId: string;
+  } | {
+    type: "approve-payroll";
+    runId: string;
+  } | {
+    type: "mark-payroll-paid";
+    runId: string;
   };
 };
 
@@ -171,29 +189,100 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
     return items;
   }, [filter, items]);
 
-  async function completeWorkflowTask(item: LifecycleActionItem) {
-    if (!item.action || item.action.type !== "complete-workflow") return;
-    const prompt = locale === "tr"
-      ? `“${item.title}” görevini tamamlandı olarak işaretlemek istiyor musun?`
-      : `Mark “${item.title}” as completed?`;
-    if (!window.confirm(prompt)) return;
+  function quickActionCopy(item: LifecycleActionItem) {
+    if (!item.action) return null;
+    if (item.action.type === "complete-workflow") return {
+      label: locale === "tr" ? "Tamamla" : "Complete",
+      busy: locale === "tr" ? "İşleniyor…" : "Processing…",
+      confirm: locale === "tr" ? `“${item.title}” görevini tamamlandı olarak işaretlemek istiyor musun?` : `Mark “${item.title}” as completed?`,
+      success: locale === "tr" ? "Görev tamamlandı ve yaşam döngüsü bir sonraki adıma ilerletildi." : "Task completed and the lifecycle advanced to its next step."
+    };
+    if (item.action.type === "approve-leave") return {
+      label: locale === "tr" ? "İzni onayla" : "Approve leave",
+      busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını onaylamak istiyor musun?` : `Approve “${item.title}”?`,
+      success: locale === "tr" ? "İzin talebi onaylandı." : "Leave request approved."
+    };
+    if (item.action.type === "approve-time") return {
+      label: locale === "tr" ? "Zamanı onayla" : "Approve time",
+      busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını onaylamak istiyor musun?` : `Approve “${item.title}”?`,
+      success: locale === "tr" ? "Zaman kaydı onaylandı." : "Time entry approved."
+    };
+    if (item.action.type === "approve-compensation") return {
+      label: locale === "tr" ? "Ücreti onayla" : "Approve compensation",
+      busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
+      confirm: locale === "tr" ? "Bu ücret değişikliği için bağımsız onayı vermek istiyor musun?" : "Give independent approval for this compensation change?",
+      success: locale === "tr" ? "Ücret değişikliği bağımsız olarak onaylandı." : "Compensation change independently approved."
+    };
+    if (item.action.type === "apply-compensation") return {
+      label: locale === "tr" ? "Ücreti uygula" : "Apply compensation",
+      busy: locale === "tr" ? "Uygulanıyor…" : "Applying…",
+      confirm: locale === "tr" ? "Onaylı ücret değişikliğini çalışan kaydına uygulamak istiyor musun?" : "Apply the approved compensation change to the employee record?",
+      success: locale === "tr" ? "Onaylı ücret değişikliği uygulandı." : "Approved compensation change applied."
+    };
+    if (item.action.type === "approve-payroll") return {
+      label: locale === "tr" ? "Bordroyu onayla" : "Approve payroll",
+      busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
+      confirm: locale === "tr" ? "Bu bordro çalıştırmasını bağımsız olarak onaylamak istiyor musun?" : "Independently approve this payroll run?",
+      success: locale === "tr" ? "Bordro çalıştırması onaylandı." : "Payroll run approved."
+    };
+    return {
+      label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
+      busy: locale === "tr" ? "İşleniyor…" : "Processing…",
+      confirm: locale === "tr" ? "Onaylı bordro çalıştırmasını ödendi olarak işaretlemek istiyor musun?" : "Mark the approved payroll run as paid?",
+      success: locale === "tr" ? "Bordro çalıştırması ödendi olarak işaretlendi." : "Payroll run marked paid."
+    };
+  }
+
+  async function executeQuickAction(item: LifecycleActionItem) {
+    if (!item.action) return;
+    const copy = quickActionCopy(item);
+    if (!copy || !window.confirm(copy.confirm)) return;
 
     setBusyId(item.id);
     setError(null);
     setSuccess(null);
     try {
-      const response = await fetch(`/api/workflows/instances/${encodeURIComponent(item.action.instanceId)}/tasks/${encodeURIComponent(item.action.taskId)}/complete`, {
+      let endpoint = "";
+      let payload: Record<string, unknown> = {};
+      if (item.action.type === "complete-workflow") {
+        endpoint = `/api/workflows/instances/${encodeURIComponent(item.action.instanceId)}/tasks/${encodeURIComponent(item.action.taskId)}/complete`;
+        payload = { result: { source: "lifecycle-action-center", completedAt: new Date().toISOString() } };
+      } else if (item.action.type === "approve-leave") {
+        endpoint = `/api/leave/requests/${encodeURIComponent(item.action.requestId)}/decision`;
+        payload = { decision: "APPROVED" };
+      } else if (item.action.type === "approve-time") {
+        endpoint = `/api/time/entries/${encodeURIComponent(item.action.entryId)}/transition`;
+        payload = { status: "APPROVED" };
+      } else if (item.action.type === "approve-compensation") {
+        endpoint = `/api/compensation/changes/${encodeURIComponent(item.action.changeId)}/decision`;
+        payload = { decision: "APPROVE" };
+      } else if (item.action.type === "apply-compensation") {
+        endpoint = `/api/compensation/changes/${encodeURIComponent(item.action.changeId)}/decision`;
+        payload = { decision: "APPLY" };
+      } else if (item.action.type === "approve-payroll") {
+        endpoint = `/api/payroll/runs/${encodeURIComponent(item.action.runId)}/transition`;
+        payload = { status: "APPROVED" };
+      } else {
+        endpoint = `/api/payroll/runs/${encodeURIComponent(item.action.runId)}/transition`;
+        payload = { status: "PAID" };
+      }
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ result: { source: "lifecycle-action-center", completedAt: new Date().toISOString() } })
+        body: JSON.stringify(payload)
       });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-      setSuccess(locale === "tr" ? "Görev tamamlandı ve yaşam döngüsü bir sonraki adıma ilerletildi." : "Task completed and the lifecycle advanced to its next step.");
-      await acknowledgeTaskNotifications(item.action.taskId);
+      setSuccess(copy.success);
+      if (item.action.type === "complete-workflow") await acknowledgeTaskNotifications(item.action.taskId);
+      window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
+      window.dispatchEvent(new Event("hrbp:notifications-changed"));
       await refresh();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : (locale === "tr" ? "Görev tamamlanamadı." : "Task could not be completed."));
+      setError(cause instanceof Error ? cause.message : (locale === "tr" ? "Aksiyon tamamlanamadı." : "Action could not be completed."));
     } finally {
       setBusyId(null);
     }
@@ -297,15 +386,16 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
             {loading && items.length === 0 ? <tr><td colSpan={7} className="workflow-action-empty">{locale === "tr" ? "Aksiyon merkezi yükleniyor…" : "Loading action center…"}</td></tr> : null}
             {!loading && visibleItems.length === 0 ? <tr><td colSpan={7} className="workflow-action-empty"><CheckCircle2 size={17}/>{locale === "tr" ? "Bu görünümde bekleyen aksiyon yok." : "No pending actions in this view."}</td></tr> : null}
             {visibleItems.map((item) => {
-              const focused = item.kind === "workflow" && (item.action?.taskId === initialTaskId || item.action?.instanceId === initialInstanceId);
-              return <tr key={item.id} id={`action-item-${item.id}`} data-workflow-instance={item.action?.instanceId} className={focused ? "focused" : undefined}>
+              const workflowAction = item.action?.type === "complete-workflow" ? item.action : null;
+              const focused = item.kind === "workflow" && (workflowAction?.taskId === initialTaskId || workflowAction?.instanceId === initialInstanceId);
+              return <tr key={item.id} id={`action-item-${item.id}`} data-workflow-instance={workflowAction?.instanceId} className={focused ? "focused" : undefined}>
                 <td><span className={`workflow-source ${item.kind}`}>{sourceLabel(item.kind)}</span></td>
                 <td><strong>{item.title}</strong><small>{item.subtitle}</small></td>
                 <td><span>{item.subjectType}</span><small>{item.subjectId}</small></td>
                 <td><span className={`workflow-due ${item.urgency}`}>{formatDate(item.dueAt)}</span></td>
                 <td><span className={`workflow-urgency ${item.urgency}`}>{urgencyLabel(item.urgency)}</span></td>
                 <td><span className="workflow-task-status">{item.status}</span></td>
-                <td>{item.action?.type === "complete-workflow" ? <button className="primary-button compact" type="button" disabled={busyId === item.id} onClick={() => void completeWorkflowTask(item)}>{busyId === item.id ? (locale === "tr" ? "İşleniyor…" : "Processing…") : (locale === "tr" ? "Tamamla" : "Complete")}</button> : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>}</td>
+                <td>{item.action ? <button className="primary-button compact" type="button" disabled={busyId === item.id} onClick={() => void executeQuickAction(item)}>{busyId === item.id ? quickActionCopy(item)?.busy : quickActionCopy(item)?.label}</button> : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>}</td>
               </tr>;
             })}
           </tbody>
