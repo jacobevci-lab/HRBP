@@ -128,7 +128,12 @@ export function WorkflowDefinitionEditor() {
     setCloneSourceId(id);
     const definition = definitions.find((item) => item.id === id);
     if (!definition) return;
-    const nextVersion = Math.min(1000, Math.max(...definitions.filter((item) => item.key === definition.key).map((item) => item.version), definition.version) + 1);
+    const highestVersion = Math.max(...definitions.filter((item) => item.key === definition.key).map((item) => item.version), definition.version);
+    if (highestVersion >= 1000) {
+      setNotice({ kind: "error", text: c("This workflow has reached the maximum supported version (1000).", "Bu iş akışı desteklenen maksimum sürüme (1000) ulaştı.") });
+      return;
+    }
+    const nextVersion = highestVersion + 1;
     setSelectedId("");
     setKey(definition.key);
     setName(definition.name);
