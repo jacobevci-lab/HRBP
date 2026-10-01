@@ -110,10 +110,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const updateData: Prisma.WorkforcePlanLineUncheckedUpdateInput = {};
     if (orgUnitIdInput !== undefined) updateData.orgUnitId = orgUnitId;
     if (body.positionId !== undefined) updateData.positionId = positionId;
-    if (roleLabel !== undefined) updateData.roleLabel = roleLabel;
+    if (typeof roleLabel === "string") updateData.roleLabel = roleLabel;
     if (body.location !== undefined) updateData.location = location ?? null;
-    if (currentFte !== undefined) updateData.currentFte = new Prisma.Decimal(currentFte);
-    if (plannedFte !== undefined) updateData.plannedFte = new Prisma.Decimal(plannedFte);
+    if (typeof currentFte === "number") updateData.currentFte = new Prisma.Decimal(currentFte);
+    if (typeof plannedFte === "number") updateData.plannedFte = new Prisma.Decimal(plannedFte);
     if (body.avgAnnualCost !== undefined) updateData.avgAnnualCost = avgAnnualCost === null ? null : new Prisma.Decimal(avgAnnualCost as number);
     if (body.demandDriver !== undefined) updateData.demandDriver = demandDriver ?? null;
     if (skillsRequired !== undefined) updateData.skillsRequired = skillsRequired as Prisma.InputJsonValue;
