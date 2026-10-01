@@ -55,6 +55,38 @@ const workflow = await source(workflowPath);
 expect(workflowPath, workflow, /HRBP_TEST_ADMIN_PASSWORD:\s*\$\{\{ secrets\.HRBP_TEST_ADMIN_PASSWORD \}\}/, "staging seed must receive the test admin password only from GitHub secrets");
 expect(workflowPath, workflow, /subject:\s*"local\.admin"/, "staging verification must require the local test admin account");
 
+
+const adminRoutePath = "app/api/settings/local-accounts/route.ts";
+const adminRoute = await source(adminRoutePath);
+expect(adminRoutePath, adminRoute, /settings:write/, "local account creation must require tenant settings write capability");
+expect(adminRoutePath, adminRoute, /mutationOriginAllowed\(request\)/, "local account creation must enforce origin checks");
+expect(adminRoutePath, adminRoute, /hashLocalPassword/, "local account creation must hash passwords before persistence");
+expect(adminRoutePath, adminRoute, /localAuthEnabled:\s*true/, "new governed local accounts must explicitly enable local sign-in");
+reject(adminRoutePath, adminRoute, /localPasswordHash:\s*password\b/, "local account administration must never persist plaintext passwords");
+
+const adminLifecyclePath = "app/api/settings/local-accounts/[id]/route.ts";
+const adminLifecycle = await source(adminLifecyclePath);
+expect(adminLifecyclePath, adminLifecycle, /settings:write/, "local account lifecycle operations must require tenant settings write capability");
+expect(adminLifecyclePath, adminLifecycle, /mutationOriginAllowed\(request\)/, "local account lifecycle operations must enforce origin checks");
+expect(adminLifecyclePath, adminLifecycle, /current\.id === ctx\.actorId/, "administrators must not be able to disable the local account backing their current session");
+expect(adminLifecyclePath, adminLifecycle, /reset-password/, "local account lifecycle must support governed password rotation");
+expect(adminLifecyclePath, adminLifecycle, /localFailedAttempts:\s*0[\s\S]*localLockedUntil:\s*null/, "password rotation and unlock must clear lockout state");
+expect(adminLifecyclePath, adminLifecycle, /hashLocalPassword/, "password rotation must use the governed password hasher");
+reject(adminLifecyclePath, adminLifecycle, /localPasswordHash:\s*password\b/, "password rotation must never persist plaintext passwords");
+
+const adminUiPath = "components/local-account-admin.tsx";
+const adminUi = await source(adminUiPath);
+expect(adminUiPath, adminUi, /type="password"/, "local account administration must use masked password inputs");
+expect(adminUiPath, adminUi, /\/api\/settings\/local-accounts/, "local account administration UI must use the governed tenant API");
+expect(adminUiPath, adminUi, /reset-password/, "local account administration UI must support password rotation");
+
+
+const settingsPagePath = "components/settings-live-page.tsx";
+const settingsPage = await source(settingsPagePath);
+expect(settingsPagePath, settingsPage, /LocalAccountAdmin/, "tenant settings must expose governed local account administration");
+expect(settingsPagePath, settingsPage, /HRBP_LOCAL_AUTH_ENABLED/, "tenant settings must surface the local authentication runtime gate");
+expect(settingsPagePath, settingsPage, /localAuthEnabled:\s*true/, "tenant settings readiness must count explicitly enabled local accounts");
+
 const packagePath = "package.json";
 const pkg = await source(packagePath);
 expect(packagePath, pkg, /local-auth:validate/, "local auth validator must be registered");

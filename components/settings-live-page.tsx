@@ -1,12 +1,13 @@
 import { Activity, BellRing, CloudCog, Database, KeyRound, Link2, LockKeyhole, ShieldCheck, UsersRound, Workflow } from "lucide-react";
 import { AccessScopeAdmin } from "@/components/access-scope-admin";
 import { JurisdictionAdmin } from "@/components/jurisdiction-admin";
+import { LocalAccountAdmin } from "@/components/local-account-admin";
 import { NotificationDeadLetterAction } from "@/components/notification-dead-letter-action";
 import { authConfigurationStatus, getOidcConfig } from "@/lib/auth-config";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { getServerLocale } from "@/lib/i18n-server";
-import { runtimeString } from "@/lib/runtime-env";
+import { runtimeBoolean, runtimeString } from "@/lib/runtime-env";
 import { getServerRequestContext } from "@/lib/server-session";
 
 function c(locale: "en" | "tr", en: string, tr: string) {
@@ -38,8 +39,9 @@ export async function SettingsLivePage() {
   const storageConfigured = Boolean(runtimeString("OBJECT_STORAGE_ENDPOINT") && runtimeString("OBJECT_STORAGE_ACCESS_KEY") && runtimeString("OBJECT_STORAGE_SECRET_KEY") && runtimeString("OBJECT_STORAGE_BUCKET"));
   const scanConfigured = Boolean(runtimeString("HRBP_DOCUMENT_SCAN_TOKEN"));
   const maintenanceConfigured = Boolean(runtimeString("HRBP_MAINTENANCE_TOKEN"));
+  const localAuthRuntimeEnabled = runtimeBoolean("HRBP_LOCAL_AUTH_ENABLED", false);
 
-  const [tenant, security, idps, integrations, userGroups, notificationGroups, activeQueues, workflowGroups, quarantineCount] = await Promise.all([
+  const [tenant, security, idps, integrations, userGroups, notificationGroups, activeQueues, workflowGroups, quarantineCount, localAccountCount] = await Promise.all([
     db.tenant.findUnique({ where: { id: ctx.tenantId }, select: { id: true, name: true, region: true, createdAt: true } }),
     db.tenantSecurityPolicy.findUnique({ where: { tenantId: ctx.tenantId } }),
     db.identityProviderConnection.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ status: "asc" }, { name: "asc" }], take: 50 }),
@@ -48,7 +50,8 @@ export async function SettingsLivePage() {
     db.notificationOutbox.groupBy({ by: ["status"], where: { tenantId: ctx.tenantId }, _count: { _all: true } }),
     db.hRServiceQueue.count({ where: { tenantId: ctx.tenantId, active: true } }),
     db.workflowDefinition.groupBy({ by: ["status"], where: { tenantId: ctx.tenantId }, _count: { _all: true } }),
-    db.documentVersion.count({ where: { tenantId: ctx.tenantId, scanStatus: { in: ["PENDING", "QUARANTINED", "FAILED"] } } })
+    db.documentVersion.count({ where: { tenantId: ctx.tenantId, scanStatus: { in: ["PENDING", "QUARANTINED", "FAILED"] } } }),
+    db.userAccount.count({ where: { tenantId: ctx.tenantId, active: true, localAuthEnabled: true, localPasswordHash: { not: null } } })
   ]);
 
   const activeUsers = userGroups.filter((row) => row.active).reduce((sum, row) => sum + row._count._all, 0);
@@ -85,6 +88,7 @@ export async function SettingsLivePage() {
           <div><CloudCog size={17}/><span><strong>{c(locale, "Private object storage", "Özel nesne depolama")}</strong><small>{c(locale, "Endpoint, bucket and credentials are checked without exposing their values.", "Endpoint, bucket ve kimlik bilgileri değerleri gösterilmeden kontrol edilir.")}</small></span><State ok={storageConfigured} label={storageConfigured ? c(locale, "Ready", "Hazır") : c(locale, "Missing", "Eksik")}/></div>
           <div><Activity size={17}/><span><strong>{c(locale, "Document malware scan", "Doküman zararlı yazılım taraması")}</strong><small>{c(locale, `${quarantineCount} versions currently require scan/quarantine attention.`, `${quarantineCount} sürüm tarama/karantina aksiyonu gerektiriyor.`)}</small></span><State ok={scanConfigured} label={scanConfigured ? c(locale, "Configured", "Yapılandırıldı") : c(locale, "Missing", "Eksik")}/></div>
           <div><Database size={17}/><span><strong>{c(locale, "Scheduled maintenance", "Zamanlanmış bakım")}</strong><small>{c(locale, "SLA escalation, workflow reminders, notification dispatch and retention.", "SLA eskalasyonu, iş akışı hatırlatmaları, bildirim dağıtımı ve retention.")}</small></span><State ok={maintenanceConfigured} label={maintenanceConfigured ? c(locale, "Protected", "Korumalı") : c(locale, "Token missing", "Token eksik")}/></div>
+          <div><KeyRound size={17}/><span><strong>{c(locale, "Local authentication", "Yerel kimlik doğrulama")}</strong><small>{c(locale, `${localAccountCount} active local accounts with password material; runtime gate is ${localAuthRuntimeEnabled ? "enabled" : "disabled"}.`, `Parolası bulunan ${localAccountCount} etkin yerel hesap var; runtime geçidi ${localAuthRuntimeEnabled ? "etkin" : "kapalı"}.`)}</small></span><State ok={localAuthRuntimeEnabled && localAccountCount > 0} label={localAuthRuntimeEnabled ? c(locale, "Enabled", "Etkin") : c(locale, "Runtime disabled", "Runtime kapalı")}/></div>
         </div>
       </div>
 
@@ -127,6 +131,6 @@ export async function SettingsLivePage() {
       {canWrite ? <NotificationDeadLetterAction count={deadLetters}/> : <p className="settings-live-footnote">{c(locale, "Read-only settings access: dead-letter retry requires settings:write.", "Salt-okunur ayar erişimi: dead-letter yeniden deneme settings:write gerektirir.")}</p>}
     </section>
 
-    {canWrite ? <><AccessScopeAdmin/><JurisdictionAdmin/></> : null}
+    {canWrite ? <><LocalAccountAdmin/><AccessScopeAdmin/><JurisdictionAdmin/></> : null}
   </div>;
 }
