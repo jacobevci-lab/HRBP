@@ -63,6 +63,21 @@ expect(actionPath, actions, /PRIVATE_NOTE/, "service staff must be able to recor
 expect(actionPath, actions, /resourceType:\s*"HRServiceRequest"[\s\S]*resourceId:\s*requestId[\s\S]*read:\s*true/, "successful HR Service actions must retire the actor's stale notifications for that request");
 expect(actionPath, actions, /hrbp:notifications-changed/, "notification badges must refresh after request action acknowledgement");
 
+
+const actionCenterDataPath = "lib/lifecycle-action-center.ts";
+const actionCenterData = await source(actionCenterDataPath);
+expect(actionCenterDataPath, actionCenterData, /isHRServiceStaffRole\(ctx\.role\)/, "HR Service quick progression must be limited to service staff roles");
+expect(actionCenterDataPath, actionCenterData, /type:\s*"advance-hr-service"[\s\S]*status:\s*"TRIAGE"/, "OPEN HR Service items must expose bounded triage progression");
+expect(actionCenterDataPath, actionCenterData, /ServiceRequestStatus\.TRIAGE[\s\S]*ServiceRequestStatus\.WAITING_EMPLOYEE[\s\S]*ServiceRequestStatus\.WAITING_THIRD_PARTY[\s\S]*status:\s*"IN_PROGRESS"/, "safe HR Service states must expose bounded in-progress progression");
+expect(actionCenterDataPath, actionCenterData, /selfService[\s\S]*action:[\s\S]*null/, "self-service HR Service attention must not receive staff lifecycle mutations");
+
+const actionCenterUiPath = "components/workflow-action-center.tsx";
+const actionCenterUi = await source(actionCenterUiPath);
+expect(actionCenterUiPath, actionCenterUi, /item\.action\.type === "advance-hr-service"/, "Action Center must understand HR Service quick progression");
+expect(actionCenterUiPath, actionCenterUi, /\/api\/hr-service\/requests\//, "HR Service quick progression must use the governed status endpoint");
+expect(actionCenterUiPath, actionCenterUi, /payload = \{ status: item\.action\.status \}/, "HR Service quick progression must remain limited to precomputed safe target states");
+expect(actionCenterUiPath, actionCenterUi, /resourceType:\s*"HRServiceRequest"/, "successful HR Service quick actions must clear matching notifications");
+
 const formPath = "components/hr-service-request-form.tsx";
 const form = await source(formPath);
 expect(formPath, form, /maxLength=\{80\}[\s\S]*maxLength=\{200\}[\s\S]*maxLength=\{4000\}/, "intake UI must mirror bounded request fields");
