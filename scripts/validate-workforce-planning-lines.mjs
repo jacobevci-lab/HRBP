@@ -5,6 +5,13 @@ const failures = [];
 function expect(path, text, pattern, message) { if (!pattern.test(text)) failures.push(path + ": " + message); }
 function reject(path, text, pattern, message) { if (pattern.test(text)) failures.push(path + ": " + message); }
 
+const scenarioCreatePath = "app/api/workforce-planning/scenarios/route.ts";
+const scenarioCreate = await source(scenarioCreatePath);
+expect(scenarioCreatePath, scenarioCreate, /mutationOriginAllowed\(request\)/, "scenario creation must enforce origin checks");
+expect(scenarioCreatePath, scenarioCreate, /horizonMonths must be an integer between 1 and 120/, "scenario horizon must be bounded");
+expect(scenarioCreatePath, scenarioCreate, /currency must be a 3-letter ISO-style code/, "scenario currency must be validated");
+expect(scenarioCreatePath, scenarioCreate, /P2002/, "duplicate scenario codes must fail as conflicts");
+
 const createPath = "app/api/workforce-planning/scenarios/[id]/lines/route.ts";
 const create = await source(createPath);
 expect(createPath, create, /mutationOriginAllowed\(request\)/, "plan line creation must enforce origin checks");
@@ -49,6 +56,11 @@ expect(dataPath, data, /lines:\s*scenario\.lines\.map/, "owning Workforce Planni
 expect(dataPath, data, /demandDriver:\s*line\.demandDriver/, "owning workspace must expose demand drivers");
 expect(dataPath, data, /skillsRequired:/, "owning workspace must expose requested skills");
 
+const scenarioUiPath = "components/workforce-scenario-create-form.tsx";
+const scenarioUi = await source(scenarioUiPath);
+expect(scenarioUiPath, scenarioUi, /\/api\/workforce-planning\/scenarios/, "Workforce Planning workspace must create governed draft scenarios");
+expect(scenarioUiPath, scenarioUi, /Create draft/, "scenario creation UI must keep new scenarios in DRAFT");
+
 const uiPath = "components/workforce-plan-line-manager.tsx";
 const ui = await source(uiPath);
 expect(uiPath, ui, /\/api\/workforce-planning\/options/, "line editor must use governed planning options");
@@ -59,6 +71,7 @@ expect(uiPath, ui, /hrbp:lifecycle-actions-changed/, "line mutations must invali
 
 const workspacePath = "components/governance-planning-live-workspace.tsx";
 const workspace = await source(workspacePath);
+expect(workspacePath, workspace, /WorkforceScenarioCreateForm/, "scenario creation must be mounted in the governed Workforce Planning workspace");
 expect(workspacePath, workspace, /WorkforcePlanLineManager/, "line management must be mounted in the governed Workforce Planning workspace");
 expect(workspacePath, workspace, /lines=\{row\.lines\}/, "scenario rows must pass only owning-domain line details to the editor");
 
