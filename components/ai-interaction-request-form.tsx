@@ -17,6 +17,7 @@ export function AIInteractionRequestForm() {
   });
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [responseText, setResponseText] = useState<string | null>(null);
 
   async function submit() {
     if (!form.prompt.trim() || !form.module.trim() || !form.purpose.trim()) {
@@ -26,6 +27,7 @@ export function AIInteractionRequestForm() {
     setSubmitting(true);
     setError(null);
     setMessage(null);
+    setResponseText(null);
     try {
       const response = await fetch("/api/ai/interactions", {
         method: "POST",
@@ -38,12 +40,21 @@ export function AIInteractionRequestForm() {
           restrictedDataAccess: form.restrictedDataAccess
         })
       });
-      const value = await response.json() as { data?: { id: string; status: string }; error?: string };
+      const value = await response.json() as {
+        data?: { id: string; status: string; response?: string; modelProvider?: string | null; modelName?: string | null };
+        dispatch?: { mode?: "sync" | "async" };
+        error?: string;
+      };
       if (!response.ok || !value.data) {
         setError(value.error || "AI request could not be submitted.");
         return;
       }
-      setMessage(`Request accepted · ${value.data.status}`);
+      if (value.dispatch?.mode === "sync" && value.data.response) {
+        setResponseText(value.data.response);
+        setMessage(`Completed · ${value.data.modelProvider ?? "model"} / ${value.data.modelName ?? "unknown"}`);
+      } else {
+        setMessage(`Request accepted · ${value.data.status}`);
+      }
       setForm((current) => ({ ...current, prompt: "" }));
       router.refresh();
     } catch {
@@ -74,6 +85,7 @@ export function AIInteractionRequestForm() {
         {submitting ? <LoaderCircle size={13}/> : <Send size={13}/>} Submit governed request
       </button>
       {message ? <small className="matrix-note">{message}</small> : null}
+      {responseText ? <div className="card" style={{ padding: 10, whiteSpace: "pre-wrap", lineHeight: 1.55 }}><strong>AI response</strong><p style={{ margin: "6px 0 0" }}>{responseText}</p><small className="cell-sub">Shown once in this browser state; raw response is not stored in the operational ledger.</small></div> : null}
       {error ? <small className="comp-decision-error">{error}</small> : null}
     </div> : null}
   </div>;
