@@ -195,6 +195,7 @@ export async function getEngagementLiveData(ctx: RequestContext) {
         description: survey.description,
         createdById: survey.createdById,
         editable: survey.createdById === ctx.actorId && !survey.campaigns.some((campaign) => campaign.status !== SurveyStatus.DRAFT),
+        campaignCount: survey.campaigns.length,
         questions: survey.questions.map((question) => ({
           id: question.id,
           questionKey: question.questionKey,
