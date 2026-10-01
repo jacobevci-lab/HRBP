@@ -54,7 +54,8 @@ function sourceLabel(resourceType: string, tr: boolean) {
     OnboardingTask: ["Onboarding task", "İşe başlatma görevi"],
     BenefitEnrollment: ["Benefits", "Yan haklar"],
     LearningAssignment: ["Learning", "Eğitim"],
-    PerformanceReview: ["Performance review", "Performans değerlendirmesi"]
+    PerformanceReview: ["Performance review", "Performans değerlendirmesi"],
+    OnboardingPlan: ["Onboarding handoff", "İşe başlatma devri"]
   };
   const label = labels[resourceType];
   return label ? (tr ? label[1] : label[0]) : resourceType;
