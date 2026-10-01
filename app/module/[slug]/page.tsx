@@ -51,10 +51,12 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const privacyAssessmentFocus = typeof search.assessment === "string" ? search.assessment : undefined;
   const privacyTransferFocus = typeof search.transfer === "string" ? search.transfer : undefined;
   const campaignFocus = typeof search.campaign === "string" ? search.campaign : undefined;
+  const workflowDefinitionFocus = typeof search.definition === "string" ? search.definition : undefined;
   const lifecycleMode = typeof search.mode === "string" ? search.mode : undefined;
   const documentLifecycleQuery = slug === "documents" ? (documentFocus || personId || "") : "";
   const policyLifecycleQuery = slug === "policies" ? (policyFocus || "") : "";
-  const query = explicitQuery || requestFocus || documentLifecycleQuery || policyLifecycleQuery;
+  const workflowLifecycleQuery = slug === "workflows" ? (workflowDefinitionFocus || "") : "";
+  const query = explicitQuery || requestFocus || documentLifecycleQuery || policyLifecycleQuery || workflowLifecycleQuery;
   const tab = typeof search.tab === "string" ? search.tab : undefined;
   const escalation = typeof search.escalation === "string" ? search.escalation : undefined;
   const taskId = typeof search.task === "string" ? search.task : undefined;
@@ -99,7 +101,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   return (
     <AppShell>
       {slug === "workflows" ? <WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId} initialFilter={actionView}/> : null}
-      {slug !== "workflows" || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={slug === "policies" ? lifecycleMode : tab}/> : null}
+      {slug !== "workflows" || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={slug === "policies" || slug === "workflows" ? lifecycleMode : tab}/> : null}
       {slug === "offboarding" && can(ctx, "offboarding:write") ? <OffboardingClearanceLoader/> : null}
       {slug === "employee-relations" ? <EmployeeRelationsCaseLifecyclePanel focus={{ query, caseId: employeeRelationsCaseId, actionId: employeeRelationsActionId, appealId: employeeRelationsAppealId }}/> : null}
       {slug === "hr-service" ? <HRServiceLifecyclePanel focus={query}/> : null}

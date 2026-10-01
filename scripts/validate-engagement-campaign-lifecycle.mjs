@@ -52,13 +52,13 @@ expect(modulePath, modulePage, /slug === "engagement" \? campaignFocus/, "campai
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
-expect(dashboardPath, dashboard, /getEngagementLifecycleActionCenterData/, "Dashboard must use the current top-level Engagement continuity source");
+expect(dashboardPath, dashboard, /getWorkflowDefinitionLifecycleActionCenterData/, "Dashboard must use the current top-level Engagement continuity source");
 expect(dashboardPath, dashboard, /engagement:\s*number/, "Dashboard must carry aggregate Engagement attention only");
 reject(dashboardPath, dashboard, /audienceFilter|responses|\.items/, "Dashboard must not receive campaign detail");
 
 const analyticsPath = "lib/lifecycle-analytics-continuity.ts";
 const analytics = await source(analyticsPath);
-expect(analyticsPath, analytics, /getEngagementLifecycleActionCenterData/, "Analytics must use the current top-level Engagement continuity source");
+expect(analyticsPath, analytics, /getWorkflowDefinitionLifecycleActionCenterData/, "Analytics must use the current top-level Engagement continuity source");
 expect(analyticsPath, analytics, /engagement:\s*source\.summary\.engagement/, "Analytics must project only the Engagement aggregate");
 expect(analyticsPath, analytics, /aggregateOnly:\s*true/, "Analytics lifecycle continuity must remain aggregate-only");
 
