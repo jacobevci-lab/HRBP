@@ -187,7 +187,9 @@ async function learningParticipantItems(ctx: RequestContext): Promise<ExpandedLi
     urgency: assignment.status === LearningAssignmentStatus.OVERDUE
       ? "critical"
       : urgencyForDueDate(assignment.dueAt, assignment.course.mandatory ? "warning" : "normal"),
-    action: null
+    action: assignment.status === LearningAssignmentStatus.ASSIGNED || assignment.status === LearningAssignmentStatus.OVERDUE
+      ? { type: "start-learning-assignment", assignmentId: assignment.id }
+      : null
   }));
 }
 

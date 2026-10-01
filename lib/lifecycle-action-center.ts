@@ -137,6 +137,9 @@ export type LifecycleActionItem = {
   } | {
     type: "activate-benefit-enrollment";
     enrollmentId: string;
+  } | {
+    type: "start-learning-assignment";
+    assignmentId: string;
   };
 };
 
