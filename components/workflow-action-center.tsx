@@ -137,6 +137,9 @@ type LifecycleActionItem = {
   } | {
     type: "start-performance-self-review";
     reviewId: string;
+  } | {
+    type: "activate-onboarding-employment";
+    planId: string;
   };
 };
 
@@ -240,6 +243,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "activate-benefit-enrollment") return { resourceType: "BenefitEnrollment", resourceId: action.enrollmentId };
   if (action?.type === "start-learning-assignment") return { resourceType: "LearningAssignment", resourceId: action.assignmentId };
   if (action?.type === "start-performance-self-review") return { resourceType: "PerformanceReview", resourceId: action.reviewId };
+  if (action?.type === "activate-onboarding-employment") return { resourceType: "OnboardingPlan", resourceId: action.planId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -465,6 +469,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” öz değerlendirmesini başlatmak istiyor musun?` : `Start “${item.title}” self review?`,
       success: locale === "tr" ? "Öz değerlendirme başlatıldı." : "Self review started."
     };
+    if (item.action.type === "activate-onboarding-employment") return {
+      label: locale === "tr" ? "Çalışanı aktifleştir" : "Activate employee",
+      busy: locale === "tr" ? "Aktifleştiriliyor…" : "Activating…",
+      confirm: locale === "tr" ? `“${item.title}” için onboarding devrini tamamlayıp istihdamı ACTIVE yapmak istiyor musun?` : `Complete the onboarding handoff and activate employment for “${item.title}”?`,
+      success: locale === "tr" ? "Onboarding devri tamamlandı ve çalışan aktifleştirildi." : "Onboarding handoff completed and employment activated."
+    };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
       busy: locale === "tr" ? "İşleniyor…" : "Processing…",
@@ -679,6 +689,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         payload = { status: "IN_PROGRESS" };
       } else if (item.action.type === "start-performance-self-review") {
         endpoint = `/api/performance/reviews/${encodeURIComponent(item.action.reviewId)}/self-start`;
+        payload = {};
+      } else if (item.action.type === "activate-onboarding-employment") {
+        endpoint = `/api/onboarding/plans/${encodeURIComponent(item.action.planId)}/activate`;
         payload = {};
       }
 
