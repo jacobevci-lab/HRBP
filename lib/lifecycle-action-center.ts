@@ -143,6 +143,9 @@ export type LifecycleActionItem = {
   } | {
     type: "start-performance-self-review";
     reviewId: string;
+  } | {
+    type: "activate-onboarding-employment";
+    planId: string;
   };
 };
 
