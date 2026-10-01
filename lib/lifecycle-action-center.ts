@@ -58,6 +58,9 @@ export type LifecycleActionItem = {
   } | {
     type: "retire-workflow-definition";
     definitionId: string;
+  } | {
+    type: "return-engagement-draft";
+    campaignId: string;
   };
   action: null | {
     type: "complete-workflow";
@@ -96,6 +99,12 @@ export type LifecycleActionItem = {
   } | {
     type: "activate-workflow-definition";
     definitionId: string;
+  } | {
+    type: "open-engagement-campaign";
+    campaignId: string;
+  } | {
+    type: "close-engagement-campaign";
+    campaignId: string;
   };
 };
 
