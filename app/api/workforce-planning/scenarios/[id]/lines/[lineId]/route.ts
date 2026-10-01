@@ -84,13 +84,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   else if (body.avgAnnualCost === null || body.avgAnnualCost === "") avgAnnualCost = null;
   else {
     const parsedCost = boundedNumber(body.avgAnnualCost, 0, 1_000_000_000);
-    avgAnnualCost = parsedCost === null || parsedCost === undefined ? Number.NaN : parsedCost;
+    avgAnnualCost = parsedCost == null ? Number.NaN : parsedCost;
   }
   const skillsRequired = normalizeSkills(body.skillsRequired);
 
-  if ([roleLabel, location, demandDriver, orgUnitIdInput, currentFte, plannedFte, skillsRequired].some((value) => value === null) || Number.isNaN(avgAnnualCost)) {
-    return Response.json({ error: "Invalid workforce plan line values." }, { status: 400 });
-  }
+  const invalid =
+    (body.roleLabel !== undefined && !roleLabel)
+    || (body.orgUnitId !== undefined && !orgUnitIdInput)
+    || (body.positionId !== undefined && body.positionId !== null && !positionIdInput)
+    || (body.currentFte !== undefined && currentFte == null)
+    || (body.plannedFte !== undefined && plannedFte == null)
+    || Number.isNaN(avgAnnualCost)
+    || skillsRequired === null
+    || location === null
+    || demandDriver === null;
+
+  if (invalid) return Response.json({ error: "Invalid workforce plan line values." }, { status: 400 });
 
   const result = await db.$transaction(async (tx) => {
     const line = await loadOwnedDraftLine(tx, ctx, id, lineId);
@@ -98,19 +107,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const positionId = body.positionId === null ? null : (positionIdInput ?? line.positionId);
     await ensureScope(tx, ctx, orgUnitId, positionId);
 
+    const updateData: Prisma.WorkforcePlanLineUncheckedUpdateInput = {};
+    if (orgUnitIdInput !== undefined) updateData.orgUnitId = orgUnitId;
+    if (body.positionId !== undefined) updateData.positionId = positionId;
+    if (roleLabel !== undefined) updateData.roleLabel = roleLabel;
+    if (body.location !== undefined) updateData.location = location ?? null;
+    if (currentFte !== undefined) updateData.currentFte = new Prisma.Decimal(currentFte);
+    if (plannedFte !== undefined) updateData.plannedFte = new Prisma.Decimal(plannedFte);
+    if (body.avgAnnualCost !== undefined) updateData.avgAnnualCost = avgAnnualCost === null ? null : new Prisma.Decimal(avgAnnualCost as number);
+    if (body.demandDriver !== undefined) updateData.demandDriver = demandDriver ?? null;
+    if (skillsRequired !== undefined) updateData.skillsRequired = skillsRequired as Prisma.InputJsonValue;
+
     const updated = await tx.workforcePlanLine.update({
       where: { id: line.id },
-      data: {
-        ...(orgUnitIdInput !== undefined ? { orgUnitId } : {}),
-        ...(body.positionId !== undefined ? { positionId } : {}),
-        ...(roleLabel !== undefined ? { roleLabel } : {}),
-        ...(body.location !== undefined ? { location: location ?? null } : {}),
-        ...(currentFte !== undefined ? { currentFte: new Prisma.Decimal(currentFte) } : {}),
-        ...(plannedFte !== undefined ? { plannedFte: new Prisma.Decimal(plannedFte) } : {}),
-        ...(body.avgAnnualCost !== undefined ? { avgAnnualCost: avgAnnualCost === null ? null : avgAnnualCost === undefined ? undefined : new Prisma.Decimal(avgAnnualCost) } : {}),
-        ...(body.demandDriver !== undefined ? { demandDriver: demandDriver ?? null } : {}),
-        ...(skillsRequired !== undefined ? { skillsRequired: skillsRequired as Prisma.InputJsonValue } : {})
-      }
+      data: updateData
     });
     await appendAudit(tx, ctx, {
       action: "workforce-plan-line.updated",
