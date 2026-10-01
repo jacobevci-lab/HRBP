@@ -45,11 +45,11 @@ function questionOptions(question: QuestionShape) {
 
 function validatedAnswer(question: QuestionShape, value: unknown): Prisma.InputJsonValue {
   if (question.type === SurveyQuestionType.SCALE) {
-    if (!Number.isInteger(value) || typeof value !== "number" || value < 1 || value > 5) throw new Error("ANSWER");
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 5) throw new Error("ANSWER");
     return value;
   }
   if (question.type === SurveyQuestionType.ENPS) {
-    if (!Number.isInteger(value) || typeof value !== "number" || value < 0 || value > 10) throw new Error("ANSWER");
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 10) throw new Error("ANSWER");
     return value;
   }
   if (question.type === SurveyQuestionType.TEXT) {
