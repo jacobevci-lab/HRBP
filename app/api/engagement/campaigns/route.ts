@@ -12,15 +12,17 @@ function asStringArray(value: unknown) {
 
 async function normalizedAudience(client: PrismaClient | Prisma.TransactionClient, ctx: RequestContext, raw: unknown): Promise<Prisma.InputJsonValue> {
   const scope = await resolveEmploymentScope(client, ctx);
-  if (scope === null) return (raw && typeof raw === "object" ? raw : {}) as Prisma.InputJsonValue;
-  if (!scope.length) throw new Error("EMPTY_SCOPE");
-
   const source = raw && typeof raw === "object" ? raw as { employmentIds?: unknown; orgUnitIds?: unknown; positionIds?: unknown } : {};
   const employmentIds = asStringArray(source.employmentIds);
   const orgUnitIds = asStringArray(source.orgUnitIds);
   const positionIds = asStringArray(source.positionIds);
   const hasSelectors = employmentIds.length > 0 || orgUnitIds.length > 0 || positionIds.length > 0;
-  if (!hasSelectors) return { employmentIds: scope, targetCount: scope.length };
+
+  if (!hasSelectors) {
+    if (scope === null) return {};
+    if (!scope.length) throw new Error("EMPTY_SCOPE");
+    return { employmentIds: scope, targetCount: scope.length };
+  }
 
   const selectorOr = [
     ...(employmentIds.length ? [{ id: { in: employmentIds } }] : []),
@@ -35,8 +37,13 @@ async function normalizedAudience(client: PrismaClient | Prisma.TransactionClien
     },
     select: { id: true }
   });
-  const scoped = new Set(scope);
-  if (matched.some((employment) => !scoped.has(employment.id))) throw new Error("OUT_OF_SCOPE");
+
+  if (scope !== null) {
+    if (!scope.length) throw new Error("EMPTY_SCOPE");
+    const scoped = new Set(scope);
+    if (matched.some((employment) => !scoped.has(employment.id))) throw new Error("OUT_OF_SCOPE");
+  }
+
   const canonicalIds = [...new Set(matched.map((employment) => employment.id))];
   if (!canonicalIds.length) throw new Error("EMPTY_AUDIENCE");
   return { employmentIds: canonicalIds, targetCount: canonicalIds.length };
