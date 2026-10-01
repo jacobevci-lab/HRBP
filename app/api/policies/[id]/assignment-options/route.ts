@@ -28,28 +28,33 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     select: {
       id: true,
       person: { select: { employeeNumber: true, givenName: true, familyName: true } },
-      position: { select: { title: true, orgUnit: { select: { name: true } } } },
-      policyAssignments: {
-        where: { policyId: id },
-        select: { id: true, status: true, dueAt: true },
-        take: 1
-      }
+      position: { select: { title: true, orgUnit: { select: { name: true } } } }
     }
   });
+
+  const ids = employments.map((employment) => employment.id);
+  const assignments = ids.length ? await db.policyAssignment.findMany({
+    where: { tenantId: ctx.tenantId, policyId: id, employmentId: { in: ids } },
+    select: { employmentId: true, status: true, dueAt: true }
+  }) : [];
+  const assignmentByEmployment = new Map(assignments.map((assignment) => [assignment.employmentId, assignment]));
 
   return Response.json({
     data: {
       relationshipScoped: scope !== null,
-      employments: employments.map((employment) => ({
-        id: employment.id,
-        employeeNumber: employment.person.employeeNumber,
-        name: `${employment.person.givenName} ${employment.person.familyName}`,
-        position: employment.position?.title ?? "No position",
-        organization: employment.position?.orgUnit?.name ?? "No organization",
-        assigned: employment.policyAssignments.length > 0,
-        assignmentStatus: employment.policyAssignments[0]?.status ?? null,
-        dueAt: employment.policyAssignments[0]?.dueAt?.toISOString() ?? null
-      }))
+      employments: employments.map((employment) => {
+        const assignment = assignmentByEmployment.get(employment.id);
+        return {
+          id: employment.id,
+          employeeNumber: employment.person.employeeNumber,
+          name: `${employment.person.givenName} ${employment.person.familyName}`,
+          position: employment.position?.title ?? "No position",
+          organization: employment.position?.orgUnit?.name ?? "No organization",
+          assigned: Boolean(assignment),
+          assignmentStatus: assignment?.status ?? null,
+          dueAt: assignment?.dueAt?.toISOString() ?? null
+        };
+      })
     }
   });
 }
