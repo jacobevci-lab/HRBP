@@ -69,7 +69,8 @@ async function policyReviewItems(ctx: RequestContext): Promise<PolicyLifecycleAt
     dueAt: policy.reviewDueAt?.toISOString() ?? null,
     createdAt: policy.updatedAt.toISOString(),
     urgency: urgencyForDueDate(policy.reviewDueAt),
-    action: null
+    action: { type: "approve-policy", policyId: policy.id },
+    secondaryAction: { type: "request-policy-changes", policyId: policy.id }
   }));
 }
 

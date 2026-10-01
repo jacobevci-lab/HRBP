@@ -17,6 +17,7 @@ expect(continuityPath, continuity, /PolicyAssignmentStatus\.PENDING[\s\S]*Policy
 expect(continuityPath, continuity, /status:\s*PolicyStatus\.PUBLISHED/, "acknowledgement attention must reference published policies only");
 expect(continuityPath, continuity, /\/module\/policies\?policy=/, "policy attention must deep-link to the governed Policy workspace");
 expect(continuityPath, continuity, /kind:\s*"policies"/, "Policies must be a first-class Action Center source");
+expect(continuityPath, continuity, /type:\s*"approve-policy"[\s\S]*type:\s*"request-policy-changes"/, "policy review attention must expose bounded approve and request-changes actions");
 expect(continuityPath, continuity, /policies:\s*items\.filter\(\(item\) => item\.kind === "policies"\)\.length/, "summary must expose aggregate Policy attention");
 reject(continuityPath, continuity, /contentMarkdown|contentHash|compensatingControl/, "central Policy attention must not load policy body or exception narratives");
 
@@ -31,7 +32,11 @@ expect(uiPath, ui, /ActionKind[\s\S]*"policies"/, "Action Center UI must underst
 expect(uiPath, ui, /allowedFilters[\s\S]*"policies"/, "Policies must be an allow-listed Action Center filter");
 expect(uiPath, ui, /summary\.policies/, "Action Center must expose the aggregate Policy source count");
 expect(uiPath, ui, /filter === "policies"/, "Action Center must provide a Policy source filter");
-expect(uiPath, ui, /href=\{item\.href\}/, "Policy attention must stay deep-link only in the central queue");
+expect(uiPath, ui, /item\.action\.type === "approve-policy"[\s\S]*\/api\/policies\//, "policy approval must use the governed review endpoint");
+expect(uiPath, ui, /item\.secondaryAction\.type === "request-policy-changes"[\s\S]*REQUEST_CHANGES/, "policy change requests must use the governed review endpoint");
+expect(uiPath, ui, /resourceType:\s*"PolicyRecord"/, "policy quick decisions must clear matching approval notifications best-effort");
+expect(uiPath, ui, /window\.confirm\(copy\.confirm\)/, "policy quick decisions must require explicit confirmation");
+expect(uiPath, ui, /href=\{item\.href\}/, "policy records without a safe quick mutation must continue to deep-link to the governed workspace");
 
 const reviewRoutePath = "app/api/policies/[id]/review/route.ts";
 const reviewRoute = await source(reviewRoutePath);

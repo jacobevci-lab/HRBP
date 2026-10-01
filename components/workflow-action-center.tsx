@@ -43,6 +43,9 @@ type LifecycleActionItem = {
   } | {
     type: "return-offer";
     offerId: string;
+  } | {
+    type: "request-policy-changes";
+    policyId: string;
   };
   action: null | {
     type: "complete-workflow";
@@ -72,6 +75,9 @@ type LifecycleActionItem = {
   } | {
     type: "approve-offer";
     offerId: string;
+  } | {
+    type: "approve-policy";
+    policyId: string;
   };
 };
 
@@ -164,6 +170,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "approve-payroll" || action?.type === "mark-payroll-paid") return { resourceType: "PayrollRun", resourceId: action.runId };
   if (action?.type === "approve-requisition") return { resourceType: "Requisition", resourceId: action.requisitionId };
   if (action?.type === "approve-offer") return { resourceType: "Offer", resourceId: action.offerId };
+  if (action?.type === "approve-policy") return { resourceType: "PolicyRecord", resourceId: action.policyId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -171,6 +178,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (secondary?.type === "reject-compensation") return { resourceType: "CompensationChange", resourceId: secondary.changeId };
   if (secondary?.type === "return-requisition") return { resourceType: "Requisition", resourceId: secondary.requisitionId };
   if (secondary?.type === "return-offer") return { resourceType: "Offer", resourceId: secondary.offerId };
+  if (secondary?.type === "request-policy-changes") return { resourceType: "PolicyRecord", resourceId: secondary.policyId };
   return null;
 }
 
@@ -283,6 +291,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” kaydını onaylayıp gönderime çıkarmak istiyor musun?` : `Approve and release “${item.title}” for sending?`,
       success: locale === "tr" ? "Teklif bağımsız olarak onaylandı." : "Offer independently approved."
     };
+    if (item.action.type === "approve-policy") return {
+      label: locale === "tr" ? "Politikayı onayla" : "Approve policy",
+      busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
+      confirm: locale === "tr" ? `“${item.title}” kaydı için bağımsız onayı vermek istiyor musun?` : `Give independent approval for “${item.title}”?`,
+      success: locale === "tr" ? "Politika bağımsız olarak onaylandı." : "Policy independently approved."
+    };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
       busy: locale === "tr" ? "İşleniyor…" : "Processing…",
@@ -316,6 +330,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       busy: locale === "tr" ? "Döndürülüyor…" : "Returning…",
       confirm: locale === "tr" ? `“${item.title}” kaydını düzeltme için taslağa döndürmek istiyor musun?` : `Return “${item.title}” to draft for revision?`,
       success: locale === "tr" ? "Teklif taslağa döndürüldü." : "Offer returned to draft."
+    };
+    if (item.secondaryAction.type === "request-policy-changes") return {
+      label: locale === "tr" ? "Düzeltme iste" : "Request changes",
+      busy: locale === "tr" ? "Döndürülüyor…" : "Returning…",
+      confirm: locale === "tr" ? `“${item.title}” kaydını kontrollü revizyon için taslağa döndürmek istiyor musun?` : `Return “${item.title}” to draft for controlled revision?`,
+      success: locale === "tr" ? "Politika düzeltme için taslağa döndürüldü." : "Policy returned to draft for revision."
     };
     return {
       label: locale === "tr" ? "Reddet" : "Reject",
@@ -351,6 +371,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.secondaryAction.type === "return-offer") {
         endpoint = `/api/recruiting/offers/${encodeURIComponent(item.secondaryAction.offerId)}/status`;
         payload = { status: "DRAFT" };
+      } else if (item.secondaryAction.type === "request-policy-changes") {
+        endpoint = `/api/policies/${encodeURIComponent(item.secondaryAction.policyId)}/review`;
+        payload = { action: "REQUEST_CHANGES" };
       }
 
       const response = await fetch(endpoint, {
@@ -411,6 +434,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "approve-offer") {
         endpoint = `/api/recruiting/offers/${encodeURIComponent(item.action.offerId)}/status`;
         payload = { status: "SENT" };
+      } else if (item.action.type === "approve-policy") {
+        endpoint = `/api/policies/${encodeURIComponent(item.action.policyId)}/review`;
+        payload = { action: "APPROVE" };
       }
 
       const response = await fetch(endpoint, {
