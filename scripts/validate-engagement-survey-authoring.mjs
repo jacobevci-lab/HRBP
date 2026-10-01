@@ -18,8 +18,9 @@ const surveyItem = await source(surveyItemPath);
 expect(surveyItemPath, surveyItem, /export async function PATCH/, "survey metadata must support governed edits");
 expect(surveyItemPath, surveyItem, /export async function DELETE/, "unused surveys must support governed deletion");
 expect(surveyItemPath, surveyItem, /survey\.createdById !== ctx\.actorId/, "survey metadata changes must remain creator-bound");
-expect(surveyItemPath, surveyItem, /campaign\.status !== "DRAFT"/, "survey metadata must lock after a campaign leaves DRAFT");
-expect(surveyItemPath, surveyItem, /if \(survey\.campaigns\.length\) throw new Error\("USED"\)/, "surveys referenced by any campaign must not be deletable");
+expect(surveyItemPath, surveyItem, /campaigns:\s*\{\s*where:\s*\{\s*status:\s*\{\s*not:\s*"DRAFT"/, "survey metadata must use an unbounded non-DRAFT campaign existence check");
+expect(surveyItemPath, surveyItem, /_count:\s*\{\s*select:\s*\{\s*campaigns:\s*true/, "survey deletion must use the full campaign count");
+expect(surveyItemPath, surveyItem, /if \(survey\._count\.campaigns\) throw new Error\("USED"\)/, "surveys referenced by any campaign must not be deletable");
 expect(surveyItemPath, surveyItem, /engagement-survey\.updated/, "survey metadata updates must be audited");
 expect(surveyItemPath, surveyItem, /engagement-survey\.deleted/, "survey deletion must be audited");
 
