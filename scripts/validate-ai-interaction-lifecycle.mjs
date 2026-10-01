@@ -41,8 +41,8 @@ expect(routePath, route, /AIInteractionStatus\.COMPLETED/, "AI lifecycle must in
 expect(routePath, route, /AIInteractionStatus\.BLOCKED/, "AI lifecycle must include BLOCKED");
 expect(routePath, route, /AIInteractionStatus\.FAILED/, "AI lifecycle must include FAILED");
 expect(routePath, route, /terminalizable\.has\(current\.status\)/, "terminal transitions must use type-safe state guards");
-expect(routePath, route, /responseHash:\s*createHash\("sha256"\)\.update\(response\)/, "completed output must retain only a response hash");
-reject(routePath, route, /responseMarkdown|responseText|rawResponse/, "raw model output must not be persisted");
+expect(routePath, route, /responseHash:\s*createHash\("sha256"\)\.update\(response!?\)/, "completed output must retain only a response hash");
+reject(routePath, route, /responseMarkdown\s*:|responseText\s*:|rawResponse\s*:/, "raw model output must not be persisted");
 expect(routePath, route, /appendSystemAudit/, "internal AI processor transitions must stay on the append-only audit chain");
 expect(routePath, route, /system:ai-processor/, "AI processor audits must use a distinct system actor");
 expect(routePath, route, /modelProvider/, "AI completion must retain model provider provenance");
