@@ -27,6 +27,7 @@ import { EngagementCampaignCreateForm } from "@/components/engagement-campaign-c
 import { EngagementResponseAction } from "@/components/engagement-response-action";
 import { EngagementResultsPanel } from "@/components/engagement-results-panel";
 import { AIInteractionRequestForm } from "@/components/ai-interaction-request-form";
+import { PrivacyAssessmentActions, PrivacyAssessmentCreateForm, PrivacyTransferActions, PrivacyTransferCreateForm } from "@/components/privacy-assurance-actions";
 import { GovernedFocusScroller } from "@/components/governed-focus-scroller";
 import { getServerRequestContext } from "@/lib/server-session";
 import {
@@ -182,14 +183,14 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
       </aside>
     </section>
     <section className="card gov-panel">
-      <div className="gov-panel-head"><div><span className="section-kicker">Privacy assurance</span><h3>DPIA & privacy risk assessments</h3></div><span className="matrix-note">Owner + due date</span></div>
-      <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Assessment</th><th>Risk</th><th>DPIA</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead><tbody>
+      <div className="gov-panel-head"><div><span className="section-kicker">Privacy assurance</span><h3>DPIA & privacy risk assessments</h3></div><div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span className="matrix-note">Owner + due date</span><PrivacyAssessmentCreateForm canWrite={privacyCanWrite} activities={data.activities.map((activity) => ({id: activity.id, code: activity.code, name: activity.name}))}/></div></div>
+      <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Assessment</th><th>Risk</th><th>DPIA</th><th>Owner</th><th>Due</th><th>Status</th><th>Lifecycle</th></tr></thead><tbody>
         {data.assessments.length ? data.assessments.map((row) => <tr key={row.id} data-privacy-assessment-id={row.id} className={privacyFocusType === "assessment" && focusId === row.id ? "focused" : undefined}><td><strong>{row.name}</strong>{privacyFocusType === "assessment" && focusId === row.id ? <small className="cell-sub">Focused privacy assessment</small> : null}</td><td>{row.riskLevel}</td><td>{row.requiresDpia ? "Required" : "Not required"}</td><td>{row.owner}</td><td>{row.dueAt}</td><td><Pill value={row.status}/></td></tr>) : <Empty text="No privacy risk assessments are recorded." columns={6}/>}
       </tbody></table></div>
     </section>
     <section className="card gov-panel">
-      <div className="gov-panel-head"><div><span className="section-kicker">Cross-border assurance</span><h3>Transfer impact review register</h3></div><span className="matrix-note">TIA due-date control</span></div>
-      <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Transfer</th><th>Route</th><th>Recipient</th><th>Mechanism</th><th>TIA due</th></tr></thead><tbody>
+      <div className="gov-panel-head"><div><span className="section-kicker">Cross-border assurance</span><h3>Transfer impact review register</h3></div><div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}><span className="matrix-note">TIA due-date control</span><PrivacyTransferCreateForm canWrite={privacyCanWrite}/></div></div>
+      <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Transfer</th><th>Route</th><th>Recipient</th><th>Mechanism</th><th>TIA due</th><th>Status</th><th>Lifecycle</th></tr></thead><tbody>
         {data.transfers.length ? data.transfers.map((row) => <tr key={row.id} data-privacy-transfer-id={row.id} className={privacyFocusType === "transfer" && focusId === row.id ? "focused" : undefined}><td><strong>{row.name}</strong>{privacyFocusType === "transfer" && focusId === row.id ? <small className="cell-sub">Focused transfer impact review</small> : null}</td><td>{row.route}</td><td>{row.recipient}</td><td>{row.mechanism}</td><td>{row.tiaDueAt}</td></tr>) : <Empty text="No active cross-border transfer records are configured." columns={5}/>}
       </tbody></table></div>
     </section>
