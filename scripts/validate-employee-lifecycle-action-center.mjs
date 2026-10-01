@@ -14,7 +14,9 @@ expect(continuityPath, continuity, /sensitive:\s*false/, "sensitive onboarding t
 expect(continuityPath, continuity, /status:\s*\{\s*in:\s*OPEN_ONBOARDING_TASKS/, "only open onboarding tasks may enter the shared queue");
 expect(continuityPath, continuity, /take:\s*100/, "onboarding plan aggregation must be bounded");
 expect(continuityPath, continuity, /href:\s*`\/module\/onboarding\?task=/, "onboarding attention must deep-link to the existing scoped task focus");
-expect(continuityPath, continuity, /action:\s*null/, "employee lifecycle attention must remain deep-link only");
+expect(continuityPath, continuity, /type:\s*"advance-onboarding-task"[\s\S]*status:\s*"IN_PROGRESS"[\s\S]*status:\s*"COMPLETED"/, "non-sensitive onboarding attention must expose only bounded start/complete actions");
+expect(continuityPath, continuity, /task\.status === OnboardingTaskStatus\.IN_PROGRESS[\s\S]*advance-onboarding-task/, "onboarding quick action must derive target state from the governed task status");
+reject(continuityPath, continuity, /advance-onboarding-task[\s\S]*BLOCKED|advance-onboarding-task[\s\S]*WAIVED/, "shared onboarding quick actions must not create blocker or waiver states that require reasons");
 
 expect(continuityPath, continuity, /can\(ctx,\s*"offboarding:write"\)/, "offboarding shared attention must require write authority");
 expect(continuityPath, continuity, /resolveEmploymentScope/, "offboarding attention must reuse employment relationship scope");
@@ -45,7 +47,9 @@ expect(uiPath, ui, /"onboarding"/, "Action Center UI must understand onboarding 
 expect(uiPath, ui, /"offboarding"/, "Action Center UI must understand offboarding attention");
 expect(uiPath, ui, /summary\.onboarding/, "Action Center must expose onboarding source count");
 expect(uiPath, ui, /summary\.offboarding/, "Action Center must expose offboarding source count");
-expect(uiPath, ui, /item\.action\?\.type\s*===\s*"complete-workflow"/, "only workflow tasks may be directly completed from the shared queue");
+expect(uiPath, ui, /item\.action\.type === "advance-onboarding-task"[\s\S]*\/api\/onboarding\/tasks\//, "onboarding quick actions must reuse the governed task-status endpoint");
+expect(uiPath, ui, /resourceType:\s*"OnboardingTask"/, "onboarding quick actions must retire matching notifications best-effort");
+expect(uiPath, ui, /payload = \{ status: item\.action\.status \}/, "onboarding quick actions must send only the precomputed bounded target status");
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
