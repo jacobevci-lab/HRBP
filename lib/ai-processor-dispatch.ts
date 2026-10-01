@@ -12,6 +12,22 @@ type AIDispatchInput = {
   sourceRefs?: string[];
 };
 
+type SynchronousProcessorResult = {
+  response: string;
+  modelProvider: string;
+  modelName: string;
+};
+
+function validSynchronousResult(value: unknown): SynchronousProcessorResult | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as { response?: unknown; modelProvider?: unknown; modelName?: unknown };
+  const response = typeof raw.response === "string" ? raw.response.trim() : "";
+  const modelProvider = typeof raw.modelProvider === "string" ? raw.modelProvider.trim() : "";
+  const modelName = typeof raw.modelName === "string" ? raw.modelName.trim() : "";
+  if (!response || response.length > 32_000 || !modelProvider || modelProvider.length > 120 || !modelName || modelName.length > 160) return null;
+  return { response, modelProvider, modelName };
+}
+
 export async function dispatchAIInteraction(input: AIDispatchInput) {
   const endpoint = runtimeString("HRBP_AI_PROCESSOR_URL");
   const token = runtimeString("HRBP_AI_PROCESSOR_TOKEN");
@@ -53,10 +69,20 @@ export async function dispatchAIInteraction(input: AIDispatchInput) {
       cache: "no-store"
     });
 
+    if (response.status === 202) return { dispatched: true as const, mode: "async" as const };
     if (!response.ok) {
       return { dispatched: false as const, reason: "PROCESSOR_REJECTED" as const, status: response.status };
     }
-    return { dispatched: true as const };
+
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      return { dispatched: false as const, reason: "PROCESSOR_RESPONSE_INVALID" as const };
+    }
+    const completed = validSynchronousResult(payload);
+    if (!completed) return { dispatched: false as const, reason: "PROCESSOR_RESPONSE_INVALID" as const };
+    return { dispatched: true as const, mode: "sync" as const, completed };
   } catch (error) {
     const reason = error instanceof Error && error.name === "AbortError" ? "PROCESSOR_TIMEOUT" : "PROCESSOR_UNAVAILABLE";
     return { dispatched: false as const, reason };
