@@ -130,6 +130,10 @@ export type LifecycleActionItem = {
     type: "advance-hr-service";
     requestId: string;
     status: "TRIAGE" | "IN_PROGRESS";
+  } | {
+    type: "advance-onboarding-task";
+    taskId: string;
+    status: "IN_PROGRESS" | "COMPLETED";
   };
 };
 
