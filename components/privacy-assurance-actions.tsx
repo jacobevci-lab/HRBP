@@ -1,15 +1,15 @@
 "use client";
 
-import { CheckCircle2, LoaderCircle, PauseCircle, PlayCircle, Plus, RotateCcw, Save, ShieldCheck, X } from "lucide-react";
+import { CheckCircle2, LoaderCircle, PauseCircle, Pencil, PlayCircle, Plus, RotateCcw, Save, ShieldCheck, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function PrivacyAssessmentCreateForm({ canWrite }: { canWrite: boolean }) {
+export function PrivacyAssessmentCreateForm({ canWrite, activities }: { canWrite: boolean; activities: Array<{ id: string; code: string; name: string }> }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", riskLevel: "MEDIUM", requiresDpia: false, dueAt: "" });
+  const [form, setForm] = useState({ name: "", riskLevel: "MEDIUM", requiresDpia: false, dueAt: "", processingActivityId: "" });
 
   if (!canWrite) return null;
 
@@ -28,6 +28,7 @@ export function PrivacyAssessmentCreateForm({ canWrite }: { canWrite: boolean })
           name: form.name.trim(),
           riskLevel: form.riskLevel.trim(),
           requiresDpia: form.requiresDpia,
+          processingActivityId: form.processingActivityId || undefined,
           dueAt: form.dueAt ? new Date(`${form.dueAt}T23:59:59.000Z`).toISOString() : undefined
         })
       });
@@ -36,7 +37,7 @@ export function PrivacyAssessmentCreateForm({ canWrite }: { canWrite: boolean })
         setError(value.error || "Assessment could not be created.");
         return;
       }
-      setForm({ name: "", riskLevel: "MEDIUM", requiresDpia: false, dueAt: "" });
+      setForm({ name: "", riskLevel: "MEDIUM", requiresDpia: false, dueAt: "", processingActivityId: "" });
       setOpen(false);
       window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
       router.refresh();
@@ -55,6 +56,7 @@ export function PrivacyAssessmentCreateForm({ canWrite }: { canWrite: boolean })
         <label><small>Risk level</small><input maxLength={40} value={form.riskLevel} onChange={(event) => setForm((value) => ({...value,riskLevel:event.target.value}))}/></label>
         <label><small>Due date</small><input type="date" value={form.dueAt} onChange={(event) => setForm((value) => ({...value,dueAt:event.target.value}))}/></label>
       </div>
+      <label><small>Processing activity</small><select value={form.processingActivityId} onChange={(event) => setForm((value) => ({...value,processingActivityId:event.target.value}))}><option value="">Optional</option>{activities.map((activity) => <option key={activity.id} value={activity.id}>{activity.code} · {activity.name}</option>)}</select></label>
       <label><small><input type="checkbox" checked={form.requiresDpia} onChange={(event) => setForm((value) => ({...value,requiresDpia:event.target.checked}))}/> DPIA required</small></label>
       <button type="button" className="mini-action approve" disabled={saving} onClick={() => void create()}>{saving ? <LoaderCircle size={12}/> : <Save size={12}/>} Create assessment</button>
       {error ? <small className="comp-decision-error">{error}</small> : null}
@@ -67,22 +69,67 @@ export function PrivacyAssessmentActions({
   status,
   ownerId,
   actorId,
-  canWrite
+  canWrite,
+  name,
+  riskLevel,
+  requiresDpia,
+  dueAtIso,
+  processingActivityId,
+  activities
 }: {
   assessmentId: string;
   status: string;
   ownerId: string;
   actorId: string;
   canWrite: boolean;
+  name: string;
+  riskLevel: string;
+  requiresDpia: boolean;
+  dueAtIso: string | null;
+  processingActivityId: string | null;
+  activities: Array<{ id: string; code: string; name: string }>;
 }) {
   const router = useRouter();
   const [openComplete, setOpenComplete] = useState(false);
+  const [openEdit, setOpenEdit] = useState(false);
   const [summary, setSummary] = useState("");
   const [mitigations, setMitigations] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name, riskLevel, requiresDpia, dueAt: dueAtIso?.slice(0,10) ?? "", processingActivityId: processingActivityId ?? "" });
   const terminal = ["COMPLETED","CLOSED"].includes(status.toUpperCase());
   const editable = canWrite && ownerId === actorId;
+
+  async function saveMetadata() {
+    if (!editable || terminal) return;
+    setBusy("EDIT");
+    setError(null);
+    try {
+      const response = await fetch(`/api/privacy/assessments/${encodeURIComponent(assessmentId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-purpose": "Privacy assurance metadata" },
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          riskLevel: editForm.riskLevel.trim(),
+          requiresDpia: editForm.requiresDpia,
+          processingActivityId: editForm.processingActivityId || null,
+          dueAt: editForm.dueAt ? new Date(`${editForm.dueAt}T23:59:59.000Z`).toISOString() : null
+        })
+      });
+      const value = await response.json() as { error?: string };
+      if (!response.ok) {
+        setError(value.error || "Assessment update failed.");
+        return;
+      }
+      setOpenEdit(false);
+      window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
+      router.refresh();
+    } catch {
+      setError("Privacy service could not be reached.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function act(action: "START" | "WAIT" | "COMPLETE" | "REOPEN") {
     if (!editable) return;
@@ -121,8 +168,18 @@ export function PrivacyAssessmentActions({
 
   return <div style={{display:"grid",gap:5}}>
     <div className="comp-decision-buttons">
-      {!terminal ? <><button type="button" className="mini-action apply" disabled={Boolean(busy)} onClick={() => void act("START")}><PlayCircle size={12}/> Start</button><button type="button" className="mini-action apply" disabled={Boolean(busy)} onClick={() => void act("WAIT")}><PauseCircle size={12}/> Wait</button><button type="button" className="mini-action approve" disabled={Boolean(busy)} onClick={() => setOpenComplete((value) => !value)}><CheckCircle2 size={12}/> Complete</button></> : <button type="button" className="mini-action apply" disabled={Boolean(busy)} onClick={() => void act("REOPEN")}><RotateCcw size={12}/> Reopen</button>}
+      {!terminal ? <><button type="button" className="mini-action apply" disabled={Boolean(busy)} onClick={() => setOpenEdit((value) => !value)}><Pencil size={12}/> Edit</button><button type="button" className="mini-action apply" disabled={Boolean(busy)} onClick={() => void act("START")}><PlayCircle size={12}/> Start</button><button type="button" className="mini-action apply" disabled={Boolean(busy)} onClick={() => void act("WAIT")}><PauseCircle size={12}/> Wait</button><button type="button" className="mini-action approve" disabled={Boolean(busy)} onClick={() => setOpenComplete((value) => !value)}><CheckCircle2 size={12}/> Complete</button></> : <button type="button" className="mini-action apply" disabled={Boolean(busy)} onClick={() => void act("REOPEN")}><RotateCcw size={12}/> Reopen</button>}
     </div>
+    {openEdit && !terminal ? <div className="card" style={{padding:8,display:"grid",gap:6,minWidth:340}}>
+      <label><small>Name</small><input maxLength={180} value={editForm.name} onChange={(event) => setEditForm((value) => ({...value,name:event.target.value}))}/></label>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+        <label><small>Risk level</small><input maxLength={40} value={editForm.riskLevel} onChange={(event) => setEditForm((value) => ({...value,riskLevel:event.target.value}))}/></label>
+        <label><small>Due date</small><input type="date" value={editForm.dueAt} onChange={(event) => setEditForm((value) => ({...value,dueAt:event.target.value}))}/></label>
+      </div>
+      <label><small>Processing activity</small><select value={editForm.processingActivityId} onChange={(event) => setEditForm((value) => ({...value,processingActivityId:event.target.value}))}><option value="">None</option>{activities.map((activity) => <option key={activity.id} value={activity.id}>{activity.code} · {activity.name}</option>)}</select></label>
+      <label><small><input type="checkbox" checked={editForm.requiresDpia} onChange={(event) => setEditForm((value) => ({...value,requiresDpia:event.target.checked}))}/> DPIA required</small></label>
+      <button type="button" className="mini-action approve" disabled={busy === "EDIT" || !editForm.name.trim() || !editForm.riskLevel.trim()} onClick={() => void saveMetadata()}><Save size={12}/> Save metadata</button>
+    </div> : null}
     {openComplete ? <div className="card" style={{padding:8,display:"grid",gap:6,minWidth:320}}>
       <label><small>Findings summary</small><textarea rows={3} maxLength={2000} value={summary} onChange={(event) => setSummary(event.target.value)}/></label>
       <label><small>Mitigations (comma separated)</small><input value={mitigations} onChange={(event) => setMitigations(event.target.value)}/></label>
