@@ -44,6 +44,8 @@ expect(uiPath, ui, /item\.secondaryAction\.type === "return-requisition"[\s\S]*s
 expect(uiPath, ui, /item\.action\.type === "approve-offer"[\s\S]*\/api\/recruiting\/offers\//, "offer approval must call the governed offer status endpoint");
 expect(uiPath, ui, /item\.secondaryAction\.type === "return-offer"[\s\S]*status:\s*"DRAFT"/, "offer return must reuse the governed offer transition");
 expect(uiPath, ui, /window\.confirm\(copy\.confirm\)/, "Recruiting quick decisions must remain explicitly confirmed");
+expect(uiPath, ui, /resourceType:\s*"Requisition"[\s\S]*resourceType:\s*"Offer"/, "Recruiting quick decisions must identify matching notification resources");
+expect(uiPath, ui, /if \(!response\.ok\) throw[\s\S]*acknowledgeResourceNotifications/, "Recruiting notification acknowledgement must occur only after the business mutation succeeds");
 expect(uiPath, ui, /href=\{item\.href\}/, "records without safe quick actions must continue to deep-link to the owning domain");
 
 const recruitingConsolePath = "components/recruiting-operations-console.tsx";
