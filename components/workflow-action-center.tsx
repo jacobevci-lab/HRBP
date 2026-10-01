@@ -111,6 +111,15 @@ type LifecycleActionItem = {
   } | {
     type: "resume-dsr";
     dsrId: string;
+  } | {
+    type: "start-privacy-assessment";
+    assessmentId: string;
+  } | {
+    type: "wait-privacy-assessment";
+    assessmentId: string;
+  } | {
+    type: "resume-privacy-assessment";
+    assessmentId: string;
   };
 };
 
@@ -208,6 +217,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "activate-workflow-definition") return { resourceType: "WorkflowDefinition", resourceId: action.definitionId };
   if (action?.type === "open-engagement-campaign" || action?.type === "close-engagement-campaign") return { resourceType: "SurveyCampaign", resourceId: action.campaignId };
   if (action?.type === "begin-dsr-verification" || action?.type === "verify-dsr" || action?.type === "wait-dsr" || action?.type === "resume-dsr") return { resourceType: "DataSubjectRequest", resourceId: action.dsrId };
+  if (action?.type === "start-privacy-assessment" || action?.type === "wait-privacy-assessment" || action?.type === "resume-privacy-assessment") return { resourceType: "PrivacyRiskAssessment", resourceId: action.assessmentId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -384,6 +394,24 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       busy: locale === "tr" ? "Devam ettiriliyor…" : "Resuming…",
       confirm: locale === "tr" ? `“${item.title}” kaydını yeniden işleme almak istiyor musun?` : `Resume “${item.title}”?`,
       success: locale === "tr" ? "DSR yeniden işleme alındı." : "DSR resumed."
+    };
+    if (item.action.type === "start-privacy-assessment") return {
+      label: locale === "tr" ? "Değerlendirmeyi başlat" : "Start assessment",
+      busy: locale === "tr" ? "Başlatılıyor…" : "Starting…",
+      confirm: locale === "tr" ? `“${item.title}” değerlendirmesini başlatmak istiyor musun?` : `Start “${item.title}”?`,
+      success: locale === "tr" ? "Gizlilik değerlendirmesi başlatıldı." : "Privacy assessment started."
+    };
+    if (item.action.type === "wait-privacy-assessment") return {
+      label: locale === "tr" ? "Beklemeye al" : "Put on hold",
+      busy: locale === "tr" ? "Güncelleniyor…" : "Updating…",
+      confirm: locale === "tr" ? `“${item.title}” değerlendirmesini beklemeye almak istiyor musun?` : `Put “${item.title}” on hold?`,
+      success: locale === "tr" ? "Gizlilik değerlendirmesi beklemeye alındı." : "Privacy assessment put on hold."
+    };
+    if (item.action.type === "resume-privacy-assessment") return {
+      label: locale === "tr" ? "Değerlendirmeye devam et" : "Resume assessment",
+      busy: locale === "tr" ? "Devam ettiriliyor…" : "Resuming…",
+      confirm: locale === "tr" ? `“${item.title}” değerlendirmesine devam etmek istiyor musun?` : `Resume “${item.title}”?`,
+      success: locale === "tr" ? "Gizlilik değerlendirmesi yeniden işleme alındı." : "Privacy assessment resumed."
     };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
@@ -576,6 +604,15 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "resume-dsr") {
         endpoint = `/api/privacy/dsrs/${encodeURIComponent(item.action.dsrId)}/lifecycle`;
         payload = { action: "RESUME" };
+      } else if (item.action.type === "start-privacy-assessment") {
+        endpoint = `/api/privacy/assessments/${encodeURIComponent(item.action.assessmentId)}/lifecycle`;
+        payload = { action: "START" };
+      } else if (item.action.type === "wait-privacy-assessment") {
+        endpoint = `/api/privacy/assessments/${encodeURIComponent(item.action.assessmentId)}/lifecycle`;
+        payload = { action: "WAIT" };
+      } else if (item.action.type === "resume-privacy-assessment") {
+        endpoint = `/api/privacy/assessments/${encodeURIComponent(item.action.assessmentId)}/lifecycle`;
+        payload = { action: "START" };
       }
 
       const response = await fetch(endpoint, {
