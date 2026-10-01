@@ -72,7 +72,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const demandDriver = boundedText(body.demandDriver, 1000);
   const currentFte = boundedNumber(body.currentFte, 0, 1_000_000, true);
   const plannedFte = boundedNumber(body.plannedFte, 0, 1_000_000, true);
-  const avgAnnualCost = boundedNumber(body.avgAnnualCost, 0, 1_000_000_000);
+  const avgAnnualCost = body.avgAnnualCost === null || body.avgAnnualCost === "" ? undefined : boundedNumber(body.avgAnnualCost, 0, 1_000_000_000);
   const skillsRequired = skills(body.skillsRequired);
 
   if (!orgUnitId || !roleLabel || currentFte === null || plannedFte === null || avgAnnualCost === null || skillsRequired === null) {
