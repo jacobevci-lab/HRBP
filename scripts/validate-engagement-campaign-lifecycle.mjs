@@ -30,12 +30,19 @@ expect(continuityPath, continuity, /createdById:\s*ctx\.actorId/, "Engagement at
 expect(continuityPath, continuity, /SurveyStatus\.SCHEDULED[\s\S]*SurveyStatus\.OPEN/, "only scheduled or open campaigns may enter timing attention");
 expect(continuityPath, continuity, /\/module\/engagement\?campaign=/, "campaign attention must deep-link to exact governed engagement focus");
 expect(continuityPath, continuity, /engagement:\s*items\.filter/, "summary must expose aggregate Engagement attention");
+expect(continuityPath, continuity, /type:\s*"open-engagement-campaign"[\s\S]*type:\s*"close-engagement-campaign"/, "campaign timing attention must expose state-specific open/close actions");
+expect(continuityPath, continuity, /type:\s*"return-engagement-draft"/, "scheduled campaigns must expose a bounded return-to-draft action");
 reject(continuityPath, continuity, /audienceFilter|SurveyResponse|responseCount|employmentId/, "central Engagement attention must not load audience or response detail");
 
 const uiPath = "components/workflow-action-center.tsx";
 const ui = await source(uiPath);
 expect(uiPath, ui, /"engagement"/, "Action Center must expose Engagement as a source");
 expect(uiPath, ui, /summary\.engagement/, "Action Center must surface aggregate Engagement attention");
+expect(uiPath, ui, /item\.action\.type === "open-engagement-campaign"[\s\S]*\/api\/engagement\/campaigns\//, "scheduled campaign opening must use the governed lifecycle route");
+expect(uiPath, ui, /item\.action\.type === "close-engagement-campaign"[\s\S]*action:\s*"CLOSE"/, "open campaign closing must use the governed lifecycle route");
+expect(uiPath, ui, /item\.secondaryAction\.type === "return-engagement-draft"[\s\S]*RETURN_DRAFT/, "scheduled campaign return-to-draft must reuse the governed lifecycle route");
+expect(uiPath, ui, /resourceType:\s*"SurveyCampaign"/, "campaign quick actions must clear matching notifications best-effort");
+expect(uiPath, ui, /window\.confirm\(copy\.confirm\)/, "campaign quick actions must require explicit confirmation");
 
 const livePath = "components/governance-planning-live-workspace.tsx";
 const live = await source(livePath);
