@@ -32,6 +32,14 @@ expect(createQuestionPath, createQuestion, /survey\.createdById !== ctx\.actorId
 expect(createQuestionPath, createQuestion, /campaigns:\s*\{\s*where:\s*\{\s*status:\s*\{\s*not:\s*"DRAFT"/, "question authoring must lock after a campaign leaves DRAFT");
 expect(createQuestionPath, createQuestion, /engagement-survey-question\.created/, "question creation must be audited");
 
+const reorderPath = "app/api/engagement/surveys/[id]/questions/reorder/route.ts";
+const reorder = await source(reorderPath);
+expect(reorderPath, reorder, /MAX_QUESTIONS = 100/, "survey question reordering must remain bounded");
+expect(reorderPath, reorder, /survey\.createdById !== ctx\.actorId/, "question reordering must remain creator-bound");
+expect(reorderPath, reorder, /campaigns:\s*\{\s*where:\s*\{\s*status:\s*\{\s*not:\s*"DRAFT"/, "question reordering must lock after a campaign leaves DRAFT");
+expect(reorderPath, reorder, /survey\.questions\.length !== questionIds\.length/, "question reorder payload must exactly match current survey questions");
+expect(reorderPath, reorder, /engagement-survey-question\.reordered/, "question reordering must be audited");
+
 const questionPath = "app/api/engagement/surveys/[id]/questions/[questionId]/route.ts";
 const question = await source(questionPath);
 expect(questionPath, question, /export async function PATCH/, "survey questions must support governed edits");
@@ -62,6 +70,8 @@ expect(uiPath, ui, /\/api\/engagement\/surveys/, "authoring UI must create gover
 expect(uiPath, ui, /\/questions/, "authoring UI must create and edit questions");
 expect(uiPath, ui, /method:\s*question\.questionId \? "PATCH" : "POST"/, "authoring UI must support question create/edit");
 expect(uiPath, ui, /method:\s*"DELETE"/, "authoring UI must support question deletion");
+expect(uiPath, ui, /questions\/reorder/, "authoring UI must support governed question reordering");
+expect(uiPath, ui, /moveQuestion/, "authoring UI must expose bounded up/down ordering controls");
 expect(uiPath, ui, /canEditSelected/, "authoring UI must respect server-computed editability");
 expect(uiPath, ui, /method:\s*"PATCH"/, "authoring UI must support survey metadata updates");
 expect(uiPath, ui, /Delete survey/, "authoring UI must surface unused-survey deletion");
