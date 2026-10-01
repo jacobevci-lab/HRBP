@@ -20,6 +20,8 @@ expect(growthPath, growth, /developmentPlans:\s*items\.filter\(\(item\) => item\
 expect(growthPath, growth, /succession:\s*items\.filter\(\(item\) => item\.kind === "succession"\)\.length/, "summary must expose aggregate succession attention");
 expect(growthPath, growth, /slice\(0,\s*300\)/, "shared queue must remain bounded after owner attention is added");
 reject(growthPath, growth, /outcomeNotes|developmentGap|performance:\s*true|potential:\s*true|readiness:\s*true|score|certificateReference/, "owner attention must not load human assessment detail or learning evidence");
+expect(growthPath, growth, /LearningAssignmentStatus\.ASSIGNED[\s\S]*LearningAssignmentStatus\.OVERDUE[\s\S]*start-learning-assignment/, "only assigned or overdue self learning may expose bounded quick-start progression");
+reject(growthPath, growth, /start-learning-assignment[\s\S]*COMPLETED/, "Action Center must not complete learning assignments without domain evidence");
 
 const pagePath = "app/module/[slug]/page.tsx";
 const page = await source(pagePath);
@@ -58,7 +60,9 @@ expect(componentPath, component, /"development-plan"/, "Action Center UI must un
 expect(componentPath, component, /"succession"/, "Action Center UI must understand succession attention");
 expect(componentPath, component, /summary\.developmentPlans/, "Action Center UI must expose development-plan count");
 expect(componentPath, component, /summary\.succession/, "Action Center UI must expose succession count");
-expect(componentPath, component, /item\.action\?\.type\s*===\s*"complete-workflow"/, "new growth attention must remain deep-link only and never become an automatic decision action");
+expect(componentPath, component, /item\.action\.type === "start-learning-assignment"[\s\S]*\/api\/learning\/assignments\//, "participant learning quick-start must use the governed self-transition endpoint");
+expect(componentPath, component, /payload = \{ status: "IN_PROGRESS" \}/, "learning quick-start must only move assignments into in-progress state");
+expect(componentPath, component, /resourceType:\s*"LearningAssignment"/, "learning quick-start must clear matching notifications best-effort");
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
