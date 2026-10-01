@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { can } from "@/lib/authorization";
 import { WorkforceScenarioActions } from "@/components/workforce-scenario-actions";
+import { WorkforcePlanLineManager } from "@/components/workforce-plan-line-manager";
 import { DSRLifecycleActions } from "@/components/dsr-lifecycle-actions";
 import { EngagementCampaignActions } from "@/components/engagement-campaign-actions";
 import { EngagementCampaignWindowEditor } from "@/components/engagement-campaign-window-editor";
@@ -110,7 +111,7 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
           <div className="gov-table-wrap"><table className="gov-table"><thead><tr><th>Scenario</th><th>Horizon</th><th>Current FTE</th><th>Planned FTE</th><th>Delta</th><th>Cost delta</th><th>Owner</th><th>Status</th><th>Governance</th></tr></thead><tbody>
             {data.rows.length ? data.rows.map((row) => <tr key={row.id} data-workforce-scenario-id={row.id} className={focusId === row.id ? "focused" : undefined}>
               <td><strong>{row.name}</strong><small className="cell-sub">{row.code} · base {row.baseDate}{focusId === row.id ? ` · ${mode === "review" ? "focused review" : "focused scenario"}` : ""}</small></td>
-              <td>{row.horizonMonths}m</td><td>{row.currentFte}</td><td>{row.plannedFte}</td><td>{row.delta >= 0 ? "+" : ""}{row.delta}</td><td>{row.currency} {row.costDelta.toLocaleString("en-US")}</td><td>{row.owner}</td><td><Pill value={row.status}/></td><td><WorkforceScenarioActions scenarioId={row.id} status={row.rawStatus} ownerId={row.ownerId} actorId={ctx.actorId} canWrite={canWrite} canApprove={canApprove}/></td>
+              <td>{row.horizonMonths}m</td><td>{row.currentFte}</td><td>{row.plannedFte}</td><td>{row.delta >= 0 ? "+" : ""}{row.delta}</td><td>{row.currency} {row.costDelta.toLocaleString("en-US")}</td><td>{row.owner}</td><td><Pill value={row.status}/></td><td><div style={{display:"grid",gap:6}}><WorkforcePlanLineManager scenarioId={row.id} status={row.rawStatus} ownerId={row.ownerId} actorId={ctx.actorId} canWrite={canWrite} currency={row.currency} lines={row.lines}/><WorkforceScenarioActions scenarioId={row.id} status={row.rawStatus} ownerId={row.ownerId} actorId={ctx.actorId} canWrite={canWrite} canApprove={canApprove}/></div></td>
             </tr>) : <Empty text="No workforce scenario lines intersect your authorized organization or position scope." columns={9}/>}
           </tbody></table></div>
         </div>
