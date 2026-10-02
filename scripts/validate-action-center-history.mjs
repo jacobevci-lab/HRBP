@@ -23,7 +23,7 @@ expect(routePath, route, /"offboarding\.task-"/, "decision history must include 
 expect(routePath, route, /"employee-case\.corrective-action-"/, "decision history must include governed Employee Relations corrective-action starts");
 expect(routePath, route, /classification:\s*true/, "decision history may expose classification metadata");
 reject(routePath, route, /purpose:\s*true|ipAddress:\s*true|hash:\s*true|previousHash:\s*true/, "decision history must not project purpose, network or chain internals");
-reject(routePath, route, /person|employee|annualBase|payload/i, "decision history API must not project person, pay or payload detail");
+reject(routePath, route, /person:\s*true|employment:\s*true|annualBase:\s*true|payload:\s*true|workEmail:\s*true/, "decision history API must not project person, employment, pay or payload detail");
 
 
 const exportPath = "app/api/action-center/history/export/route.ts";
