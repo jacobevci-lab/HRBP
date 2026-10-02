@@ -7,11 +7,12 @@ function reject(path, text, pattern, message) { if (pattern.test(text)) failures
 
 const growthPath = "lib/growth-action-center-continuity.ts";
 const growth = await source(growthPath);
-expect(growthPath, growth, /DevelopmentPlanStatus\.ACTIVE/, "development-plan owner attention must only include active plans");
+expect(growthPath, growth, /DevelopmentPlanStatus\.DRAFT[\s\S]*DevelopmentPlanStatus\.ACTIVE/, "development-plan owner attention must include owned drafts for activation and active plans nearing review");
 expect(growthPath, growth, /can\(ctx,\s*"talent:write"\)/, "development-plan attention must require talent write authority");
 expect(growthPath, growth, /ownerId:\s*ctx\.actorId/, "development-plan attention must be bound to the signed human owner");
 expect(growthPath, growth, /HRBP_DEVELOPMENT_PLAN_WARNING_DAYS/, "development-plan attention must reuse the configured reminder horizon");
 expect(growthPath, growth, /href:\s*`\/module\/talent\?developmentPlan=/, "development-plan attention must deep-link to the exact governed plan");
+expect(growthPath, growth, /plan\.status === DevelopmentPlanStatus\.DRAFT[\s\S]*type:\s*"activate-development-plan"/, "owned development-plan drafts must expose bounded activation");
 expect(growthPath, growth, /can\(ctx,\s*"succession:write"\)/, "succession attention must require succession write authority");
 expect(growthPath, growth, /ownerId:\s*ctx\.actorId[\s\S]*active:\s*true[\s\S]*reviewDueAt:/, "succession attention must be active, owner-bound and review-date driven");
 expect(growthPath, growth, /HRBP_SUCCESSION_REVIEW_WARNING_DAYS/, "succession attention must reuse the configured reminder horizon");
@@ -63,6 +64,9 @@ expect(componentPath, component, /summary\.succession/, "Action Center UI must e
 expect(componentPath, component, /item\.action\.type === "start-learning-assignment"[\s\S]*\/api\/learning\/assignments\//, "participant learning quick-start must use the governed self-transition endpoint");
 expect(componentPath, component, /payload = \{ status: "IN_PROGRESS" \}/, "learning quick-start must only move assignments into in-progress state");
 expect(componentPath, component, /resourceType:\s*"LearningAssignment"/, "learning quick-start must clear matching notifications best-effort");
+expect(componentPath, component, /item\.action\.type === "activate-development-plan"[\s\S]*\/api\/talent\/development-plans\//, "development-plan activation must use the governed plan endpoint");
+expect(componentPath, component, /method = item\.action\.type === "activate-development-plan" \? "PATCH" : "POST"/, "development-plan activation must preserve the owning PATCH mutation contract");
+expect(componentPath, component, /resourceType:\s*"DevelopmentPlan"/, "development-plan activation must clear matching notifications best-effort");
 expect(growthPath, growth, /ReviewStatus\.NOT_STARTED[\s\S]*start-performance-self-review/, "only not-started self reviews may expose bounded quick-start progression");
 expect(componentPath, component, /item\.action\.type === "start-performance-self-review"[\s\S]*\/api\/performance\/reviews\//, "performance self-review quick-start must use the governed self-start endpoint");
 expect(componentPath, component, /resourceType:\s*"PerformanceReview"/, "performance self-review quick-start must clear matching notifications best-effort");
