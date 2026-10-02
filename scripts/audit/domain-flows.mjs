@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { BenefitPlanType, PerformanceBand, PotentialBand } from '@prisma/client';
-/** Additional real HTTP flows. All writes are restricted to the disposable audit database. */
+/** Real HTTP flows; every write targets only the disposable audit database. */
 export async function auditDomainFlows({ contexts, fixture, db, report, scenario, BASE, inventory }) {
   assert.equal(BASE, 'http://localhost:3100');
   const account = role => fixture.accounts.find(a => a.role === role);
@@ -142,6 +142,7 @@ export async function auditDomainFlows({ contexts, fixture, db, report, scenario
   });
   await scenario('Old session rejected after account is deactivated', async () => {
     const subject = account('RECRUITER');
+    await call('RECRUITER', '/api/people', 'GET', undefined, 200);
     await db.userAccount.update({ where: { id: subject.id }, data: { active: false } });
     try { await call('RECRUITER', '/api/people', 'GET', undefined, 401); }
     finally { await db.userAccount.update({ where: { id: subject.id }, data: { active: true } }); }
@@ -151,7 +152,7 @@ export async function auditDomainFlows({ contexts, fixture, db, report, scenario
     await scenario(`Authenticated read ${route.path}`, async () => {
       const role = readRole(route.path), response = await contexts.get(role).request.get(BASE + route.path, { timeout: 15000, maxRedirects: 0 });
       report.api.push({ path: route.path, method: 'GET', role, test: 'authenticated-read', http: response.status() });
-      assert.ok(response.status() < 500, `Unexpected HTTP ${response.status()}`);
+      assert.ok(response.status() < 500 && ![401,403].includes(response.status()), `Authenticated read did not reach its handler: HTTP ${response.status()}`);
     });
   }
 }
