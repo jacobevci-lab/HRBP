@@ -20,6 +20,7 @@ const actionPrefixes = [
   "learning-assignment.self-transition.",
   "performance-review.self-started",
   "ONBOARDING_HANDOFF_",
+  "offboarding.task-",
   "workflow.task-"
 ];
 
