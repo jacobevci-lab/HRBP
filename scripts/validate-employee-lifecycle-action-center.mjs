@@ -28,7 +28,8 @@ expect(continuityPath, continuity, /\.\.\.employmentIdFilter\(scope\)/, "offboar
 expect(continuityPath, continuity, /status:\s*\{\s*in:\s*OPEN_SEPARATIONS/, "only open separation processes may enter attention");
 expect(continuityPath, continuity, /finalSettlementStatus:\s*true/, "offboarding attention may use only the settlement state needed for operational routing");
 expect(continuityPath, continuity, /tasks:[\s\S]*select:\s*\{\s*id:\s*true,\s*title:\s*true,\s*status:\s*true,\s*dueAt:\s*true,\s*createdAt:\s*true\s*\}/, "offboarding task projection must remain bounded to operational fields");
-expect(continuityPath, continuity, /type:\s*"advance-offboarding-task"[\s\S]*status:\s*"IN_PROGRESS"[\s\S]*status:\s*"COMPLETED"/, "offboarding task attention must expose only bounded start/complete actions");
+expect(continuityPath, continuity, /type:\s*"advance-offboarding-task"[^}]*status:\s*"COMPLETED"/, "in-progress offboarding tasks must expose bounded completion");
+expect(continuityPath, continuity, /type:\s*"advance-offboarding-task"[^}]*status:\s*"IN_PROGRESS"/, "not-started or blocked offboarding tasks must expose bounded start/resume");
 reject(continuityPath, continuity, /advance-offboarding-task[^}]*status:\s*"BLOCKED"|advance-offboarding-task[^}]*status:\s*"WAIVED"/, "shared offboarding quick actions must not create blocker or waiver states that require reasons");
 reject(continuityPath, continuity, /employeeReason|rehireDecisionReason|replacementDecisionReason|finalSettlementNote|exceptionReason|accountId|serialNumber|conditionNote/, "shared offboarding attention must not load restricted narrative or account/asset detail");
 expect(continuityPath, continuity, /slice\(0,\s*300\)/, "combined action queue must remain bounded");
