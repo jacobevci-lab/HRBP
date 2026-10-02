@@ -27,7 +27,9 @@ expect(continuityPath, continuity, /resolveEmploymentScope/, "offboarding attent
 expect(continuityPath, continuity, /\.\.\.employmentIdFilter\(scope\)/, "offboarding process query must stay relationship scoped");
 expect(continuityPath, continuity, /status:\s*\{\s*in:\s*OPEN_SEPARATIONS/, "only open separation processes may enter attention");
 expect(continuityPath, continuity, /finalSettlementStatus:\s*true/, "offboarding attention may use only the settlement state needed for operational routing");
-expect(continuityPath, continuity, /tasks:[\s\S]*select:\s*\{\s*id:\s*true,\s*status:\s*true\s*\}/, "offboarding task projection must remain minimized");
+expect(continuityPath, continuity, /tasks:[\s\S]*select:\s*\{\s*id:\s*true,\s*title:\s*true,\s*status:\s*true,\s*dueAt:\s*true,\s*createdAt:\s*true\s*\}/, "offboarding task projection must remain bounded to operational fields");
+expect(continuityPath, continuity, /type:\s*"advance-offboarding-task"[\s\S]*status:\s*"IN_PROGRESS"[\s\S]*status:\s*"COMPLETED"/, "offboarding task attention must expose only bounded start/complete actions");
+reject(continuityPath, continuity, /advance-offboarding-task[^}]*status:\s*"BLOCKED"|advance-offboarding-task[^}]*status:\s*"WAIVED"/, "shared offboarding quick actions must not create blocker or waiver states that require reasons");
 reject(continuityPath, continuity, /employeeReason|rehireDecisionReason|replacementDecisionReason|finalSettlementNote|exceptionReason|accountId|serialNumber|conditionNote/, "shared offboarding attention must not load restricted narrative or account/asset detail");
 expect(continuityPath, continuity, /slice\(0,\s*300\)/, "combined action queue must remain bounded");
 expect(continuityPath, continuity, /employeeLifecycleDegraded/, "new lifecycle aggregation must fail soft without suppressing the existing queue");
@@ -56,6 +58,8 @@ expect(uiPath, ui, /resourceType:\s*"OnboardingTask"/, "onboarding quick actions
 expect(uiPath, ui, /payload = \{ status: item\.action\.status \}/, "onboarding quick actions must send only the precomputed bounded target status");
 expect(uiPath, ui, /item\.action\.type === "activate-onboarding-employment"[\s\S]*\/api\/onboarding\/plans\//, "onboarding activation handoff must reuse the governed activation endpoint");
 expect(uiPath, ui, /resourceType:\s*"OnboardingPlan"/, "onboarding activation must clear matching plan notifications best-effort");
+expect(uiPath, ui, /item\.action\.type === "advance-offboarding-task"[\s\S]*\/api\/offboarding\/processes\//, "offboarding task quick actions must reuse the governed task endpoint");
+expect(uiPath, ui, /resourceType:\s*"SeparationTask"/, "offboarding task quick actions must clear matching notifications best-effort");
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
