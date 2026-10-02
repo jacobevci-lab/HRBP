@@ -614,9 +614,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         payload = { action: "RETURN_DRAFT" };
       }
 
-      const method = item.action.type === "activate-development-plan" ? "PATCH" : "POST";
       const response = await fetch(endpoint, {
-        method,
+        method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload)
       });
