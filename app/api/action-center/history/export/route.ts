@@ -25,9 +25,19 @@ const actionPrefixes = [
   "workflow.task-"
 ];
 
-function daysFrom(request: Request) {
-  const value = Number(new URL(request.url).searchParams.get("days") ?? 30);
-  return Number.isFinite(value) ? Math.min(90, Math.max(1, Math.floor(value))) : 30;
+const resourceTypes = new Set([
+  "LeaveRequest","TimeEntry","CompensationChange","PayrollRun","Requisition","Offer","PolicyRecord",
+  "WorkforceScenario","WorkflowDefinition","WorkflowTask","SurveyCampaign","DataSubjectRequest",
+  "PrivacyRiskAssessment","HRServiceRequest","OnboardingTask","OnboardingPlan","BenefitEnrollment",
+  "LearningAssignment","PerformanceReview","SeparationTask","CaseAction"
+]);
+
+function queryOptions(request: Request) {
+  const params = new URL(request.url).searchParams;
+  const rawDays = Number(params.get("days") ?? 30);
+  const days = Number.isFinite(rawDays) ? Math.min(90, Math.max(1, Math.floor(rawDays))) : 30;
+  const resourceType = params.get("resourceType")?.trim() || null;
+  return { days, resourceType: resourceType && resourceTypes.has(resourceType) ? resourceType : null };
 }
 
 function csvCell(value: string) {
@@ -38,13 +48,14 @@ export async function GET(request: Request) {
   const ctx = getRequestContext(request);
   if (!ctx) return unauthorized();
 
-  const days = daysFrom(request);
+  const { days, resourceType } = queryOptions(request);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const rows = await db.auditEvent.findMany({
     where: {
       tenantId: ctx.tenantId,
       actorId: ctx.actorId,
       occurredAt: { gte: since },
+      ...(resourceType ? { resourceType } : {}),
       OR: actionPrefixes.map((prefix) => ({ action: { startsWith: prefix } }))
     },
     orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
@@ -70,10 +81,11 @@ export async function GET(request: Request) {
   ];
 
   const date = new Date().toISOString().slice(0, 10);
+  const suffix = resourceType ? `-${resourceType.toLowerCase()}` : "";
   return new Response(lines.join("\n"), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="hrbp-my-decision-evidence-${date}.csv"`,
+      "content-disposition": `attachment; filename="hrbp-my-decision-evidence${suffix}-${date}.csv"`,
       "cache-control": "no-store"
     }
   });
