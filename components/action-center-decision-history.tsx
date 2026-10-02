@@ -58,6 +58,7 @@ function sourceLabel(resourceType: string, tr: boolean) {
     OnboardingPlan: ["Onboarding handoff", "İşe başlatma devri"],
     SeparationTask: ["Offboarding task", "İşten ayrılış görevi"],
     CaseAction: ["Employee Relations action", "Çalışan ilişkileri aksiyonu"],
+    CaseAppeal: ["Employee Relations appeal", "Çalışan ilişkileri itirazı"],
     DevelopmentPlan: ["Development plan", "Gelişim planı"]
   };
   const label = labels[resourceType];
@@ -127,7 +128,7 @@ export function ActionCenterDecisionHistory() {
             LeaveRequest:1,TimeEntry:1,CompensationChange:1,PayrollRun:1,Requisition:1,Offer:1,PolicyRecord:1,
             WorkforceScenario:1,WorkflowDefinition:1,WorkflowTask:1,SurveyCampaign:1,DataSubjectRequest:1,
             PrivacyRiskAssessment:1,HRServiceRequest:1,OnboardingTask:1,OnboardingPlan:1,BenefitEnrollment:1,
-            LearningAssignment:1,PerformanceReview:1,SeparationTask:1,CaseAction:1,DevelopmentPlan:1
+            LearningAssignment:1,PerformanceReview:1,SeparationTask:1,CaseAction:1,CaseAppeal:1,DevelopmentPlan:1
           }).map((type) => <option key={type} value={type}>{sourceLabel(type, tr)}</option>)}
         </select>
         <button className="secondary-button compact" type="button" onClick={() => void load(days, resourceType)} disabled={loading}><RefreshCw size={14}/>{tr ? "Yenile" : "Refresh"}</button>
