@@ -32,20 +32,66 @@ jobs:
     env:
       DATABASE_URL: postgresql://hrbp:hrbp@localhost:5432/hrbp
       HRBP_MAINTENANCE_TOKEN: ci-product-audit-maintenance-token
+      HRBP_LOCAL_AUTH_ENABLED: 'true'
+      HRBP_AUTH_TENANT_ID: tenant-acme-global
+      APP_URL: http://127.0.0.1:3100
       NEXT_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v4
-      - name: Capture exact tracked source for audit inspection
-        run: git archive --format=tar HEAD -o /tmp/hrbp-audit-source.tar
-      - uses: actions/upload-artifact@v4
-        with:
-          name: product-audit-source
-          path: /tmp/hrbp-audit-source.tar
-          retention-days: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Generate disposable credentials
+        shell: bash
+        run: |
+          PASSWORD=$(openssl rand -hex 24)
+          KEY=$(openssl rand -hex 32)
+          echo "::add-mask::$PASSWORD"
+          echo "::add-mask::$KEY"
+          echo "HRBP_TEST_ADMIN_PASSWORD=$PASSWORD" >> "$GITHUB_ENV"
+          echo "HRBP_SESSION_SECRET=$KEY" >> "$GITHUB_ENV"
       - run: npm install
+      - name: Install isolated browser test dependency
+        run: |
+          npm install --prefix "$RUNNER_TEMP/hrbp-browser" --ignore-scripts playwright@1.63.0
+          npm audit --prefix "$RUNNER_TEMP/hrbp-browser" --audit-level=high
+          node "$RUNNER_TEMP/hrbp-browser/node_modules/playwright/cli.js" install --with-deps chromium
+          echo "HRBP_AUDIT_BROWSER_PACKAGE=$RUNNER_TEMP/hrbp-browser/package.json" >> "$GITHUB_ENV"
       - run: npx prisma db push --skip-generate
       - run: npm run typecheck
+      - name: Inventory all source routes and controls
+        run: node scripts/audit/inventory.mjs
+      - name: Auth contract regression
+        id: auth
+        continue-on-error: true
+        run: node --test scripts/audit/auth-contract.test.mjs
       - run: npm run build
+      - name: Seed disposable multi-role fixtures
+        run: node scripts/audit/fixtures.mjs
+      - name: Run real browser and HTTP audit
+        id: browser
+        continue-on-error: true
+        shell: bash
+        run: |
+          npm run start -- --hostname 127.0.0.1 --port 3100 > /tmp/hrbp-product-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          ready=0
+          for i in {1..40}; do
+            if curl --fail --silent http://127.0.0.1:3100/api/health/runtime > /dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" = 1
+          node scripts/audit/browser.mjs
+      - name: Retain audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: product-audit-evidence
+          path: audit-results/
+          retention-days: 7
+      - name: Enforce audit result
+        if: always()
+        run: |
+          test "${{ steps.auth.outcome }}" = success
+          test "${{ steps.browser.outcome }}" = success
