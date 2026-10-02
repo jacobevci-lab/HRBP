@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, BadgeDollarSign, BookOpenCheck, BriefcaseBusiness, CalendarCheck2, CheckCircle2, ClipboardCheck, Clock3, ExternalLink, FileClock, HeartHandshake, ReceiptText, RefreshCw, ShieldAlert, Target, TimerReset, UserMinus, UserPlus, UsersRound, Workflow } from "lucide-react";
+import { AlertTriangle, BadgeDollarSign, BookOpenCheck, BriefcaseBusiness, CalendarCheck2, CheckCircle2, ClipboardCheck, Clock3, ExternalLink, FileClock, HeartHandshake, ReceiptText, RefreshCw, Search, ShieldAlert, SlidersHorizontal, Target, TimerReset, UserMinus, UserPlus, UsersRound, Workflow } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
@@ -278,6 +278,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
   const [items, setItems] = useState<LifecycleActionItem[]>([]);
   const [summary, setSummary] = useState<ActionSummary>(emptySummary);
   const [filter, setFilter] = useState<Filter>(() => normalizeFilter(initialFilter));
+  const [query, setQuery] = useState("");
+  const [actionableOnly, setActionableOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -321,16 +323,32 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
   const visibleItems = useMemo(() => {
     const now = Date.now();
     const soon = now + 24 * 60 * 60 * 1000;
-    if (filter === "critical") return items.filter((item) => item.urgency === "critical");
-    if (filter === "overdue") return items.filter((item) => item.dueAt && new Date(item.dueAt).getTime() < now);
-    if (filter === "due-soon") return items.filter((item) => {
+    let filtered = items;
+    if (filter === "critical") filtered = filtered.filter((item) => item.urgency === "critical");
+    else if (filter === "overdue") filtered = filtered.filter((item) => item.dueAt && new Date(item.dueAt).getTime() < now);
+    else if (filter === "due-soon") filtered = filtered.filter((item) => {
       if (!item.dueAt) return false;
       const due = new Date(item.dueAt).getTime();
       return due >= now && due <= soon;
     });
-    if (filter !== "all") return items.filter((item) => item.kind === filter);
-    return items;
-  }, [filter, items]);
+    else if (filter !== "all") filtered = filtered.filter((item) => item.kind === filter);
+
+    if (actionableOnly) filtered = filtered.filter((item) => Boolean(item.action || item.secondaryAction));
+
+    const normalizedQuery = query.trim().toLocaleLowerCase(locale === "tr" ? "tr-TR" : "en-US");
+    if (normalizedQuery) {
+      filtered = filtered.filter((item) => [
+        item.title,
+        item.subtitle,
+        item.status,
+        item.subjectType,
+        item.subjectId,
+        sourceLabel(item.kind)
+      ].some((value) => value.toLocaleLowerCase(locale === "tr" ? "tr-TR" : "en-US").includes(normalizedQuery)));
+    }
+
+    return filtered;
+  }, [actionableOnly, filter, items, locale, query]);
 
   function quickActionCopy(item: LifecycleActionItem) {
     if (!item.action) return null;
@@ -848,6 +866,31 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <button type="button" className={filter === "learning" ? "active" : ""} onClick={() => setFilter("learning")}><BookOpenCheck size={14}/>{locale === "tr" ? "Eğitim" : "Learning"} <strong>{summary.learning}</strong></button>
         <button type="button" className={filter === "development-plan" ? "active" : ""} onClick={() => setFilter("development-plan")}><Target size={14}/>{locale === "tr" ? "Gelişim" : "Development"} <strong>{summary.developmentPlans}</strong></button>
         <button type="button" className={filter === "succession" ? "active" : ""} onClick={() => setFilter("succession")}><UsersRound size={14}/>{locale === "tr" ? "Yedekleme" : "Succession"} <strong>{summary.succession}</strong></button>
+      </div>
+
+      <div className="workflow-action-refine">
+        <label className="workflow-action-search">
+          <Search size={15}/>
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value.slice(0, 160))}
+            placeholder={locale === "tr" ? "Başlık, konu, durum veya kaynak ara…" : "Search title, subject, status or source…"}
+            aria-label={locale === "tr" ? "Aksiyon merkezinde ara" : "Search action center"}
+            maxLength={160}
+          />
+        </label>
+        <button
+          type="button"
+          className={`workflow-action-toggle ${actionableOnly ? "active" : ""}`}
+          aria-pressed={actionableOnly}
+          onClick={() => setActionableOnly((value) => !value)}
+        >
+          <SlidersHorizontal size={14}/>
+          <span>{locale === "tr" ? "Yalnız hızlı işlem" : "Quick actions only"}</span>
+          <strong>{items.filter((item) => Boolean(item.action || item.secondaryAction)).length}</strong>
+        </button>
+        {(query || actionableOnly) ? <button type="button" className="secondary-button compact" onClick={() => { setQuery(""); setActionableOnly(false); }}>{locale === "tr" ? "Temizle" : "Clear"}</button> : null}
+        <span className="workflow-action-result-count">{visibleItems.length} / {items.length}</span>
       </div>
 
       {error ? <div className="workflow-action-message error"><AlertTriangle size={15}/>{error}</div> : null}
