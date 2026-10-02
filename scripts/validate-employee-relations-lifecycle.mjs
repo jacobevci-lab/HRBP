@@ -11,6 +11,15 @@ expect(schemaPath, schema, /fromStatus\s+CaseStatus[\s\S]*toStatus\s+CaseStatus[
 expect(schemaPath, schema, /model CaseActionStatusTransition/, "corrective-action transitions must have first-class evidence");
 expect(schemaPath, schema, /classification\s+DataClassification\s+@default\(HIGHLY_RESTRICTED\)/g, "lifecycle evidence must remain highly restricted");
 
+
+const appealReviewPath = "app/api/employee-relations/cases/[id]/appeals/[appealId]/review/route.ts";
+const appealReview = await source(appealReviewPath);
+expect(appealReviewPath, appealReview, /getCaseWallCase/, "appeal review start must remain behind the case wall");
+expect(appealReviewPath, appealReview, /reviewerId !== ctx\.actorId/, "appeal review start must remain assigned-reviewer bound");
+expect(appealReviewPath, appealReview, /CaseAppealStatus\.SUBMITTED[\s\S]*CaseAppealStatus\.REVIEWING/, "appeal quick-start must only advance submitted appeals into reviewing");
+expect(appealReviewPath, appealReview, /TransactionIsolationLevel\.Serializable/, "appeal review start must use serializable isolation");
+expect(appealReviewPath, appealReview, /employee-case\.appeal-review-started/, "appeal review start must emit highly-restricted audit evidence");
+
 const caseRoutePath = "app/api/employee-relations/cases/[id]/status/route.ts";
 const caseRoute = await source(caseRoutePath);
 expect(caseRoutePath, caseRoute, /mutationOriginAllowed/, "case transitions must enforce same-origin protection");
@@ -84,6 +93,7 @@ expect(actionCenterPath, actionCenter, /subjectType:\s*"CaseAction"/, "correctiv
 expect(actionCenterPath, actionCenter, /employee-relations\?q=.*&action=/, "corrective-action attention items must deep-link to the exact action");
 expect(actionCenterPath, actionCenter, /employee-relations\?q=.*&appeal=/, "appeal attention items must deep-link to the exact appeal");
 expect(actionCenterPath, actionCenter, /reviewerId:\s*ctx\.actorId/, "appeal attention must remain explicitly reviewer scoped");
+expect(actionCenterPath, actionCenter, /row\.status === CaseAppealStatus\.SUBMITTED[\s\S]*type:\s*"start-er-appeal-review"/, "only submitted appeals may expose bounded quick-start review");
 expect(actionCenterPath, actionCenter, /row\.status === CaseActionStatus\.OPEN[\s\S]*type:\s*"start-er-corrective-action"/, "only OPEN corrective actions may expose bounded quick-start progression");
 
 
@@ -92,6 +102,8 @@ const sharedAction = await source(sharedActionPath);
 expect(sharedActionPath, sharedAction, /item\.action\.type === "start-er-corrective-action"[\s\S]*\/api\/employee-relations\/cases\//, "Employee Relations quick-start must use the governed corrective-action endpoint");
 expect(sharedActionPath, sharedAction, /payload = \{ status: "IN_PROGRESS" \}/, "Employee Relations quick-start must only move corrective actions into IN_PROGRESS");
 expect(sharedActionPath, sharedAction, /resourceType:\s*"CaseAction"/, "Employee Relations quick-start must clear matching notifications best-effort");
+expect(sharedActionPath, sharedAction, /item\.action\.type === "start-er-appeal-review"[\s\S]*\/appeals\//, "appeal quick-start must use the governed reviewer-bound route");
+expect(sharedActionPath, sharedAction, /resourceType:\s*"CaseAppeal"/, "appeal quick-start must clear matching notifications best-effort");
 
 const notificationPath = "lib/notification-display.ts";
 const notifications = await source(notificationPath);
