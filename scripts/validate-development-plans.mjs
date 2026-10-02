@@ -121,6 +121,19 @@ expect(consolePath, consoleSource, /learning-assignment/, "development plan UI m
 expect(consolePath, consoleSource, /never auto-promotes|otomatik yükseltmez/, "development plan UI must explain the human decision boundary");
 expect(consolePath, consoleSource, /Human outcome|İnsan sonucu/, "development plan completion must request explicit human outcome evidence");
 
+
+const actionCenterPath = "lib/growth-action-center-continuity.ts";
+const actionCenter = await source(actionCenterPath);
+expect(actionCenterPath, actionCenter, /ownerId:\s*ctx\.actorId/, "development-plan activation attention must remain owner bound");
+expect(actionCenterPath, actionCenter, /DevelopmentPlanStatus\.DRAFT/, "development-plan activation attention must include draft plans");
+expect(actionCenterPath, actionCenter, /type:\s*"activate-development-plan"/, "development-plan drafts must expose bounded activation through Action Center");
+
+const sharedActionPath = "components/workflow-action-center.tsx";
+const sharedAction = await source(sharedActionPath);
+expect(sharedActionPath, sharedAction, /item\.action\.type === "activate-development-plan"/, "Action Center must understand development-plan activation");
+expect(sharedActionPath, sharedAction, /payload = \{ status: "ACTIVE" \}/, "Action Center must only request the governed DRAFT to ACTIVE transition");
+expect(sharedActionPath, sharedAction, /method = item\.action\.type === "activate-development-plan" \? "PATCH" : "POST"/, "development-plan quick activation must call the owning PATCH endpoint");
+
 const presentationPath = "lib/notification-presentation.ts";
 const presentation = await source(presentationPath);
 expect(presentationPath, presentation, /DEVELOPMENT_PLAN_REASSESSMENT_REQUIRED/, "notification center must present development-plan reassessment events");
