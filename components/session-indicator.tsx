@@ -51,6 +51,6 @@ export function SessionIndicator() {
   return <div className="session-identity">
     <div className="user-avatar">{initials(session.user.displayName)}</div>
     <div className="user-copy"><strong>{session.user.displayName}</strong><small>{roleLabel(session.user.role, locale)}</small></div>
-    <Link href="/api/auth/logout" className="session-action" title={signOut}><LogOut size={15}/></Link>
+    <Link href="/api/auth/logout" prefetch={false} className="session-action" title={signOut}><LogOut size={15}/></Link>
   </div>;
 }
