@@ -91,6 +91,20 @@ expect(closePath, close, /employment\.exit-terminated[\s\S]*offboarding\.process
 expect(closePath, close, /TransactionIsolationLevel\.Serializable/, "closure must use serializable isolation");
 expect(closePath, close, /P2034/, "closure serialization conflicts must be controlled");
 
+
+const actionCenterContinuityPath = "lib/employee-lifecycle-action-continuity.ts";
+const actionCenterContinuity = await source(actionCenterContinuityPath);
+expect(actionCenterContinuityPath, actionCenterContinuity, /type:\s*"advance-offboarding-task"/, "offboarding task attention must expose bounded quick progression");
+expect(actionCenterContinuityPath, actionCenterContinuity, /task\.status === ExitTaskStatus\.IN_PROGRESS[\s\S]*status:\s*"COMPLETED"/, "in-progress exit tasks must expose bounded completion");
+expect(actionCenterContinuityPath, actionCenterContinuity, /status:\s*"IN_PROGRESS"/, "not-started or blocked exit tasks must expose bounded start/resume");
+expectAbsent(actionCenterContinuityPath, actionCenterContinuity, /advance-offboarding-task[^}]*status:\s*"BLOCKED"|advance-offboarding-task[^}]*status:\s*"WAIVED"/, "Action Center must not bypass blocker or waiver reason capture");
+
+const actionCenterUiPath = "components/workflow-action-center.tsx";
+const actionCenterUi = await source(actionCenterUiPath);
+expect(actionCenterUiPath, actionCenterUi, /item\.action\.type === "advance-offboarding-task"/, "Action Center must understand offboarding task progression");
+expect(actionCenterUiPath, actionCenterUi, /\/api\/offboarding\/processes\//, "offboarding task quick progression must use the governed task endpoint");
+expect(actionCenterUiPath, actionCenterUi, /payload = \{ status: item\.action\.status \}/, "offboarding task quick progression must send only the precomputed safe target state");
+
 const dataPath = "lib/offboarding-live-data.ts";
 const data = await source(dataPath);
 expect(dataPath, data, /initiatedById:\s*true/, "offboarding data must expose initiator for four-eyes UI");
