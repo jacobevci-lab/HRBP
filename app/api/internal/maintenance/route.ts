@@ -1,84 +1,63 @@
-import { monitorAuditIntegrity } from "@/lib/audit-monitoring";
-import { runBenefitsMaintenance } from "@/lib/benefits-maintenance";
-import { queueDevelopmentPlanReminders } from "@/lib/development-plan-reminders";
 import { internalBearerAuthorized } from "@/lib/internal-auth";
-import { runLearningMaintenance } from "@/lib/learning-maintenance";
-import { queueLearningReminders } from "@/lib/learning-reminders";
-import { queueOffboardingReadinessReminders } from "@/lib/offboarding-reminders";
-import { queueOnboardingReadinessReminders } from "@/lib/onboarding-reminders";
-import { runOperationalMaintenance } from "@/lib/operational-maintenance";
-import { runRecruitingMaintenance } from "@/lib/recruiting-maintenance";
-import { queueSuccessionReviewReminders } from "@/lib/succession-reminders";
-import { queueWorkflowReminders } from "@/lib/workflow-reminders";
+import {
+  MAINTENANCE_JOBS, MAINTENANCE_PROTOCOL_VERSION, executeMaintenanceJobs, selectMaintenanceJobs,
+  type MaintenanceJobName
+} from "@/lib/maintenance-protocol.mjs";
 
-type MaintenanceFailure = { job: string; type: string; code?: string };
-
-function describeFailure(job: string, error: unknown): MaintenanceFailure {
-  const value = error && typeof error === "object" ? error as { name?: unknown; code?: unknown } : null;
-  return {
-    job,
-    type: typeof value?.name === "string" && value.name ? value.name : "Error",
-    ...(typeof value?.code === "string" && value.code ? { code: value.code } : {})
-  };
+function json(body: unknown, status = 200) {
+  return Response.json(body, { status, headers: { "cache-control": "no-store" } });
 }
 
-async function capture<T>(job: string, run: () => Promise<T>, failures: MaintenanceFailure[]): Promise<T | null> {
-  try {
-    return await run();
-  } catch (error) {
-    const failure = describeFailure(job, error);
-    failures.push(failure);
-    console.error(`[HRBP] Maintenance job failed: ${job}`, error);
-    return null;
+// Import only the selected domain. A capability probe never initializes Prisma.
+async function runJob(job: MaintenanceJobName): Promise<unknown> {
+  switch (job) {
+    case "benefits-lifecycle": return (await import("@/lib/benefits-maintenance")).runBenefitsMaintenance();
+    case "learning-lifecycle": return (await import("@/lib/learning-maintenance")).runLearningMaintenance();
+    case "recruiting-lifecycle": return (await import("@/lib/recruiting-maintenance")).runRecruitingMaintenance();
+    case "onboarding-readiness": return (await import("@/lib/onboarding-reminders")).queueOnboardingReadinessReminders();
+    case "offboarding-readiness": return (await import("@/lib/offboarding-reminders")).queueOffboardingReadinessReminders();
+    case "workflow-reminders": return (await import("@/lib/workflow-reminders")).queueWorkflowReminders();
+    case "learning-reminders": return (await import("@/lib/learning-reminders")).queueLearningReminders();
+    case "succession-reminders": return (await import("@/lib/succession-reminders")).queueSuccessionReviewReminders();
+    case "development-plan-reminders": return (await import("@/lib/development-plan-reminders")).queueDevelopmentPlanReminders();
+    case "audit-integrity": return (await import("@/lib/audit-monitoring")).monitorAuditIntegrity();
+    case "operational-maintenance": return (await import("@/lib/operational-maintenance")).runOperationalMaintenance();
   }
+}
+
+export async function GET(request: Request) {
+  if (!internalBearerAuthorized(request, "HRBP_MAINTENANCE_TOKEN")) {
+    return json({ error: "Valid internal maintenance credentials are required." }, 401);
+  }
+  return json({ data: { protocolVersion: MAINTENANCE_PROTOCOL_VERSION, jobs: MAINTENANCE_JOBS } });
 }
 
 export async function POST(request: Request) {
   if (!internalBearerAuthorized(request, "HRBP_MAINTENANCE_TOKEN")) {
-    return Response.json({ error: "Valid internal maintenance credentials are required." }, { status: 401 });
+    return json({ error: "Valid internal maintenance credentials are required." }, 401);
+  }
+  let jobs: MaintenanceJobName[];
+  try {
+    jobs = selectMaintenanceJobs(new URL(request.url).searchParams);
+  } catch {
+    return json({ error: "Exactly one supported maintenance job is required." }, 400);
   }
 
-  const failures: MaintenanceFailure[] = [];
-
-  // Audited lifecycle normalizers and readiness escalation remain serialized so
-  // their hash-chain writes never race each other for the same tenant ledger head.
-  // Each job is isolated: one domain failure must not suppress all later maintenance.
-  const benefitsLifecycle = await capture("benefits-lifecycle", runBenefitsMaintenance, failures);
-  const learningLifecycle = await capture("learning-lifecycle", runLearningMaintenance, failures);
-  const recruitingLifecycle = await capture("recruiting-lifecycle", runRecruitingMaintenance, failures);
-  const onboardingReadiness = await capture("onboarding-readiness", queueOnboardingReadinessReminders, failures);
-  const offboardingReadiness = await capture("offboarding-readiness", queueOffboardingReadinessReminders, failures);
-
-  const [workflowReminders, learningReminders, successionReminders, developmentPlanReminders, auditIntegrity] = await Promise.all([
-    capture("workflow-reminders", queueWorkflowReminders, failures),
-    capture("learning-reminders", queueLearningReminders, failures),
-    capture("succession-reminders", queueSuccessionReviewReminders, failures),
-    capture("development-plan-reminders", queueDevelopmentPlanReminders, failures),
-    capture("audit-integrity", monitorAuditIntegrity, failures)
-  ]);
-
-  const operational = await capture("operational-maintenance", runOperationalMaintenance, failures);
+  const { results, failures, execution } = await executeMaintenanceJobs(jobs, runJob);
+  const { operational, ...domainResults } = results;
+  // Preserve the existing no-selector response, including notifications and policy counters.
   const data = {
-    ...(operational ?? {}),
-    benefitsLifecycle,
-    learningLifecycle,
-    recruitingLifecycle,
-    onboardingReadiness,
-    offboardingReadiness,
-    workflowReminders,
-    learningReminders,
-    successionReminders,
-    developmentPlanReminders,
-    auditIntegrity
+    ...(operational && typeof operational === "object" && !Array.isArray(operational) ? operational : {}),
+    ...domainResults
   };
-
+  console.info("[HRBP] Maintenance execution", execution);
   if (failures.length) {
-    return Response.json({
+    // Bounded machine diagnostics only: no exception messages, SQL, tokens or employee data.
+    console.error("[HRBP] Maintenance failures", failures);
+    return json({
       error: "One or more maintenance jobs failed. Successful jobs were allowed to complete.",
-      failures,
-      data
-    }, { status: 500 });
+      failures, data, execution
+    }, 500);
   }
-
-  return Response.json({ data });
+  return json({ data, execution });
 }
