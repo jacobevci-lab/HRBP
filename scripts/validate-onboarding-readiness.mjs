@@ -83,18 +83,20 @@ expect(dataPath, data, /employmentStatus:\s*plan\.employment\?\.status\s*\?\?\s*
 
 const consolePath = "components/onboarding-operations-console.tsx";
 const consoleSource = await source(consolePath);
-expect(consolePath, consoleSource, /targetStartDate:\s*string/, "console contract must include target start date");
-expect(consolePath, consoleSource, /employmentStatus:\s*string\s*\|\s*null/, "console contract must include employment state");
+expect(consolePath, consoleSource, /buildOnboardingReadiness\(snapshot, now\)/, "console readiness must use the behavior-tested plan projection");
+expect(consolePath, consoleSource, /date\(plan\.targetStartDate\)[\s\S]*date\(plan\.employmentStartDate\)/, "console must show both independently enforced start dates");
+expect(consolePath, consoleSource, /plan\.employmentStatus/, "console must retain governed employment state");
 expect(consolePath, consoleSource, /status === "BLOCKED" \|\| status === "WAIVED"/, "block and waive actions must open the reason capture flow");
 expect(consolePath, consoleSource, /JSON\.stringify\(\{ status, \.\.\.\(note \? \{ note \} : \{\}\) \}\)/, "captured transition reason must be sent to the API");
-expect(consolePath, consoleSource, /fetch\(`\/api\/onboarding\/plans\/\$\{planId\}\/activate`/, "completed onboarding must expose the governed activation endpoint");
-expect(consolePath, consoleSource, /readyForActivation\s*=\s*planStatus\s*===\s*"COMPLETED"\s*&&\s*employmentStatus\s*===\s*"PREBOARDING"/, "activation UI must only appear for a completed preboarding handoff");
-expect(consolePath, consoleSource, /disabled=\{pending !== null \|\| !startDateReached\}/, "activation control must stay disabled before the governed start date");
+expect(consolePath, consoleSource, /fetch\(`\/api\/onboarding\/plans\/\$\{encodeURIComponent\(planId\)\}\/activate`/, "completed onboarding must expose the governed activation endpoint");
+expect(consolePath, consoleSource, /!snapshot\.canActivate\s*\|\|\s*!plan\?\.ready/, "activation handler must reject missing capability or non-ready state");
+expect(consolePath, consoleSource, /plan\.ready\s*&&\s*snapshot\.canActivate\s*\?[\s\S]*disabled=\{busy\}/, "activation UI must require ready-now state, write authority and no pending mutation");
 expect(consolePath, consoleSource, /new URLSearchParams\(window\.location\.search\)/, "onboarding console must consume notification deep-link query context");
 expect(consolePath, consoleSource, /onboarding-task-\$\{task\.id\}/, "onboarding tasks must expose stable deep-link anchors");
 expect(consolePath, consoleSource, /onboarding-plan-\$\{planId\}/, "onboarding plans must expose stable deep-link anchors");
 expect(consolePath, consoleSource, /scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/, "notification targets must scroll into view");
 expect(consolePath, consoleSource, /reasonEditor\.text\.trim\(\)/, "reason confirmation must reject empty blocker or waiver explanations");
+expect(consolePath, consoleSource, /maxLength=\{500\}/, "reason editor must preserve the server's input bound");
 
 if (failures.length) {
   console.error("Onboarding readiness validation failed:\n- " + failures.join("\n- "));

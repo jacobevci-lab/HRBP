@@ -1,25 +1,36 @@
+import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
-const path = "components/onboarding-operations-console.tsx";
-const source = await readFile(path, "utf8");
-const failures = [];
-function expect(pattern, message) { if (!pattern.test(source)) failures.push(`${path}: ${message}`); }
-
-expect(/START_RISK_WINDOW_MS\s*=\s*72\s*\*\s*60\s*\*\s*60\s*\*\s*1000/, "operations console must expose the same 72-hour start-risk horizon used by readiness monitoring");
-expect(/blockedTaskCount\s*=\s*tasks\.filter\(\(task\)\s*=>\s*task\.status\s*===\s*"BLOCKED"\)/, "blocked tasks must be aggregated into an operational risk signal");
-expect(/overdueTaskCount\s*=\s*tasks\.filter\([\s\S]*!terminalTaskStatuses\.has\(task\.status\)[\s\S]*dueDate[\s\S]*<\s*now/, "non-terminal tasks past due date must be counted as overdue");
-expect(/startRiskPlanIds\s*=\s*new Set\([\s\S]*planStatus\s*!==\s*"COMPLETED"[\s\S]*START_RISK_WINDOW_MS/, "open plans approaching start date must be aggregated without double-counting tasks");
-expect(/activationReadyPlanIds\s*=\s*new Set\([\s\S]*planStatus\s*===\s*"COMPLETED"[\s\S]*employmentStatus\s*===\s*"PREBOARDING"/, "completed preboarding handoffs must have a dedicated activation-ready KPI");
-expect(/labelText=\{c\("Blocked tasks","Engelli görevler"\)\}/, "blocked-task KPI must be visible and localized");
-expect(/labelText=\{c\("Overdue tasks","Gecikmiş görevler"\)\}/, "overdue-task KPI must be visible and localized");
-expect(/labelText=\{c\("Start-date risk","Başlangıç tarihi riski"\)\}/, "start-date risk KPI must be visible and localized");
-expect(/labelText=\{c\("Ready to activate","Aktivasyona hazır"\)\}/, "activation-ready KPI must be visible and localized");
-expect(/taskOverdue\s*=\s*!terminalTaskStatuses\.has\(task\.status\)/, "task rows must calculate overdue state without flagging completed or waived tasks");
-expect(/c\("OVERDUE","GECİKMİŞ"\)/, "overdue task rows must expose a localized visual warning");
-expect(/startRisk\s*\?\s*` · \$\{c\("start risk <72h","başlangıç riski <72s"\)\}`/, "journey headers must surface the start-risk state directly");
-
-if (failures.length) {
-  console.error("Onboarding observability validation failed:\n- " + failures.join("\n- "));
-  process.exit(1);
-}
-console.log("Onboarding observability validation passed.");
+const consoleSource = await readFile("components/onboarding-operations-console.tsx", "utf8");
+const data = await readFile("lib/onboarding-operations-data.ts", "utf8");
+const types = await readFile("lib/onboarding-readiness-view.d.mts", "utf8");
+assert.match(data, /can\(ctx, "onboarding:read"\)[\s\S]*can\(ctx, "onboarding:write"\)[\s\S]*throw/, "operational projection requires read and write authority");
+assert.match(data, /resolveOnboardingPopulationScope\(db, ctx\)/);
+assert.match(data, /tenantId: ctx\.tenantId[\s\S]*onboardingPlanPopulationFilter\(scope\)/, "query must retain tenant and relationship boundaries");
+assert.match(data, /plans:\s*plans\.map/, "empty plans must survive independently from flat task rows");
+assert.match(data, /_count:\s*\{ select:\s*\{ tasks: true/, "task completeness must be checked against a server total");
+assert.match(data, /take: PLAN_LIMIT \+ 1/); assert.match(data, /take: TASK_LIMIT/);
+assert.match(data, /hasMorePlans: records\.length > PLAN_LIMIT/);
+assert.match(data, /employment: \{ select: \{ status: true, startDate: true/);
+assert.match(data, /startRiskHours\(runtimeNumber\("HRBP_ONBOARDING_START_RISK_HOURS", 72\)\)/, "view horizon must match the configured maintenance horizon");
+assert.match(data, /canActivate: can\(ctx, "onboarding:write"\) && can\(ctx, "people:write"\)/);
+assert.match(types, /employmentStartDate: string \| null/);
+assert.match(consoleSource, /buildOnboardingReadiness\(snapshot, now\)/);
+assert.match(consoleSource, /filterOnboardingReadiness\(view\.plans/);
+assert.match(consoleSource, /plan\.tasks\.map/, "filters must not replace the full task list with matching task rows");
+assert.match(consoleSource, /snapshot\.hasMorePlans/);
+assert.match(consoleSource, /plan\.incomplete/);
+assert.match(consoleSource, /plan\.completed[\s\S]*plan\.waived/, "waivers must not masquerade as completed work");
+assert.match(consoleSource, /plan\.ready && snapshot\.canActivate/);
+assert.match(consoleSource, /inFlight\.current \|\| busy \|\| !snapshot\.canActivate \|\| !plan\?\.ready/);
+assert.match(consoleSource, /window\.confirm/);
+assert.match(consoleSource, /credentials: "same-origin"/);
+assert.match(consoleSource, /No broader query was used/);
+assert.match(consoleSource, /Due date not set/);
+assert.doesNotMatch(consoleSource, /Policy-driven due date|key\.split\("\|"\)|START_RISK_WINDOW_MS/, "do not restore invented dates, delimiter grouping or fixed risk windows");
+assert.match(consoleSource, /aria-live="polite"/);
+for (const label of ["Blocked tasks", "Overdue tasks", "Start-date risk", "Ready to activate", "Waiting for start date", "Sorumlu ekip türü", "Muafiyet gerekçesi"]) assert.ok(consoleSource.includes(label));
+const behavior = spawnSync(process.execPath, ["--test", "scripts/onboarding-readiness-view.test.mjs"], { stdio: "inherit" });
+if (behavior.error || behavior.status !== 0) process.exit(1);
+console.log("Onboarding observability: scoped snapshot wiring and behavioral tests passed.");
