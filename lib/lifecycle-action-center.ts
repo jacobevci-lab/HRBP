@@ -151,6 +151,10 @@ export type LifecycleActionItem = {
     processId: string;
     taskId: string;
     status: "IN_PROGRESS" | "COMPLETED";
+  } | {
+    type: "start-er-corrective-action";
+    caseId: string;
+    actionId: string;
   };
 };
 
@@ -358,7 +362,9 @@ async function employeeRelationsItems(ctx: RequestContext): Promise<LifecycleAct
       dueAt: row.dueAt?.toISOString() ?? null,
       createdAt: row.createdAt.toISOString(),
       urgency: urgencyForDueDate(row.dueAt, "warning"),
-      action: null
+      action: row.status === CaseActionStatus.OPEN
+        ? { type: "start-er-corrective-action", caseId: row.caseId, actionId: row.id }
+        : null
     })),
     ...appeals.map((row): LifecycleActionItem => ({
       id: `employee-relations:appeal:${row.id}`,
