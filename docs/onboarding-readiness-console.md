@@ -23,7 +23,8 @@ snapshot so its server workspace call remains unchanged.
 
 The read model in `lib/onboarding-readiness-view.mjs` is pure and does not fetch
 records, grant permissions, transition employment or issue notifications.
-The server query retains tenant and onboarding population scope and explicitly
+The server query intersects queue eligibility and population scope with AND,
+so one OR predicate cannot overwrite the other. It retains tenant scope and explicitly
 requires onboarding read/write authority. Activation visibility additionally
 requires people write authority. The existing mutation endpoints still enforce
 origin, capabilities, relationship scope, task/state rechecks and audit writes.

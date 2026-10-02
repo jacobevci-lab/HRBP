@@ -33,11 +33,14 @@ export async function getOnboardingOperationsData(ctx: RequestContext): Promise<
     const records = await db.onboardingPlan.findMany({
       where: {
         tenantId: ctx.tenantId,
-        OR: [
-          { status: { not: OnboardingStatus.COMPLETED } },
-          { status: OnboardingStatus.COMPLETED, employment: { is: { status: EmploymentStatus.PREBOARDING } } }
-        ],
-        ...onboardingPlanPopulationFilter(scope)
+        // Both predicates contain OR. Intersect them instead of spreading one over the other.
+        AND: [
+          { OR: [
+            { status: { not: OnboardingStatus.COMPLETED } },
+            { status: OnboardingStatus.COMPLETED, employment: { is: { status: EmploymentStatus.PREBOARDING } } }
+          ] },
+          onboardingPlanPopulationFilter(scope)
+        ]
       },
       orderBy: [{ targetStartDate: "asc" }, { id: "asc" }],
       take: PLAN_LIMIT + 1,

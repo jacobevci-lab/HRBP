@@ -8,6 +8,8 @@ const types = await readFile("lib/onboarding-readiness-view.d.mts", "utf8");
 assert.match(data, /can\(ctx, "onboarding:read"\)[\s\S]*can\(ctx, "onboarding:write"\)[\s\S]*throw/, "operational projection requires read and write authority");
 assert.match(data, /resolveOnboardingPopulationScope\(db, ctx\)/);
 assert.match(data, /tenantId: ctx\.tenantId[\s\S]*onboardingPlanPopulationFilter\(scope\)/, "query must retain tenant and relationship boundaries");
+assert.match(data, /AND:\s*\[[\s\S]*OR:\s*\[[\s\S]*onboardingPlanPopulationFilter\(scope\)/, "queue eligibility and population OR predicates must be intersected");
+assert.doesNotMatch(data, /\.\.\.onboardingPlanPopulationFilter/, "spreading the population OR would overwrite queue eligibility");
 assert.match(data, /plans:\s*plans\.map/, "empty plans must survive independently from flat task rows");
 assert.match(data, /_count:\s*\{ select:\s*\{ tasks: true/, "task completeness must be checked against a server total");
 assert.match(data, /take: PLAN_LIMIT \+ 1/); assert.match(data, /take: TASK_LIMIT/);
