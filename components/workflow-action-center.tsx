@@ -145,6 +145,10 @@ type LifecycleActionItem = {
     processId: string;
     taskId: string;
     status: "IN_PROGRESS" | "COMPLETED";
+  } | {
+    type: "start-er-corrective-action";
+    caseId: string;
+    actionId: string;
   };
 };
 
@@ -250,6 +254,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "start-performance-self-review") return { resourceType: "PerformanceReview", resourceId: action.reviewId };
   if (action?.type === "activate-onboarding-employment") return { resourceType: "OnboardingPlan", resourceId: action.planId };
   if (action?.type === "advance-offboarding-task") return { resourceType: "SeparationTask", resourceId: action.taskId };
+  if (action?.type === "start-er-corrective-action") return { resourceType: "CaseAction", resourceId: action.actionId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -487,6 +492,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” görevini ${item.action.status === "COMPLETED" ? "tamamlamak" : "işleme almak"} istiyor musun?` : `${item.action.status === "COMPLETED" ? "Complete" : "Start"} “${item.title}”?`,
       success: item.action.status === "COMPLETED" ? (locale === "tr" ? "Offboarding görevi tamamlandı." : "Offboarding task completed.") : (locale === "tr" ? "Offboarding görevi işleme alındı." : "Offboarding task moved in progress.")
     };
+    if (item.action.type === "start-er-corrective-action") return {
+      label: locale === "tr" ? "Aksiyonu başlat" : "Start action",
+      busy: locale === "tr" ? "Başlatılıyor…" : "Starting…",
+      confirm: locale === "tr" ? `“${item.title}” düzeltici aksiyonunu işleme almak istiyor musun?` : `Start corrective action “${item.title}”?`,
+      success: locale === "tr" ? "Düzeltici aksiyon işleme alındı." : "Corrective action moved in progress."
+    };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
       busy: locale === "tr" ? "İşleniyor…" : "Processing…",
@@ -708,6 +719,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "advance-offboarding-task") {
         endpoint = `/api/offboarding/processes/${encodeURIComponent(item.action.processId)}/tasks/${encodeURIComponent(item.action.taskId)}/complete`;
         payload = { status: item.action.status };
+      } else if (item.action.type === "start-er-corrective-action") {
+        endpoint = `/api/employee-relations/cases/${encodeURIComponent(item.action.caseId)}/actions/${encodeURIComponent(item.action.actionId)}/status`;
+        payload = { status: "IN_PROGRESS" };
       }
 
       const response = await fetch(endpoint, {
