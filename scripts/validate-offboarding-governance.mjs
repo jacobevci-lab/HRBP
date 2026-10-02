@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { validateMaintenanceOrder } from "./validate-maintenance-order.mjs";
 
 async function source(path) { return readFile(path, "utf8"); }
 const failures = [];
@@ -153,7 +154,7 @@ expectAbsent(reminderPath, reminder, /data:\s*\{\s*status:\s*ExitTaskStatus\./, 
 
 const maintenancePath = "app/api/internal/maintenance/route.ts";
 const maintenance = await source(maintenancePath);
-expect(maintenancePath, maintenance, /queueOnboardingReadinessReminders[\s\S]*queueOffboardingReadinessReminders[\s\S]*Promise\.all/, "audited readiness jobs must remain serialized before parallel reminders");
+await validateMaintenanceOrder();
 
 const displayPath = "lib/notification-display.ts";
 const display = await source(displayPath);
