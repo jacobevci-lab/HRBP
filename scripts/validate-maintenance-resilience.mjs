@@ -14,7 +14,7 @@ expect(routePath, route, /Successful jobs were allowed to complete/, "partial fa
 expect(routePath, route, /failures, data, execution[\s\S]*500/, "partial failures must remain failing HTTP responses with job evidence");
 reject(routePath, route, /import\s*\{[^}]*\}\s*from\s*["']@\/lib\/(?:db|[a-z-]+maintenance|[a-z-]+reminders|audit-monitoring)["']/, "domain modules must be lazy-loaded instead of initialized by every request");
 for (const job of MAINTENANCE_JOBS) {
-  expect(routePath, route, new RegExp(`case "${job}": return \\(await import`), `missing lazy loader for ${job}`);
+  expect(routePath, route, new RegExp(`case "${job}": \\{\\s*const \\{ (\\w+) \\} = await import\\("[^"]+"\\);\\s*return await \\1\\(\\);`), `missing lazy loader for ${job}`);
 }
 const declaration = await readFile("lib/maintenance-protocol.d.mts", "utf8");
 for (const job of MAINTENANCE_JOBS) expect("maintenance-protocol.d.mts", declaration, new RegExp(`"${job}"`), "runtime and TypeScript job manifests must agree");

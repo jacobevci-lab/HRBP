@@ -11,17 +11,50 @@ function json(body: unknown, status = 200) {
 // Import only the selected domain. A capability probe never initializes Prisma.
 async function runJob(job: MaintenanceJobName): Promise<unknown> {
   switch (job) {
-    case "benefits-lifecycle": return (await import("@/lib/benefits-maintenance")).runBenefitsMaintenance();
-    case "learning-lifecycle": return (await import("@/lib/learning-maintenance")).runLearningMaintenance();
-    case "recruiting-lifecycle": return (await import("@/lib/recruiting-maintenance")).runRecruitingMaintenance();
-    case "onboarding-readiness": return (await import("@/lib/onboarding-reminders")).queueOnboardingReadinessReminders();
-    case "offboarding-readiness": return (await import("@/lib/offboarding-reminders")).queueOffboardingReadinessReminders();
-    case "workflow-reminders": return (await import("@/lib/workflow-reminders")).queueWorkflowReminders();
-    case "learning-reminders": return (await import("@/lib/learning-reminders")).queueLearningReminders();
-    case "succession-reminders": return (await import("@/lib/succession-reminders")).queueSuccessionReviewReminders();
-    case "development-plan-reminders": return (await import("@/lib/development-plan-reminders")).queueDevelopmentPlanReminders();
-    case "audit-integrity": return (await import("@/lib/audit-monitoring")).monitorAuditIntegrity();
-    case "operational-maintenance": return (await import("@/lib/operational-maintenance")).runOperationalMaintenance();
+    case "benefits-lifecycle": {
+      const { runBenefitsMaintenance } = await import("@/lib/benefits-maintenance");
+      return await runBenefitsMaintenance();
+    }
+    case "learning-lifecycle": {
+      const { runLearningMaintenance } = await import("@/lib/learning-maintenance");
+      return await runLearningMaintenance();
+    }
+    case "recruiting-lifecycle": {
+      const { runRecruitingMaintenance } = await import("@/lib/recruiting-maintenance");
+      return await runRecruitingMaintenance();
+    }
+    case "onboarding-readiness": {
+      const { queueOnboardingReadinessReminders } = await import("@/lib/onboarding-reminders");
+      return await queueOnboardingReadinessReminders();
+    }
+    case "offboarding-readiness": {
+      const { queueOffboardingReadinessReminders } = await import("@/lib/offboarding-reminders");
+      return await queueOffboardingReadinessReminders();
+    }
+    case "workflow-reminders": {
+      const { queueWorkflowReminders } = await import("@/lib/workflow-reminders");
+      return await queueWorkflowReminders();
+    }
+    case "learning-reminders": {
+      const { queueLearningReminders } = await import("@/lib/learning-reminders");
+      return await queueLearningReminders();
+    }
+    case "succession-reminders": {
+      const { queueSuccessionReviewReminders } = await import("@/lib/succession-reminders");
+      return await queueSuccessionReviewReminders();
+    }
+    case "development-plan-reminders": {
+      const { queueDevelopmentPlanReminders } = await import("@/lib/development-plan-reminders");
+      return await queueDevelopmentPlanReminders();
+    }
+    case "audit-integrity": {
+      const { monitorAuditIntegrity } = await import("@/lib/audit-monitoring");
+      return await monitorAuditIntegrity();
+    }
+    case "operational-maintenance": {
+      const { runOperationalMaintenance } = await import("@/lib/operational-maintenance");
+      return await runOperationalMaintenance();
+    }
   }
 }
 
