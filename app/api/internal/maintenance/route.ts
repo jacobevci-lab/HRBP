@@ -44,11 +44,21 @@ export async function POST(request: Request) {
   }
 
   const { results, failures, execution } = await executeMaintenanceJobs(jobs, runJob);
-  const { operational, ...domainResults } = results;
-  // Preserve the existing no-selector response, including notifications and policy counters.
+  const { operational } = results;
+  // Explicit projection preserves the existing public response contract. JSON omits
+  // undefined fields for unselected jobs, while failed selected jobs remain null.
   const data = {
     ...(operational && typeof operational === "object" && !Array.isArray(operational) ? operational : {}),
-    ...domainResults
+    benefitsLifecycle: results.benefitsLifecycle,
+    learningLifecycle: results.learningLifecycle,
+    recruitingLifecycle: results.recruitingLifecycle,
+    onboardingReadiness: results.onboardingReadiness,
+    offboardingReadiness: results.offboardingReadiness,
+    workflowReminders: results.workflowReminders,
+    learningReminders: results.learningReminders,
+    successionReminders: results.successionReminders,
+    developmentPlanReminders: results.developmentPlanReminders,
+    auditIntegrity: results.auditIntegrity
   };
   console.info("[HRBP] Maintenance execution", execution);
   if (failures.length) {

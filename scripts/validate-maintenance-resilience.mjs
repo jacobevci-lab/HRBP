@@ -33,6 +33,6 @@ if (failures.length) {
   process.exit(1);
 }
 // These execute production orchestration/runner code, not source-text approximations of behavior.
-const behavior = spawnSync(process.execPath, ["--test", "scripts/maintenance-protocol.test.mjs"], { stdio: "inherit" });
+const behavior = spawnSync(process.execPath, ["--test", "scripts/maintenance-protocol.test.mjs", "scripts/service-sla-policy.test.mjs"], { stdio: "inherit" });
 if (behavior.error || behavior.status !== 0) process.exit(1);
 console.log("Maintenance resilience contract and behavioral validation passed.");

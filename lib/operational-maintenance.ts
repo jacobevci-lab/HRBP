@@ -5,6 +5,7 @@ import { runNotificationDispatcher } from "@/lib/notification-dispatcher";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { pruneNotificationOutbox } from "@/lib/notification-retention";
 import { runtimeNumber } from "@/lib/runtime-env";
+import { serviceSlaPolicy } from "@/lib/service-sla-policy.mjs";
 import type { RequestContext } from "@/lib/request-context";
 
 const terminalServiceStatuses = [ServiceRequestStatus.RESOLVED, ServiceRequestStatus.CLOSED, ServiceRequestStatus.CANCELLED];
@@ -18,24 +19,17 @@ function systemContext(tenantId: string): RequestContext {
   };
 }
 
-function escalationTarget(dueAt: Date, now: Date) {
-  const warningMinutes = Math.max(15, Math.floor(runtimeNumber("HRBP_SERVICE_SLA_WARNING_MINUTES", 120)));
-  const severeMinutes = Math.max(60, Math.floor(runtimeNumber("HRBP_SERVICE_SLA_SEVERE_MINUTES", 1440)));
-  const deltaMinutes = Math.floor((dueAt.getTime() - now.getTime()) / 60_000);
-  if (deltaMinutes <= -severeMinutes) return { level: 3, reason: `SLA breached by at least ${severeMinutes} minutes` };
-  if (deltaMinutes <= 0) return { level: 2, reason: "SLA breached" };
-  if (deltaMinutes <= warningMinutes) return { level: 1, reason: `SLA due within ${warningMinutes} minutes` };
-  return { level: 0, reason: "" };
-}
-
 async function escalateServiceRequests(now: Date) {
   const maxBatch = Math.min(1000, Math.max(50, Math.floor(runtimeNumber("HRBP_MAINTENANCE_BATCH_SIZE", 500))));
+  const slaPolicy = serviceSlaPolicy(now,
+    runtimeNumber("HRBP_SERVICE_SLA_WARNING_MINUTES", 120),
+    runtimeNumber("HRBP_SERVICE_SLA_SEVERE_MINUTES", 1440));
   const candidates = await db.hRServiceRequest.findMany({
     where: {
-      slaDueAt: { not: null },
+      ...slaPolicy.where,
       status: { notIn: terminalServiceStatuses }
     },
-    orderBy: { slaDueAt: "asc" },
+    orderBy: [{ slaDueAt: "asc" }, { id: "asc" }],
     take: maxBatch,
     select: {
       id: true,
@@ -54,7 +48,7 @@ async function escalateServiceRequests(now: Date) {
   for (const candidate of candidates) {
     const slaDueAt = candidate.slaDueAt;
     if (!slaDueAt) continue;
-    const target = escalationTarget(slaDueAt, now);
+    const target = slaPolicy.target(slaDueAt);
     if (target.level <= candidate.escalationLevel) continue;
 
     const changed = await db.$transaction(async (tx) => {
@@ -75,7 +69,14 @@ async function escalateServiceRequests(now: Date) {
       }
 
       const result = await tx.hRServiceRequest.updateMany({
-        where: { id: candidate.id, tenantId: candidate.tenantId, escalationLevel: candidate.escalationLevel, status: { notIn: terminalServiceStatuses } },
+        // Re-evaluate next pass if a human changed the deadline, queue or assignee.
+        // Never overwrite a newer assignment or escalate against a stale SLA.
+        where: {
+          id: candidate.id, tenantId: candidate.tenantId,
+          escalationLevel: candidate.escalationLevel, slaDueAt,
+          assigneeId: candidate.assigneeId, queue: candidate.queue,
+          status: { notIn: terminalServiceStatuses }
+        },
         data: {
           escalationLevel: target.level,
           escalationReason: target.reason,

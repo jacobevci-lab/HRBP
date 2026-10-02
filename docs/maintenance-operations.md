@@ -89,3 +89,21 @@ PostgreSQL, followed by the original no-selector request. Existing database
 assertions still require exactly-once notification delivery and stale-read
 notification retention. Passing a local Worker test is not a measurement of
 production CPU or memory usage.
+
+## HR service SLA correctness
+
+Candidate selection now filters for a genuinely higher escalation level in the
+SQL predicate **before** the batch limit. Previously, a full batch of old,
+already-escalated requests could prevent later actionable requests from being
+considered. Deadline and escalation thresholds use the same exact millisecond
+boundaries in selection and evaluation; a request due in 59 seconds is no
+longer classified as breached by minute rounding.
+
+The transactional update compares the scanned SLA deadline, queue and assignee
+as well as tenant, record identity, escalation level and open status. If a human
+changed those values in the meantime, the update is skipped and the request is
+re-evaluated on the next pass rather than overwriting a newer assignment.
+
+Fourteen additional tests cover boundary conditions, candidate-selection
+consistency, saturated batches and the stale-write query contract. These are
+unit/query-wiring tests, not a production concurrency or load test.
