@@ -51,7 +51,7 @@ reject(exportPath, exported, /purpose:\s*true|ipAddress:\s*true|hash:\s*true|pre
 
 const componentPath = "components/action-center-decision-history.tsx";
 const component = await source(componentPath);
-expect(componentPath, component, /\/api\/action-center\/history\?days=/, "decision history UI must consume the governed history route");
+expect(componentPath, component, /\/api\/action-center\/history\?\$\{params\.toString\(\)\}/, "decision history UI must consume the governed history route");
 expect(componentPath, component, /7d[\s\S]*30d[\s\S]*90d/, "decision history must offer bounded time windows");
 expect(componentPath, component, /actor-scoped|Actor scope/, "decision history must disclose actor scoping");
 expect(componentPath, component, /Full hash-chained evidence remains in the Audit Ledger|Tam hash-zincirli kanıt Audit Ledger içinde kalır/, "decision history must direct full evidence to Audit Ledger");
