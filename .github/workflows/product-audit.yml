@@ -1,0 +1,51 @@
+name: Product Audit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hrbp-product-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  product-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hrbp
+          POSTGRES_PASSWORD: hrbp
+          POSTGRES_DB: hrbp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hrbp -d hrbp"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://hrbp:hrbp@localhost:5432/hrbp
+      HRBP_MAINTENANCE_TOKEN: ci-product-audit-maintenance-token
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture exact tracked source for audit inspection
+        run: git archive --format=tar HEAD -o /tmp/hrbp-audit-source.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: product-audit-source
+          path: /tmp/hrbp-audit-source.tar
+          retention-days: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npx prisma db push --skip-generate
+      - run: npm run typecheck
+      - run: npm run build
