@@ -37,8 +37,12 @@ jobs:
           node-version: 22
       - name: Create ephemeral test secrets
         run: |
-          echo "HRBP_SESSION_SECRET=$(openssl rand -hex 48)" >> "$GITHUB_ENV"
-          echo "HRBP_TEST_ADMIN_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+          session_secret=$(openssl rand -hex 48)
+          admin_password=$(openssl rand -hex 24)
+          echo "::add-mask::$session_secret"
+          echo "::add-mask::$admin_password"
+          echo "HRBP_SESSION_SECRET=$session_secret" >> "$GITHUB_ENV"
+          echo "HRBP_TEST_ADMIN_PASSWORD=$admin_password" >> "$GITHUB_ENV"
       - name: Install unchanged application dependencies and isolated browser tooling
         run: |
           mkdir -p .audit
@@ -57,11 +61,11 @@ jobs:
           npx next build > .audit/build.log 2>&1 || { tail -80 .audit/build.log; exit 1; }
       - name: Browser, link, API and workflow audit
         run: |
-          npx next start --hostname 127.0.0.1 --port 3100 > .audit/server.log 2>&1 &
+          npx next start --hostname localhost --port 3100 > .audit/server.log 2>&1 &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
           for i in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:3100/api/health/runtime > /dev/null; then break; fi
+            if curl --fail --silent http://localhost:3100/api/health/runtime > /dev/null; then break; fi
             sleep 1
           done
           node scripts/platform-audit.mjs
