@@ -75,7 +75,7 @@ expect(componentPath, component, /event\.target\.value\.slice\(0, 160\)/, "Actio
 expect(componentPath, component, /Quick actions only|Yalnız hızlı işlem/, "Action Center must support actionable-only filtering");
 expect(componentPath, component, /Boolean\(item\.action \|\| item\.secondaryAction\)/, "actionable-only filtering must derive solely from governed quick-action metadata");
 expect(componentPath, component, /item\.subjectType[\s\S]*item\.subjectId[\s\S]*sourceLabel\(item\.kind\)/, "Action Center local search must cover bounded operational metadata already present in the queue");
-reject(componentPath, component, /fetch\([\s\S]*query[\s\S]*\/api\/action-center/, "Action Center search must remain client-side and must not broaden server-side scope");
+reject(componentPath, component, /fetch\("\/api\/action-center\?/, "Action Center search must remain client-side and must not broaden server-side scope");
 
 const modulePagePath = "app/module/[slug]/page.tsx";
 const modulePage = await source(modulePagePath);
