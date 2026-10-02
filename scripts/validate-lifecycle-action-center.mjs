@@ -70,6 +70,12 @@ expect(componentPath, component, /window\.confirm\(copy\.confirm\)/, "state-chan
 expect(componentPath, component, /workflow-row-actions[\s\S]*executeSecondaryAction/, "paired decisions must render both governed primary and rejection controls");
 expect(componentPath, component, /if \(!response\.ok\) throw[\s\S]*await refresh\(\)/, "quick actions must refresh only after a successful governed mutation");
 expect(componentPath, component, /<Link[\s\S]*href=\{item\.href\}/, "actions without a safe quick mutation must continue to deep-link into their owning governed module");
+expect(componentPath, component, /Search action center|Aksiyon merkezinde ara/, "Action Center must expose bounded local search");
+expect(componentPath, component, /event\.target\.value\.slice\(0, 160\)/, "Action Center search input must remain bounded");
+expect(componentPath, component, /Quick actions only|Yalnız hızlı işlem/, "Action Center must support actionable-only filtering");
+expect(componentPath, component, /Boolean\(item\.action \|\| item\.secondaryAction\)/, "actionable-only filtering must derive solely from governed quick-action metadata");
+expect(componentPath, component, /item\.subjectType[\s\S]*item\.subjectId[\s\S]*sourceLabel\(item\.kind\)/, "Action Center local search must cover bounded operational metadata already present in the queue");
+reject(componentPath, component, /fetch\("\/api\/action-center\?/, "Action Center search must remain client-side and must not broaden server-side scope");
 
 const modulePagePath = "app/module/[slug]/page.tsx";
 const modulePage = await source(modulePagePath);
