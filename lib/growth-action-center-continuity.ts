@@ -203,8 +203,10 @@ async function developmentPlanOwnerItems(ctx: RequestContext): Promise<ExpandedL
     where: {
       tenantId: ctx.tenantId,
       ownerId: ctx.actorId,
-      status: DevelopmentPlanStatus.ACTIVE,
-      targetAt: { lte: horizon }
+      OR: [
+        { status: DevelopmentPlanStatus.DRAFT },
+        { status: DevelopmentPlanStatus.ACTIVE, targetAt: { lte: horizon } }
+      ]
     },
     orderBy: [{ targetAt: "asc" }, { updatedAt: "asc" }],
     take: 100,
@@ -215,7 +217,9 @@ async function developmentPlanOwnerItems(ctx: RequestContext): Promise<ExpandedL
     id: `development-plan:${plan.id}`,
     kind: "development-plan",
     title: plan.title,
-    subtitle: "Development outcome / human reassessment review",
+    subtitle: plan.status === DevelopmentPlanStatus.DRAFT
+      ? "Draft development plan ready for governed activation"
+      : "Development outcome / human reassessment review",
     module: "talent",
     href: `/module/talent?developmentPlan=${encodeURIComponent(plan.id)}`,
     subjectType: "DevelopmentPlan",
@@ -223,8 +227,10 @@ async function developmentPlanOwnerItems(ctx: RequestContext): Promise<ExpandedL
     status: statusLabel(plan.status),
     dueAt: plan.targetAt.toISOString(),
     createdAt: plan.updatedAt.toISOString(),
-    urgency: urgencyForDueDate(plan.targetAt, "warning"),
-    action: null
+    urgency: plan.status === DevelopmentPlanStatus.DRAFT ? "normal" : urgencyForDueDate(plan.targetAt, "warning"),
+    action: plan.status === DevelopmentPlanStatus.DRAFT
+      ? { type: "activate-development-plan", planId: plan.id }
+      : null
   }));
 }
 
