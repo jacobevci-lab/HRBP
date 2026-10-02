@@ -155,6 +155,9 @@ export type LifecycleActionItem = {
     type: "start-er-corrective-action";
     caseId: string;
     actionId: string;
+  } | {
+    type: "activate-development-plan";
+    planId: string;
   };
 };
 
