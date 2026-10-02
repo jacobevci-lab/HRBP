@@ -81,7 +81,7 @@ expect(dataPath, data, /targetStartDate:\s*plan\.targetStartDate\.toISOString\(\
 expect(dataPath, data, /EmploymentStatus\.PREBOARDING/, "completed onboarding must remain in the operations queue while employment is still preboarding");
 expect(dataPath, data, /employmentStatus:\s*plan\.employment\?\.status\s*\?\?\s*null/, "operations data must expose governed employment state for handoff controls");
 
-const consolePath = "components/onboarding-operations-console.tsx";
+const consolePath = "components/onboarding-readiness-console.tsx";
 const consoleSource = await source(consolePath);
 expect(consolePath, consoleSource, /buildOnboardingReadiness\(snapshot, now\)/, "console readiness must use the behavior-tested plan projection");
 expect(consolePath, consoleSource, /date\(plan\.targetStartDate\)[\s\S]*date\(plan\.employmentStartDate\)/, "console must show both independently enforced start dates");

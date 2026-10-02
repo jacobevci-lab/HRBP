@@ -1,75 +1,95 @@
-# Day-one readiness: operational view
+# Day-one readiness: paged operations and notification focus
 
-The onboarding write console now consumes a plan-aware, authorized snapshot.
-Plan identity is independent of task rows: empty plans remain visible and are
-not treated as verified ready. The existing `tasks` component prop carries the
-snapshot so its server workspace call remains unchanged.
+## Readiness and unchanged mutation boundaries
 
-## Meaning of the view
+Plans are independent of task rows, so empty plans remain visible. Ready-now
+requires a completed plan, linked PREBOARDING employment, a nonempty complete
+task list with every task completed or explicitly waived, and both planned and
+employment start dates reached. Waiting-for-start is separate from ready-now.
+Incomplete, inconsistent and unknown inputs remain review signals, not repairs.
+Waived work is counted separately from completed work; missing deadlines are
+not inferred. The risk horizon uses HRBP_ONBOARDING_START_RISK_HOURS (1–336,
+default 72). The existing readiness projection and action console are unchanged
+and now live behind a page browser; the console file was moved without content
+changes to components/onboarding-readiness-console.tsx.
 
-* **Ready now** requires a completed plan, a linked PREBOARDING employment, at
-  least one task, a complete task list, every task completed or explicitly waived,
-  and both the planned start and employment start dates reached.
-* **Waiting for start date** has cleared tasks but at least one of those dates
-  is still in the future. It is not included in the ready-now count.
-* **Start-date risk** uses HRBP_ONBOARDING_START_RISK_HOURS, clamped to 1–336
-  hours with the same default of 72 as maintenance. Past-start open plans also
-  remain at risk. This is operational timing, not employee scoring.
-* Completed and waived tasks are separate counts. Waiver clearance does not
-  assert that the task was performed. Missing deadlines are explicitly unset;
-  the interface no longer implies that an unseen policy supplies a deadline.
-* Empty plans, missing employment/dates, unknown or inconsistent states and
-  incomplete task lists are review signals, not automatic database repairs.
+Every mutation still uses its original API with origin, capability, population,
+state, date and audit controls. An exact-focus read never grants mutation rights.
+No schema, dependency, AI or deployment configuration changes are required.
 
-The read model in `lib/onboarding-readiness-view.mjs` is pure and does not fetch
-records, grant permissions, transition employment or issue notifications.
-The server query intersects queue eligibility and population scope with AND,
-so one OR predicate cannot overwrite the other. It retains tenant scope and explicitly
-requires onboarding read/write authority. Activation visibility additionally
-requires people write authority. The existing mutation endpoints still enforce
-origin, capabilities, relationship scope, task/state rechecks and audit writes.
-No mutation endpoint or database schema is changed in this feature.
+## Read API
 
-## Filters and limits
+GET /api/onboarding/operations requires onboarding:read AND onboarding:write.
+Authentication is resolved before query parsing, and data access independently
+rechecks the capabilities. All responses, including errors, are no-store.
 
-Search (employee name, number or task title), responsible **team type** and
-readiness filters select whole plans. Selecting IT never hides a security
-blocker elsewhere in the same plan and never changes completion denominators.
-Team type is not a claim that a named person has been assigned. Search is
-client-side within the authorized snapshot; it is not sent to a new endpoint,
-persisted in browser storage or used to broaden population visibility.
+- No query: first active, authorized page.
+- after: a bounded JSON positional cursor [1, UTC-start-date, plan-id].
+- plan and/or task: exact focus; supplied identifiers must agree on one plan.
 
-The query loads at most 100 plans (one extra record detects more results) and
-200 tasks per plan. The task total is independently selected with `_count`.
-Any incomplete plan is visibly flagged and has no activation action. Counts
-and filters describe the loaded snapshot, not organization-wide totals.
-Rendering initially displays 20 matching plans with a show-more control.
-This is not server-side pagination: accessing plans beyond the 100-plan limit
-or additional tasks beyond the per-plan limit remains a follow-up capability.
+Unknown/duplicate/empty parameters and mixed paging/focus are rejected with
+400 before opening the database. Missing, inactive and out-of-scope focus targets
+produce the same 404 response, with no substitute or broader lookup. Errors do
+not echo selectors, SQL, employee data or credentials.
 
-Notification links highlight only already-loaded records. A loaded target
-hidden by filters is distinguished from a target not found in the snapshot.
-An unresolved target is not declared deleted/inactive and triggers no broader
-lookup. The initial clock comes from the server snapshot and advances with
-monotonic elapsed browser time; refresh retrieves new source data. This is not
-a real-time subscription.
+Each request intersects tenant, active-queue eligibility, current relationship
+scope and the positional/focus predicate using AND. Read scope, plan rows,
+nested task totals and any pinned task are read in one bounded RepeatableRead
+transaction. This is a coherent per-request read, NOT a snapshot held across
+multiple pages and NOT a distributed lock against later mutations.
 
-## Interaction safety and verification
+## Pagination and task limits
 
-Existing reason-required block/waive transitions are retained with the
-500-character input limit. Identifier path segments are encoded. Activation
-requires an explicit user confirmation, plus the unchanged server checks.
-A synchronous in-flight guard prevents duplicate clicks and controls remain
-disabled during a pending mutation/refresh. Failed requests are not retried.
+Plan ordering is targetStartDate ascending, then unique id ascending. The cursor
+compares values rather than requiring the anchor row to still exist. It is not
+an authorization token: altered cursors still cannot bypass scope predicates.
+At most 100 plan rows are returned, with an extra sentinel determining whether
+another page exists. Each plan still exposes at most 200 tasks and an independent
+total. No unbounded client-side accumulation or database count of the whole
+organization is introduced.
 
-`node --test scripts/onboarding-readiness-view.test.mjs` covers 45 deterministic
-cases: date boundaries, incomplete/empty/duplicate inputs, distinct waiver
-counts, scoped joins, Turkish search, whole-plan filtering and risk ordering.
-`npm run onboarding-observability:validate` runs those tests and source-wiring
-checks through the existing prebuild gate. The readiness governance validator
-retains its server-side security/audit/transition checks and now checks the new
-UI wiring rather than removed implementation-local variables.
+Next/previous navigation reloads the selected page. Previous-page cursors remain
+only in component memory, not browser storage. Concurrent changes to start dates,
+queue eligibility or scope may shift rows between pages. Restart the queue for a
+fresh traversal; stable ordering is not a promise of historical snapshot paging.
+Counts, risk ordering, search and team/readiness filters are page-local. The UI
+explicitly discloses this; an empty filtered page is not an empty organization.
+Filters retain whole plans and all loaded tasks. Twenty-plan increments inside a
+page are rendering controls, while Next page fetches a new server page.
 
-These unit and wiring checks do not establish visual browser correctness,
-production load capacity or successful live deployment. The full application
-TypeScript/build/Worker suite must pass separately before merging.
+## Notification focus
+
+The browser follows plan/task parameters on navigation, including repeated
+parameters for validation. It does not assume a missing target has been deleted.
+An authorized target beyond the first 100 plans is loaded directly. If a target
+task is outside the first 200 tasks of its plan, it replaces one displayed task
+inside the same cap. The independent total remains unchanged: the incomplete
+plan warning and withheld activation are preserved. This is NOT full task-list
+pagination; tasks without a direct focus link beyond the cap need follow-up work.
+Return to plan queue clears focus without weakening access checks.
+
+## Client refresh safety
+
+Read requests use same-origin credentials, no-store, redirect rejection, a
+20-second timeout and AbortController cleanup. The client validates the page
+protocol and prevents a stale response from replacing a newer selection. Old
+records/action controls are hidden during read failures and changes of query or
+server snapshot. It does not automatically retry. Existing write actions retain
+their synchronous in-flight guard, reason capture and confirmation. Navigating
+away does not cancel a write that the user already initiated.
+
+The browser owns pagination disclosures and suppresses only the old console's
+first-snapshot overflow notice. Task incompleteness and every readiness warning
+remain visible. A mutation-triggered router refresh causes the current page or
+focus to reload instead of silently returning the user to the first page.
+
+## Verification limits
+
+The existing 45 readiness tests remain under onboarding-observability:validate.
+Forty new tests exercise the actual TypeScript data adapter and GET handler with
+mocked identity/database dependencies, plus cursor parsing, 205-plan traversal,
+exact focus, scope intersection, task pinning, safe errors and client wiring.
+These are not real-browser, production load, real PostgreSQL pagination or
+concurrent authorization-revocation tests. Full application typecheck, build,
+existing regression validators and Worker/PostgreSQL maintenance smoke run in CI.
+Successful CI and merge do not establish that the live Worker has been deployed.
