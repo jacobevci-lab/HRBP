@@ -158,6 +158,10 @@ export type LifecycleActionItem = {
   } | {
     type: "activate-development-plan";
     planId: string;
+  } | {
+    type: "start-er-appeal-review";
+    caseId: string;
+    appealId: string;
   };
 };
 
@@ -382,7 +386,9 @@ async function employeeRelationsItems(ctx: RequestContext): Promise<LifecycleAct
       dueAt: null,
       createdAt: row.submittedAt.toISOString(),
       urgency: "warning",
-      action: null
+      action: row.status === CaseAppealStatus.SUBMITTED
+        ? { type: "start-er-appeal-review", caseId: row.caseId, appealId: row.id }
+        : null
     }))
   ];
 }

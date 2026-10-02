@@ -25,6 +25,7 @@ expect(routePath, route, /"ONBOARDING_HANDOFF_"/, "decision history must include
 expect(routePath, route, /"offboarding\.task-"/, "decision history must include governed offboarding task decisions");
 expect(routePath, route, /"employee-case\.corrective-action-"/, "decision history must include governed Employee Relations corrective-action starts");
 expect(routePath, route, /"development-plan\.transition\."/ , "decision history must include governed development-plan lifecycle decisions");
+expect(routePath, route, /"employee-case\.appeal-review-started"/, "decision history must include governed appeal review starts");
 expect(routePath, route, /classification:\s*true/, "decision history may expose classification metadata");
 reject(routePath, route, /purpose:\s*true|ipAddress:\s*true|hash:\s*true|previousHash:\s*true/, "decision history must not project purpose, network or chain internals");
 reject(routePath, route, /person:\s*true|employment:\s*true|annualBase:\s*true|payload:\s*true|workEmail:\s*true/, "decision history API must not project person, employment, pay or payload detail");
@@ -49,6 +50,7 @@ expect(exportPath, exported, /"ONBOARDING_HANDOFF_"/, "decision evidence export 
 expect(exportPath, exported, /"offboarding\.task-"/, "decision evidence export must include governed offboarding task decisions");
 expect(exportPath, exported, /"employee-case\.corrective-action-"/, "decision evidence export must include governed Employee Relations corrective-action starts");
 expect(exportPath, exported, /"development-plan\.transition\."/ , "decision evidence export must include governed development-plan lifecycle decisions");
+expect(exportPath, exported, /"employee-case\.appeal-review-started"/, "decision evidence export must include governed appeal review starts");
 reject(exportPath, exported, /purpose:\s*true|ipAddress:\s*true|hash:\s*true|previousHash:\s*true|payload:\s*true/, "decision evidence export must not include sensitive audit internals");
 
 const componentPath = "components/action-center-decision-history.tsx";
@@ -72,6 +74,7 @@ expect(componentPath, component, /OnboardingPlan/, "decision history must label 
 expect(componentPath, component, /SeparationTask/, "decision history must label offboarding task evidence");
 expect(componentPath, component, /CaseAction/, "decision history must label Employee Relations corrective-action evidence");
 expect(componentPath, component, /DevelopmentPlan/, "decision history must label development-plan evidence");
+expect(componentPath, component, /CaseAppeal/, "decision history must label Employee Relations appeal evidence");
 reject(componentPath, component, /item\.purpose|item\.ipAddress|item\.previousHash|item\.hash\b/, "decision history UI must not render sensitive audit internals");
 
 const modulePath = "app/module/[slug]/page.tsx";

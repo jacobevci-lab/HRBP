@@ -23,6 +23,7 @@ const actionPrefixes = [
   "offboarding.task-",
   "employee-case.corrective-action-",
   "development-plan.transition.",
+  "employee-case.appeal-review-started",
   "workflow.task-"
 ];
 
@@ -30,7 +31,7 @@ const resourceTypes = new Set([
   "LeaveRequest","TimeEntry","CompensationChange","PayrollRun","Requisition","Offer","PolicyRecord",
   "WorkforceScenario","WorkflowDefinition","WorkflowTask","SurveyCampaign","DataSubjectRequest",
   "PrivacyRiskAssessment","HRServiceRequest","OnboardingTask","OnboardingPlan","BenefitEnrollment",
-  "LearningAssignment","PerformanceReview","SeparationTask","CaseAction","DevelopmentPlan"
+  "LearningAssignment","PerformanceReview","SeparationTask","CaseAction","CaseAppeal","DevelopmentPlan"
 ]);
 
 function queryOptions(request: Request) {
