@@ -152,6 +152,10 @@ type LifecycleActionItem = {
   } | {
     type: "activate-development-plan";
     planId: string;
+  } | {
+    type: "start-er-appeal-review";
+    caseId: string;
+    appealId: string;
   };
 };
 
@@ -259,6 +263,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "advance-offboarding-task") return { resourceType: "SeparationTask", resourceId: action.taskId };
   if (action?.type === "start-er-corrective-action") return { resourceType: "CaseAction", resourceId: action.actionId };
   if (action?.type === "activate-development-plan") return { resourceType: "DevelopmentPlan", resourceId: action.planId };
+  if (action?.type === "start-er-appeal-review") return { resourceType: "CaseAppeal", resourceId: action.appealId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -526,6 +531,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” gelişim planını aktifleştirmek istiyor musun?` : `Activate development plan “${item.title}”?`,
       success: locale === "tr" ? "Gelişim planı aktifleştirildi." : "Development plan activated."
     };
+    if (item.action.type === "start-er-appeal-review") return {
+      label: locale === "tr" ? "İtiraz incelemesini başlat" : "Start appeal review",
+      busy: locale === "tr" ? "Başlatılıyor…" : "Starting…",
+      confirm: locale === "tr" ? `“${item.title}” için itiraz incelemesini başlatmak istiyor musun?` : `Start review for “${item.title}”?`,
+      success: locale === "tr" ? "İtiraz incelemesi başlatıldı." : "Appeal review started."
+    };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
       busy: locale === "tr" ? "İşleniyor…" : "Processing…",
@@ -753,6 +764,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "activate-development-plan") {
         endpoint = `/api/talent/development-plans/${encodeURIComponent(item.action.planId)}`;
         payload = { status: "ACTIVE" };
+      } else if (item.action.type === "start-er-appeal-review") {
+        endpoint = `/api/employee-relations/cases/${encodeURIComponent(item.action.caseId)}/appeals/${encodeURIComponent(item.action.appealId)}/review`;
+        payload = {};
       }
 
       const method = item.action.type === "activate-development-plan" ? "PATCH" : "POST";
