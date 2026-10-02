@@ -6,8 +6,8 @@ import { withDb } from "@/lib/db";
 import { canAccessOnboardingPlan, resolveOnboardingPopulationScope } from "@/lib/onboarding-access";
 import { getRequestContext, mutationOriginAllowed } from "@/lib/request-context";
 
-const openPlanStates = [OnboardingStatus.NOT_STARTED, OnboardingStatus.IN_PROGRESS, OnboardingStatus.BLOCKED];
-const openTaskStates = [OnboardingTaskStatus.NOT_STARTED, OnboardingTaskStatus.IN_PROGRESS, OnboardingTaskStatus.BLOCKED];
+const openPlanStates: readonly OnboardingStatus[] = [OnboardingStatus.NOT_STARTED, OnboardingStatus.IN_PROGRESS, OnboardingStatus.BLOCKED];
+const openTaskStates: readonly OnboardingTaskStatus[] = [OnboardingTaskStatus.NOT_STARTED, OnboardingTaskStatus.IN_PROGRESS, OnboardingTaskStatus.BLOCKED];
 const teamTypes = ["HR", "IT", "MANAGER", "SECURITY", "EMPLOYEE", "FACILITIES", "PAYROLL", "FINANCE", "LEGAL"];
 const BODY_LIMIT = 8192;
 type Mode = "create" | "deadline";
