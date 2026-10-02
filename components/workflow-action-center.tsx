@@ -140,6 +140,11 @@ type LifecycleActionItem = {
   } | {
     type: "activate-onboarding-employment";
     planId: string;
+  } | {
+    type: "advance-offboarding-task";
+    processId: string;
+    taskId: string;
+    status: "IN_PROGRESS" | "COMPLETED";
   };
 };
 
@@ -244,6 +249,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   if (action?.type === "start-learning-assignment") return { resourceType: "LearningAssignment", resourceId: action.assignmentId };
   if (action?.type === "start-performance-self-review") return { resourceType: "PerformanceReview", resourceId: action.reviewId };
   if (action?.type === "activate-onboarding-employment") return { resourceType: "OnboardingPlan", resourceId: action.planId };
+  if (action?.type === "advance-offboarding-task") return { resourceType: "SeparationTask", resourceId: action.taskId };
 
   const secondary = item.secondaryAction;
   if (secondary?.type === "reject-leave") return { resourceType: "LeaveRequest", resourceId: secondary.requestId };
@@ -475,6 +481,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” için onboarding devrini tamamlayıp istihdamı ACTIVE yapmak istiyor musun?` : `Complete the onboarding handoff and activate employment for “${item.title}”?`,
       success: locale === "tr" ? "Onboarding devri tamamlandı ve çalışan aktifleştirildi." : "Onboarding handoff completed and employment activated."
     };
+    if (item.action.type === "advance-offboarding-task") return {
+      label: item.action.status === "COMPLETED" ? (locale === "tr" ? "Görevi tamamla" : "Complete task") : (locale === "tr" ? "Görevi başlat" : "Start task"),
+      busy: locale === "tr" ? "Güncelleniyor…" : "Updating…",
+      confirm: locale === "tr" ? `“${item.title}” görevini ${item.action.status === "COMPLETED" ? "tamamlamak" : "işleme almak"} istiyor musun?` : `${item.action.status === "COMPLETED" ? "Complete" : "Start"} “${item.title}”?`,
+      success: item.action.status === "COMPLETED" ? (locale === "tr" ? "Offboarding görevi tamamlandı." : "Offboarding task completed.") : (locale === "tr" ? "Offboarding görevi işleme alındı." : "Offboarding task moved in progress.")
+    };
     return {
       label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
       busy: locale === "tr" ? "İşleniyor…" : "Processing…",
@@ -693,6 +705,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       } else if (item.action.type === "activate-onboarding-employment") {
         endpoint = `/api/onboarding/plans/${encodeURIComponent(item.action.planId)}/activate`;
         payload = {};
+      } else if (item.action.type === "advance-offboarding-task") {
+        endpoint = `/api/offboarding/processes/${encodeURIComponent(item.action.processId)}/tasks/${encodeURIComponent(item.action.taskId)}/complete`;
+        payload = { status: item.action.status };
       }
 
       const response = await fetch(endpoint, {

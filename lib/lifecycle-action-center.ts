@@ -146,6 +146,11 @@ export type LifecycleActionItem = {
   } | {
     type: "activate-onboarding-employment";
     planId: string;
+  } | {
+    type: "advance-offboarding-task";
+    processId: string;
+    taskId: string;
+    status: "IN_PROGRESS" | "COMPLETED";
   };
 };
 
