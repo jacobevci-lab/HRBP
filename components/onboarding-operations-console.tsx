@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useLocale } from "@/components/locale-provider";
 import { OnboardingOperationsConsole as ReadinessConsole } from "@/components/onboarding-readiness-console";
+import { OnboardingTaskPlanningConsole } from "@/components/onboarding-task-planning-console";
 import { parseOnboardingOperationsQuery } from "@/lib/onboarding-operations-query.mjs";
 import type { OnboardingOperationsSnapshot } from "@/lib/onboarding-operations-data";
 import styles from "./onboarding-readiness.module.css";
@@ -22,6 +23,7 @@ function OperationsBrowser({ tasks }: { tasks: OnboardingOperationsSnapshot }) {
   const focus = focusParams.toString();
   const [selection, setSelection] = useState<Selection>(() => ({ query: focus, focus, previous: [], number: 1 }));
   const [revision, setRevision] = useState(0);
+  const [planning, setPlanning] = useState(false);
   const [result, setResult] = useState<Result>(() => ({ source: tasks, query: "", revision: 0, data: tasks, error: null }));
 
   useEffect(() => {
@@ -86,14 +88,14 @@ function OperationsBrowser({ tasks }: { tasks: OnboardingOperationsSnapshot }) {
     <section className={`card ${styles.console}`} aria-busy={loading}>
       <div className={styles.planActions}>
         <strong>{focusedMode ? c("Notification record", "Bildirim kaydı") : c(`Plan page ${selection.number}`, `Plan sayfası ${selection.number}`)}</strong>
-        {focusedMode ? <button type="button" className="secondary-button" onClick={returnToQueue}>{c("Return to plan queue", "Plan kuyruğuna dön")}</button> : <>
-          <button type="button" className="secondary-button" disabled={loading || !selection.previous.length} onClick={() => navigate(selection.previous.at(-1) ?? "", selection.previous.slice(0, -1), Math.max(1, selection.number - 1))}>{c("Previous page", "Önceki sayfa")}</button>
-          <button type="button" className="secondary-button" disabled={loading || !data?.page.nextCursor} onClick={() => {
+        {focusedMode ? <button type="button" className="secondary-button" disabled={planning} onClick={returnToQueue}>{c("Return to plan queue", "Plan kuyruğuna dön")}</button> : <>
+          <button type="button" className="secondary-button" disabled={planning || loading || !selection.previous.length} onClick={() => navigate(selection.previous.at(-1) ?? "", selection.previous.slice(0, -1), Math.max(1, selection.number - 1))}>{c("Previous page", "Önceki sayfa")}</button>
+          <button type="button" className="secondary-button" disabled={planning || loading || !data?.page.nextCursor} onClick={() => {
             if (data?.page.nextCursor) navigate(new URLSearchParams({ after: data.page.nextCursor }).toString(), [...selection.previous, selection.query], selection.number + 1);
           }}>{c("Next page", "Sonraki sayfa")}</button>
-          <button type="button" className="secondary-button" disabled={loading} onClick={() => navigate("", [], 1)}>{c("Restart queue", "Kuyruğu baştan yükle")}</button>
+          <button type="button" className="secondary-button" disabled={planning || loading} onClick={() => navigate("", [], 1)}>{c("Restart queue", "Kuyruğu baştan yükle")}</button>
         </>}
-        <button type="button" className="secondary-button" disabled={loading} onClick={() => setRevision((value) => value + 1)}>{c("Reload this page", "Bu sayfayı yenile")}</button>
+        <button type="button" className="secondary-button" disabled={planning || loading} onClick={() => setRevision((value) => value + 1)}>{c("Reload this page", "Bu sayfayı yenile")}</button>
       </div>
       <p className={styles.note}>{c("Each page reloads your current access scope. Counts, team filters, search and risk ordering apply only to this page, not all pages. Pages replace previous data rather than accumulating records.", "Her sayfada güncel erişim kapsamınız yeniden kontrol edilir. Sayılar, ekip filtreleri, arama ve risk sıralaması yalnızca bu sayfaya aittir. Yeni sayfa öncekinin yerini alır; kayıtlar biriktirilmez.")}</p>
       {data?.hasMorePlans ? <p className={styles.note} role="status">{c("More authorized plans are available on the next page. A filter with no matches here does not mean the whole queue is empty.", "Sonraki sayfada başka yetkili planlar var. Burada filtre sonucu bulunamaması tüm kuyruğun boş olduğu anlamına gelmez.")}</p> : null}
@@ -103,7 +105,10 @@ function OperationsBrowser({ tasks }: { tasks: OnboardingOperationsSnapshot }) {
     </section>
     {/* Pagination disclosure belongs to this browser. Suppress only the legacy
         first-snapshot overflow notice; retain every task/completeness warning. */}
+    {data ? <OnboardingTaskPlanningConsole key={`planning:${selection.query}:${revision}:${data.generatedAt}`} snapshot={data} onBusyChange={setPlanning} onSaved={() => setRevision((value) => value + 1)}/> : null}
+    <fieldset disabled={planning} aria-busy={planning} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
     {data ? <ReadinessConsole key={`${selection.query}:${revision}:${data.generatedAt}`} tasks={{ ...data, hasMorePlans: false }}/> : null}
+    </fieldset>
   </>;
 }
 

@@ -41,6 +41,6 @@ assert.match(browser, /onboarding-readiness-console/);
 assert.match(browser, /data \? <ReadinessConsole/);
 assert.match(browser, /data\?\.hasMorePlans/);
 assert.match(browser, /only to this page/);
-const behavior = spawnSync(process.execPath, ["--test", "scripts/onboarding-readiness-view.test.mjs", "scripts/onboarding-operations-page.test.mjs"], { stdio: "inherit" });
+const behavior = spawnSync(process.execPath, ["--test", "scripts/onboarding-readiness-view.test.mjs", "scripts/onboarding-operations-page.test.mjs", "scripts/onboarding-task-planning.test.mjs", "scripts/onboarding-task-planning.postgres.test.mjs"], { stdio: "inherit" });
 if (behavior.error || behavior.status !== 0) process.exit(1);
 console.log("Onboarding observability: scoped pagination, focus and readiness checks passed.");
