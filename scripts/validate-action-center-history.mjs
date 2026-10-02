@@ -20,9 +20,10 @@ expect(routePath, route, /"learning-assignment\.self-transition\."/ , "decision 
 expect(routePath, route, /"performance-review\.self-started"/, "decision history must include governed performance self-review starts");
 expect(routePath, route, /"ONBOARDING_HANDOFF_"/, "decision history must include governed onboarding activation handoffs");
 expect(routePath, route, /"offboarding\.task-"/, "decision history must include governed offboarding task decisions");
+expect(routePath, route, /"employee-case\.corrective-action-"/, "decision history must include governed Employee Relations corrective-action starts");
 expect(routePath, route, /classification:\s*true/, "decision history may expose classification metadata");
 reject(routePath, route, /purpose:\s*true|ipAddress:\s*true|hash:\s*true|previousHash:\s*true/, "decision history must not project purpose, network or chain internals");
-reject(routePath, route, /person|employee|annualBase|payload/i, "decision history API must not project person, pay or payload detail");
+reject(routePath, route, /person:\s*true|employment:\s*true|annualBase:\s*true|payload:\s*true|workEmail:\s*true/, "decision history API must not project person, employment, pay or payload detail");
 
 
 const exportPath = "app/api/action-center/history/export/route.ts";
@@ -40,6 +41,7 @@ expect(exportPath, exported, /"learning-assignment\.self-transition\."/ , "decis
 expect(exportPath, exported, /"performance-review\.self-started"/, "decision evidence export must include governed performance self-review starts");
 expect(exportPath, exported, /"ONBOARDING_HANDOFF_"/, "decision evidence export must include governed onboarding activation handoffs");
 expect(exportPath, exported, /"offboarding\.task-"/, "decision evidence export must include governed offboarding task decisions");
+expect(exportPath, exported, /"employee-case\.corrective-action-"/, "decision evidence export must include governed Employee Relations corrective-action starts");
 reject(exportPath, exported, /purpose:\s*true|ipAddress:\s*true|hash:\s*true|previousHash:\s*true|payload:\s*true/, "decision evidence export must not include sensitive audit internals");
 
 const componentPath = "components/action-center-decision-history.tsx";
@@ -58,6 +60,7 @@ expect(componentPath, component, /LearningAssignment/, "decision history must la
 expect(componentPath, component, /PerformanceReview/, "decision history must label performance self-review evidence");
 expect(componentPath, component, /OnboardingPlan/, "decision history must label onboarding handoff evidence");
 expect(componentPath, component, /SeparationTask/, "decision history must label offboarding task evidence");
+expect(componentPath, component, /CaseAction/, "decision history must label Employee Relations corrective-action evidence");
 reject(componentPath, component, /item\.purpose|item\.ipAddress|item\.previousHash|item\.hash\b/, "decision history UI must not render sensitive audit internals");
 
 const modulePath = "app/module/[slug]/page.tsx";

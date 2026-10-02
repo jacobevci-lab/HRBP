@@ -21,6 +21,7 @@ const actionPrefixes = [
   "performance-review.self-started",
   "ONBOARDING_HANDOFF_",
   "offboarding.task-",
+  "employee-case.corrective-action-",
   "workflow.task-"
 ];
 
@@ -50,6 +51,7 @@ function decisionHref(resourceType: string, resourceId: string) {
   if (resourceType === "PerformanceReview") return `/module/performance?review=${id}`;
   if (resourceType === "OnboardingPlan") return `/module/onboarding?plan=${id}`;
   if (resourceType === "SeparationTask") return `/module/offboarding?task=${id}`;
+  if (resourceType === "CaseAction") return `/module/employee-relations?action=${id}`;
   if (resourceType === "WorkflowTask") return `/module/workflows?task=${id}`;
   return null;
 }

@@ -21,6 +21,7 @@ const actionPrefixes = [
   "performance-review.self-started",
   "ONBOARDING_HANDOFF_",
   "offboarding.task-",
+  "employee-case.corrective-action-",
   "workflow.task-"
 ];
 

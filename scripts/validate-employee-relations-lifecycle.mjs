@@ -84,6 +84,14 @@ expect(actionCenterPath, actionCenter, /subjectType:\s*"CaseAction"/, "correctiv
 expect(actionCenterPath, actionCenter, /employee-relations\?q=.*&action=/, "corrective-action attention items must deep-link to the exact action");
 expect(actionCenterPath, actionCenter, /employee-relations\?q=.*&appeal=/, "appeal attention items must deep-link to the exact appeal");
 expect(actionCenterPath, actionCenter, /reviewerId:\s*ctx\.actorId/, "appeal attention must remain explicitly reviewer scoped");
+expect(actionCenterPath, actionCenter, /row\.status === CaseActionStatus\.OPEN[\s\S]*type:\s*"start-er-corrective-action"/, "only OPEN corrective actions may expose bounded quick-start progression");
+
+
+const sharedActionPath = "components/workflow-action-center.tsx";
+const sharedAction = await source(sharedActionPath);
+expect(sharedActionPath, sharedAction, /item\.action\.type === "start-er-corrective-action"[\s\S]*\/api\/employee-relations\/cases\//, "Employee Relations quick-start must use the governed corrective-action endpoint");
+expect(sharedActionPath, sharedAction, /payload = \{ status: "IN_PROGRESS" \}/, "Employee Relations quick-start must only move corrective actions into IN_PROGRESS");
+expect(sharedActionPath, sharedAction, /resourceType:\s*"CaseAction"/, "Employee Relations quick-start must clear matching notifications best-effort");
 
 const notificationPath = "lib/notification-display.ts";
 const notifications = await source(notificationPath);
