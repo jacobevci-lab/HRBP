@@ -1,0 +1,20 @@
+.console { min-width: 0; }
+.console strong, .console small, .console p { overflow-wrap: anywhere; }
+.filters { display: grid; grid-template-columns: minmax(12rem, 2fr) minmax(9rem, 1fr) minmax(9rem, 1fr) auto; align-items: end; gap: 12px; margin: 16px 0 10px; }
+.filters label, .reasonEditor label { display: grid; gap: 6px; min-width: 0; color: var(--muted); font-size: 12px; }
+.filters input, .filters select, .reasonEditor textarea { width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--text); padding: 10px; font: inherit; }
+.filters input, .filters select { min-height: 40px; }
+.filters input:focus-visible, .filters select:focus-visible, .reasonEditor textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note { color: var(--muted); font-size: 12px; line-height: 1.6; margin: 12px 0; }
+.risk { color: var(--red); }
+.focused { outline: 2px solid var(--accent); outline-offset: -2px; scroll-margin-top: 80px; }
+.planActions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.planActions span { display: inline-flex; align-items: center; gap: 5px; }
+.issues { padding: 10px 12px; border-bottom: 1px solid var(--line-strong); color: var(--muted); font-size: 12px; }
+.issues p { display: flex; align-items: flex-start; gap: 7px; margin: 5px 0; }
+.issues svg { flex-shrink: 0; margin-top: 2px; }
+.reasonEditor { grid-column: 1 / -1; display: grid; gap: 10px; padding: 12px 0 4px; border-top: 1px dashed var(--line-strong); }
+.reasonEditor textarea { min-height: 80px; resize: vertical; }
+.empty { padding: 20px; color: var(--muted); line-height: 1.6; }
+@media (max-width: 1000px) { .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .filters { grid-template-columns: minmax(0, 1fr); } .planActions { justify-content: flex-start; } .console :global(.onb-plan > header) { flex-direction: column; align-items: flex-start; gap: 12px; } .console :global(.onb-task) { grid-template-columns: minmax(0, 1fr); gap: 10px; } .console :global(.ats-actions) { flex-wrap: wrap; } }
