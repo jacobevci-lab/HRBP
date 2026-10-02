@@ -195,7 +195,7 @@ async function offboardingItems(ctx: RequestContext): Promise<EmployeeLifecycleA
       finalSettlementStatus: true,
       tasks: {
         where: { blocking: true, status: { notIn: CLOSED_EXIT_TASKS } },
-        select: { id: true, status: true },
+        select: { id: true, title: true, status: true, dueAt: true, createdAt: true },
         take: 50
       },
       assets: {
@@ -233,7 +233,7 @@ async function offboardingItems(ctx: RequestContext): Promise<EmployeeLifecycleA
     const stage = statusLabel(process.status);
     const blockerText = blockerCount ? `${blockerCount} open clearance control${blockerCount === 1 ? "" : "s"}` : "clearance controls complete";
     const settlementText = finalSettlementClear ? "final settlement complete" : `final settlement ${statusLabel(process.finalSettlementStatus ?? "not started")}`;
-    return [{
+    const processItem: EmployeeLifecycleAttentionItem = {
       id: `offboarding:${process.id}`,
       kind: "offboarding",
       title: `Offboarding clearance · ${employee}`,
@@ -249,7 +249,29 @@ async function offboardingItems(ctx: RequestContext): Promise<EmployeeLifecycleA
         ? "warning"
         : urgencyForDueDate(process.lastWorkingDate, blockerCount > 0 ? "warning" : "normal"),
       action: null
-    }];
+    };
+
+    const taskItems = process.tasks.map((task): EmployeeLifecycleAttentionItem => ({
+      id: `offboarding:task:${task.id}`,
+      kind: "offboarding",
+      title: `Exit task · ${employee}`,
+      subtitle: task.title,
+      module: "offboarding",
+      href: `/module/offboarding?separation=${encodeURIComponent(process.id)}&task=${encodeURIComponent(task.id)}`,
+      subjectType: "SeparationTask",
+      subjectId: task.id,
+      status: statusLabel(task.status),
+      dueAt: (task.dueAt ?? process.lastWorkingDate).toISOString(),
+      createdAt: task.createdAt.toISOString(),
+      urgency: task.status === ExitTaskStatus.BLOCKED
+        ? "critical"
+        : urgencyForDueDate(task.dueAt ?? process.lastWorkingDate, "warning"),
+      action: task.status === ExitTaskStatus.IN_PROGRESS
+        ? { type: "advance-offboarding-task", processId: process.id, taskId: task.id, status: "COMPLETED" }
+        : { type: "advance-offboarding-task", processId: process.id, taskId: task.id, status: "IN_PROGRESS" }
+    }));
+
+    return [processItem, ...taskItems];
   });
 }
 
