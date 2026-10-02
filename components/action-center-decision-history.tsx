@@ -67,15 +67,18 @@ export function ActionCenterDecisionHistory() {
   const { locale } = useLocale();
   const tr = locale === "tr";
   const [days, setDays] = useState(30);
+  const [resourceType, setResourceType] = useState("");
   const [items, setItems] = useState<DecisionHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (windowDays = days) => {
+  const load = useCallback(async (windowDays = days, selectedResourceType = resourceType) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/action-center/history?days=${windowDays}`, { cache: "no-store" });
+      const params = new URLSearchParams({ days: String(windowDays) });
+      if (selectedResourceType) params.set("resourceType", selectedResourceType);
+      const response = await fetch(`/api/action-center/history?${params.toString()}`, { cache: "no-store" });
       const body = await response.json() as HistoryResponse;
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
       setItems(body.data?.items ?? []);
@@ -84,15 +87,15 @@ export function ActionCenterDecisionHistory() {
     } finally {
       setLoading(false);
     }
-  }, [days, tr]);
+  }, [days, resourceType, tr]);
 
-  useEffect(() => { void load(days); }, [days, load]);
+  useEffect(() => { void load(days, resourceType); }, [days, resourceType, load]);
 
   useEffect(() => {
-    const refresh = () => void load(days);
+    const refresh = () => void load(days, resourceType);
     window.addEventListener("hrbp:lifecycle-actions-changed", refresh);
     return () => window.removeEventListener("hrbp:lifecycle-actions-changed", refresh);
-  }, [days, load]);
+  }, [days, resourceType, load]);
 
   const grouped = useMemo(() => {
     const counts = new Map<string, number>();
@@ -117,8 +120,17 @@ export function ActionCenterDecisionHistory() {
           <option value={30}>30d</option>
           <option value={90}>90d</option>
         </select>
-        <button className="secondary-button compact" type="button" onClick={() => void load(days)} disabled={loading}><RefreshCw size={14}/>{tr ? "Yenile" : "Refresh"}</button>
-        <a className="secondary-button compact" href={`/api/action-center/history/export?days=${days}`}><Download size={14}/>{tr ? "CSV kanıt" : "Export CSV"}</a>
+        <select value={resourceType} onChange={(event) => setResourceType(event.target.value)} aria-label={tr ? "Alan filtresi" : "Domain filter"}>
+          <option value="">{tr ? "Tüm alanlar" : "All domains"}</option>
+          {Object.keys({
+            LeaveRequest:1,TimeEntry:1,CompensationChange:1,PayrollRun:1,Requisition:1,Offer:1,PolicyRecord:1,
+            WorkforceScenario:1,WorkflowDefinition:1,WorkflowTask:1,SurveyCampaign:1,DataSubjectRequest:1,
+            PrivacyRiskAssessment:1,HRServiceRequest:1,OnboardingTask:1,OnboardingPlan:1,BenefitEnrollment:1,
+            LearningAssignment:1,PerformanceReview:1,SeparationTask:1,CaseAction:1
+          }).map((type) => <option key={type} value={type}>{sourceLabel(type, tr)}</option>)}
+        </select>
+        <button className="secondary-button compact" type="button" onClick={() => void load(days, resourceType)} disabled={loading}><RefreshCw size={14}/>{tr ? "Yenile" : "Refresh"}</button>
+        <a className="secondary-button compact" href={`/api/action-center/history/export?days=${days}${resourceType ? `&resourceType=${encodeURIComponent(resourceType)}` : ""}`}><Download size={14}/>{tr ? "CSV kanıt" : "Export CSV"}</a>
       </div>
     </div>
 
