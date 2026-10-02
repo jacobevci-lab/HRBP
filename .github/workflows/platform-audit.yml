@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - scripts/platform-audit.mjs
+      - scripts/platform-auth-browser-audit.mjs
       - .github/workflows/platform-audit.yml
 permissions:
   contents: read
@@ -70,6 +71,7 @@ jobs:
             sleep 1
           done
           node scripts/platform-audit.mjs || { tail -70 .audit/server.log; exit 1; }
+          node scripts/platform-auth-browser-audit.mjs || { tail -70 .audit/server.log; exit 1; }
       - name: Preserve complete audit evidence
         if: always()
         uses: actions/upload-artifact@v4
