@@ -3,14 +3,15 @@ import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 import { PrismaClient } from '@prisma/client';
 import { requireDisposableDatabase } from './load-ts.mjs';
+import { auditDomainFlows } from './domain-flows.mjs';
 requireDisposableDatabase();
-const BASE = 'http://127.0.0.1:3100';
-const requireBrowser = createRequire(process.env.HRBP_AUDIT_BROWSER_PACKAGE);
-const { chromium } = requireBrowser('playwright');
+// Match Next's loopback URL normalization without weakening the application's origin guard.
+const BASE = 'http://localhost:3100';
+const { chromium } = createRequire(process.env.HRBP_AUDIT_BROWSER_PACKAGE)('playwright');
 const fixture = JSON.parse(await readFile('audit-results/fixtures.json', 'utf8'));
 const inventory = JSON.parse(await readFile('audit-results/inventory.json', 'utf8'));
 const db = new PrismaClient();
-const report = { version: 1, target: 'disposable CI Next.js/Chromium/PostgreSQL', source: process.env.GITHUB_SHA, pages: [], links: [], api: [], scenarios: [], failures: [], externalBlocked: [], limitations: ['Page-load and link checks are not exhaustive feature coverage.', 'Synthetic role fixtures are not real OIDC/SSO integration.', 'Object storage, document scanning, AI provider and third-party integrations have no live credentials.', 'Chromium only; not Firefox/WebKit or production Cloudflare load testing.'] };
+const report = { version: 2, target: 'disposable CI Next.js/Chromium/PostgreSQL', source: process.env.GITHUB_SHA, pages: [], links: [], api: [], scenarios: [], failures: [], externalBlocked: [], limitations: ['Page-load and link checks are not exhaustive feature coverage.', 'Synthetic role fixtures are not real OIDC/SSO integration.', 'Object storage, document scanning, AI provider and third-party integrations have no live credentials.', 'Chromium only; not Firefox/WebKit or production Cloudflare load testing.'] };
 await mkdir('audit-results/screenshots', { recursive: true });
 const browser = await chromium.launch({ headless: true });
 const contexts = new Map();
@@ -21,14 +22,20 @@ async function scenario(name, action) {
 }
 async function contextFor(account) {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: 'en-US', timezoneId: 'UTC' });
+  context.setDefaultTimeout(15000);
   await context.addInitScript(() => { localStorage.setItem('hrbp-locale', 'en'); localStorage.setItem('hrbp-theme', 'light'); });
   await context.route('**/*', route => {
     if (new URL(route.request().url()).origin === BASE) return route.continue();
     report.externalBlocked.push(new URL(route.request().url()).origin); return route.abort();
   });
   if (account) {
-    const r = await context.request.post(BASE + '/api/auth/local', { data: { identifier: account.subject, password: process.env.HRBP_TEST_ADMIN_PASSWORD, returnTo: '/' }, headers: { origin: BASE } });
-    assert.equal(r.status(), 200, `Login failed for ${account.role}`);
+    const r = await context.request.post(BASE + '/api/auth/local', { data: { identifier: account.subject, password: process.env.HRBP_TEST_ADMIN_PASSWORD, returnTo: '/' }, headers: { origin: BASE }, timeout:15000 });
+    if (r.status() !== 200) {
+      const body = await r.json().catch(() => ({}));
+      const message = typeof body.error === 'string' ? body.error.slice(0,120) : 'unreadable response';
+      await context.close();
+      throw new Error(`Login ${account.role}: HTTP ${r.status()}; ${message}`);
+    }
     const session = await (await context.request.get(BASE + '/api/auth/session')).json();
     assert.equal(session.authenticated, true, `Session cookie failed for ${account.role}`);
     assert.equal(session.user.role, account.role);
@@ -46,9 +53,11 @@ async function inspectPage(context, role, path, responsive = false) {
     const text = await page.locator('body').innerText();
     const hrefs = await page.locator('a[href]').evaluateAll(nodes => nodes.map(n=>n.getAttribute('href')));
     const nav = await page.locator('a.nav-item').evaluateAll(nodes=>nodes.map(n=>n.getAttribute('href')));
-    const deferred = /protected fallback|temporarily unavailable|safe fallback|could not be loaded/i.test(text);
+    const fallbackDetected = /protected fallback|temporarily unavailable|safe fallback|could not be loaded/i.test(text);
+    // Public dashboard deliberately serves a labelled synthetic snapshot, not a live outage.
+    const deferred = role !== 'PUBLIC' && fallbackDetected;
     const denied = /Access is restricted|Access denied|does not include|not authorized/i.test(text);
-    row = {role,path,http:response?.status(),heading:await page.locator('h1').first().textContent().catch(()=>''),pageErrors:errors,serverErrors:httpErrors,deferred,denied,nav,links:hrefs,controls:await page.locator('button:not([disabled])').count()};
+    row = {role,path,http:response?.status(),heading:await page.locator('h1').first().textContent({timeout:3000}).catch(()=>''),pageErrors:errors,serverErrors:httpErrors,deferred,fallbackDetected,synthetic:role==='PUBLIC',denied,nav,links:hrefs,controls:await page.locator('button:not([disabled])').count()};
     if (row.http !== 200 || errors.length || httpErrors.length || deferred) failure('page', {role,path,http:row.http,errors,httpErrors,deferred});
     if (responsive) {
       row.layouts=[];
@@ -157,12 +166,26 @@ try {
         const creation=p.waitForResponse(r=>r.url().includes(`/plans/${fixture.planId}/tasks`)&&r.request().method()==='POST');await p.getByRole('button',{name:'Save with audit record',exact:true}).click();const response=await creation;assert.equal(response.status(),201);const data=(await response.json()).data;assert.equal(await db.auditEvent.count({where:{tenantId:fixture.tenantId,resourceId:data.id}}),1);
       }finally{await p.close();}
     });
+    await scenario('real local-sign-in form authenticates the synthetic employee',async()=>{
+      const guest=await contextFor(null),p=await guest.newPage();
+      try {
+        await p.goto(BASE+'/auth/sign-in',{waitUntil:'networkidle'});
+        await p.locator('#local-identifier').fill(fixture.accounts.find(a=>a.role==='EMPLOYEE').subject);
+        await p.locator('#local-password').fill(process.env.HRBP_TEST_ADMIN_PASSWORD);
+        const responsePromise=p.waitForResponse(r=>r.url()===BASE+'/api/auth/local'&&r.request().method()==='POST');
+        await p.getByRole('button',{name:'Sign in with local account',exact:true}).click();
+        assert.equal((await responsePromise).status(),200);
+        await p.waitForURL(BASE+'/',{waitUntil:'networkidle'});
+        assert.equal((await (await guest.request.get(BASE+'/api/auth/session')).json()).authenticated,true);
+      }finally{await guest.close();}
+    });
+    await auditDomainFlows({contexts,fixture,db,report,scenario,BASE,inventory});
   }
 } catch(e) {failure('audit-execution',{error:String(e.message).slice(0,400)});}
 finally {
   await db.$disconnect();await browser.close();
   report.externalBlocked=[...new Set(report.externalBlocked)];
-  report.counts={pages:report.pages.length,links:report.links.length,apiChecks:report.api.length,scenarios:report.scenarios.length,failures:report.failures.length};
+  report.counts={pages:report.pages.length,links:report.links.length,apiChecks:report.api.length,scenarios:report.scenarios.length,authenticatedRoles:contexts.size-1,failures:report.failures.length};
   await writeFile('audit-results/browser.json',JSON.stringify(report,null,2));
   const summary=['# HRBP product audit','',`Commit: ${report.source}`,`Target: ${report.target}`,'',JSON.stringify(report.counts),'','## Findings',...report.failures.map(f=>'- '+JSON.stringify(f)),'','## Scenarios',...report.scenarios.map(s=>'- '+JSON.stringify(s)),'','## Limits',...report.limitations.map(s=>'- '+s),''].join('\n');
   await writeFile('audit-results/summary.md',summary);

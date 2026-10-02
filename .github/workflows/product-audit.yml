@@ -34,7 +34,7 @@ jobs:
       HRBP_MAINTENANCE_TOKEN: ci-product-audit-maintenance-token
       HRBP_LOCAL_AUTH_ENABLED: 'true'
       HRBP_AUTH_TENANT_ID: tenant-acme-global
-      APP_URL: http://127.0.0.1:3100
+      APP_URL: http://localhost:3100
       NEXT_TELEMETRY_DISABLED: '1'
     steps:
       - uses: actions/checkout@v4
@@ -73,12 +73,12 @@ jobs:
         continue-on-error: true
         shell: bash
         run: |
-          npm run start -- --hostname 127.0.0.1 --port 3100 > /tmp/hrbp-product-server.log 2>&1 &
+          npm run start -- --hostname localhost --port 3100 > /tmp/hrbp-product-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
           ready=0
           for i in {1..40}; do
-            if curl --fail --silent http://127.0.0.1:3100/api/health/runtime > /dev/null; then ready=1; break; fi
+            if curl --fail --silent http://localhost:3100/api/health/runtime > /dev/null; then ready=1; break; fi
             sleep 1
           done
           test "$ready" = 1
