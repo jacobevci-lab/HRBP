@@ -738,8 +738,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         payload = { status: "ACTIVE" };
       }
 
+      const method = item.action.type === "activate-development-plan" ? "PATCH" : "POST";
       const response = await fetch(endpoint, {
-        method: "POST",
+        method,
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload)
       });
