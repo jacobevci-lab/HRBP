@@ -16,6 +16,9 @@ expect(continuityPath, continuity, /take:\s*100/, "onboarding plan aggregation m
 expect(continuityPath, continuity, /href:\s*`\/module\/onboarding\?task=/, "onboarding attention must deep-link to the existing scoped task focus");
 expect(continuityPath, continuity, /type:\s*"advance-onboarding-task"[\s\S]*status:\s*"COMPLETED"/, "in-progress onboarding attention must expose bounded completion");
 expect(continuityPath, continuity, /type:\s*"advance-onboarding-task"[\s\S]*status:\s*"IN_PROGRESS"/, "not-started or blocked onboarding attention must expose bounded in-progress transition");
+expect(continuityPath, continuity, /OnboardingStatus\.COMPLETED[\s\S]*EmploymentStatus\.PREBOARDING/, "completed preboarding plans must enter activation-handoff attention");
+expect(continuityPath, continuity, /canActivateEmployment\s*=\s*can\(ctx,\s*"people:write"\)/, "activation-handoff quick action must require people write authority");
+expect(continuityPath, continuity, /type:\s*"activate-onboarding-employment"/, "start-date-ready onboarding handoff must expose bounded employment activation");
 expect(continuityPath, continuity, /task\.status === OnboardingTaskStatus\.IN_PROGRESS[\s\S]*advance-onboarding-task/, "onboarding quick action must derive target state from the governed task status");
 reject(continuityPath, continuity, /type:\s*"advance-onboarding-task"[^}]*status:\s*"BLOCKED"|type:\s*"advance-onboarding-task"[^}]*status:\s*"WAIVED"/, "shared onboarding quick actions must not create blocker or waiver states that require reasons");
 
@@ -51,6 +54,8 @@ expect(uiPath, ui, /summary\.offboarding/, "Action Center must expose offboardin
 expect(uiPath, ui, /item\.action\.type === "advance-onboarding-task"[\s\S]*\/api\/onboarding\/tasks\//, "onboarding quick actions must reuse the governed task-status endpoint");
 expect(uiPath, ui, /resourceType:\s*"OnboardingTask"/, "onboarding quick actions must retire matching notifications best-effort");
 expect(uiPath, ui, /payload = \{ status: item\.action\.status \}/, "onboarding quick actions must send only the precomputed bounded target status");
+expect(uiPath, ui, /item\.action\.type === "activate-onboarding-employment"[\s\S]*\/api\/onboarding\/plans\//, "onboarding activation handoff must reuse the governed activation endpoint");
+expect(uiPath, ui, /resourceType:\s*"OnboardingPlan"/, "onboarding activation must clear matching plan notifications best-effort");
 
 const dashboardPath = "lib/dashboard-lifecycle-attention.ts";
 const dashboard = await source(dashboardPath);
