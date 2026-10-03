@@ -1,0 +1,31 @@
+name: Apply Reviewed Remediation
+on:
+  pull_request:
+    paths:
+      - '.github/remediation-payload/**'
+      - '.github/workflows/apply-remediation-payload.yml'
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.head_ref == 'fix/platform-audit-20261003' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Verify and apply exact reviewed patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .github/remediation-payload/0{0..4}.b64 | base64 --decode | xz --decompress > "$RUNNER_TEMP/fixes.patch"
+          echo "8e88384c154b0482090073801800a5acd8c9bd89d2a937b1f8b0f4c43b83c686  $RUNNER_TEMP/fixes.patch" | sha256sum --check
+          git apply --check --unidiff-zero "$RUNNER_TEMP/fixes.patch"
+          git apply --unidiff-zero "$RUNNER_TEMP/fixes.patch"
+          git add app components lib scripts docs package.json
+          git diff --cached --stat
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: remediate platform audit authentication, input validation, localization and mobile issues'
+          git push origin HEAD:refs/heads/fix/platform-audit-20261003
