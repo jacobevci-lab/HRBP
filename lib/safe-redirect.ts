@@ -16,7 +16,7 @@ export function sanitizeReturnTo(value: unknown, fallback = "/"): string {
     }
     try {
       const url = new URL(input, "https://hrbp.invalid");
-      if (url.origin !== "https://hrbp.invalid" || url.username || url.password) return null;
+      if (url.origin !== "https://hrbp.invalid" || url.username || url.password || url.pathname.startsWith("//")) return null;
       return `${url.pathname}${url.search}${url.hash}`;
     } catch { return null; }
   }

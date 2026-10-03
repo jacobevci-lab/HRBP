@@ -25,3 +25,17 @@ Immediate account validation adds database reads to authenticated requests. Reac
 This is not a new durable server-side session store: logout removes the browser cookie, but copied bearer cookies are not individually denylisted. Account deactivation/role changes are checked on subsequent requests, not a cancellation of already-running transactions. Re-enabling an unchanged account can make an otherwise unexpired cookie valid again. Distributed session revocation, idle timeout and live identity-provider revocation remain separate improvements.
 
 The test suite is Chromium-only and does not establish all CRUD/approval/export journeys, external OIDC, payroll, AI, storage or notification-provider success. A green GitHub build is not proof of Cloudflare rollout or production health. The earlier Cloudflare deployment failure needs provider build logs before assigning a root cause.
+
+## Build-tool dependency exception avoided
+
+During verification on 3 October 2026, the full dependency audit began reporting
+GHSA-vfj7-8cjw-p6xm through the Next lint plugin's fast-glob/micromatch/braces chain.
+The advisory currently lists no patched braces version. This change does not
+suppress the advisory, disable full auditing or downgrade the Next.js runtime.
+Only the official `@next/eslint-plugin-next` is pinned to 14.2.35 (glob-based),
+with its glob dependency at 10.5.0; eslint-config-next remains on 15.x.
+`lint-compat:validate` checks all 21 existing rule names and configured severities,
+React/TypeScript configuration and three executable ESLint 9 fixtures. These
+checks are not proof that every older rule implementation is identical. Review
+and remove this temporary tooling pin when an audited compatible release drops
+vulnerable braces. Full npm audit remains a required gate.
