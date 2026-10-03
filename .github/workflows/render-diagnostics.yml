@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-      - name: Apply source-bound follow-up and remove this one-time workflow
+      - name: Apply only source files at their reviewed versions
         env:
           EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
@@ -28,8 +28,7 @@ jobs:
           'components/governance-planning-live-workspace.tsx':'fc330e435b0b9f5d68aa1112ea8ad3926c1f80ad5b15b45d96ebefd922414611',
           'app/workflows.css':'454bfbbb89f51e8aec766615aec94542a1b5f2e27a240af183b96d9823ce0f9a',
           'scripts/platform-auth-browser-audit.mjs':'17b8217d15d8b2b6c79ff997db1332272c3d91be3223740a6da443bc122fc2fc',
-          'scripts/platform-remediation-gate.mjs':'15d43f07a6aa246a14fe144f378236230b83c73136d507e9667da649667ac82e',
-          '.github/workflows/platform-regression.yml':'24a527fb70797057689328c6877ca799b9b79dc9b7e396a5252f061d3534de06'}
+          'scripts/platform-remediation-gate.mjs':'15d43f07a6aa246a14fe144f378236230b83c73136d507e9667da649667ac82e'}
           for path,digest in expected.items():
             assert hashlib.sha256(Path(path).read_bytes()).hexdigest()==digest, 'Source changed: '+path
           p=Path('components/audit-live-page.tsx');s=p.read_text().replace('<div className="audit-live-page">','<div className="audit-live-page" data-audit-locale={locale}>')
@@ -57,10 +56,8 @@ jobs:
           s=s.replace("await page.locator('.locale-toggle button').filter({hasText:'TR'}).click();await page.waitForLoadState('networkidle');", "await page.locator('.locale-toggle button').filter({hasText:'TR'}).click();await waitServerLocale(page,path,'tr');await page.waitForLoadState('networkidle');")
           s=s.replace("await page.locator('.locale-toggle button').filter({hasText:'EN'}).click();await page.waitForLoadState('networkidle');", "await page.locator('.locale-toggle button').filter({hasText:'EN'}).click();await waitServerLocale(page,path,'en');await page.waitForLoadState('networkidle');");p.write_text(s)
           p=Path('scripts/platform-remediation-gate.mjs');s=p.read_text().replace("check('No browser errors or 5xx',", "check('Primary browser sweep has no navigation, JavaScript or server errors',base.browser500.length===0&&base.browserJsErrors.length===0&&base.serverFailurePages.length===0,{navigation:base.browser500,js:base.browserJsErrors,server:base.serverFailurePages});\ncheck('Both mobile sweeps fit the document',base.mobileOverflow.length===0&&browser.mobileOverflow.length===0,{primary:base.mobileOverflow,principalVerified:browser.mobileOverflow});\ncheck('No browser errors or 5xx',");p.write_text(s)
-          p=Path('.github/workflows/platform-regression.yml');s=p.read_text().replace('node --test scripts/platform-remediation.test.mjs','node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs').replace('          node scripts/platform-remediation-gate.mjs','          node scripts/platform-render-regression.mjs\n          node scripts/platform-remediation-gate.mjs');p.write_text(s)
-          Path('.github/workflows/render-diagnostics.yml').unlink()
           PY
           git diff --check
-          git add components/audit-live-page.tsx components/governance-planning-live-workspace.tsx app/workflows.css scripts/platform-auth-browser-audit.mjs scripts/platform-remediation-gate.mjs .github/workflows/platform-regression.yml .github/workflows/render-diagnostics.yml
+          git add components/audit-live-page.tsx components/governance-planning-live-workspace.tsx app/workflows.css scripts/platform-auth-browser-audit.mjs scripts/platform-remediation-gate.mjs
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'fix: use native audit downloads and fit workflow controls on mobile'
           git push origin HEAD:refs/heads/$BRANCH
