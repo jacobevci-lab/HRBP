@@ -47,7 +47,7 @@ function csvCell(value: string) {
 }
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
 
   const { days, resourceType } = queryOptions(request);

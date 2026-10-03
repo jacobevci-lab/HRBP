@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, LeaveRequestStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -13,7 +14,7 @@ function validDate(value: string | undefined) {
 }
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "leave:read")) return forbidden();
 
@@ -36,11 +37,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
 
-  const body = await request.json() as { employmentId?: string; leaveTypeId?: string; startsAt?: string; endsAt?: string; units?: string | number; reason?: string };
+  const body = await readJsonObject(request) as { employmentId?: string; leaveTypeId?: string; startsAt?: string; endsAt?: string; units?: string | number; reason?: string };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   if (!body.employmentId || !body.leaveTypeId || !body.startsAt || !body.endsAt || body.units === undefined) {
     return Response.json({ error: "employmentId, leaveTypeId, startsAt, endsAt and units are required." }, { status: 400 });
   }

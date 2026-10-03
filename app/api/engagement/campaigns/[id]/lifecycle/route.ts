@@ -9,7 +9,7 @@ type CampaignAction = "SCHEDULE" | "OPEN" | "CLOSE" | "RETURN_DRAFT" | "ARCHIVE"
 const actions: CampaignAction[] = ["SCHEDULE", "OPEN", "CLOSE", "RETURN_DRAFT", "ARCHIVE"];
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "engagement:write")) return forbidden();

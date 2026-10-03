@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, EmploymentStatus, LifecycleEventType, PlatformRole, PositionStatus } from "@prisma/client";
 import { withDb, db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -11,7 +12,7 @@ const workforceMasterDataWriters = new Set<PlatformRole>([
 ]);
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "people:read")) return forbidden();
 
@@ -39,14 +40,15 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "people:write") || !workforceMasterDataWriters.has(ctx.role)) {
     return forbidden("Creating a workforce master record requires an operational tenant-wide role.");
   }
 
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const givenName = String(body.givenName ?? "").trim();
   const familyName = String(body.familyName ?? "").trim();
   const employeeNumber = String(body.employeeNumber ?? "").trim();

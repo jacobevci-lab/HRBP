@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, LearningAssignmentStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -15,14 +16,15 @@ const transitions: Record<LearningAssignmentStatus, LearningAssignmentStatus[]> 
 };
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "learning:self-progress")) return forbidden();
   if (!ctx.employmentId) return forbidden("An employment-bound identity is required for learning progress.");
 
   const { id } = await params;
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const next = String(body.status ?? "") as LearningAssignmentStatus;
   if (!Object.values(LearningAssignmentStatus).includes(next)) return Response.json({ error: "A valid learning assignment status is required." }, { status: 400 });
   const score = body.score === undefined || body.score === "" ? undefined : Number(body.score);

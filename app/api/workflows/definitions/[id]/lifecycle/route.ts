@@ -11,7 +11,7 @@ const activatableStatuses = new Set<WorkflowDefinitionStatus>([WorkflowDefinitio
 const retirableStatuses = new Set<WorkflowDefinitionStatus>([WorkflowDefinitionStatus.DRAFT, WorkflowDefinitionStatus.PAUSED]);
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "workflows:approve")) return forbidden();

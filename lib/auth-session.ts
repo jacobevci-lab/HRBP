@@ -2,11 +2,15 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { PlatformRole } from "@prisma/client";
 import { runtimeNumber, runtimeString } from "@/lib/runtime-env";
 
+export { sanitizeReturnTo } from "@/lib/safe-redirect";
+
 export const SESSION_COOKIE = "hrbp_session";
 export const OIDC_TRANSACTION_COOKIE = "hrbp_oidc_txn";
 
 export type SessionClaims = {
   v: 1;
+  authMethod?: "local" | "oidc";
+  credentialVersion?: string | null;
   tenantId: string;
   actorId: string;
   role: PlatformRole;
@@ -43,21 +47,18 @@ export function encodeSignedPayload(payload: object, secret: string) {
 }
 
 export function decodeSignedPayload<T extends { exp?: number }>(token: string | undefined, secret: string): T | null {
-  if (!token) return null;
+  if (!token || token.length > 8192 || !/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/.test(token)) return null;
   const [segment, suppliedSignature] = token.split(".");
-  if (!segment || !suppliedSignature) return null;
-
   const expected = Buffer.from(signature(segment, secret));
   const supplied = Buffer.from(suppliedSignature);
   if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return null;
-
   try {
-    const value = JSON.parse(Buffer.from(segment, "base64url").toString("utf8")) as T;
-    if (value.exp && value.exp <= Math.floor(Date.now() / 1000)) return null;
-    return value;
-  } catch {
-    return null;
-  }
+    const value: unknown = JSON.parse(Buffer.from(segment, "base64url").toString("utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const exp = (value as { exp?: unknown }).exp;
+    if (typeof exp !== "number" || !Number.isSafeInteger(exp) || exp <= Math.floor(Date.now() / 1000)) return null;
+    return value as T;
+  } catch { return null; }
 }
 
 export function sessionSecret(): string | undefined {
@@ -73,21 +74,31 @@ export function pkceChallenge(verifier: string) {
   return createHash("sha256").update(verifier).digest("base64url");
 }
 
-export function sanitizeReturnTo(value: string | null | undefined, fallback = "/") {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return fallback;
-  return value;
+/** Ignore malformed unrelated cookies, and reject ambiguous duplicate cookie names. */
+export function parseCookies(header: string | null): Record<string, string> {
+  const result: Record<string, string> = Object.create(null);
+  if (!header || header.length > 16384) return result;
+  const seen = new Set<string>();
+  for (const part of header.split(";")) {
+    const index = part.indexOf("=");
+    if (index <= 0) continue;
+    const key = part.slice(0, index).trim();
+    if (!key || seen.has(key)) { delete result[key]; continue; }
+    seen.add(key);
+    try { result[key] = decodeURIComponent(part.slice(index + 1).trim()); } catch { /* Invalid cookie, not a server error. */ }
+  }
+  return result;
 }
 
-export function parseCookies(header: string | null): Record<string, string> {
-  if (!header) return {};
-  return header.split(";").reduce<Record<string, string>>((result, part) => {
-    const index = part.indexOf("=");
-    if (index <= 0) return result;
-    const key = part.slice(0, index).trim();
-    const value = part.slice(index + 1).trim();
-    if (key) result[key] = decodeURIComponent(value);
-    return result;
-  }, {});
+export function validSessionClaims(claims: SessionClaims | null): claims is SessionClaims {
+  if (!claims || claims.v !== 1 || !validRoles.has(claims.role)) return false;
+  const required = [claims.tenantId, claims.actorId, claims.subject, claims.displayName];
+  if (required.some((value) => typeof value !== "string" || !value || value.length > 512)) return false;
+  if (claims.employmentId !== undefined && (typeof claims.employmentId !== "string" || !claims.employmentId || claims.employmentId.length > 191)) return false;
+  if (claims.email !== undefined && (typeof claims.email !== "string" || claims.email.length > 512)) return false;
+  const now = Math.floor(Date.now() / 1000);
+  return Number.isSafeInteger(claims.issuedAt) && Number.isSafeInteger(claims.exp) &&
+    claims.issuedAt <= now + 60 && claims.exp > now && claims.exp > claims.issuedAt && claims.exp - claims.issuedAt <= 86400;
 }
 
 export function sessionFromRequest(request: Request): SessionClaims | null {
@@ -95,7 +106,7 @@ export function sessionFromRequest(request: Request): SessionClaims | null {
   if (!secret) return null;
   const cookies = parseCookies(request.headers.get("cookie"));
   const claims = decodeSignedPayload<SessionClaims>(cookies[SESSION_COOKIE], secret);
-  if (!claims || claims.v !== 1 || !claims.tenantId || !claims.actorId || !claims.subject || !validRoles.has(claims.role)) return null;
+  if (!validSessionClaims(claims)) return null;
   return claims;
 }
 
@@ -109,7 +120,7 @@ export function createSessionCookie(claims: Omit<SessionClaims, "v" | "issuedAt"
   const issuedAt = Math.floor(Date.now() / 1000);
   const ttlHours = Math.min(Math.max(runtimeNumber("HRBP_SESSION_TTL_HOURS", 8), 1), 24);
   const exp = issuedAt + ttlHours * 60 * 60;
-  const token = encodeSignedPayload({ ...claims, v: 1, issuedAt, exp } satisfies SessionClaims, secret);
+  const token = encodeSignedPayload({ ...claims, authMethod: claims.authMethod ?? "oidc", v: 1, issuedAt, exp } satisfies SessionClaims, secret);
   return cookieBase(SESSION_COOKIE, token, exp - issuedAt);
 }
 

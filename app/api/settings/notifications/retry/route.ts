@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, NotificationOutboxStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -5,14 +6,15 @@ import { db } from "@/lib/db";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "settings:write")) return forbidden();
   if (!mutationOriginAllowed(request)) return Response.json({ error: "Mutation origin is not allowed." }, { status: 403 });
 
   let body: { limit?: unknown; id?: unknown } = {};
   try {
-    body = await request.json() as { limit?: unknown; id?: unknown };
+    body = await readJsonObject(request) as { limit?: unknown; id?: unknown };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   } catch {
     // An empty body uses the safe default batch size.
   }

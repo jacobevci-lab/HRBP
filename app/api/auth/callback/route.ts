@@ -1,3 +1,4 @@
+import { sanitizeReturnTo } from "@/lib/safe-redirect";
 import { PlatformRole } from "@prisma/client";
 import { getOidcConfig } from "@/lib/auth-config";
 import { clearOidcTransactionCookie, createSessionCookie, readOidcTransaction } from "@/lib/auth-session";
@@ -107,8 +108,9 @@ export async function GET(request: Request) {
       return { user, employmentId: person?.employments[0]?.id };
     });
 
-    const headers = new Headers({ location: transaction.returnTo, "cache-control": "no-store" });
+    const headers = new Headers({ location: sanitizeReturnTo(transaction.returnTo), "cache-control": "no-store" });
     headers.append("set-cookie", createSessionCookie({
+      authMethod: "oidc",
       tenantId: identity.user.tenantId,
       actorId: identity.user.id,
       role: identity.user.role,

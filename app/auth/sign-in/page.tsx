@@ -1,3 +1,4 @@
+import { sanitizeReturnTo } from "@/lib/safe-redirect";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
 import { getServerLocale } from "@/lib/i18n-server";
@@ -28,7 +29,6 @@ const messages = {
   }
 } as const;
 
-function safeReturnTo(value: unknown) { return typeof value === "string" && value.startsWith("/") && !value.startsWith("//") ? value : "/"; }
 
 export default async function SignInPage({ searchParams }: { searchParams: SearchParams }) {
   const [params, locale] = await Promise.all([searchParams, getServerLocale()]);
@@ -36,7 +36,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
   const c = (en: string, trValue: string) => tr ? trValue : en;
   const error = typeof params.error === "string" ? params.error : undefined;
   const signedOut = params.signedOut === "1";
-  const returnTo = safeReturnTo(params.returnTo);
+  const returnTo = sanitizeReturnTo(params.returnTo);
   const loginHref = `/api/auth/login?returnTo=${encodeURIComponent(returnTo)}`;
   const localizedMessages = messages[locale];
   const localAuthEnabled = runtimeBoolean("HRBP_LOCAL_AUTH_ENABLED", false);

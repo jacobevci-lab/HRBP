@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, ReviewCycleStatus, ReviewStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -6,7 +7,7 @@ import { canActOnEmployment, employmentIdFilter, resolveEmploymentScope } from "
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "performance:read")) return forbidden();
   const scope = await resolveEmploymentScope(db, ctx);
@@ -15,11 +16,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "performance:write")) return forbidden();
-  const body = await request.json() as { cycleId?: string; employmentId?: string; managerEmploymentId?: string };
+  const body = await readJsonObject(request) as { cycleId?: string; employmentId?: string; managerEmploymentId?: string };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   if (!body.cycleId || !body.employmentId) return Response.json({ error: "cycleId and employmentId are required." }, { status: 400 });
 
   try {

@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { BenefitPlanType, DataClassification } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -24,7 +25,7 @@ function parseAmount(value: unknown) {
 }
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "benefits:read")) return forbidden();
   const scope = await resolveEmploymentScope(db, ctx);
@@ -37,11 +38,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "benefits:write")) return forbidden();
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const code = String(body.code ?? "").trim().toUpperCase().slice(0, 64);
   const name = String(body.name ?? "").trim().slice(0, 250);
   const type = String(body.type ?? "") as BenefitPlanType;

@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight, Eye, EyeOff, KeyRound, LoaderCircle, LockKeyhole, Mail } from "lucide-react";
+import { sanitizeReturnTo } from "@/lib/safe-redirect";
 import { useState } from "react";
 
 export function LocalSignInForm({
@@ -32,7 +33,7 @@ export function LocalSignInForm({
         setError(value.error || (tr ? "Yerel giriş başarısız." : "Local sign-in failed."));
         return;
       }
-      window.location.assign(value.data.returnTo || "/");
+      window.location.assign(sanitizeReturnTo(value.data.returnTo));
     } catch {
       setError(tr ? "Yerel giriş servisine ulaşılamadı." : "Local sign-in service could not be reached.");
     } finally {

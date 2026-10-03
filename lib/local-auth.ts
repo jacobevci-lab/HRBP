@@ -17,9 +17,16 @@ export function hashLocalPassword(password: string) {
   return `scrypt$${N}$${R}$${P}$${salt.toString("base64url")}$${derived.toString("base64url")}`;
 }
 
+/** Narrow compatibility for the historical seed typo, not arbitrary password formats. */
+export function isLegacySeedPasswordHash(value: string | null | undefined) {
+  return typeof value === "string" && /^scrypt\$16384\$8\$1[A-Za-z0-9_-]{108}$/.test(value);
+}
+
 export function verifyLocalPassword(password: string, encoded: string | null | undefined) {
   if (!validLocalPassword(password) || !encoded) return false;
-  const parts = encoded.split("$");
+  const legacy = isLegacySeedPasswordHash(encoded);
+  const suffix = legacy ? encoded.slice("scrypt$16384$8$1".length) : "";
+  const parts = legacy ? ["scrypt", "16384", "8", "1", suffix.slice(0, 22), suffix.slice(22)] : encoded.split("$");
   if (parts.length !== 6 || parts[0] !== "scrypt") return false;
   const cost = Number(parts[1]);
   const blockSize = Number(parts[2]);
@@ -34,7 +41,7 @@ export function verifyLocalPassword(password: string, encoded: string | null | u
   } catch {
     return false;
   }
-  if (salt.length < 16 || expected.length !== KEY_LENGTH) return false;
+  if (salt.length !== 16 || expected.length !== KEY_LENGTH || salt.toString("base64url") !== parts[4] || expected.toString("base64url") !== parts[5]) return false;
 
   const actual = scryptSync(password, salt, KEY_LENGTH, {
     N: cost,

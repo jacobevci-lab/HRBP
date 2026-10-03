@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, LeaveUnit } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -5,7 +6,7 @@ import { appendAudit } from "@/lib/audit";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "leave:read")) return forbidden();
   const data = await db.leaveType.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ active: "desc" }, { name: "asc" }] });
@@ -13,11 +14,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "leave:configure")) return forbidden();
-  const body = await request.json() as { code?: string; name?: string; unit?: LeaveUnit; paid?: boolean; requiresApproval?: boolean; annualAllowance?: string | number };
+  const body = await readJsonObject(request) as { code?: string; name?: string; unit?: LeaveUnit; paid?: boolean; requiresApproval?: boolean; annualAllowance?: string | number };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   if (!body.code?.trim() || !body.name?.trim()) return Response.json({ error: "code and name are required." }, { status: 400 });
   const allowance = body.annualAllowance === undefined ? undefined : Number(body.annualAllowance);
   if (allowance !== undefined && (!Number.isFinite(allowance) || allowance < 0 || allowance > 3660)) return Response.json({ error: "annualAllowance must be between 0 and 3660." }, { status: 400 });

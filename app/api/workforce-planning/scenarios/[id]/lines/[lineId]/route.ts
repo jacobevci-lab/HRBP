@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, Prisma, WorkforceScenarioStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -65,13 +66,14 @@ async function loadOwnedDraftLine(tx: Prisma.TransactionClient, ctx: NonNullable
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string; lineId: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "workforce-plan:write")) return forbidden();
 
   const { id, lineId } = await params;
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const roleLabel = boundedText(body.roleLabel, 160);
   const location = boundedText(body.location, 160);
   const demandDriver = boundedText(body.demandDriver, 1000);
@@ -147,7 +149,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string; lineId: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "workforce-plan:write")) return forbidden();

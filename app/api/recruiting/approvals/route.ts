@@ -14,7 +14,7 @@ type ApprovalQueueItem = {
 };
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "recruiting:write")) return forbidden("Recruiting operations authority is required for the approval queue.");
 

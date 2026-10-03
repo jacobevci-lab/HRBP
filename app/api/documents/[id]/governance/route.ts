@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, PlatformRole } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -13,13 +14,14 @@ function parseOptionalDate(value: string | null | undefined) {
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "documents:govern")) return forbidden();
 
   const { id } = await params;
-  const body = await request.json() as { legalHold?: boolean; retentionUntil?: string | null; expiresAt?: string | null };
+  const body = await readJsonObject(request) as { legalHold?: boolean; retentionUntil?: string | null; expiresAt?: string | null };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   if (body.legalHold !== undefined && ctx.role !== PlatformRole.LEGAL) {
     return forbidden("Only Legal can change a document legal-hold flag.");
   }

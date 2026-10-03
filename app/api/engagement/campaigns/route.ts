@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, EmploymentStatus, Prisma, PrismaClient, SurveyStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -64,7 +65,7 @@ function audienceTargetCount(audience: Prisma.InputJsonValue) {
 }
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "engagement:read")) return forbidden();
   const live = await getEngagementLiveData(ctx);
@@ -81,11 +82,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "engagement:write")) return forbidden();
-  const body = await request.json() as { surveyId?: string; name?: string; anonymous?: boolean; anonymityThreshold?: number; opensAt?: string; closesAt?: string; audienceFilter?: unknown };
+  const body = await readJsonObject(request) as { surveyId?: string; name?: string; anonymous?: boolean; anonymityThreshold?: number; opensAt?: string; closesAt?: string; audienceFilter?: unknown };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const surveyId = body.surveyId?.trim();
   const name = body.name?.trim();
   if (!surveyId || !name || surveyId.length > 128 || name.length > 160) return Response.json({ error: "Valid surveyId and name are required." }, { status: 400 });

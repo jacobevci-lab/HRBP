@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, Prisma } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -7,13 +8,14 @@ import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/re
 const MAX_QUESTIONS = 100;
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "engagement:write")) return forbidden();
 
   const { id } = await params;
-  const body = await request.json() as { questionIds?: unknown };
+  const body = await readJsonObject(request) as { questionIds?: unknown };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   if (!Array.isArray(body.questionIds) || !body.questionIds.length || body.questionIds.length > MAX_QUESTIONS) {
     return Response.json({ error: "questionIds must be a non-empty bounded array." }, { status: 400 });
   }
