@@ -1,0 +1,114 @@
+name: Render Diagnostics
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    if: github.head_ref == 'fix/platform-audit-20261003'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hrbp
+          POSTGRES_PASSWORD: disposable-audit-only
+          POSTGRES_DB: hrbp_audit
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U hrbp -d hrbp_audit"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://hrbp:disposable-audit-only@127.0.0.1:5432/hrbp_audit
+      CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://hrbp:disposable-audit-only@127.0.0.1:5432/hrbp_audit
+      HRBP_DISPOSABLE_AUDIT: 'true'
+      HRBP_LOCAL_AUTH_ENABLED: 'true'
+      HRBP_AUTH_TENANT_ID: tenant-acme-global
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Prepare isolated diagnostics
+        run: |
+          mkdir -p .diagnostics
+          git archive --format=tar.gz -o .diagnostics/review-source.tar.gz HEAD
+          for name in HRBP_SESSION_SECRET HRBP_TEST_ADMIN_PASSWORD HRBP_ENGAGEMENT_RESPONSE_SECRET; do
+            value=$(openssl rand -hex 48)
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+          npm install > .diagnostics/install.log 2>&1
+          npm install --no-save --package-lock=false playwright@1.56.1 >> .diagnostics/install.log 2>&1
+          npx playwright install --with-deps chromium > .diagnostics/browser-install.log 2>&1
+          tar -czf .diagnostics/typescript-tooling.tar.gz node_modules/typescript
+      - name: Seed and build
+        run: |
+          npx prisma generate
+          npx prisma db push
+          for script in seed-staging seed-work-pay-staging seed-access-staging seed-growth-staging seed-connected-growth-staging seed-services-staging seed-service-governance-staging seed-governance-planning-staging; do
+            node "scripts/$script.mjs" >> .diagnostics/seed.log 2>&1
+          done
+          npx next build > .diagnostics/build.log 2>&1 || { tail -60 .diagnostics/build.log; exit 1; }
+      - name: Reproduce natural audit navigation and inspect overflow
+        run: |
+          npx next start --hostname localhost --port 3100 > .diagnostics/server.log 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in {1..30}; do
+            if curl --fail --silent http://localhost:3100/api/health/runtime > /dev/null; then break; fi
+            sleep 1
+          done
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          import { writeFile } from 'node:fs/promises';
+          const origin='http://localhost:3100';
+          const login=await fetch(origin+'/api/auth/local',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({identifier:'local.admin',password:process.env.HRBP_TEST_ADMIN_PASSWORD})});
+          if(login.status!==200)throw Error('Disposable login failed '+login.status);
+          const raw=login.headers.get('set-cookie').split(';')[0],i=raw.indexOf('=');
+          const cookie={name:raw.slice(0,i),value:decodeURIComponent(raw.slice(i+1)),url:origin};
+          const browser=await chromium.launch();const output=[];
+          try {
+            for(const suppressExport of [false,true]){
+              const context=await browser.newContext({viewport:{width:1440,height:1000}});await context.addCookies([cookie]);
+              await context.route('**/*',r=>{const u=new URL(r.request().url());return u.origin!==origin||(suppressExport&&u.pathname==='/api/audit/export')?r.abort():r.continue();});
+              const page=await context.newPage(),events=[],pending=new Map();let sequence=0;
+              page.on('request',r=>{const u=new URL(r.url()),h=r.headers();const entry={seq:++sequence,path:u.pathname,method:r.method(),type:r.resourceType(),prefetch:h['next-router-prefetch']||null,rsc:h.rsc||null};pending.set(r,entry);if(events.length<150)events.push({...entry,event:'start'});});
+              for(const name of ['requestfinished','requestfailed'])page.on(name,r=>{const e=pending.get(r);pending.delete(r);if(events.length<150&&e)events.push({...e,event:name});});
+              page.on('download',d=>events.push({event:'download',filename:d.suggestedFilename()}));
+              page.on('pageerror',e=>events.push({event:'pageerror',message:e.message.slice(0,200)}));
+              const r=await page.goto(origin+'/module/audit',{waitUntil:'load',timeout:25000});
+              let idle=true;try{await page.waitForLoadState('networkidle',{timeout:6000});}catch{idle=false;}
+              const initial={status:r.status(),idle,heading:await page.locator('h1').first().textContent(),pending:[...pending.values()]};
+              await page.locator('.locale-toggle button').filter({hasText:'TR'}).click();
+              let idleTr=true;try{await page.waitForLoadState('networkidle',{timeout:6000});}catch{idleTr=false;}
+              const state={intervention:suppressExport?'diagnostic export suppression':'NONE',initial,idleTr,heading:await page.locator('h1').first().textContent(),pending:[...pending.values()],events};
+              output.push(state);console.log('AUDIT_RENDER_DIAGNOSTIC '+JSON.stringify(state));await context.close();
+            }
+            const context=await browser.newContext({viewport:{width:390,height:844}});await context.addCookies([cookie]);
+            await context.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());
+            const page=await context.newPage();
+            for(const lang of ['EN','TR']){
+              await page.goto(origin+'/module/workflows',{waitUntil:'load'});
+              await page.locator('.app-shell[data-session-loading="false"]').waitFor();
+              await page.locator('.locale-toggle button').filter({hasText:lang}).click();
+              await page.waitForLoadState('networkidle',{timeout:6000});
+              for(const theme of ['light','dark']){
+                await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);
+                const state=await page.evaluate(()=>({width:document.documentElement.scrollWidth,viewport:innerWidth,lang:document.documentElement.lang,theme:document.documentElement.dataset.theme,offenders:[...document.querySelectorAll('.page-content *')].map(e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return{tag:e.tagName,cls:e.className,left:r.left,right:r.right,width:r.width,scroll:e.scrollWidth,client:e.clientWidth,display:s.display,whiteSpace:s.whiteSpace,minWidth:s.minWidth,text:e.textContent?.trim().slice(0,90)};}).filter(e=>e.right>innerWidth+2||e.left<0).slice(0,40)}));
+                output.push(state);console.log('MOBILE_LAYOUT_DIAGNOSTIC '+JSON.stringify(state));await page.screenshot({path:`.diagnostics/workflows-${lang}-${theme}.png`});
+              }
+            }
+            await context.close();
+          }finally{await browser.close();await writeFile('.diagnostics/render.json',JSON.stringify(output,null,2));}
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hrbp-render-diagnostics
+          path: .diagnostics/
+          include-hidden-files: true
+          retention-days: 7
