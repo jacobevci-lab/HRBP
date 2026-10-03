@@ -15,4 +15,12 @@
 .workflow-action-head>div,.workflow-decision-history-head>div{min-width:0}
 .workflow-action-head,.workflow-decision-history-head{flex-wrap:wrap}
 .workflow-action-head p,.workflow-decision-history-head p{overflow-wrap:anywhere}
-@media(max-width:620px){.workflow-action-refine>*{max-width:100%;box-sizing:border-box}.workflow-action-search{flex-basis:100%}.workflow-action-head>div,.workflow-decision-history-head>div{max-width:100%}.workflow-decision-history-filters{min-width:0;flex-wrap:wrap}}
+@media(max-width:620px){.workflow-action-refine>*{max-width:100%;box-sizing:border-box}.workflow-action-search{flex-basis:100%}.workflow-action-head>div,.workflow-decision-history-head>div{max-width:100%}.workflow-history-controls{min-width:0;flex-wrap:wrap}}
+
+/* Native selects must shrink within their grid tracks; wide tables retain local scrolling. */
+@media(max-width:800px){
+  .workflow-history-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;width:100%;min-width:0;max-width:100%}
+  .workflow-history-controls>*{min-width:0;max-width:100%;width:100%;box-sizing:border-box}
+  .workflow-history-controls .secondary-button{height:auto;min-height:34px;white-space:normal;justify-content:center}
+}
+@media(max-width:760px){.workflow-action-search{flex:0 1 auto;width:100%}}

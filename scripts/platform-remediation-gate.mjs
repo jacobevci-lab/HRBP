@@ -17,6 +17,8 @@ check('Disabled account rejected on existing cookie',base.checks.some(x=>x.categ
 check('Onboarding valid workflow still persists',base.checks.some(x=>x.category==='onboarding-persisted'&&x.actual==='ACTIVE'));
 check('Natural navigation preserves all four principals',browser.natural.length===4&&browser.natural.every(x=>x.before.authenticated&&x.after.authenticated&&!x.principalLost&&x.logoutRequests.length===0&&x.explicitSignOutWorks),browser.natural);
 check('Every tested page retains its expected principal',browser.principalFailures.length===0,browser.principalFailures);
+check('Primary browser sweep has no navigation, JavaScript or server errors',base.browser500.length===0&&base.browserJsErrors.length===0&&base.serverFailurePages.length===0,{navigation:base.browser500,js:base.browserJsErrors,server:base.serverFailurePages});
+check('Both mobile sweeps fit the document',base.mobileOverflow.length===0&&browser.mobileOverflow.length===0,{primary:base.mobileOverflow,principalVerified:browser.mobileOverflow});
 check('No browser errors or 5xx',browser.jsFailures.length===0&&browser.httpFailures.length===0&&browser.serverFailures.length===0,{js:browser.jsFailures,http:browser.httpFailures,server:browser.serverFailures});
 check('No unexpected authenticated fallback',browser.adminProtectedFallbacks.length===0&&browser.unexpectedPreviews.length===0);
 check('Rendered internal links respond successfully',browser.nonSuccessfulLinks.length===0,browser.nonSuccessfulLinks);

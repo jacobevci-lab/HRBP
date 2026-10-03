@@ -21,6 +21,14 @@ async function login(role){
  const part=raw.split(';')[0];return{name:part.slice(0,part.indexOf('=')),value:decodeURIComponent(part.slice(part.indexOf('=')+1)),url:origin,httpOnly:true,secure:false,sameSite:'Lax'};
 }
 async function principal(context){const r=await context.request.get(origin+'/api/auth/session');let body={};try{body=await r.json();}catch{}return{status:r.status(),authenticated:body.authenticated===true,id:body.user?.id??null,role:body.user?.role??null};}
+// Wait for the server-rendered locale, not only the immediate client toggle state.
+async function waitServerLocale(page, path, locale) {
+ const selector=path==='/module/audit'?'.audit-live-page':
+  ['/module/engagement','/module/workforce-planning','/module/ai-assistant'].includes(path)?'.gov-shell':null;
+ if(!selector)return;
+ const attr=path==='/module/audit'?'data-audit-locale':'data-governance-locale';
+ await page.locator(`${selector}[${attr}="${locale}"]`).waitFor({timeout:10000});
+}
 const browser=await chromium.launch({headless:true});
 try{
  for(const [role,expectedRole] of Object.entries(roles)){
@@ -69,9 +77,9 @@ try{
      for(const l of state.links)if(l.href?.startsWith('/')&&!l.href.startsWith('//'))links.set(l.href,l);
      if(await page.locator('.theme-toggle').count()){
       const theme=await page.evaluate(()=>document.documentElement.dataset.theme);await page.locator('.theme-toggle').click();const themeChanged=theme!==await page.evaluate(()=>document.documentElement.dataset.theme);await page.locator('.theme-toggle').click();
-      await page.locator('.locale-toggle button').filter({hasText:'TR'}).click();await page.waitForLoadState('networkidle');
+      await page.locator('.locale-toggle button').filter({hasText:'TR'}).click();await waitServerLocale(page,path,'tr');await page.waitForLoadState('networkidle');
       const tr=await page.evaluate(()=>({selected:document.documentElement.lang==='tr',heading:document.querySelector('.page-content h1')?.textContent,englishWorkspaceLabels:['Survey campaigns','Workforce scenarios','My requests','Anonymity controls'].filter(x=>(document.querySelector('.page-content')?.textContent||'').includes(x))}));
-      await page.locator('.locale-toggle button').filter({hasText:'EN'}).click();await page.waitForLoadState('networkidle');
+      await page.locator('.locale-toggle button').filter({hasText:'EN'}).click();await waitServerLocale(page,path,'en');await page.waitForLoadState('networkidle');
       report.ui.push({path,themeChanged,turkishSelected:tr.selected,turkishHeading:tr.heading,remainingEnglishLabels:tr.englishWorkspaceLabels,principalAfterToggles:(await principal(context)).role});
      }
     }

@@ -58,7 +58,7 @@ function Empty({ text, columns = 8 }: { text: string; columns?: number }) {
 function AccessDenied({ slug, locale }: { slug: GovernanceSlug; locale: Locale }) {
   const c = (text: string) => governanceText(locale, text);
   const title = slug === "engagement" ? c("Engagement") : slug === "workforce-planning" ? c("Workforce Planning") : slug === "ai-assistant" ? c("AI Assistant") : c("Privacy & Compliance");
-  return <div className="gov-shell"><section className="card gov-panel" style={{ minHeight: 270, display: "grid", placeItems: "center", textAlign: "center", padding: 36 }}><div style={{ maxWidth: 560 }}><LockKeyhole size={30} style={{ margin: "0 auto 12px" }}/><span className="section-kicker">{c("Policy enforced")}</span><h3 style={{ margin: "5px 0 8px" }}>{title} {c("access is restricted")}</h3><p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.6 }}>{c("The signed session does not include this governed capability. Privileged demo data is never substituted when authorization is denied.")}</p></div></section></div>;
+  return <div className="gov-shell" data-governance-locale={locale}><section className="card gov-panel" style={{ minHeight: 270, display: "grid", placeItems: "center", textAlign: "center", padding: 36 }}><div style={{ maxWidth: 560 }}><LockKeyhole size={30} style={{ margin: "0 auto 12px" }}/><span className="section-kicker">{c("Policy enforced")}</span><h3 style={{ margin: "5px 0 8px" }}>{title} {c("access is restricted")}</h3><p style={{ margin: 0, color: "var(--muted)", lineHeight: 1.6 }}>{c("The signed session does not include this governed capability. Privileged demo data is never substituted when authorization is denied.")}</p></div></section></div>;
 }
 
 export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: { slug: GovernanceSlug; focusId?: string; mode?: string }) {
@@ -71,7 +71,7 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
     const scopeLabel = data.relationshipScoped ? c("Relationship scoped") : c("Tenant authorized");
     const campaignFocusVisible = focusId ? data.rows.some((row) => row.id === focusId) : true;
     const engagementCanWrite = can(ctx, "engagement:write");
-    return <div className="gov-shell"><GovernedFocusScroller attribute="data-engagement-campaign-id" value={campaignFocusVisible ? focusId : undefined}/>{focusId && !campaignFocusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>{c("Campaign focus is unavailable in your governed scope.")}</strong> {c("The deep link failed closed and did not broaden the engagement query.")}</p></section> : null}
+    return <div className="gov-shell" data-governance-locale={locale}><GovernedFocusScroller attribute="data-engagement-campaign-id" value={campaignFocusVisible ? focusId : undefined}/>{focusId && !campaignFocusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>{c("Campaign focus is unavailable in your governed scope.")}</strong> {c("The deep link failed closed and did not broaden the engagement query.")}</p></section> : null}
       <section className="gov-metrics">
         <Metric icon={<UsersRound size={18}/>} label={c("Active campaigns")} value={String(data.activeCampaigns)} meta={(locale === "tr" ? `${scopeLabel} kampanya görünümü` : `${scopeLabel} campaign view`)}/>
         <Metric icon={<Gauge size={18}/>} label={c("Visible responses")} value={String(data.responses)} meta={(locale === "tr" ? `%${data.responseRate} ortalama görünür yanıt oranı` : `${data.responseRate}% average visible response rate`)}/>
@@ -110,7 +110,7 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
     const focusVisible = focusId ? data.rows.some((row) => row.id === focusId) : true;
     const canWrite = can(ctx, "workforce-plan:write");
     const canApprove = can(ctx, "workforce-plan:approve");
-    return <div className="gov-shell"><GovernedFocusScroller attribute="data-workforce-scenario-id" value={focusVisible ? focusId : undefined}/>{focusId && !focusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>{c("Scenario focus is unavailable in your governed scope.")}</strong> {c("The deep link failed closed and did not broaden the workforce planning query.")}</p></section> : null}
+    return <div className="gov-shell" data-governance-locale={locale}><GovernedFocusScroller attribute="data-workforce-scenario-id" value={focusVisible ? focusId : undefined}/>{focusId && !focusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>{c("Scenario focus is unavailable in your governed scope.")}</strong> {c("The deep link failed closed and did not broaden the workforce planning query.")}</p></section> : null}
       <section className="gov-metrics">
         <Metric icon={<Target size={18}/>} label={c("Active workforce")} value={String(data.activeEmployments)} meta={(locale === "tr" ? `${scopeLabel} aktif / izinli çalışanlar` : `${scopeLabel} active / leave population`)}/>
         <Metric icon={<UsersRound size={18}/>} label={c("Visible scenarios")} value={String(data.scenarioCount)} meta={(locale === "tr" ? `${data.approvedScenarios} onaylandı` : `${data.approvedScenarios} approved`)}/>
@@ -138,7 +138,7 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
 
   if (slug === "ai-assistant") {
     const data = await getAIAssistantLiveData(ctx);
-    return <div className="gov-shell">
+    return <div className="gov-shell" data-governance-locale={locale}>
       <section className="gov-metrics">
         <Metric icon={<Bot size={18}/>} label={c("My requests")} value={String(data.requests)} meta={c("Authenticated actor · last 7 days")}/>
         <Metric icon={<CheckCircle2 size={18}/>} label={c("Completed")} value={String(data.completed)} meta={c("Decision-support interactions")}/>
@@ -168,7 +168,7 @@ export async function GovernancePlanningLiveWorkspace({ slug, focusId, mode }: {
     || (privacyFocusType === "transfer" && data.transfers.some((row) => row.id === focusId))
     || (privacyFocusType === "dsr" && data.dsrs.some((row) => row.id === focusId));
   const privacyFocusAttribute = privacyFocusType === "assessment" ? "data-privacy-assessment-id" : privacyFocusType === "transfer" ? "data-privacy-transfer-id" : "data-dsr-id";
-  return <div className="gov-shell"><GovernedFocusScroller attribute={privacyFocusAttribute} value={privacyFocusVisible ? focusId : undefined}/>{focusId && !privacyFocusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>{c("Privacy focus is unavailable in your governed scope.")}</strong> {c("The deep link failed closed and did not broaden the privacy query.")}</p></section> : null}
+  return <div className="gov-shell" data-governance-locale={locale}><GovernedFocusScroller attribute={privacyFocusAttribute} value={privacyFocusVisible ? focusId : undefined}/>{focusId && !privacyFocusVisible ? <section className="card governance-note"><LockKeyhole size={18}/><p><strong>{c("Privacy focus is unavailable in your governed scope.")}</strong> {c("The deep link failed closed and did not broaden the privacy query.")}</p></section> : null}
     <section className="gov-metrics">
       <Metric icon={<FileKey2 size={18}/>} label={c("Processing activities")} value={String(data.processingActivities)} meta={c("Active RoPA records")}/>
       <Metric icon={<Activity size={18}/>} label={c("Open DSRs")} value={String(data.openDsrs)} meta={(locale === "tr" ? `${data.dsrsDue7} talebin son tarihi 7 gün içinde` : `${data.dsrsDue7} due within 7 days`)}/>
