@@ -11,7 +11,7 @@ function bounded(value: unknown, max: number) {
   return text && text.length <= max ? text : text ? null : undefined;
 }
 
-async function loadOwnedSurvey(tx: Prisma.TransactionClient, ctx: NonNullable<ReturnType<typeof getRequestContext>>, id: string) {
+async function loadOwnedSurvey(tx: Prisma.TransactionClient, ctx: NonNullable<Awaited<ReturnType<typeof getRequestContext>>>, id: string) {
   const survey = await tx.engagementSurvey.findFirst({
     where: { id, tenantId: ctx.tenantId },
     select: {

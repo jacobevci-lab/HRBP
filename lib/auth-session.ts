@@ -119,7 +119,7 @@ export function createSessionCookie(claims: Omit<SessionClaims, "v" | "issuedAt"
   if (!secret) throw new Error("HRBP_SESSION_SECRET must contain at least 32 characters.");
   const issuedAt = Math.floor(Date.now() / 1000);
   const ttlHours = Math.min(Math.max(runtimeNumber("HRBP_SESSION_TTL_HOURS", 8), 1), 24);
-  const exp = issuedAt + ttlHours * 60 * 60;
+  const exp = issuedAt + Math.floor(ttlHours * 60 * 60);
   const token = encodeSignedPayload({ ...claims, authMethod: claims.authMethod ?? "oidc", v: 1, issuedAt, exp } satisfies SessionClaims, secret);
   return cookieBase(SESSION_COOKIE, token, exp - issuedAt);
 }

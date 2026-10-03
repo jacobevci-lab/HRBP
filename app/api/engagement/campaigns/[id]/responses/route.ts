@@ -77,7 +77,7 @@ function validatedAnswer(question: QuestionShape, value: unknown): Prisma.InputJ
 }
 
 async function loadCampaignForRespondent(
-  ctx: NonNullable<ReturnType<typeof getRequestContext>>,
+  ctx: NonNullable<Awaited<ReturnType<typeof getRequestContext>>>,
   campaignId: string
 ) {
   if (!ctx.employmentId) throw new Error("EMPLOYMENT");

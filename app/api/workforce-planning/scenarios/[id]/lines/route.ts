@@ -29,7 +29,7 @@ function skills(value: unknown) {
   return [...new Set(normalized)];
 }
 
-async function validatePlanningScope(tx: Prisma.TransactionClient, ctx: NonNullable<ReturnType<typeof getRequestContext>>, orgUnitId: string, positionId?: string) {
+async function validatePlanningScope(tx: Prisma.TransactionClient, ctx: NonNullable<Awaited<ReturnType<typeof getRequestContext>>>, orgUnitId: string, positionId?: string) {
   const orgUnit = await tx.organizationUnit.findFirst({
     where: { id: orgUnitId, tenantId: ctx.tenantId, validTo: null },
     select: { id: true }

@@ -22,7 +22,7 @@ function normalizedOptions(value: unknown, type: SurveyQuestionType | undefined)
   return [...new Set(options)];
 }
 
-async function loadOwnedEditableQuestion(tx: Prisma.TransactionClient, ctx: NonNullable<ReturnType<typeof getRequestContext>>, surveyId: string, questionId: string) {
+async function loadOwnedEditableQuestion(tx: Prisma.TransactionClient, ctx: NonNullable<Awaited<ReturnType<typeof getRequestContext>>>, surveyId: string, questionId: string) {
   const question = await tx.surveyQuestion.findFirst({
     where: { id: questionId, tenantId: ctx.tenantId, surveyId },
     select: {

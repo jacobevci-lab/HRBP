@@ -28,7 +28,7 @@ function normalizeSkills(value: unknown) {
   return [...new Set(normalized)];
 }
 
-async function ensureScope(tx: Prisma.TransactionClient, ctx: NonNullable<ReturnType<typeof getRequestContext>>, orgUnitId: string, positionId?: string | null) {
+async function ensureScope(tx: Prisma.TransactionClient, ctx: NonNullable<Awaited<ReturnType<typeof getRequestContext>>>, orgUnitId: string, positionId?: string | null) {
   const orgUnit = await tx.organizationUnit.findFirst({ where: { id: orgUnitId, tenantId: ctx.tenantId, validTo: null }, select: { id: true } });
   if (!orgUnit) throw new Error("ORG");
 
@@ -49,7 +49,7 @@ async function ensureScope(tx: Prisma.TransactionClient, ctx: NonNullable<Return
   if (positionId && !allowedPositions.has(positionId)) throw new Error("SCOPE");
 }
 
-async function loadOwnedDraftLine(tx: Prisma.TransactionClient, ctx: NonNullable<ReturnType<typeof getRequestContext>>, scenarioId: string, lineId: string) {
+async function loadOwnedDraftLine(tx: Prisma.TransactionClient, ctx: NonNullable<Awaited<ReturnType<typeof getRequestContext>>>, scenarioId: string, lineId: string) {
   const line = await tx.workforcePlanLine.findFirst({
     where: { id: lineId, tenantId: ctx.tenantId, scenarioId },
     select: {
