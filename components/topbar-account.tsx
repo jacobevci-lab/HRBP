@@ -53,7 +53,7 @@ export function TopbarAccount() {
     <div className="topbar-account">
       <span className="topbar-avatar">{initials(session.user.displayName)}</span>
       <span className="topbar-account-copy"><strong>{session.user.displayName}</strong><small>{roleLabel(session.user.role, locale)}</small></span>
-      <Link className="topbar-logout" href="/api/auth/logout" title={signOut} aria-label={signOut}><LogOut size={15}/></Link>
+      <form action="/api/auth/logout" method="post" className="logout-form"><button type="submit" className="topbar-logout" title={signOut} aria-label={signOut}><LogOut size={15}/></button></form>
     </div>
   );
 }

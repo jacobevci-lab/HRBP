@@ -57,3 +57,5 @@ html[data-theme="dark"] .topbar-login,html[data-theme="dark"] .topbar-logout{bac
 .topbar-login{height:36px;display:inline-flex;align-items:center;gap:7px;padding:0 11px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:#43504c;text-decoration:none;font-size:10.5px;font-weight:700}
 .topbar-logout{width:28px;height:28px;display:grid;place-items:center;border-radius:7px;border:1px solid var(--line);background:var(--surface-soft);color:var(--muted);text-decoration:none}
 @media(max-width:900px){.topbar-account-copy{display:none}.topbar-account{padding-right:5px}.topbar-login span{display:none}}
+
+.logout-form{margin:0;display:inline-flex;flex-shrink:0}.logout-form button{border:0;background:transparent;cursor:pointer;color:inherit;font:inherit}.logout-form button:focus-visible{outline:2px solid var(--orange);outline-offset:3px}

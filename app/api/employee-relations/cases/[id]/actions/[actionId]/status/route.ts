@@ -16,7 +16,7 @@ const transitions: Record<CaseActionStatus, CaseActionStatus[]> = {
 const terminal = new Set<CaseActionStatus>([CaseActionStatus.COMPLETED, CaseActionStatus.CANCELLED]);
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; actionId: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "cases:write")) return forbidden();

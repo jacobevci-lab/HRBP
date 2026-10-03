@@ -9,7 +9,7 @@ type Decision = "APPROVE" | "REJECT" | "REVOKE";
 const decisionValues: Decision[] = ["APPROVE", "REJECT", "REVOKE"];
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; exceptionId: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "policies:approve")) return forbidden();

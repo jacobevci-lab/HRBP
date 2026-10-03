@@ -23,7 +23,7 @@ function actionableDueDate(target: Date, now: Date) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "recruiting:write") || !can(ctx, "onboarding:write")) return forbidden("Hire transition requires recruiting and onboarding privileges.");

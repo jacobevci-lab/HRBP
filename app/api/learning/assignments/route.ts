@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, LearningAssignmentStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -14,7 +15,7 @@ function parsedDate(value: unknown) {
 }
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "learning:read")) return forbidden();
   const scope = await resolveEmploymentScope(db, ctx);
@@ -28,11 +29,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "learning:write")) return forbidden();
-  const body = await request.json() as { employmentId?: string; courseId?: string; dueAt?: string | null };
+  const body = await readJsonObject(request) as { employmentId?: string; courseId?: string; dueAt?: string | null };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   if (!body.employmentId || !body.courseId) return Response.json({ error: "employmentId and courseId are required." }, { status: 400 });
   const dueAt = parsedDate(body.dueAt);
   if (dueAt === undefined) return Response.json({ error: "dueAt must be a valid date or blank." }, { status: 400 });

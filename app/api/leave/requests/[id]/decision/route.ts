@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, LeaveRequestStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -8,13 +9,14 @@ import { canTransitionLeave } from "@/lib/work-pay-state";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "leave:approve")) return forbidden();
 
   const { id } = await params;
-  const body = await request.json() as { decision?: "APPROVED" | "REJECTED" };
+  const body = await readJsonObject(request) as { decision?: "APPROVED" | "REJECTED" };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const next = body.decision === "APPROVED" ? LeaveRequestStatus.APPROVED : body.decision === "REJECTED" ? LeaveRequestStatus.REJECTED : null;
   if (!next) return Response.json({ error: "decision must be APPROVED or REJECTED." }, { status: 400 });
 

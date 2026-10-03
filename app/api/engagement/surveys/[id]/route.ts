@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, Prisma } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -10,7 +11,7 @@ function bounded(value: unknown, max: number) {
   return text && text.length <= max ? text : text ? null : undefined;
 }
 
-async function loadOwnedSurvey(tx: Prisma.TransactionClient, ctx: NonNullable<ReturnType<typeof getRequestContext>>, id: string) {
+async function loadOwnedSurvey(tx: Prisma.TransactionClient, ctx: NonNullable<Awaited<ReturnType<typeof getRequestContext>>>, id: string) {
   const survey = await tx.engagementSurvey.findFirst({
     where: { id, tenantId: ctx.tenantId },
     select: {
@@ -25,13 +26,14 @@ async function loadOwnedSurvey(tx: Prisma.TransactionClient, ctx: NonNullable<Re
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "engagement:write")) return forbidden();
 
   const { id } = await params;
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const code = bounded(body.code, 40);
   const name = bounded(body.name, 160);
   const description = bounded(body.description, 2000);
@@ -70,7 +72,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "engagement:write")) return forbidden();

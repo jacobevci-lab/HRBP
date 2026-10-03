@@ -4,7 +4,7 @@ import { resolveEmploymentScope } from "@/lib/employment-scope";
 import { getRequestContext, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "workforce-plan:read")) return forbidden();
 

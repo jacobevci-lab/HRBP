@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { BenefitEnrollmentStatus, DataClassification } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -14,13 +15,14 @@ const transitions: Record<BenefitEnrollmentStatus, BenefitEnrollmentStatus[]> = 
 };
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "benefits:write")) return forbidden();
 
   const { id } = await params;
-  const body = await request.json() as { status?: string; effectiveTo?: string };
+  const body = await readJsonObject(request) as { status?: string; effectiveTo?: string };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const next = String(body.status ?? "") as BenefitEnrollmentStatus;
   if (!Object.values(BenefitEnrollmentStatus).includes(next)) return Response.json({ error: "A valid enrollment status is required." }, { status: 400 });
   const effectiveTo = body.effectiveTo ? new Date(body.effectiveTo) : undefined;

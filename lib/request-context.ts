@@ -1,4 +1,5 @@
 import { PlatformRole } from "@prisma/client";
+import { verifySessionAccount } from "@/lib/verified-session";
 import { sessionFromRequest } from "@/lib/auth-session";
 
 export type RequestContext = {
@@ -21,8 +22,8 @@ function insecureHeaderContextAllowed() {
   return process.env.NODE_ENV !== "production" && process.env.HRBP_ALLOW_INSECURE_CONTEXT_HEADERS === "true";
 }
 
-export function getRequestContext(request: Request): RequestContext | null {
-  const session = sessionFromRequest(request);
+export async function getRequestContext(request: Request): Promise<RequestContext | null> {
+  const session = await verifySessionAccount(sessionFromRequest(request));
   if (session) {
     return {
       tenantId: session.tenantId,

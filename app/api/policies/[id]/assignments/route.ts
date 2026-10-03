@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, EmploymentStatus, PolicyAssignmentStatus, PolicyStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -8,13 +9,14 @@ import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/re
 const MAX_ASSIGNMENTS = 500;
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "policies:write")) return forbidden();
 
   const { id } = await params;
-  const body = await request.json() as { employmentIds?: unknown; dueAt?: unknown };
+  const body = await readJsonObject(request) as { employmentIds?: unknown; dueAt?: unknown };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const rawIds = Array.isArray(body.employmentIds) ? body.employmentIds : [];
   const ids = [...new Set(rawIds
     .filter((value): value is string => typeof value === "string")

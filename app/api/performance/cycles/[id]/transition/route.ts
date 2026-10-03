@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, ReviewCycleStatus, ReviewStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -13,13 +14,14 @@ const transitions: Record<ReviewCycleStatus, ReviewCycleStatus[]> = {
 };
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "performance:write")) return forbidden();
 
   const { id } = await params;
-  const body = await request.json() as { status?: string };
+  const body = await readJsonObject(request) as { status?: string };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const next = String(body.status ?? "") as ReviewCycleStatus;
   if (!Object.values(ReviewCycleStatus).includes(next)) return Response.json({ error: "A valid cycle status is required." }, { status: 400 });
 

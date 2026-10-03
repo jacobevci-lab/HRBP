@@ -13,7 +13,7 @@ function countryCode(value: unknown) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin request blocked.");
   if (!can(ctx, "settings:read") || !can(ctx, "people:read")) return forbidden();

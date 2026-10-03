@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { BenefitEnrollmentStatus, DataClassification } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -20,13 +21,14 @@ function parseAmount(value: unknown) {
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "benefits:write")) return forbidden();
 
   const { id } = await params;
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const hasCoverageTier = Object.prototype.hasOwnProperty.call(body, "coverageTier");
   const hasEmployerContribution = Object.prototype.hasOwnProperty.call(body, "employerContribution");
   const hasEmployeeContribution = Object.prototype.hasOwnProperty.call(body, "employeeContribution");

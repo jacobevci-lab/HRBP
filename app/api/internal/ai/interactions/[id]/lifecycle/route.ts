@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { createHash } from "node:crypto";
 import { AIInteractionStatus, DataClassification, Prisma } from "@prisma/client";
 import { appendSystemAudit } from "@/lib/audit";
@@ -20,7 +21,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params;
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const action = typeof body.action === "string" ? body.action.trim().toUpperCase() as ProcessorAction : undefined;
   if (!action || !actions.includes(action)) {
     return Response.json({ error: "action must be START, COMPLETE, BLOCK or FAIL." }, { status: 400 });

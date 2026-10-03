@@ -10,7 +10,7 @@ import { putPrivateObject } from "@/lib/object-storage";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string; versionId: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "documents:write")) return forbidden();

@@ -7,7 +7,7 @@ import { asIdentifier } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string; membershipId: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "hr-service:write") || !canManageHRServiceQueues(ctx)) return forbidden();

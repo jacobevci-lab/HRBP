@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { AllegationStatus, DataClassification } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -6,7 +7,7 @@ import { getCaseWallCase } from "@/lib/case-wall";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "cases:read")) return forbidden();
   const { id } = await params;
@@ -16,12 +17,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "cases:write")) return forbidden();
   const { id } = await params;
-  const body = await request.json() as { category?: string; description?: string; severity?: string; policyCode?: string };
+  const body = await readJsonObject(request) as { category?: string; description?: string; severity?: string; policyCode?: string };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   if (!body.category?.trim() || !body.description?.trim()) return Response.json({ error: "category and description are required." }, { status: 400 });
 
   const data = await db.$transaction(async (tx) => {

@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, Prisma, SurveyQuestionType } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -21,7 +22,7 @@ function normalizedOptions(value: unknown, type: SurveyQuestionType | undefined)
   return [...new Set(options)];
 }
 
-async function loadOwnedEditableQuestion(tx: Prisma.TransactionClient, ctx: NonNullable<ReturnType<typeof getRequestContext>>, surveyId: string, questionId: string) {
+async function loadOwnedEditableQuestion(tx: Prisma.TransactionClient, ctx: NonNullable<Awaited<ReturnType<typeof getRequestContext>>>, surveyId: string, questionId: string) {
   const question = await tx.surveyQuestion.findFirst({
     where: { id: questionId, tenantId: ctx.tenantId, surveyId },
     select: {
@@ -41,13 +42,14 @@ async function loadOwnedEditableQuestion(tx: Prisma.TransactionClient, ctx: NonN
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string; questionId: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "engagement:write")) return forbidden();
 
   const { id, questionId } = await params;
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const questionKey = bounded(body.questionKey, 80);
   const prompt = bounded(body.prompt, 1000);
   const dimension = bounded(body.dimension, 120);
@@ -98,7 +100,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string; questionId: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "engagement:write")) return forbidden();

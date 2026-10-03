@@ -1,13 +1,27 @@
 export type JsonObject = Record<string, unknown>;
 
+/** Reject non-object, malformed, non-UTF8 and oversized input before domain mutations. */
 export async function readJsonObject(request: Request): Promise<JsonObject | null> {
+  if (!request.body) return null;
+  const contentType = request.headers.get("content-type")?.split(";")[0].trim().toLowerCase();
+  if (contentType && contentType !== "application/json") return null;
+  const reader = request.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let size = 0;
+  let source = "";
   try {
-    const value: unknown = await request.json();
-    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-    return value as JsonObject;
-  } catch {
-    return null;
-  }
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > 65536) { await reader.cancel(); return null; }
+      source += decoder.decode(value, { stream: true });
+    }
+    source += decoder.decode();
+    const value: unknown = JSON.parse(source);
+    return value && typeof value === "object" && !Array.isArray(value) ? value as JsonObject : null;
+  } catch { return null; }
+  finally { reader.releaseLock(); }
 }
 
 export function asIdentifier(value: unknown, maxLength = 191): string | null {

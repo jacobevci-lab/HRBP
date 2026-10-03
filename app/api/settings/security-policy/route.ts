@@ -10,7 +10,7 @@ function booleanValue(value: unknown, fallback: boolean) {
 }
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "settings:read")) return forbidden();
 
@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "settings:write")) return forbidden();

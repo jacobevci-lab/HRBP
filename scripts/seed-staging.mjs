@@ -13,7 +13,7 @@ function hashSeedPassword(password) {
   if (typeof password !== "string" || password.length < 12 || password.length > 256) throw new Error("HRBP_TEST_ADMIN_PASSWORD must be 12-256 characters.");
   const salt = randomBytes(16);
   const derived = scryptSync(password, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
-  return `scrypt$16384$8$1${salt.toString("base64url")}${derived.toString("base64url")}`;
+  return ["scrypt", 16384, 8, 1, salt.toString("base64url"), derived.toString("base64url")].join("$");
 }
 
 function addDays(date, days) {
