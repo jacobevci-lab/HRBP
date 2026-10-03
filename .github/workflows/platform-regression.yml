@@ -62,7 +62,7 @@ jobs:
           done
       - name: Build production application
         run: |
-          node --test scripts/platform-remediation.test.mjs
+          node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs
           npx next build > .audit/build.log 2>&1 || { tail -80 .audit/build.log; exit 1; }
       - name: Browser, link, API and workflow audit
         run: |
@@ -75,6 +75,7 @@ jobs:
           done
           node scripts/platform-audit.mjs || { tail -70 .audit/server.log; exit 1; }
           node scripts/platform-auth-browser-audit.mjs || { tail -70 .audit/server.log; exit 1; }
+          node scripts/platform-render-regression.mjs
           node scripts/platform-remediation-gate.mjs
       - name: Preserve complete audit evidence
         if: always()
