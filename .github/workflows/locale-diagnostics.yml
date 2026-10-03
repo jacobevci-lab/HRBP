@@ -39,6 +39,7 @@ jobs:
             value=$(openssl rand -hex 48)
             echo "::add-mask::$value"
             echo "$name=$value" >> "$GITHUB_ENV"
+            export "$name=$value"
           done
           npm install > .diagnostics/install.log 2>&1
           npm install --no-save --package-lock=false playwright@1.56.1 >> .diagnostics/install.log 2>&1
@@ -59,9 +60,10 @@ jobs:
           node --input-type=module <<'NODE'
           import { chromium } from 'playwright';
           import { writeFile } from 'node:fs/promises';
+          import { setTimeout as sleep } from 'node:timers/promises';
           const origin='http://localhost:3100', report=[];
           const login=await fetch(origin+'/api/auth/local',{method:'POST',headers:{origin,'content-type':'application/json'},body:JSON.stringify({identifier:'local.admin',password:process.env.HRBP_TEST_ADMIN_PASSWORD})});
-          if(login.status!==200)throw Error('Disposable login failed');
+          if(login.status!==200)throw Error('Disposable login failed '+login.status);
           const raw=login.headers.get('set-cookie').split(';')[0],i=raw.indexOf('=');
           const cookie={name:raw.slice(0,i),value:decodeURIComponent(raw.slice(i+1)),url:origin};
           const browser=await chromium.launch();
@@ -70,15 +72,18 @@ jobs:
             const context=await browser.newContext({viewport:{width:1440,height:1000}});await context.addCookies([cookie]);
             await context.route('**/*',r=>{const u=new URL(r.request().url()),h=r.request().headers();return u.origin!==origin||(blockSelfPrefetch&&u.pathname==='/module/audit'&&h['next-router-prefetch'])?r.abort():r.continue();});
             const page=await context.newPage(),events=[],bodies=[];
-            page.on('request',r=>{const u=new URL(r.url());if(u.pathname==='/module/audit'){const h=r.headers();events.push({type:'request',rsc:h.rsc||null,prefetch:h['next-router-prefetch']||null,locale:(h.cookie||'').split(';').filter(x=>x.trim().startsWith('hrbp-locale=')),method:r.method()});}});
-            page.on('response',r=>{const u=new URL(r.url());if(u.pathname==='/module/audit'){const h=r.headers();const p=r.text().then(t=>events.push({type:'response',status:r.status(),contentType:h['content-type'],cache:h['cache-control'],localeFragments:[...t.matchAll(/data-audit-locale.{0,35}/g)].map(x=>x[0]).slice(0,6)})).catch(e=>events.push({type:'response-read',error:e.name}));bodies.push(p);}});
+            page.on('request',r=>{const u=new URL(r.url());if(u.pathname==='/module/audit'){const h=r.headers();events.push({type:'request',rsc:h.rsc||null,prefetch:h['next-router-prefetch']||null,method:r.method()});}});
+            page.on('requestfailed',r=>{if(new URL(r.url()).pathname==='/module/audit')events.push({type:'failed',error:r.failure()?.errorText});});
+            page.on('response',r=>{const u=new URL(r.url());if(u.pathname==='/module/audit'){const h=r.headers();events.push({type:'response-headers',status:r.status(),contentType:h['content-type']});const p=r.text().then(t=>events.push({type:'response',status:r.status(),contentType:h['content-type'],cache:h['cache-control'],localeFragments:[...t.matchAll(/data-audit-locale.{0,35}/g)].map(x=>x[0]).slice(0,6)})).catch(e=>events.push({type:'response-read',error:e.name}));bodies.push(p);}});
             const snap=()=>page.evaluate(()=>({lang:document.documentElement.lang,locale:document.cookie.split(';').filter(x=>x.trim().startsWith('hrbp-locale=')),stored:localStorage.getItem('hrbp-locale'),server:document.querySelector('.audit-live-page')?.getAttribute('data-audit-locale'),heading:document.querySelector('.audit-live-page h1')?.textContent,buttons:[...document.querySelectorAll('.locale-toggle button')].map(b=>({text:b.textContent,pressed:b.getAttribute('aria-pressed')}))}));
             await page.goto(origin+'/module/audit',{waitUntil:'networkidle'});const before=await snap();
             await page.locator('.locale-toggle button').filter({hasText:'TR'}).click();
-            await page.waitForTimeout(2500);const after=await snap();
+            await page.waitForTimeout(3500);const after=await snap();
+            const rawHtml=await context.request.get(origin+'/module/audit');const html=await rawHtml.text();
+            const direct={status:rawHtml.status(),localeFragments:[...html.matchAll(/data-audit-locale.{0,35}/g)].map(x=>x[0]).slice(0,6)};
             await page.reload({waitUntil:'networkidle'});const reload=await snap();
-            await Promise.allSettled(bodies);
-            report.push({intervention:blockSelfPrefetch?'block self-prefetch ONLY':'NONE',before,after,reload,events});
+            await Promise.race([Promise.allSettled(bodies),sleep(5000)]);
+            report.push({intervention:blockSelfPrefetch?'block self-prefetch ONLY':'NONE',before,after,direct,reload,events});
             console.log('LOCALE_DIAGNOSTIC '+JSON.stringify(report.at(-1)));await context.close();
            }
           }finally{await browser.close();await writeFile('.diagnostics/locale.json',JSON.stringify(report,null,2));}
