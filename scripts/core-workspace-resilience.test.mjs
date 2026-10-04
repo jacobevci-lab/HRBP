@@ -142,19 +142,31 @@ test('Employee 360 hides lifecycle navigation when people read is unavailable', 
   assert.ok(!nodes(tree).some(n => String(n.props.href).includes('/lifecycle')));
 });
 function errorFixture(locale) {
-  let index = 0, reloads = 0;
+  let index = 0, reloads = 0, provided = false;
   const hooks = [];
   const location = { href: 'https://example.invalid/module/people?q=Ay%C5%9Fe#record', reload: () => reloads++ };
   const component = load('components/core-workspace-error.tsx', {
-    '@/components/locale-provider': { useLocale: () => ({ locale }) },
+    '@/components/locale-provider': { useLocale: () => {
+      assert.equal(provided, true, 'Locale hook must execute beneath AppShell');
+      return { locale };
+    } },
     react: {
       useRef: initial => { const i = index++; return hooks[i] ??= { current: initial }; },
       useState: initial => { const i = index++; hooks[i] ??= initial; return [hooks[i], value => { hooks[i] = value; }]; }
     }
   }, { window: { location } });
+  function resolve(tree) {
+    if (Array.isArray(tree)) return tree.map(resolve);
+    if (!tree || typeof tree !== 'object') return tree;
+    if (typeof tree.type === 'function') return resolve(tree.type(tree.props));
+    const before = provided;
+    if (tree.type === 'app-shell') provided = true;
+    try { return { ...tree, props: { ...tree.props, children: resolve(tree.props.children) } }; }
+    finally { provided = before; }
+  }
   return { location, get reloads() { return reloads; }, render(slug) {
     index = 0;
-    return component.CoreWorkspaceError({ slug, error: new Error('SQL/private-secret'), reset: () => assert.fail('no automatic retry') });
+    return resolve(component.CoreWorkspaceError({ slug, error: new Error('SQL/private-secret'), reset: () => assert.fail('no automatic retry') }));
   } };
 }
 for (const locale of ['en', 'tr']) for (const slug of slugs) {

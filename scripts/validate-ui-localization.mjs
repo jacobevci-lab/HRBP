@@ -114,7 +114,9 @@ for (const fullPath of scanFiles) {
 const localeAwareFiles = new Map([
   ["components/app-shell.tsx", ["LocaleProvider", "LocaleToggle"]],
   ["components/dashboard.tsx", ["getServerLocale"]],
-  ["components/module-landing.tsx", ["getServerLocale", "ProtectedFallback"]],
+  ["components/module-landing.tsx", ["getServerLocale", "translate(locale", "descriptions[slug]"]],
+  ["components/module-workspace-error.tsx", ["useLocale", "Çalışma alanı şu anda yüklenemiyor", "This workspace is temporarily unavailable"]],
+  ["app/module/[slug]/error.tsx", ["ModuleWorkspaceError"]],
   ["components/core-hr-workspace.tsx", ["useLocale"]],
   ["components/work-pay-workspace.tsx", ["getServerLocale"]],
   ["components/growth-workspace.tsx", ["getServerLocale"]],
