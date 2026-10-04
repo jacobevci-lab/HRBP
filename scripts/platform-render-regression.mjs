@@ -34,7 +34,8 @@ async function contextFor(locale = 'en', theme = 'light') {
   await context.route('**/*', route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
   await context.addCookies([{ name: 'hrbp-locale', value: locale, url: origin }]);
   await context.addInitScript(({locale,theme}) => {
-    localStorage.setItem('hrbp-locale', locale); localStorage.setItem('hrbp-theme', theme);
+    if(localStorage.getItem('hrbp-locale')===null)localStorage.setItem('hrbp-locale', locale);
+    if(localStorage.getItem('hrbp-theme')===null)localStorage.setItem('hrbp-theme', theme);
   }, { locale, theme });
   return context;
 }
@@ -79,12 +80,22 @@ try {
       await page.locator('.audit-live-heading a[download]').hover();
       await page.waitForTimeout(600);
       assert.equal(exportRequests.length,0,'Viewing/hovering the page must not fetch the CSV');
-      for(const locale of ['tr','en']) {
+      // Exercise the intermittent third-switch failure and retain an unsaved filter draft.
+      await page.locator('.audit-filter-bar input[name="q"]').fill('unsaved locale draft');
+      for(const locale of ['tr','en','tr','en','tr','en']) {
         await page.locator('.locale-toggle button').filter({hasText:locale.toUpperCase()}).click();
         await page.locator(`.audit-live-page[data-audit-locale="${locale}"]`).waitFor({timeout:10000});
         assert.equal(await page.locator('.audit-live-page h1').textContent(),locale==='tr'?'Denetim Defteri':'Audit Ledger');
+        await page.locator('.locale-toggle[aria-busy="false"]').waitFor({timeout:10000});
+        assert.equal(await page.locator('.audit-filter-bar input[name="q"]').inputValue(),'unsaved locale draft');
+        assert.equal(await page.locator('.locale-error').count(),0);
+        const preference=await page.evaluate(()=>({lang:document.documentElement.lang,stored:localStorage.getItem('hrbp-locale'),cookie:document.cookie.split(';').map(x=>x.trim()).find(x=>x.startsWith('hrbp-locale='))}));
+        assert.equal(preference.lang,locale);assert.equal(preference.stored,locale);assert.equal(preference.cookie,'hrbp-locale='+locale);
         await identity(context);
       }
+      await page.reload({waitUntil:'load'});
+      await page.locator('.audit-live-page[data-audit-locale="en"]').waitFor();
+      await identity(context);
       const filter=page.locator('.audit-filter-bar');
       await filter.locator('input[name="q"]').fill('auth.local-succeeded');
       await filter.locator('select[name="actor"]').selectOption(actorId);
@@ -113,7 +124,7 @@ try {
       await identity(context);assert.deepEqual(errors,[]);
       const anonymous=await browser.newContext();
       try { const denied=await anonymous.request.get(target.href);assert.equal(denied.status(),401); } finally {await anonymous.close();}
-      report.downloads.push({records:rows.length-1,requestCount:exportRequests.length,filtersPreserved:true,principalRetained:true,anonymousDenied:true});
+      report.downloads.push({records:rows.length-1,requestCount:exportRequests.length,filtersPreserved:true,principalRetained:true,anonymousDenied:true,localeTransitions:6,draftPreserved:true});
     } finally { await context.close(); }
   });
   for(const locale of ['en','tr'])for(const theme of ['light','dark']) {
