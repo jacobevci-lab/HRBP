@@ -63,3 +63,11 @@ Final source-head results are recorded in the pull request. Green tests alone
 do not establish a live Cloudflare rollout or solve its separate build failure.
 
 No production data, schema, dependency, secret or provider setting changes.
+
+The dedicated healthy-path browser gate additionally checks four disposable
+roles across EN/TR on all four core pages (32 cases). It rejects the explicit
+error-panel marker even with HTTP 200, requires the expected principal and
+localized heading, and checks narrow viewport fit. Access-restricted views
+are included; this does not prove that each role can perform every mutation.
+It does not deliberately break the real database or claim browser-tested
+outage recovery. Existing audit evidence and gates remain in the chain.
