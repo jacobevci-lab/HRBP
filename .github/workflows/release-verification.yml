@@ -1,0 +1,45 @@
+name: Release Verification
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      expected_revision:
+        description: Full 40-character commit expected on the live HRBP domain (empty uses this workflow commit)
+        type: string
+        required: false
+        default: ''
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify revision identity and negative response cases
+        run: node --test scripts/deployment-verification.test.mjs
+  live:
+    if: github.event_name == 'workflow_dispatch'
+    needs: contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      HRBP_VERIFY_ORIGIN: https://hrbp.fornostsecurity.com
+      HRBP_EXPECTED_REVISION: ${{ inputs.expected_revision || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: One anonymous read-only probe of the deployed revision
+        run: node scripts/verify-deployment.mjs

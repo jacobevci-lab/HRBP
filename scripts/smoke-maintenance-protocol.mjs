@@ -1,10 +1,17 @@
 import assert from "node:assert/strict";
 import { runMaintenance } from "./run-operational-maintenance.mjs";
+import { getBuildRevision } from "./build-revision.cjs";
+import { verifyDeployment } from "./verify-deployment.mjs";
 
 // This script intentionally cannot target a live host. Production scheduling uses the runner.
 const endpoint = "http://127.0.0.1:8787/api/internal/maintenance";
 const token = process.env.HRBP_MAINTENANCE_TOKEN;
 assert.ok(token && token.length >= 24, "A CI maintenance token is required.");
+// Check the actual packaged Worker, not only an imported health payload helper.
+const release = await verifyDeployment({ origin: "http://127.0.0.1:8787",
+  expectedRevision: getBuildRevision(), localSmoke: true });
+assert.equal(release.success, true, `Packaged Worker revision verification failed: ${release.code}`);
+console.log("Packaged Worker build revision matches the checked-out source.");
 const options = { redirect: "error", signal: AbortSignal.timeout(10_000) };
 for (const method of ["GET", "POST"]) {
   const response = await fetch(endpoint, { ...options, method });
