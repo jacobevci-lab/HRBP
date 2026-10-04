@@ -18,7 +18,7 @@ const taskReminderEvents = ["OFFBOARDING_TASK_BLOCKED", "OFFBOARDING_TASK_OVERDU
 function transitionRequiresReason(status: ExitTaskStatus) { return status === ExitTaskStatus.BLOCKED || status === ExitTaskStatus.WAIVED; }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; taskId: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "offboarding:write")) return forbidden();

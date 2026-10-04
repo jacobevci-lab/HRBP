@@ -14,6 +14,7 @@ import "./platform-admin.css";
 import "./offboarding.css";
 import "./auth.css";
 import "./theme.css";
+import "./locale-preference.css";
 import "./lifecycle.css";
 import "./notifications.css";
 import "./workflows.css";
@@ -44,9 +45,9 @@ const uiBootstrap = `
     var cookieMatch = document.cookie.match(/(?:^|; )hrbp-locale=([^;]+)/);
     var cookieLocale = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
     var storedLocale = localStorage.getItem('hrbp-locale');
-    var locale = storedLocale === 'tr' || storedLocale === 'en'
-      ? storedLocale
-      : (cookieLocale === 'tr' || cookieLocale === 'en' ? cookieLocale : (navigator.language.toLowerCase().indexOf('tr') === 0 ? 'tr' : 'en'));
+    var locale = cookieLocale === 'tr' || cookieLocale === 'en'
+      ? cookieLocale
+      : (storedLocale === 'tr' || storedLocale === 'en' ? storedLocale : (navigator.language.toLowerCase().indexOf('tr') === 0 ? 'tr' : 'en'));
     document.documentElement.lang = locale;
     document.documentElement.dataset.locale = locale;
   } catch (_) {

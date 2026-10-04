@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { NotificationOutboxStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { internalBearerAuthorized } from "@/lib/internal-auth";
@@ -54,7 +55,8 @@ export async function POST(request: Request) {
 
   let body: { action?: unknown; id?: unknown; limit?: unknown };
   try {
-    body = await request.json() as { action?: unknown; id?: unknown; limit?: unknown };
+    body = await readJsonObject(request) as { action?: unknown; id?: unknown; limit?: unknown };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   } catch {
     return Response.json({ error: "Valid JSON body is required." }, { status: 400 });
   }

@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { randomUUID } from "node:crypto";
 import { DSRStatus, DSRType, DataClassification } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -6,7 +7,7 @@ import { appendAudit } from "@/lib/audit";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "privacy:read")) return forbidden();
   const data = await db.dataSubjectRequest.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ dueAt: "asc" }, { createdAt: "desc" }], take: 300 });
@@ -14,11 +15,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "privacy:write")) return forbidden();
-  const body = await request.json() as { subjectPersonId?: string; type?: DSRType; channel?: string; dueAt?: string };
+  const body = await readJsonObject(request) as { subjectPersonId?: string; type?: DSRType; channel?: string; dueAt?: string };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   if (!body.subjectPersonId || !body.type || !Object.values(DSRType).includes(body.type)) return Response.json({ error: "subjectPersonId and valid type are required." }, { status: 400 });
   const data = await db.$transaction(async (tx) => {
     const person = await tx.person.findFirst({ where: { id: body.subjectPersonId, tenantId: ctx.tenantId }, select: { id: true } });

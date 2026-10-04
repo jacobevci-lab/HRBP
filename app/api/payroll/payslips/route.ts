@@ -3,7 +3,7 @@ import { getPayrollSelfServiceData } from "@/lib/payroll-payslip-data";
 import { getRequestContext, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "payroll:self-payslip")) return forbidden();
   if (!ctx.employmentId) return forbidden("Payroll self-service requires a signed employment identity.");

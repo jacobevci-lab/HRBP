@@ -1,9 +1,12 @@
+import { readJsonObject } from "@/lib/input-validation";
+import { sanitizeReturnTo } from "@/lib/safe-redirect";
 import { DataClassification } from "@prisma/client";
 import { appendSystemAudit } from "@/lib/audit";
 import { createSessionCookie } from "@/lib/auth-session";
 import { db } from "@/lib/db";
 import {
   hashLocalPassword,
+  isLegacySeedPasswordHash,
   LOCAL_AUTH_LOCK_MINUTES,
   LOCAL_AUTH_MAX_FAILURES,
   validLocalPassword,
@@ -26,12 +29,11 @@ export async function POST(request: Request) {
   const tenantId = runtimeString("HRBP_AUTH_TENANT_ID");
   if (!tenantId) return Response.json({ error: "Local authentication tenant is not configured." }, { status: 503 });
 
-  const body = await request.json() as { identifier?: unknown; password?: unknown; returnTo?: unknown };
+  const body = await readJsonObject(request) as { identifier?: unknown; password?: unknown; returnTo?: unknown };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const identifier = typeof body.identifier === "string" ? body.identifier.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
-  const returnTo = typeof body.returnTo === "string" && body.returnTo.startsWith("/") && !body.returnTo.startsWith("//")
-    ? body.returnTo
-    : "/";
+  const returnTo = sanitizeReturnTo(body.returnTo);
 
   if (!identifier || identifier.length > 254 || !validLocalPassword(password)) {
     verifyLocalPassword(password, DUMMY_HASH);
@@ -113,14 +115,23 @@ export async function POST(request: Request) {
   }
 
   const identity = await db.$transaction(async (tx) => {
-    const updated = await tx.userAccount.update({
-      where: { id: user.id },
+    const changed = await tx.userAccount.updateMany({
+      where: { id: user.id, tenantId, active: true, localAuthEnabled: true,
+        localPasswordHash: user.localPasswordHash,
+        OR: [{ localLockedUntil: null }, { localLockedUntil: { lte: now } }] },
       data: {
         localFailedAttempts: 0,
         localLockedUntil: null,
-        lastLocalLoginAt: now
+        lastLocalLoginAt: now,
+        ...(isLegacySeedPasswordHash(user.localPasswordHash) ? {
+          localPasswordHash: hashLocalPassword(password), localPasswordUpdatedAt: now
+        } : {})
       }
     });
+
+    if (changed.count !== 1) return null;
+    const updated = await tx.userAccount.findFirst({ where: { id: user.id, tenantId, active: true, localAuthEnabled: true } });
+    if (!updated) return null;
 
     const person = updated.email
       ? await tx.person.findFirst({
@@ -147,8 +158,12 @@ export async function POST(request: Request) {
     return { user: updated, employmentId: person?.employments[0]?.id };
   });
 
+  if (!identity) return Response.json({ error: "Invalid credentials." }, { status: 401 });
+
   const headers = new Headers({ "content-type": "application/json", "cache-control": "no-store" });
   headers.append("set-cookie", createSessionCookie({
+    authMethod: "local",
+    credentialVersion: identity.user.localPasswordUpdatedAt?.toISOString() ?? null,
     tenantId: identity.user.tenantId,
     actorId: identity.user.id,
     role: identity.user.role,

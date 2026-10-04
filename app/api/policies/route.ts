@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { createHash } from "node:crypto";
 import { DataClassification, PolicyStatus } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -6,7 +7,7 @@ import { appendAudit } from "@/lib/audit";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "policies:read")) return forbidden();
   const now = new Date();
@@ -27,11 +28,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "policies:write")) return forbidden();
-  const body = await request.json() as { code?: string; title?: string; version?: string; jurisdiction?: string; audience?: string; contentMarkdown?: string; effectiveFrom?: string; reviewDueAt?: string };
+  const body = await readJsonObject(request) as { code?: string; title?: string; version?: string; jurisdiction?: string; audience?: string; contentMarkdown?: string; effectiveFrom?: string; reviewDueAt?: string };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   if (!body.code?.trim() || !body.title?.trim() || !body.version?.trim() || !body.contentMarkdown?.trim() || !body.effectiveFrom) return Response.json({ error: "code, title, version, contentMarkdown and effectiveFrom are required." }, { status: 400 });
   const effectiveFrom = new Date(body.effectiveFrom);
   const reviewDueAt = body.reviewDueAt ? new Date(body.reviewDueAt) : undefined;

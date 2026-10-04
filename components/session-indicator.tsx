@@ -51,6 +51,6 @@ export function SessionIndicator() {
   return <div className="session-identity">
     <div className="user-avatar">{initials(session.user.displayName)}</div>
     <div className="user-copy"><strong>{session.user.displayName}</strong><small>{roleLabel(session.user.role, locale)}</small></div>
-    <Link href="/api/auth/logout" className="session-action" title={signOut}><LogOut size={15}/></Link>
+    <form action="/api/auth/logout" method="post" className="logout-form"><button type="submit" className="session-action" title={signOut} aria-label={signOut}><LogOut size={15}/></button></form>
   </div>;
 }

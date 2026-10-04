@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, Prisma, WorkflowDefinitionStatus, WorkflowInstanceStatus, WorkflowTaskStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -6,7 +7,7 @@ import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "workflows:read")) return forbidden();
   const data = await db.workflowInstance.findMany({ where: { tenantId: ctx.tenantId }, orderBy: { startedAt: "desc" }, include: { definition: { select: { key: true, name: true, version: true } }, tasks: { orderBy: { dueAt: "asc" } } }, take: 300 });
@@ -14,11 +15,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "workflows:run")) return forbidden();
   if (!mutationOriginAllowed(request)) return Response.json({ error: "Mutation origin is not allowed." }, { status: 403 });
-  const body = await request.json() as { definitionId?: string; subjectType?: string; subjectId?: string; context?: unknown };
+  const body = await readJsonObject(request) as { definitionId?: string; subjectType?: string; subjectId?: string; context?: unknown };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   if (!body.definitionId || !body.subjectType?.trim() || !body.subjectId?.trim()) return Response.json({ error: "definitionId, subjectType and subjectId are required." }, { status: 400 });
   const data = await db.$transaction(async (tx) => {
     const definition = await tx.workflowDefinition.findFirst({ where: { id: body.definitionId, tenantId: ctx.tenantId, status: WorkflowDefinitionStatus.ACTIVE }, include: { steps: { orderBy: { orderIndex: "asc" } } } });

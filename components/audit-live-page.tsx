@@ -39,10 +39,10 @@ export async function AuditLivePage({ searchParams }: { searchParams: Record<str
       ? c(locale, "Anchored recent-chain verification", "Ankrajlı yakın dönem zincir doğrulaması")
       : c(locale, "No audit events yet", "Henüz denetim olayı yok");
 
-  return <div className="audit-live-page">
+  return <div className="audit-live-page" data-audit-locale={locale}>
     <div className="page-heading audit-live-heading">
       <div><span className="eyebrow">{c(locale, "Trust & evidence", "Güven & kanıt")}</span><h1>{c(locale, "Audit Ledger", "Denetim Defteri")}</h1><p>{c(locale, "Immutable tenant activity with hash-chain integrity verification.", "Hash-zinciri bütünlük doğrulamalı değiştirilemez tenant aktivitesi.")}</p></div>
-      <Link className="secondary-button" href={`/api/audit/export?${exportParams.toString()}`}><Download size={15}/>{c(locale, "Export CSV", "CSV dışa aktar")}</Link>
+      <a className="secondary-button" download href={`/api/audit/export?${exportParams.toString()}`}><Download size={15}/>{c(locale, "Export CSV", "CSV dışa aktar")}</a>
     </div>
 
     <section className="audit-metrics">

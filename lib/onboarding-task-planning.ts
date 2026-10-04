@@ -85,7 +85,7 @@ const messages: Record<string, string> = {
 };
 
 export async function handleOnboardingTaskPlanning(request: Request, params: Promise<{ id: string }>, mode: Mode) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return json({ code: "UNAUTHORIZED", error: messages.UNAUTHORIZED }, 401);
   if (!mutationOriginAllowed(request) || !can(ctx, "onboarding:read") || !can(ctx, "onboarding:write")) {
     return json({ code: "FORBIDDEN", error: messages.FORBIDDEN }, 403);

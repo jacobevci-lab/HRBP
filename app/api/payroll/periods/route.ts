@@ -6,7 +6,7 @@ import { asDate, asIdentifier, asText, readJsonObject } from "@/lib/input-valida
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "payroll:read")) return forbidden();
   const data = await db.payrollPeriod.findMany({
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "payroll:configure")) return forbidden();

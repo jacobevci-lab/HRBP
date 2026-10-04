@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
   const locale = requestLocale(request);
   const normalized = q.toLocaleLowerCase(locale === "tr" ? "tr-TR" : "en-US");
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   const moduleResults = navigation
     .flatMap((group) => group.items)
     .filter((item) => {

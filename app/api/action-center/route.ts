@@ -2,7 +2,7 @@ import { getWorkflowDefinitionLifecycleActionCenterData as getLifecycleActionCen
 import { getRequestContext, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
 
   const data = await getLifecycleActionCenterContinuityData(ctx);

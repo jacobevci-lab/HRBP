@@ -3,7 +3,7 @@ import { getEngagementCampaignResults } from "@/lib/engagement-results";
 import { getRequestContext, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "engagement:write")) return forbidden();
 

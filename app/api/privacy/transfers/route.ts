@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, Prisma, TransferMechanism } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -18,12 +19,13 @@ function categories(value: unknown) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "privacy:write")) return forbidden();
 
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const name = boundedText(body.name, 180, true);
   const sourceCountry = boundedText(body.sourceCountry, 80, true);
   const destinationCountry = boundedText(body.destinationCountry, 80, true);

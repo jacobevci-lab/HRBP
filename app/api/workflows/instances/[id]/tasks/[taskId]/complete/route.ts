@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, Prisma, WorkflowInstanceStatus, WorkflowTaskStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -6,11 +7,12 @@ import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; taskId: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return Response.json({ error: "Mutation origin is not allowed." }, { status: 403 });
   const { id, taskId } = await params;
-  const body = await request.json() as { result?: unknown };
+  const body = await readJsonObject(request) as { result?: unknown };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const data = await db.$transaction(async (tx) => {
     const instance = await tx.workflowInstance.findFirst({
       where: { id, tenantId: ctx.tenantId, status: { in: [WorkflowInstanceStatus.RUNNING, WorkflowInstanceStatus.WAITING] } },

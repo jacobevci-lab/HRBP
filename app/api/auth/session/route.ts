@@ -1,3 +1,4 @@
+import { verifySessionAccount } from "@/lib/verified-session";
 import { authConfigurationStatus } from "@/lib/auth-config";
 import { sessionFromRequest } from "@/lib/auth-session";
 import { can, type Capability } from "@/lib/authorization";
@@ -18,6 +19,7 @@ const uiCapabilityCandidates: Capability[] = [
   "leave:read",
   "compensation:read",
   "payroll:read",
+  "payroll:self-payslip",
   "benefits:read",
   "performance:read",
   "talent:read",
@@ -37,7 +39,7 @@ const uiCapabilityCandidates: Capability[] = [
 ];
 
 export async function GET(request: Request) {
-  const session = sessionFromRequest(request);
+  const session = await verifySessionAccount(sessionFromRequest(request));
   const configuration = authConfigurationStatus();
 
   if (!session) {

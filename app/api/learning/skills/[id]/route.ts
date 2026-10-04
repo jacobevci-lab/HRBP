@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -5,13 +6,14 @@ import { db } from "@/lib/db";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "learning:write")) return forbidden();
 
   const { id } = await params;
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const hasName = Object.prototype.hasOwnProperty.call(body, "name");
   const hasCategory = Object.prototype.hasOwnProperty.call(body, "category");
   const hasCritical = Object.prototype.hasOwnProperty.call(body, "critical");

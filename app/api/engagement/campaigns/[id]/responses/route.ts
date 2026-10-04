@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { createHmac } from "node:crypto";
 import {
   DataClassification,
@@ -76,7 +77,7 @@ function validatedAnswer(question: QuestionShape, value: unknown): Prisma.InputJ
 }
 
 async function loadCampaignForRespondent(
-  ctx: NonNullable<ReturnType<typeof getRequestContext>>,
+  ctx: NonNullable<Awaited<ReturnType<typeof getRequestContext>>>,
   campaignId: string
 ) {
   if (!ctx.employmentId) throw new Error("EMPLOYMENT");
@@ -158,7 +159,7 @@ function campaignError(error: unknown) {
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "engagement:read")) return forbidden();
 
@@ -196,13 +197,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "engagement:read")) return forbidden();
 
   const { id } = await params;
-  const body = await request.json() as { answers?: unknown };
+  const body = await readJsonObject(request) as { answers?: unknown };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   if (!Array.isArray(body.answers) || body.answers.length > MAX_ANSWERS) {
     return Response.json({ error: "answers must be a bounded array." }, { status: 400 });
   }

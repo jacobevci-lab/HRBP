@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { NotificationOutboxStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
@@ -8,7 +9,7 @@ function limitFrom(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
 
   const url = new URL(request.url);
@@ -54,13 +55,14 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return Response.json({ error: "Mutation origin is not allowed." }, { status: 403 });
 
   let body: { id?: unknown; all?: unknown; read?: unknown; resourceType?: unknown; resourceId?: unknown };
   try {
-    body = await request.json() as { id?: unknown; all?: unknown; read?: unknown; resourceType?: unknown; resourceId?: unknown };
+    body = await readJsonObject(request) as { id?: unknown; all?: unknown; read?: unknown; resourceType?: unknown; resourceId?: unknown };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   } catch {
     return Response.json({ error: "Valid JSON body is required." }, { status: 400 });
   }

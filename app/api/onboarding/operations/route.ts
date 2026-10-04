@@ -7,7 +7,7 @@ function json(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "no-store", "referrer-policy": "no-referrer" } });
 }
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return json({ error: "Authentication required." }, 401);
   if (!can(ctx, "onboarding:read") || !can(ctx, "onboarding:write")) return json({ error: "Onboarding operations access required." }, 403);
   const search = new URL(request.url).searchParams;

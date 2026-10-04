@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, PlatformRole, Prisma, WorkflowDefinitionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -22,7 +23,7 @@ function bounded(value: string | undefined, max: number) {
 }
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "workflows:read")) return forbidden();
   const data = await db.workflowDefinition.findMany({
@@ -35,12 +36,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "workflows:write")) return forbidden();
 
-  const body = await request.json() as {
+  const body = await readJsonObject(request) as {
     key?: string;
     name?: string;
     version?: number;
@@ -48,6 +49,7 @@ export async function POST(request: Request) {
     triggerType?: string;
     steps?: WorkflowStepInput[];
   };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
 
   const key = bounded(body.key, 80);
   const name = bounded(body.name, 160);

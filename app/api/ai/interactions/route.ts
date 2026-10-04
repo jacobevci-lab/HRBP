@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { createHash } from "node:crypto";
 import { AIInteractionStatus, DataClassification, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -24,12 +25,13 @@ function normalizeSourceRefs(value: unknown) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "ai:use")) return forbidden();
 
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const prompt = boundedText(body.prompt, MAX_PROMPT_LENGTH, true);
   const moduleName = boundedText(body.module, 80, true);
   const purpose = boundedText(body.purpose, 240, true) ?? boundedText(ctx.purpose, 240, true);

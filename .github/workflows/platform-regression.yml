@@ -1,0 +1,93 @@
+name: Platform Regression
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: platform-audit-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hrbp
+          POSTGRES_PASSWORD: disposable-audit-only
+          POSTGRES_DB: hrbp_audit
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hrbp -d hrbp_audit"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://hrbp:disposable-audit-only@127.0.0.1:5432/hrbp_audit
+      CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://hrbp:disposable-audit-only@127.0.0.1:5432/hrbp_audit
+      HRBP_DISPOSABLE_AUDIT: "true"
+      HRBP_LOCAL_AUTH_ENABLED: "true"
+      HRBP_AUTH_TENANT_ID: tenant-acme-global
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Create ephemeral test secrets
+        run: |
+          session_secret=$(openssl rand -hex 48)
+          admin_password=$(openssl rand -hex 24)
+          echo "::add-mask::$session_secret"
+          echo "::add-mask::$admin_password"
+          echo "HRBP_SESSION_SECRET=$session_secret" >> "$GITHUB_ENV"
+          echo "HRBP_TEST_ADMIN_PASSWORD=$admin_password" >> "$GITHUB_ENV"
+          engagement_secret=$(openssl rand -hex 48)
+          echo "::add-mask::$engagement_secret"
+          echo "HRBP_ENGAGEMENT_RESPONSE_SECRET=$engagement_secret" >> "$GITHUB_ENV"
+      - name: Install application and isolated browser tooling
+        run: |
+          mkdir -p .audit
+          npm install > .audit/install.log 2>&1
+          npm install --no-save --package-lock=false playwright@1.56.1 > .audit/playwright-install.log 2>&1
+          npx playwright install --with-deps chromium > .audit/browser-install.log 2>&1
+      - name: Verify native download observation independently of application code
+        run: |
+          node --test scripts/audit-download-observer.test.mjs
+          node scripts/native-download-calibration.mjs
+      - name: Prepare disposable database and seed all product domains
+        run: |
+          npx prisma generate > .audit/schema.log 2>&1
+          npx prisma db push >> .audit/schema.log 2>&1
+          for script in seed-staging seed-work-pay-staging seed-access-staging seed-growth-staging seed-connected-growth-staging seed-services-staging seed-service-governance-staging seed-governance-planning-staging; do
+            node "scripts/$script.mjs" >> .audit/seed.log 2>&1 || { tail -40 .audit/seed.log; exit 1; }
+          done
+      - name: Build production application
+        run: |
+          node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs scripts/locale-preference.test.mjs scripts/locale-progress.test.mjs
+          npx next build > .audit/build.log 2>&1 || { tail -80 .audit/build.log; exit 1; }
+      - name: Browser, link, API and workflow audit
+        run: |
+          node --require ./scripts/audit-download-observer.cjs node_modules/next/dist/bin/next start --hostname localhost --port 3100 > .audit/server.log 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          ready=0
+          for i in {1..30}; do
+            if curl --fail --silent http://localhost:3100/api/health/runtime > /dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1 || { tail -70 .audit/server.log; exit 1; }
+          node scripts/platform-render-regression.mjs
+          node scripts/platform-audit.mjs || { tail -70 .audit/server.log; exit 1; }
+          node scripts/platform-auth-browser-audit.mjs || { tail -70 .audit/server.log; exit 1; }
+          node scripts/platform-remediation-gate.mjs
+      - name: Preserve complete audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hrbp-platform-audit
+          path: .audit/
+          include-hidden-files: true
+          retention-days: 7

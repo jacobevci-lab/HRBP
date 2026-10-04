@@ -10,7 +10,7 @@ function effectiveStatus(status: PolicyExceptionStatus, expiresAt: Date | null, 
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "policies:read")) return forbidden();
   const id = asIdentifier((await params).id);
@@ -25,7 +25,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "policies:read")) return forbidden();

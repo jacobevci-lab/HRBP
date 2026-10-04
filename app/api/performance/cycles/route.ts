@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, ReviewCycleStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -6,7 +7,7 @@ import { employmentIdFilter, resolveEmploymentScope } from "@/lib/employment-sco
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "performance:read")) return forbidden();
   const scope = await resolveEmploymentScope(db, ctx);
@@ -19,11 +20,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "performance:write")) return forbidden();
-  const body = await request.json() as { name?: string; startsAt?: string; endsAt?: string; calibrationAt?: string };
+  const body = await readJsonObject(request) as { name?: string; startsAt?: string; endsAt?: string; calibrationAt?: string };
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const name = body.name?.trim();
   if (!name || !body.startsAt || !body.endsAt) return Response.json({ error: "name, startsAt and endsAt are required." }, { status: 400 });
 

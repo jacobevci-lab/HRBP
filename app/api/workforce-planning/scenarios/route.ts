@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, Prisma, WorkforceScenarioStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -12,7 +13,7 @@ function boundedText(value: unknown, max: number, required = false) {
 }
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "workforce-plan:read")) return forbidden();
   const live = await getWorkforcePlanningLiveData(ctx);
@@ -28,12 +29,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "workforce-plan:write")) return forbidden();
 
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const codeValue = boundedText(body.code, 40, true);
   const name = boundedText(body.name, 160, true);
   const description = boundedText(body.description, 2_000);

@@ -1,3 +1,4 @@
+import { readJsonObject } from "@/lib/input-validation";
 import { OrganizationUnitType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -5,7 +6,7 @@ import { getRequestContext, unauthorized } from "@/lib/request-context";
 import { recordAudit } from "@/lib/audit";
 
 export async function GET(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "organization:read")) return forbidden();
   const data = await db.organizationUnit.findMany({ where: { tenantId: ctx.tenantId, validTo: null }, orderBy: [{ type: "asc" }, { name: "asc" }], include: { _count: { select: { positions: true, children: true } } } });
@@ -13,10 +14,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const ctx = getRequestContext(request);
+  const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "organization:write")) return forbidden();
-  const body = await request.json() as Record<string, unknown>;
+  const body = await readJsonObject(request) as Record<string, unknown>;
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const name = String(body.name ?? "").trim();
   const code = String(body.code ?? "").trim();
   const type = String(body.type ?? "DEPARTMENT") as OrganizationUnitType;
