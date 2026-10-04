@@ -11,8 +11,10 @@ export async function readReceipts(name = 'export-receipts.jsonl') {
   const sequences = new Map();
   for (const row of rows) {
     assert.equal(row.v, 1); assert.ok(Number.isInteger(row.pid) && row.pid > 0);
-    assert.equal(row.sequence, (sequences.get(row.pid) ?? -1) + 1, 'Lost, duplicated or reordered receipt');
-    sequences.set(row.pid, row.sequence);
+    assert.ok(Number.isInteger(row.threadId) && row.threadId >= 0);
+    const writer = `${row.pid}:${row.threadId}`;
+    assert.equal(row.sequence, (sequences.get(writer) ?? -1) + 1, 'Lost, duplicated or reordered receipt');
+    sequences.set(writer, row.sequence);
     assert.ok(['start', 'request'].includes(row.kind));
     if (row.kind === 'request') {
       assert.ok(['/api/audit/export', '/api/health/runtime'].includes(row.path));

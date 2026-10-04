@@ -2,6 +2,7 @@
 // Test-only passive HTTP receipts. Never loaded by the deployed application.
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const { threadId } = require('node:worker_threads');
 const { appendFileSync, mkdirSync, statSync, existsSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { createHash } = require('node:crypto');
@@ -17,7 +18,7 @@ const file = resolve('.audit', name);
 let size = existsSync(file) ? statSync(file).size : 0;
 let sequence = 0;
 function record(data) {
-  const line = JSON.stringify({ v: 1, pid: process.pid, sequence: sequence++, ...data }) + '\n';
+  const line = JSON.stringify({ v: 1, pid: process.pid, threadId, sequence: sequence++, ...data }) + '\n';
   size += Buffer.byteLength(line);
   assert.ok(size <= 1024 * 1024, 'Audit receipts exceeded their evidence budget');
   appendFileSync(file, line, { encoding: 'utf8', mode: 0o600 });

@@ -10,6 +10,11 @@ const name = `observer-unit-${randomUUID()}.jsonl`;
 test('passive HTTP observer records actual receipts and keeps request/response untouched', { timeout: 20000 }, async (t) => {
   const child = spawn(process.execPath, ['--require', './scripts/audit-download-observer.cjs', '--input-type=module', '-e', `
     import http from 'node:http';
+    import { Worker } from 'node:worker_threads';
+    import { once } from 'node:events';
+    // Workers inherit --require and process.pid, but each has its own sequence.
+    const worker = new Worker('setImmediate(()=>{})', { eval: true });
+    await once(worker, 'exit');
     const server=http.createServer(async(req,res)=>{
       if(req.url.startsWith('/api/audit/export')){
         res.writeHead(200,{'content-type':'text/csv','content-disposition':'attachment; filename="synthetic.csv"'});
@@ -25,6 +30,11 @@ test('passive HTTP observer records actual receipts and keeps request/response u
     const get = (path, options={}) => fetch(origin+path,{...options,signal:AbortSignal.timeout(5000)});
     await (await get('/api/health/runtime')).text();
     const receipts=await openReceiptWindow(name);
+    await t.test('worker preloads with the same PID preserve independent ordered streams',async()=>{
+      const {rows}=await readReceipts(name);const starts=rows.filter(row=>row.kind==='start');
+      assert.equal(starts.length,2);assert.equal(new Set(starts.map(row=>row.pid)).size,1);
+      assert.equal(new Set(starts.map(row=>row.threadId)).size,2);
+    });
     await t.test('zero requests before explicit export', async()=>assert.deepEqual(await receipts(),[]));
     const target=origin+'/api/audit/export?q=synthetic&actor=test';
     const response=await get('/api/audit/export?q=synthetic&actor=test',{headers:{cookie:'secret-session-never-record',authorization:'Bearer never-log-this'}});
