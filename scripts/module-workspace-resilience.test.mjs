@@ -146,13 +146,20 @@ test('Generic error boundary passes no raw error object into its recovery screen
   assert.equal(tree.type,'panel'); assert.deepEqual(Object.keys(tree.props),[]);
 });
 for(const locale of ['en','tr']) test(`Recovery in ${locale} renders no data/write controls and reloads only on explicit click`, () => {
-  let index=0,reloads=0;const hooks=[];
+  let index=0,reloads=0,provided=false;const hooks=[];
   const location={href:'https://example.invalid/module/hr-service?request=a#detail',reload:()=>reloads++};
   const component=load('components/module-workspace-error.tsx',{
-    '@/components/locale-provider':{useLocale:()=>({locale})},
+    '@/components/locale-provider':{useLocale:()=>{assert.equal(provided,true,'Locale hook must execute beneath AppShell');return {locale};}},
     react:{useRef(initial){const i=index++;return hooks[i]??={current:initial};},useState(initial){const i=index++;hooks[i]??=initial;return[hooks[i],v=>{hooks[i]=v;}];}}
   },{window:{location}});
-  const render=()=>{index=0;return component.ModuleWorkspaceError({error:new Error('private_sql')});};
+  function resolve(tree) {
+    if(Array.isArray(tree))return tree.map(resolve);
+    if(!tree||typeof tree!=='object')return tree;
+    if(typeof tree.type==='function')return resolve(tree.type(tree.props));
+    const before=provided;if(tree.type==='app-shell')provided=true;
+    try{return {...tree,props:{...tree.props,children:resolve(tree.props.children)}};}finally{provided=before;}
+  }
+  const render=()=>{index=0;return resolve(component.ModuleWorkspaceError({error:new Error('private_sql')}));};
   const tree=render(),all=nodes(tree); assert.equal(reloads,0);
   assert.ok(all.some(n=>n.props['data-module-workspace-state']==='unavailable')); assert.ok(all.some(n=>n.props.role==='alert'));
   assert.doesNotMatch(text(tree),/private_sql|512|98\.6/);

@@ -7,7 +7,7 @@ import { useLocale } from "@/components/locale-provider";
 
 /** Replaces the entire failed generic route, including sibling mutation panels.
  * Error objects, URL values and synthetic business data are never rendered here. */
-export function ModuleWorkspaceError() {
+function ModuleWorkspaceErrorContent() {
   const { locale } = useLocale();
   const reloading = useRef(false);
   const [pending, setPending] = useState(false);
@@ -19,7 +19,7 @@ export function ModuleWorkspaceError() {
     // background retry or a replay of an API write. Unsaved drafts are not kept.
     window.location.reload();
   }
-  return <AppShell>
+  return <>
     <section className="card module-table" data-module-workspace-state="unavailable">
       <div className="empty-state" role="alert">
         <h1>{locale === "tr" ? "Çalışma alanı şu anda yüklenemiyor" : "This workspace is temporarily unavailable"}</h1>
@@ -37,5 +37,10 @@ export function ModuleWorkspaceError() {
         </div>
       </div>
     </section>
-  </AppShell>;
+  </>;
+}
+
+export function ModuleWorkspaceError() {
+  // AppShell owns LocaleProvider; the error boundary is outside the failed page.
+  return <AppShell><ModuleWorkspaceErrorContent/></AppShell>;
 }
