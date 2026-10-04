@@ -1,0 +1,22 @@
+name: Live Runtime Diagnostic
+on:
+  push:
+    branches: [diagnostics/live-runtime-20261004]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    env:
+      HRBP_VERIFY_ORIGIN: https://hrbp.fornostsecurity.com
+      HRBP_EXPECTED_REVISION: aa7c033e9ace37cc706bb1c6f6b08314fd3c613d
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: One anonymous GET to identify the live runtime
+        run: node scripts/verify-deployment.mjs
