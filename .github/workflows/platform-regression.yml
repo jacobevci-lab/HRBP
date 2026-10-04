@@ -66,7 +66,7 @@ jobs:
           done
       - name: Build production application
         run: |
-          node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs scripts/locale-preference.test.mjs scripts/locale-progress.test.mjs
+          node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs scripts/locale-preference.test.mjs scripts/locale-progress.test.mjs scripts/core-workspace-resilience.test.mjs
           npx next build > .audit/build.log 2>&1 || { tail -80 .audit/build.log; exit 1; }
       - name: Browser, link, API and workflow audit
         run: |
