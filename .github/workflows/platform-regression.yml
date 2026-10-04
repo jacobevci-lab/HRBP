@@ -53,6 +53,10 @@ jobs:
           npm install > .audit/install.log 2>&1
           npm install --no-save --package-lock=false playwright@1.56.1 > .audit/playwright-install.log 2>&1
           npx playwright install --with-deps chromium > .audit/browser-install.log 2>&1
+      - name: Verify native download observation independently of application code
+        run: |
+          node --test scripts/audit-download-observer.test.mjs
+          node scripts/native-download-calibration.mjs
       - name: Prepare disposable database and seed all product domains
         run: |
           npx prisma generate > .audit/schema.log 2>&1
@@ -66,13 +70,15 @@ jobs:
           npx next build > .audit/build.log 2>&1 || { tail -80 .audit/build.log; exit 1; }
       - name: Browser, link, API and workflow audit
         run: |
-          npx next start --hostname localhost --port 3100 > .audit/server.log 2>&1 &
+          node --require ./scripts/audit-download-observer.cjs node_modules/next/dist/bin/next start --hostname localhost --port 3100 > .audit/server.log 2>&1 &
           PID=$!
           trap 'kill $PID 2>/dev/null || true' EXIT
+          ready=0
           for i in {1..30}; do
-            if curl --fail --silent http://localhost:3100/api/health/runtime > /dev/null; then break; fi
+            if curl --fail --silent http://localhost:3100/api/health/runtime > /dev/null; then ready=1; break; fi
             sleep 1
           done
+          test "$ready" -eq 1 || { tail -70 .audit/server.log; exit 1; }
           node scripts/platform-render-regression.mjs
           node scripts/platform-audit.mjs || { tail -70 .audit/server.log; exit 1; }
           node scripts/platform-auth-browser-audit.mjs || { tail -70 .audit/server.log; exit 1; }

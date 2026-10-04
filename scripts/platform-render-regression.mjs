@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
+import { openReceiptWindow, assertSingleExport } from './audit-download-receipts.mjs';
 
 const origin = 'http://localhost:3100';
 const database = new URL(process.env.DATABASE_URL || 'about:blank');
@@ -17,7 +18,7 @@ async function check(name, run) {
   try { await run(); report.checks.push({ name, passed: true }); }
   catch (error) {
     report.checks.push({ name, passed: false });
-    report.failures.push({ name, message: String(error.message).slice(0,400) });
+    report.failures.push({ name, message: String(error.message).slice(0,400), stack: String(error.stack).slice(0,1600) });
   }
 }
 async function identity(context) {
@@ -68,8 +69,12 @@ try {
   await check('audit: actual sign-in, no unsolicited export, localized filters and real CSV download', async () => {
     const context = await contextFor();
     try {
-      const page = await context.newPage(); const exportRequests=[], errors=[];
+      // Prove that passive receipt collection is active before asserting zero exports.
+      const health=await context.request.get(origin+'/api/health/runtime');assert.equal(health.status(),200);
+      const receipts=await openReceiptWindow();
+      const page = await context.newPage(); const exportRequests=[], errors=[], downloads=[];
       page.on('request',r=>{if(new URL(r.url()).pathname==='/api/audit/export')exportRequests.push({method:r.method(),prefetch:!!r.headers()['next-router-prefetch']});});
+      page.on('download',download=>downloads.push(download));
       page.on('pageerror',error=>errors.push(error.message));
       await signIn(page);
       const response=await page.goto(origin+'/module/audit',{waitUntil:'load',timeout:25000});
@@ -80,6 +85,7 @@ try {
       await page.locator('.audit-live-heading a[download]').hover();
       await page.waitForTimeout(600);
       assert.equal(exportRequests.length,0,'Viewing/hovering the page must not fetch the CSV');
+      assert.deepEqual(await receipts(),[],'Viewing/hovering must not cause a server-side export');
       // Exercise the intermittent third-switch failure and retain an unsaved filter draft.
       await page.locator('.audit-filter-bar input[name="q"]').fill('unsaved locale draft');
       for(const locale of ['tr','en','tr','en','tr','en']) {
@@ -110,21 +116,24 @@ try {
       const downloadLink=page.locator('.audit-live-heading a[download]');
       const target=new URL(await downloadLink.getAttribute('href'),origin);
       for(const [key,value] of Object.entries({q:'auth.local-succeeded',actor:actorId,resource:'UserAccount',classification:'INTERNAL',days:'7'}))assert.equal(target.searchParams.get(key),value);
-      assert.equal(exportRequests.length,0);
+      assert.equal(exportRequests.length,0);assert.equal(downloads.length,0);
+      assert.deepEqual(await receipts(),[],'Filters and locale transitions must not trigger export');
       const [download]=await Promise.all([page.waitForEvent('download'),downloadLink.click()]);
       assert.match(download.suggestedFilename(),/^hrbp-audit-\d{4}-\d{2}-\d{2}\.csv$/);
+      assert.equal(download.url(),target.href,'Native download URL preserves the complete export target');
       await download.saveAs('.audit/downloads/filtered-audit.csv');
       assert.equal(await download.failure(),null);
       const rows=csvRows(await readFile('.audit/downloads/filtered-audit.csv','utf8'));
       assert.deepEqual(rows[0],['id','occurredAt','actorId','action','resourceType','resourceId','classification','ipAddress','purpose','hash','previousHash']);
       assert.ok(rows.length>1,'The actual sign-in must appear in the filtered export');
       for(const row of rows.slice(1)){assert.equal(row[2],actorId);assert.equal(row[3],'auth.local-succeeded');assert.equal(row[4],'UserAccount');assert.equal(row[6],'INTERNAL');}
-      assert.equal(exportRequests.length,1);assert.equal(exportRequests[0].prefetch,false);
+      const received=await receipts();assertSingleExport(received,target.href);assert.equal(downloads.length,1);
       assert.equal(new URL(page.url()).pathname,'/module/audit');
       await identity(context);assert.deepEqual(errors,[]);
+      assertSingleExport(await receipts(),target.href);
       const anonymous=await browser.newContext();
       try { const denied=await anonymous.request.get(target.href);assert.equal(denied.status(),401); } finally {await anonymous.close();}
-      report.downloads.push({records:rows.length-1,requestCount:exportRequests.length,filtersPreserved:true,principalRetained:true,anonymousDenied:true,localeTransitions:6,draftPreserved:true});
+      report.downloads.push({records:rows.length-1,requestCount:received.length,receiptSource:'loopback-http',pageRequestEvents:exportRequests.length,downloadEvents:downloads.length,filtersPreserved:true,principalRetained:true,anonymousDenied:true,localeTransitions:6,draftPreserved:true});
     } finally { await context.close(); }
   });
   for(const locale of ['en','tr'])for(const theme of ['light','dark']) {
