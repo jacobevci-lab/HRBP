@@ -45,3 +45,29 @@ Temporary locale diagnostic source/workflow are removed from the final patch.
 No schema, production secrets, customer data or provider configuration changes.
 All earlier session-reset and external-provider/load-testing boundaries in
 platform-audit-remediation.md still apply.
+
+## Follow-up after the first real-browser trial
+
+At cdfdbdd, CI #1011 passed, but Platform Regression #16 (37194158591,
+artifact 11300960305) still failed the Audit TR marker and recorded stalled
+pending controls on several pages. The server-action change alone was not a
+verified resolution. No merge or success override was performed.
+
+A feature-scoped progress update now runs outside the suspended transition,
+every 250 ms while locale is pending, for at most five seconds. It renders a
+small elapsed-time indicator and lets React retry pending work; translation
+functions stay stable between progress ticks. Timers are cleared on settle or
+unmount. This is an explicit bounded compatibility mitigation, not an upstream
+framework patch: it never retries the server action, reloads the page, changes
+server markers, suppresses requests, or reports a timeout as success. The same
+10-second server-heading check and six draft-preserving transitions must pass.
+
+Similar suspended-commit behavior and an urgent-render mitigation are reported
+upstream at https://github.com/vercel/next.js/issues/96233. That report is not
+proof of an identical internal cause in HRBP. Retain the real production-build
+regression when reviewing/removing this compatibility step after a framework
+upgrade. There is no claim of a general fix for every RSC or network failure.
+
+The focused real Audit/download/layout regression now runs before the broad
+sweeps to fail early; no check is removed. Three scheduling/cleanup tests with
+mocked timers supplement, rather than replace, the real browser gate.

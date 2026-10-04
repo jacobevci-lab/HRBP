@@ -1,3 +1,5 @@
 /* Locale changes retain the current selection while the server commits the new preference. */
 .locale-toggle button:disabled{cursor:progress;opacity:.65}
 .locale-error{position:fixed;bottom:16px;left:16px;right:16px;max-width:440px;padding:10px 12px;border:1px solid var(--red);border-radius:8px;background:var(--surface);color:var(--text);font-size:12px;line-height:1.4;white-space:normal;box-shadow:var(--shadow);z-index:100}
+
+.locale-progress{position:fixed;bottom:16px;left:16px;right:16px;max-width:260px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--text);font-size:12px;line-height:1.4;white-space:normal;z-index:99}

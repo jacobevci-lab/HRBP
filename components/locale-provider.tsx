@@ -10,6 +10,7 @@ type LocaleContextValue = {
   setLocale: (locale: Locale) => void;
   localePending: boolean;
   localeError: boolean;
+  localePendingSeconds: number;
   t: (key: TranslationKey, vars?: Record<string, string | number>) => string;
 };
 
@@ -20,6 +21,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
   const [localeError, setLocaleError] = useState(false);
   const [localePending, startTransition] = useTransition();
   const changing = useRef(false);
+  const [pendingTicks, setPendingTicks] = useState(0);
 
   const setLocale = useCallback((next: Locale) => {
     if (!isLocale(next) || changing.current) return;
@@ -53,13 +55,28 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     }
   }, [setLocale]);
 
+  // Compatibility recovery for an observed production-only suspended router commit.
+  // A bounded, ordinary progress update lets React retry the resolved transition.
+  // No network retry, DOM replacement, forged readiness marker or success timeout.
+  useEffect(() => {
+    if (!localePending) return;
+    setPendingTicks(0);
+    const progress = setInterval(() => setPendingTicks((value) => value + 1), 250);
+    const bound = setTimeout(() => clearInterval(progress), 5000);
+    return () => { clearInterval(progress); clearTimeout(bound); };
+  }, [localePending]);
+
+  const t = useCallback((key: TranslationKey, vars?: Record<string, string | number>) =>
+    translate(locale, key, vars), [locale]);
+  const localePendingSeconds = Math.floor(pendingTicks / 4);
   const value = useMemo<LocaleContextValue>(() => ({
     locale,
     setLocale,
     localePending,
     localeError,
-    t: (key, vars) => translate(locale, key, vars)
-  }), [locale, setLocale, localePending, localeError]);
+    localePendingSeconds,
+    t
+  }), [locale, setLocale, localePending, localeError, localePendingSeconds, t]);
 
   return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
 }
