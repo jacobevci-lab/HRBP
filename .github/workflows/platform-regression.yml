@@ -82,9 +82,9 @@ jobs:
           node scripts/platform-render-regression.mjs
           node scripts/platform-audit.mjs || { tail -70 .audit/server.log; exit 1; }
           node scripts/platform-auth-browser-audit.mjs || { tail -70 .audit/server.log; exit 1; }
+          node scripts/leave-decision-browser-regression.mjs
           node scripts/leave-api-regression.mjs
           node scripts/leave-browser-regression.mjs
-          node scripts/leave-decision-browser-regression.mjs
           node scripts/module-workspace-browser-regression.mjs
           node scripts/core-workspace-browser-regression.mjs
           node scripts/platform-remediation-gate.mjs

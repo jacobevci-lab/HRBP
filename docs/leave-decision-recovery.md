@@ -44,8 +44,8 @@ wrong/partial/HTML responses, byte bounds, abort, confirmation, opposite clicks,
 notification isolation, sealed conflicts, unmount and explicit reload.
 
 `node scripts/leave-decision-browser-regression.mjs` is a mandatory Platform
-Regression stage, after identity preparation and prior leave tests and before
-unchanged generic/core/final gates. It refuses targets other than fixed localhost
+Regression stage, after identity preparation and before the unchanged prior
+leave, generic, core and final gates. It refuses targets other than fixed localhost
 and flagged disposable loopback PostgreSQL `hrbp_audit`. It uses real form login
 for MANAGER and a synthetic HR_OPERATIONS account. Requests, balances and unread
 notification fixtures are seeded only into that disposable database.
