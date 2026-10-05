@@ -50,7 +50,11 @@ expect(routePath, route, /cache-control[\s\S]*no-store/, "personal action queues
 
 const componentPath = "components/workflow-action-center.tsx";
 const component = await source(componentPath);
-expect(componentPath, component, /fetch\("\/api\/action-center"/, "workspace must consume the lifecycle aggregate API");
+const queuePath = "lib/action-center-queue.ts";
+const queue = await source(queuePath);
+expect(componentPath, component, /createActionQueueLoader[\s\S]*queueLoader\.current\.load\(\)/, "workspace must consume the checked queue reader");
+expect(queuePath, queue, /"\/api\/action-center"/, "queue reader must consume the lifecycle aggregate API");
+expect(queuePath, queue, /method: "GET"[\s\S]*cache: "no-store"[\s\S]*redirect: "error"/, "queue reads must be private non-redirecting GETs");
 for (const kind of ["workflow", "hr-service", "employee-relations", "documents", "leave", "time-attendance", "compensation", "payroll", "performance", "learning"]) {
   expect(componentPath, component, new RegExp(`"${kind}"`), `UI must understand ${kind} lifecycle attention`);
 }
@@ -102,7 +106,7 @@ reject(learningDataPath, learningData, /findUnique\([\s\S]*boundedFocusId/, "lea
 const growthPagePath = "components/growth-module-page.tsx";
 const growthPage = await source(growthPagePath);
 expect(growthPagePath, growthPage, /getPerformanceParticipantData\(ctx,\s*focusId\)/, "performance module must resolve exact participant focus through its governed loader");
-expect(growthPagePath, growthPage, /getLearningParticipantData\(ctx,\s*focusId\)/, "learning module must resolve exact participant focus through its governed loader");
+expect(growthPagePath, growthPage, /getLearningParticipantData\(ctx,\s*focusId\)/, "learning module must resolve exact learning focus through its governed loader");
 expect(growthPagePath, growthPage, /No broader record lookup was attempted|Daha geniş bir kayıt sorgusu denenmedi/, "inaccessible performance focus must disclose safe failure without broad fallback");
 expect(growthPagePath, growthPage, /No unscoped fallback was used|Kapsamsız bir yedek sorgu kullanılmadı/, "inaccessible learning focus must disclose safe failure without broad fallback");
 
@@ -136,6 +140,6 @@ if (failures.length) {
   process.exit(1);
 }
 // Execute the actual adapter, shared row and parent integration, not only source patterns.
-const behavior = spawnSync(process.execPath, ["--test", "scripts/action-center-leave.test.mjs"], { stdio: "inherit" });
+const behavior = spawnSync(process.execPath, ["--test", "scripts/action-center-leave.test.mjs", "scripts/action-center-queue.test.mjs"], { stdio: "inherit" });
 if (behavior.error || behavior.status !== 0) process.exit(1);
 console.log("Lifecycle action center validation passed.");
