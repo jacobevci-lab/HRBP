@@ -7,6 +7,10 @@ import { execFileSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
 import { chromium } from 'playwright';
 const origin = 'http://localhost:3100';
+const surface = process.env.HRBP_LEAVE_DECISION_SURFACE || 'module';
+assert.ok(['module', 'action-center'].includes(surface), 'Only the two fixed local surfaces are supported');
+const actionCenter = surface === 'action-center';
+const pagePath = actionCenter ? '/module/workflows' : '/module/leave';
 const database = new URL(process.env.DATABASE_URL || 'about:blank');
 assert.equal(process.env.HRBP_DISPOSABLE_AUDIT, 'true');
 assert.ok(['postgres:', 'postgresql:'].includes(database.protocol));
@@ -14,7 +18,7 @@ assert.ok(['localhost', '127.0.0.1'].includes(database.hostname));
 assert.equal(database.pathname, '/hrbp_audit'); assert.equal(database.search, '');
 assert.ok(process.env.HRBP_TEST_ADMIN_PASSWORD);
 const db = new PrismaClient(), browser = await chromium.launch({ headless: true });
-const report = { source: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), checks: [], failures: [],
+const report = { source: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), surface, checks: [], failures: [],
   scope: 'MANAGER and HR_OPERATIONS, EN desktop/TR mobile, real login/decision API/PostgreSQL. Request/identity seeds and deliberate response-loss/notification failures in fixed disposable localhost only.' };
 await mkdir('.audit', { recursive: true });
 async function scenario(name, fn) {
@@ -52,11 +56,11 @@ try {
     let actor, employee;
     try {
       await scenario(name('real form login and correct principal'), async () => {
-        await page.goto(origin + '/auth/sign-in?returnTo=%2Fmodule%2Fleave', { waitUntil: 'networkidle' });
+        await page.goto(origin + '/auth/sign-in?returnTo=' + encodeURIComponent(pagePath), { waitUntil: 'networkidle' });
         await page.locator('#local-identifier').fill(role === 'manager' ? 'audit.manager' : hrSubject);
         await page.locator('#local-password').fill(process.env.HRBP_TEST_ADMIN_PASSWORD);
         await page.locator('.local-auth-card button[type="submit"]').click();
-        await page.waitForURL(origin + '/module/leave'); actor = await identity();
+        await page.waitForURL(origin + pagePath); actor = await identity();
       });
       const person = await db.person.create({ data: { tenantId: actor.tenantId, givenName: 'QA decision', familyName: 'Report', employeeNumber: randomUUID() } });
       employee = await db.employment.create({ data: { tenantId: actor.tenantId, personId: person.id, status: 'ACTIVE', startDate: new Date('2025-01-01'), managerEmploymentId: role === 'manager' ? actor.employmentId : null } });
@@ -66,8 +70,8 @@ try {
         const balance = await db.leaveBalance.create({ data: { tenantId: actor.tenantId, employmentId: employee.id, leaveTypeId: type.id, periodYear: when.getUTCFullYear(), opening: '0.30', used: '0.20' } });
         const record = await db.leaveRequest.create({ data: { tenantId: actor.tenantId, employmentId: employee.id, leaveTypeId: type.id, startsAt: when, endsAt: when, units: '0.10', status: 'PENDING' } });
         const notice = await db.notificationOutbox.create({ data: { tenantId: actor.tenantId, recipientUserId: actor.id, eventType: 'LEAVE_APPROVAL_REQUIRED', resourceType: 'LeaveRequest', resourceId: record.id, dedupeKey: randomUUID(), status: 'DELIVERED', channel: 'IN_APP', deliveredAt: new Date() } });
-        await page.goto(origin + '/module/leave', { waitUntil: 'networkidle' });
-        const control = page.locator(`[data-leave-decision-id="${record.id}"]`); await control.waitFor();
+        await page.goto(origin + pagePath, { waitUntil: 'networkidle' });
+        const control = page.locator(`${actionCenter ? '.workflow-action-center ' : ''}[data-leave-decision-id="${record.id}"]`); await control.waitFor();
         assert.equal(await control.locator('[data-decision="APPROVED"]').innerText(), locale === 'tr' ? 'Onayla' : 'Approve');
         return { record, balance, notice, control, path: `/api/leave/requests/${record.id}/decision` };
       }
@@ -109,6 +113,12 @@ try {
       });
       for (const mode of ['html-after-commit', 'lost-after-commit']) await scenario(name(mode + ' seals row, retains notification and reloads without replay'), async () => {
         f = await fixture(); const before = posts.length, beforePatches = patches.length;
+        let snapshot;
+        if (actionCenter) {
+          const response = await context.request.get(origin + '/api/action-center');
+          assert.equal(response.status(), 200); snapshot = await response.json();
+          assert.ok(snapshot.data.items.some(item => item.action?.requestId === f.record.id));
+        }
         const handler = async route => {
           const response = await route.fetch(); assert.equal(response.status(), 200);
           if (mode === 'html-after-commit') await route.fulfill({ status: 200, contentType: 'text/html', body: '<html>interrupted response</html>' });
@@ -121,6 +131,24 @@ try {
         assert.equal((await state(f)).status, 'APPROVED'); assert.equal(await used(f), '0.3'); assert.equal(await auditCount(f), 1);
         assert.equal(await unread(f), true); assert.equal(patches.length, beforePatches);
         await context.unroute(origin + f.path, handler);
+        if (actionCenter) {
+          const center = page.locator('.workflow-action-center');
+          const search = center.locator('.workflow-action-search input');
+          await search.fill('no-matching-row-' + randomUUID()); await f.control.waitFor({ state: 'detached' });
+          await search.fill(''); await f.control.locator('[data-leave-decision-result="unknown"]').waitFor();
+          assert.equal(await f.control.locator('[data-decision]').count(), 0);
+          // Simulate a delayed, pre-decision queue snapshot. A read must not erase
+          // the page-owned attempted-record seal or authorize an opposite write.
+          const stale = route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(snapshot) });
+          await context.route(origin + '/api/action-center', stale);
+          try {
+            await center.locator('.workflow-action-head button').click();
+            await page.waitForFunction(() => !document.querySelector('.workflow-action-head button')?.disabled);
+            await f.control.locator('[data-leave-decision-result="unknown"]').waitFor();
+            assert.equal(await f.control.locator('[data-decision]').count(), 0);
+            assert.equal(posts.length - before, 1); assert.equal(patches.length, beforePatches);
+          } finally { await context.unroute(origin + '/api/action-center', stale); }
+        }
         await f.control.locator('[data-leave-decision-reload]').click(); await page.waitForLoadState('networkidle');
         assert.equal(posts.length - before, 1); assert.equal(await auditCount(f), 1); await identity();
       });
@@ -131,11 +159,44 @@ try {
         assert.equal(await f.control.locator('[data-decision]').count(), 0);
         assert.equal((await state(f)).status, 'PENDING'); assert.equal(await auditCount(f), 0); assert.equal(await unread(f), true);
       });
+      if (actionCenter) {
+        await scenario(name('failed queue read disables stale leave controls without a decision'), async () => {
+          f = await fixture(); const before = posts.length;
+          const fail = route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Simulated queue unavailability' }) });
+          await context.route(origin + '/api/action-center', fail);
+          try {
+            await page.locator('.workflow-action-head button').click();
+            await page.locator('.workflow-action-message.error').waitFor();
+            assert.equal(await f.control.locator('[data-decision="APPROVED"]').isDisabled(), true);
+            await f.control.locator('[data-decision="APPROVED"]').evaluate(button => button.click());
+            assert.equal(posts.length, before); assert.equal((await state(f)).status, 'PENDING');
+            assert.equal(await auditCount(f), 0); assert.equal(await unread(f), true);
+          } finally { await context.unroute(origin + '/api/action-center', fail); }
+          await page.locator('.workflow-action-head button').click();
+          await page.waitForFunction(id => { const button = document.querySelector(`[data-leave-decision-id="${id}"] [data-decision="APPROVED"]`); return button && !button.disabled; }, f.record.id);
+        });
+        await scenario(name('mismatched action identifiers offer navigation only'), async () => {
+          const response = await context.request.get(origin + '/api/action-center');
+          assert.equal(response.status(), 200); const snapshot = await response.json();
+          const row = snapshot.data.items.find(item => item.action?.requestId === f.record.id); assert.ok(row);
+          row.secondaryAction = { type: 'reject-leave', requestId: 'different-record' };
+          const malformed = route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(snapshot) });
+          await context.route(origin + '/api/action-center', malformed);
+          try {
+            const before = posts.length;
+            await page.locator('.workflow-action-head button').click();
+            await f.control.waitFor({ state: 'detached' });
+            const visible = page.locator(`[id="action-item-${row.id}"]`);
+            assert.equal(await visible.locator('button').count(), 0); assert.equal(await visible.locator('a').count(), 1);
+            assert.equal(posts.length, before); assert.equal(await auditCount(f), 0);
+          } finally { await context.unroute(origin + '/api/action-center', malformed); }
+        });
+      }
       await scenario(name('principal and JavaScript health preserved'), async () => { await identity(); assert.deepEqual(jsErrors, []); });
     } finally { await context.close(); }
   }
 } finally {
-  await writeFile('.audit/leave-decision-browser.json', JSON.stringify(report, null, 2));
+  await writeFile(actionCenter ? '.audit/leave-action-center-browser.json' : '.audit/leave-decision-browser.json', JSON.stringify(report, null, 2));
   await browser.close(); await db.$disconnect();
 }
 console.log('LEAVE_DECISION_BROWSER ' + JSON.stringify({ checks: report.checks.length, failures: report.failures }));
