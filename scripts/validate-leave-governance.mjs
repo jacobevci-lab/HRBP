@@ -66,8 +66,12 @@ expect(dataPath, data, /opening[\s\S]*accrued[\s\S]*adjustment[\s\S]*used/, "sel
 
 const consolePath = "components/leave-participant-console.tsx";
 const consoleSource = await source(consolePath);
-expect(consolePath, consoleSource, /\/api\/leave\/requests/, "leave self-service must create requests through the governed API");
-expect(consolePath, consoleSource, /\/self-cancel/, "leave self-service must use the identity-bound cancellation endpoint");
+const clientPath = "lib/leave-client-action.ts";
+const clientSource = await source(clientPath);
+expect(consolePath, consoleSource, /submitLeaveAction\(action,\s*\{\s*signal:\s*controller\.signal\s*\}\)/, "leave self-service must call the tested receipt checker");
+expect(consolePath, consoleSource, /kind:\s*"create"[\s\S]*employmentId[\s\S]*kind:\s*"cancel",\s*employmentId,\s*requestId:\s*row\.id/, "create and cancellation must retain the scoped employment and selected request");
+expect(clientPath, clientSource, /"\/api\/leave\/requests"/, "leave self-service must create requests through the governed API");
+expect(clientPath, clientSource, /encodeURIComponent\(action\.requestId\)\}\/self-cancel/, "leave self-service must use the encoded identity-bound cancellation endpoint");
 expect(consolePath, consoleSource, /Overlap and balance controls are enforced server-side/, "leave UI must disclose server-side governance controls");
 
 const livePath = "components/work-pay-live-workspace.tsx";
@@ -98,6 +102,6 @@ if (failures.length) {
   process.exit(1);
 }
 
-const behavior = spawnSync(process.execPath, ["--test", "scripts/leave-validation.test.mjs"], { stdio: "inherit" });
+const behavior = spawnSync(process.execPath, ["--test", "scripts/leave-validation.test.mjs", "scripts/leave-client-action.test.mjs"], { stdio: "inherit" });
 if (behavior.error || behavior.status !== 0) process.exit(1);
 console.log("Validated leave governance contract: self-service ownership, approval separation, overlap prevention, serialized balance reservation/restoration, notifications and audit evidence are enforced.");
