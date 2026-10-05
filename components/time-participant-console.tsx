@@ -59,7 +59,7 @@ function TimeParticipantControl({ employmentId, data }: Props) {
     if (mayCorrect) {
       locked.current = false;
       if (outcome.outcome === "invalid") invalidInput();
-      else setNotice({ tone: "error", text: outcome.status === 429
+      else if (outcome.outcome === "rejected") setNotice({ tone: "error", text: outcome.status === 429
         ? c("Too many requests. Your input is preserved; review it and try again later.", "Çok fazla istek gönderildi. Bilgileriniz korundu; kontrol edip daha sonra tekrar deneyin.")
         : c("The draft was not accepted. Your input is preserved; check the fields before trying again.", "Taslak kabul edilmedi. Bilgileriniz korundu; tekrar denemeden önce alanları kontrol edin.") });
       return;
