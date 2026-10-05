@@ -1,5 +1,6 @@
 import { readJsonObject } from "@/lib/input-validation";
-import { DataClassification, LeaveUnit } from "@prisma/client";
+import { parseLeaveType } from "@/lib/leave-input";
+import { DataClassification, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
@@ -18,23 +19,17 @@ export async function POST(request: Request) {
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "leave:configure")) return forbidden();
-  const body = await readJsonObject(request) as { code?: string; name?: string; unit?: LeaveUnit; paid?: boolean; requiresApproval?: boolean; annualAllowance?: string | number };
+  const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
-  if (!body.code?.trim() || !body.name?.trim()) return Response.json({ error: "code and name are required." }, { status: 400 });
-  const allowance = body.annualAllowance === undefined ? undefined : Number(body.annualAllowance);
-  if (allowance !== undefined && (!Number.isFinite(allowance) || allowance < 0 || allowance > 3660)) return Response.json({ error: "annualAllowance must be between 0 and 3660." }, { status: 400 });
+  const parsed = parseLeaveType(body);
+  if (!parsed.ok) return Response.json({ error: parsed.error }, { status: 400 });
 
   try {
     const data = await db.$transaction(async (tx) => {
       const leaveType = await tx.leaveType.create({
         data: {
           tenantId: ctx.tenantId,
-          code: body.code!.trim().toUpperCase().slice(0, 40),
-          name: body.name!.trim().slice(0, 160),
-          unit: body.unit ?? LeaveUnit.DAYS,
-          paid: body.paid ?? true,
-          requiresApproval: body.requiresApproval ?? true,
-          annualAllowance: allowance
+          ...parsed.value
         }
       });
       await appendAudit(tx, ctx, { action: "leave-type.created", resourceType: "LeaveType", resourceId: leaveType.id, classification: DataClassification.INTERNAL });
@@ -42,7 +37,7 @@ export async function POST(request: Request) {
     });
     return Response.json({ data }, { status: 201 });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Unique constraint")) return Response.json({ error: "A leave type with this code already exists." }, { status: 409 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return Response.json({ error: "A leave type with this code already exists." }, { status: 409 });
     throw error;
   }
 }

@@ -1,4 +1,6 @@
 import { readJsonObject } from "@/lib/input-validation";
+import { parseLeaveRequest } from "@/lib/leave-input";
+import { hasAvailableLeaveBalance } from "@/lib/leave-balance-amount";
 import { DataClassification, LeaveRequestStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -6,12 +8,6 @@ import { appendAudit } from "@/lib/audit";
 import { canActOnEmployment, employmentIdFilter, resolveEmploymentScope } from "@/lib/employment-scope";
 import { enqueueLeaveApprovalNotification } from "@/lib/leave-notifications";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
-
-function validDate(value: string | undefined) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
 
 export async function GET(request: Request) {
   const ctx = await getRequestContext(request);
@@ -41,33 +37,26 @@ export async function POST(request: Request) {
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
 
-  const body = await readJsonObject(request) as { employmentId?: string; leaveTypeId?: string; startsAt?: string; endsAt?: string; units?: string | number; reason?: string };
+  const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
-  if (!body.employmentId || !body.leaveTypeId || !body.startsAt || !body.endsAt || body.units === undefined) {
-    return Response.json({ error: "employmentId, leaveTypeId, startsAt, endsAt and units are required." }, { status: 400 });
-  }
+  const parsed = parseLeaveRequest(body);
+  if (!parsed.ok) return Response.json({ error: parsed.error }, { status: 400 });
+  const { employmentId, leaveTypeId, startsAt, endsAt, units, reason } = parsed.value;
 
-  const startsAt = validDate(body.startsAt);
-  const endsAt = validDate(body.endsAt);
-  const units = Number(body.units);
-  if (!startsAt || !endsAt) return Response.json({ error: "startsAt and endsAt must be valid dates." }, { status: 400 });
-  if (endsAt < startsAt) return Response.json({ error: "endsAt must be on or after startsAt." }, { status: 400 });
-  if (!Number.isFinite(units) || units <= 0 || units > 366) return Response.json({ error: "units must be greater than 0 and no more than 366." }, { status: 400 });
-
-  const selfRequest = Boolean(ctx.employmentId && body.employmentId === ctx.employmentId);
+  const selfRequest = Boolean(ctx.employmentId && employmentId === ctx.employmentId);
   if (selfRequest) {
     if (!can(ctx, "leave:self-request")) return forbidden();
   } else {
     if (!can(ctx, "leave:write")) return forbidden("Creating leave on behalf of another employment requires leave:write.");
     const scope = await resolveEmploymentScope(db, ctx);
-    if (!canActOnEmployment(scope, body.employmentId)) return forbidden("Employment is outside your authorized relationship scope.");
+    if (!canActOnEmployment(scope, employmentId)) return forbidden("Employment is outside your authorized relationship scope.");
   }
 
   try {
     const data = await db.$transaction(async (tx) => {
       const [employment, leaveType, overlap] = await Promise.all([
         tx.employment.findFirst({
-          where: { id: body.employmentId, tenantId: ctx.tenantId },
+          where: { id: employmentId, tenantId: ctx.tenantId },
           select: {
             id: true,
             managerEmploymentId: true,
@@ -75,13 +64,13 @@ export async function POST(request: Request) {
           }
         }),
         tx.leaveType.findFirst({
-          where: { id: body.leaveTypeId, tenantId: ctx.tenantId, active: true },
+          where: { id: leaveTypeId, tenantId: ctx.tenantId, active: true },
           select: { id: true, name: true, requiresApproval: true, annualAllowance: true }
         }),
         tx.leaveRequest.findFirst({
           where: {
             tenantId: ctx.tenantId,
-            employmentId: body.employmentId,
+            employmentId: employmentId,
             status: { in: [LeaveRequestStatus.PENDING, LeaveRequestStatus.APPROVED, LeaveRequestStatus.TAKEN] },
             startsAt: { lte: endsAt },
             endsAt: { gte: startsAt }
@@ -102,8 +91,7 @@ export async function POST(request: Request) {
           select: { id: true, opening: true, accrued: true, used: true, adjustment: true }
         });
         if (!balance) throw new Error("BALANCE_NOT_FOUND");
-        const available = Number(balance.opening) + Number(balance.accrued) + Number(balance.adjustment) - Number(balance.used);
-        if (available < units) throw new Error("INSUFFICIENT_BALANCE");
+        if (!hasAvailableLeaveBalance(balance, units)) throw new Error("INSUFFICIENT_BALANCE");
         balanceId = balance.id;
       }
 
@@ -116,7 +104,7 @@ export async function POST(request: Request) {
           startsAt,
           endsAt,
           units,
-          reason: body.reason?.trim().slice(0, 2000) || null,
+          reason,
           status,
           approverId: status === LeaveRequestStatus.APPROVED ? ctx.actorId : null,
           decidedAt: status === LeaveRequestStatus.APPROVED ? new Date() : null

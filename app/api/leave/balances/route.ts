@@ -1,3 +1,4 @@
+import { parseLeaveBalanceYear } from "@/lib/leave-input";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { employmentIdFilter, resolveEmploymentScope } from "@/lib/employment-scope";
@@ -8,9 +9,9 @@ export async function GET(request: Request) {
   if (!ctx) return unauthorized();
   if (!can(ctx, "leave:read")) return forbidden();
 
+  const year = parseLeaveBalanceYear(new URL(request.url).searchParams);
+  if (year === null) return Response.json({ error: "year must be one four-digit calendar year between 0001 and 9999." }, { status: 400 });
   const scope = await resolveEmploymentScope(db, ctx);
-  const url = new URL(request.url);
-  const year = Number(url.searchParams.get("year") ?? new Date().getUTCFullYear());
   const data = await db.leaveBalance.findMany({
     where: { tenantId: ctx.tenantId, periodYear: year, ...employmentIdFilter(scope) },
     orderBy: [{ employmentId: "asc" }, { leaveTypeId: "asc" }],

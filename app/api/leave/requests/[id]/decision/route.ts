@@ -1,3 +1,4 @@
+import { hasAvailableLeaveBalance } from "@/lib/leave-balance-amount";
 import { readJsonObject } from "@/lib/input-validation";
 import { DataClassification, LeaveRequestStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -55,8 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           select: { id: true, opening: true, accrued: true, used: true, adjustment: true }
         });
         if (!balance) throw new Error("BALANCE_NOT_FOUND");
-        const available = Number(balance.opening) + Number(balance.accrued) + Number(balance.adjustment) - Number(balance.used);
-        if (available < Number(current.units)) throw new Error("INSUFFICIENT_BALANCE");
+        if (!hasAvailableLeaveBalance(balance, current.units)) throw new Error("INSUFFICIENT_BALANCE");
         balanceId = balance.id;
       }
 
