@@ -62,10 +62,13 @@ try {
       await row.waitFor(); page.once('dialog', dialog => dialog.accept());
       await row.locator('button').click();
       await waitNotice('saved');
-      await page.waitForFunction(id => {
+      await page.waitForFunction(({ id, expectedLabel }) => {
         const row = document.querySelector(`[data-leave-request-id="${id}"]`);
-        return row && /cancelled|iptal/i.test(row.innerText) && !row.querySelector('button');
-      }, id);
+        // JavaScript /i does not equate Turkish dotted capital İ with ASCII i.
+        // Verify the actual status element, exact localized label and absent action.
+        const status = row?.querySelector('em.growth-pill.cancelled');
+        return status?.textContent?.trim() === expectedLabel && !row.querySelector('button');
+      }, { id, expectedLabel: locale === 'tr' ? 'İptal' : 'Cancelled' });
       assert.equal((await db.leaveRequest.findUniqueOrThrow({ where: { id } })).status, 'CANCELLED');
       assert.equal(await used(), '0.2');
     }

@@ -129,10 +129,10 @@ function text(tree) {
   if (tree == null || typeof tree === 'boolean') return '';
   return typeof tree === 'object' ? text(tree.props?.children) : String(tree);
 }
-function componentFixture({ locale = 'en', refreshThrows = false, confirms = true } = {}) {
+function componentFixture({ locale = 'en', refreshThrows = false, confirms = true, rowStatus = 'APPROVED' } = {}) {
   let index = 0, refreshes = 0, resets = 0, reloads = 0, cleanup;
   const hooks = [], effects = [], calls = [];
-  const data = { leaveTypes: [{ id: 'lt1', code: 'QA', name: 'QA leave', requiresApproval: true }], balances: [], requests: [{ id: 'r1', leaveType: 'QA leave', startsAt: input.startsAt, endsAt: input.endsAt, units: '0.1', unit: 'DAYS', status: 'APPROVED' }] };
+  const data = { leaveTypes: [{ id: 'lt1', code: 'QA', name: 'QA leave', requiresApproval: true }], balances: [], requests: [{ id: 'r1', leaveType: 'QA leave', startsAt: input.startsAt, endsAt: input.endsAt, units: '0.1', unit: 'DAYS', status: rowStatus }] };
   const form = { fields: { ...input }, isConnected: true, reset() { resets++; this.fields = {}; } };
   const component = load('components/leave-participant-console.tsx', {
     'react/jsx-runtime': { jsx, jsxs: jsx },
@@ -211,3 +211,19 @@ test('new browser stage is mandatory without disturbing the existing module/core
   const browser = readFileSync('scripts/leave-browser-regression.mjs', 'utf8');
   for (const token of ['HRBP_DISPOSABLE_AUDIT', '/hrbp_audit', 'http://localhost:3100', 'db.leaveRequest', 'db.auditEvent', 'route.fetch', 'route.abort']) assert.ok(browser.includes(token));
 });
+
+for (const [locale, expectedLabel] of [['en', 'Cancelled'], ['tr', 'İptal']]) {
+  test(`${locale} cancelled row exposes its exact localized status, not an ASCII case-fold assumption`, () => {
+    const f = componentFixture({ locale, rowStatus: 'CANCELLED' });
+    const row = nodes(f.render()).find(n => n.props['data-leave-request-id'] === 'r1');
+    const status = nodes(row).find(n => n.type === 'em');
+    assert.equal(status.props.className, 'growth-pill cancelled');
+    assert.equal(text(status), expectedLabel);
+    assert.ok(!nodes(row).some(n => n.type === 'button'));
+    if (locale === 'tr') assert.equal(/cancelled|iptal/i.test(text(status)), false,
+      'The old ASCII-insensitive browser matcher could not recognize the actual Turkish status.');
+    const browser = readFileSync('scripts/leave-browser-regression.mjs', 'utf8');
+    assert.ok(browser.includes("querySelector('em.growth-pill.cancelled')"));
+    assert.ok(browser.includes('status?.textContent?.trim() === expectedLabel'));
+  });
+}
