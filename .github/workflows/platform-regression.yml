@@ -66,7 +66,7 @@ jobs:
           done
       - name: Build production application
         run: |
-          node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs scripts/locale-preference.test.mjs scripts/locale-progress.test.mjs scripts/core-workspace-resilience.test.mjs scripts/core-workspace-browser-wiring.test.mjs scripts/module-workspace-resilience.test.mjs
+          node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs scripts/locale-preference.test.mjs scripts/locale-progress.test.mjs scripts/core-workspace-resilience.test.mjs scripts/core-workspace-browser-wiring.test.mjs scripts/module-workspace-resilience.test.mjs scripts/leave-validation.test.mjs
           npx next build > .audit/build.log 2>&1 || { tail -80 .audit/build.log; exit 1; }
       - name: Browser, link, API and workflow audit
         run: |
@@ -83,6 +83,7 @@ jobs:
           node scripts/platform-audit.mjs || { tail -70 .audit/server.log; exit 1; }
           node scripts/platform-auth-browser-audit.mjs || { tail -70 .audit/server.log; exit 1; }
           node scripts/module-workspace-browser-regression.mjs
+          node scripts/leave-api-regression.mjs
           node scripts/core-workspace-browser-regression.mjs
           node scripts/platform-remediation-gate.mjs
       - name: Preserve complete audit evidence

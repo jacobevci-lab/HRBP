@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
 async function source(path) { return readFile(path, "utf8"); }
 const failures = [];
@@ -49,7 +50,13 @@ const typePath = "app/api/leave/types/route.ts";
 const leaveType = await source(typePath);
 expect(typePath, leaveType, /mutationOriginAllowed/, "leave policy mutation must enforce same-origin mutation policy");
 expect(typePath, leaveType, /can\(ctx,\s*"leave:configure"\)/, "leave type creation must require policy configuration capability");
-expect(typePath, leaveType, /annualAllowance must be between/, "leave allowance configuration must be bounded");
+expect(typePath, leaveType, /parseLeaveType\(body\)/, "leave allowance configuration must use validated input");
+const inputPath = "lib/leave-input.ts";
+const input = await source(inputPath);
+expect(inputPath, input, /annualAllowance must be between/, "leave allowance configuration must remain bounded in its shared parser");
+for (const [path, text] of [[requestPath, request], [decisionPath, decision]]) {
+  expect(path, text, /hasAvailableLeaveBalance\(balance,/, "both approval paths must use exact balance comparisons");
+}
 
 const dataPath = "lib/leave-participant-data.ts";
 const data = await source(dataPath);
@@ -91,4 +98,6 @@ if (failures.length) {
   process.exit(1);
 }
 
+const behavior = spawnSync(process.execPath, ["--test", "scripts/leave-validation.test.mjs"], { stdio: "inherit" });
+if (behavior.error || behavior.status !== 0) process.exit(1);
 console.log("Validated leave governance contract: self-service ownership, approval separation, overlap prevention, serialized balance reservation/restoration, notifications and audit evidence are enforced.");
