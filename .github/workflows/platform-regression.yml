@@ -30,7 +30,7 @@ jobs:
       HRBP_DISPOSABLE_AUDIT: "true"
       HRBP_LOCAL_AUTH_ENABLED: "true"
       HRBP_AUTH_TENANT_ID: tenant-acme-global
-      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_TELEMETRY_DISABLED: 1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -66,7 +66,7 @@ jobs:
           done
       - name: Build production application
         run: |
-          node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs scripts/locale-preference.test.mjs scripts/locale-progress.test.mjs scripts/core-workspace-resilience.test.mjs scripts/core-workspace-browser-wiring.test.mjs scripts/module-workspace-resilience.test.mjs scripts/leave-validation.test.mjs scripts/leave-client-action.test.mjs scripts/leave-decision.test.mjs scripts/action-center-leave.test.mjs
+          node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs scripts/locale-preference.test.mjs scripts/locale-progress.test.mjs scripts/core-workspace-resilience.test.mjs scripts/core-workspace-browser-wiring.test.mjs scripts/module-workspace-resilience.test.mjs scripts/leave-validation.test.mjs scripts/leave-client-action.test.mjs scripts/leave-decision.test.mjs scripts/action-center-leave.test.mjs scripts/action-center-queue.test.mjs
           npx next build > .audit/build.log 2>&1 || { tail -80 .audit/build.log; exit 1; }
       - name: Browser, link, API and workflow audit
         run: |
@@ -82,6 +82,7 @@ jobs:
           node scripts/platform-render-regression.mjs
           node scripts/platform-audit.mjs || { tail -70 .audit/server.log; exit 1; }
           node scripts/platform-auth-browser-audit.mjs || { tail -70 .audit/server.log; exit 1; }
+          node scripts/action-center-queue-browser.mjs
           node scripts/leave-decision-browser-regression.mjs
           HRBP_LEAVE_DECISION_SURFACE=action-center node scripts/leave-decision-browser-regression.mjs
           node scripts/leave-api-regression.mjs
