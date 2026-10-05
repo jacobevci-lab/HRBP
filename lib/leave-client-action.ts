@@ -9,9 +9,10 @@ export type LeaveCreateInput = {
 };
 export type LeaveClientAction =
   | { kind: "create"; input: LeaveCreateInput }
-  | { kind: "cancel"; employmentId: string; requestId: string };
+  | { kind: "cancel"; employmentId: string; requestId: string }
+  | { kind: "decision"; requestId: string; decision: "APPROVED" | "REJECTED" };
 export type LeaveActionResult =
-  | { outcome: "saved"; id: string; status: "PENDING" | "APPROVED" | "CANCELLED" }
+  | { outcome: "saved"; id: string; status: "PENDING" | "APPROVED" | "CANCELLED" | "REJECTED" }
   | { outcome: "rejected"; status: number }
   | { outcome: "unknown" };
 
@@ -57,6 +58,11 @@ function matchesReceipt(action: LeaveClientAction, data: Record<string, unknown>
   if (action.kind === "cancel") {
     return data.id === action.requestId && data.employmentId === action.employmentId && data.status === "CANCELLED";
   }
+  if (action.kind === "decision") {
+    return data.id === action.requestId && data.status === action.decision &&
+      identifier(data.employmentId) && identifier(data.approverId) &&
+      Number.isFinite(dateMillis(data.decidedAt));
+  }
   const input = action.input;
   return data.employmentId === input.employmentId && data.leaveTypeId === input.leaveTypeId &&
     typeof data.status === "string" && ["PENDING", "APPROVED"].includes(data.status) &&
@@ -69,9 +75,12 @@ export async function submitLeaveAction(action: LeaveClientAction, options: {
   fetchImpl?: typeof fetch; signal?: AbortSignal; timeoutMs?: number;
 } = {}): Promise<LeaveActionResult> {
   const timeoutMs = options.timeoutMs ?? 20_000;
-  const employmentId = action.kind === "create" ? action.input.employmentId : action.employmentId;
-  if (!identifier(employmentId) ||
-      (action.kind === "create" ? !identifier(action.input.leaveTypeId) : !identifier(action.requestId)) ||
+  const validTarget = action.kind === "decision"
+    ? identifier(action.requestId) && ![".", ".."].includes(action.requestId) &&
+      ["APPROVED", "REJECTED"].includes(action.decision)
+    : identifier(action.kind === "create" ? action.input.employmentId : action.employmentId) &&
+      identifier(action.kind === "create" ? action.input.leaveTypeId : action.requestId);
+  if (!validTarget ||
       !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) {
     return { outcome: "rejected", status: 400 };
   }
@@ -83,11 +92,15 @@ export async function submitLeaveAction(action: LeaveClientAction, options: {
   try {
     if (controller.signal.aborted) return { outcome: "unknown" };
     const response = await (options.fetchImpl ?? fetch)(action.kind === "create"
-      ? "/api/leave/requests" : `/api/leave/requests/${encodeURIComponent(action.requestId)}/self-cancel`, {
+      ? "/api/leave/requests"
+      : action.kind === "decision"
+        ? `/api/leave/requests/${encodeURIComponent(action.requestId)}/decision`
+        : `/api/leave/requests/${encodeURIComponent(action.requestId)}/self-cancel`, {
       method: "POST", credentials: "same-origin", redirect: "error", cache: "no-store",
       signal: controller.signal,
-      headers: { Accept: "application/json", ...(action.kind === "create" ? { "content-type": "application/json" } : {}) },
-      ...(action.kind === "create" ? { body: JSON.stringify(action.input) } : {})
+      headers: { Accept: "application/json", ...(action.kind !== "cancel" ? { "content-type": "application/json" } : {}) },
+      ...(action.kind === "create" ? { body: JSON.stringify(action.input) }
+        : action.kind === "decision" ? { body: JSON.stringify({ decision: action.decision }) } : {})
     });
     if (response.redirected) return { outcome: "unknown" };
     const body = await readReceipt(response);
@@ -99,7 +112,7 @@ export async function submitLeaveAction(action: LeaveClientAction, options: {
     }
     if (response.status === (action.kind === "create" ? 201 : 200) &&
         body.error === undefined && object(body.data) && matchesReceipt(action, body.data)) {
-      return { outcome: "saved", id: body.data.id as string, status: body.data.status as "PENDING" | "APPROVED" | "CANCELLED" };
+      return { outcome: "saved", id: body.data.id as string, status: body.data.status as "PENDING" | "APPROVED" | "CANCELLED" | "REJECTED" };
     }
     return { outcome: "unknown" };
   } catch {
@@ -123,4 +136,28 @@ export function leaveActionMessage(result: LeaveActionResult, locale: "en" | "tr
   if (result.status === 404) return tr ? "İlgili kayıt artık kullanılamıyor. Güncel kayıtları kontrol edin." : "The related record is no longer available. Check the current records.";
   if (result.status === 429) return tr ? "Çok fazla istek gönderildi. Otomatik tekrar yapılmadı; daha sonra yeniden deneyin." : "Too many requests. No automatic retry was made; try again later.";
   return tr ? "Alanları kontrol edin: izin türü, tarihler, miktar veya açıklama kabul edilmedi. Formunuz korunuyor." : "Check the leave type, dates, quantity and reason. The input was not accepted; your form is retained.";
+}
+
+/** Badge cleanup is best-effort AFTER a verified decision, never its completion signal. */
+export async function acknowledgeLeaveNotification(requestId: string, options: {
+  fetchImpl?: typeof fetch; timeoutMs?: number;
+} = {}): Promise<boolean> {
+  const timeoutMs = options.timeoutMs ?? 5_000;
+  if (!identifier(requestId) || requestId.length > 160 ||
+      !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 5_000) return false;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await (options.fetchImpl ?? fetch)("/api/notifications", {
+      method: "PATCH", credentials: "same-origin", redirect: "error", cache: "no-store",
+      signal: controller.signal, headers: { Accept: "application/json", "content-type": "application/json" },
+      body: JSON.stringify({ resourceType: "LeaveRequest", resourceId: requestId, read: true })
+    });
+    if (response.redirected) return false;
+    const body = await readReceipt(response);
+    return !controller.signal.aborted && response.status === 200 && object(body) && body.error === undefined &&
+      object(body.data) && Number.isSafeInteger(body.data.updated) && Number(body.data.updated) >= 0 &&
+      Number.isSafeInteger(body.data.unreadCount) && Number(body.data.unreadCount) >= 0;
+  } catch { return false; }
+  finally { clearTimeout(timer); }
 }
