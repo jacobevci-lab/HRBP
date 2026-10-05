@@ -57,6 +57,7 @@ function action(value: unknown, secondary = false): boolean {
 export function decodeActionQueue(value: unknown): ActionQueue | null {
   if (!object(value) || Object.hasOwn(value, "error") || !object(value.data)) return null;
   const data = value.data;
+  if (!validSourceFlags(data)) return null;
   if (!Array.isArray(data.items) || data.items.length > 5000 || !object(data.summary) || !date(data.generatedAt)) return null;
   if (!summaryKeys.every(key => Number.isSafeInteger(data.summary && (data.summary as Record<string, unknown>)[key]) && Number((data.summary as Record<string, unknown>)[key]) >= 0)) return null;
   const seen = new Set<string>();
@@ -146,4 +147,52 @@ export function queueFailureMessage(reason: Failure, locale: string): string {
   if (reason === "session") return locale === "tr" ? "Oturum doğrulanamadı. Yeniden giriş yapıp listeyi yükle." : "Your session could not be verified. Sign in again and reload the queue.";
   if (reason === "access") return locale === "tr" ? "Bu aksiyon kuyruğuna erişim doğrulanamadı. Yetkilerini kontrol edip yeniden dene." : "Access to this action queue could not be verified. Check your access and try again.";
   return locale === "tr" ? "Aksiyon listesi doğrulanamadı. Hızlı işlemler kapalı; listeyi yeniden yüklemek için Yenile düğmesini kullan." : "The action queue could not be verified. Quick actions are disabled; use Refresh to reload the list.";
+}
+
+/** These are reported source failures, not a guarantee that every product domain is complete. */
+export const actionQueueSourceLabels = {
+  growthDegraded: { en: "Growth", tr: "Gelişim" },
+  employeeLifecycleDegraded: { en: "Employee lifecycle", tr: "Çalışan yaşam döngüsü" },
+  documentSignatureDegraded: { en: "Document signatures", tr: "Doküman imzaları" },
+  recruitingDegraded: { en: "Recruiting", tr: "İşe alım" },
+  policyDegraded: { en: "Policies", tr: "Politikalar" },
+  workforcePlanningDegraded: { en: "Workforce planning", tr: "İşgücü planlama" },
+  privacyDegraded: { en: "Privacy", tr: "Gizlilik" },
+  engagementDegraded: { en: "Engagement", tr: "Bağlılık" },
+  workflowDefinitionDegraded: { en: "Workflow definitions", tr: "İş akışı tanımları" }
+} as const;
+export type ActionQueueSource = keyof typeof actionQueueSourceLabels;
+const sourceKeys = Object.keys(actionQueueSourceLabels) as ActionQueueSource[];
+export type QueueSourceHealth = {
+  state: "reported" | "partial" | "unknown";
+  failed: ActionQueueSource[];
+  unknown: ActionQueueSource[];
+};
+
+function validSourceFlags(data: Record<string, unknown>): boolean {
+  return sourceKeys.every(key => !Object.hasOwn(data, key) || typeof data[key] === "boolean");
+}
+
+/** Missing flags are unknown (for older responses), never silently converted to healthy. */
+export function actionQueueSourceHealth(data: unknown): QueueSourceHealth {
+  const failed: ActionQueueSource[] = [], unknown: ActionQueueSource[] = [];
+  for (const key of sourceKeys) {
+    if (!object(data) || !Object.hasOwn(data, key) || typeof data[key] !== "boolean") unknown.push(key);
+    else if (data[key] === true) failed.push(key);
+  }
+  return { state: failed.length ? "partial" : unknown.length ? "unknown" : "reported", failed, unknown };
+}
+
+export function sourceHealthMessage(health: QueueSourceHealth, locale: string): string {
+  if (health.state === "reported") return "";
+  const language = locale === "tr" ? "tr" : "en";
+  const names = (keys: ActionQueueSource[]) => keys.map(key => actionQueueSourceLabels[key][language]).join(", ");
+  if (language === "tr") {
+    const failed = health.failed.length ? `Liste kısmen yüklendi. Eksik kaynaklar: ${names(health.failed)}. ` : "";
+    const unknown = health.unknown.length ? "Bazı kaynakların yüklenme durumu bildirilmedi. " : "";
+    return failed + unknown + "Yüklenmiş kayıtlar kullanılabilir; toplamlar doğrulanamadı. Yenile yalnızca listeyi tekrar okur, işlem göndermez.";
+  }
+  const failed = health.failed.length ? `The queue is partially loaded. Unavailable sources: ${names(health.failed)}. ` : "";
+  const unknown = health.unknown.length ? "Loading status was not reported for some sources. " : "";
+  return failed + unknown + "Loaded records remain available; totals could not be verified. Refresh only reads the queue and does not submit an action.";
 }
