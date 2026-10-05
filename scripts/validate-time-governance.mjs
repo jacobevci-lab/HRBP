@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
 async function source(path) { return readFile(path, "utf8"); }
 const failures = [];
@@ -73,8 +74,11 @@ expect(dataPath, data, /workScheduleAssignment\.findFirst/, "self-service must s
 
 const consolePath = "components/time-participant-console.tsx";
 const consoleSource = await source(consolePath);
-expect(consolePath, consoleSource, /\/api\/time\/entries/, "time self-service must create drafts through the governed API");
-expect(consolePath, consoleSource, /status:\s*"SUBMITTED"/, "time self-service must submit drafts through the state machine");
+const clientPath = "lib/time-client-action.ts";
+const client = await source(clientPath);
+expect(consolePath, consoleSource, /submitTimeAction/, "time UI must delegate to the verified client action");
+expect(clientPath, client, /\/api\/time\/entries/, "time self-service must create drafts through the governed API");
+expect(clientPath, client, /status:\s*"SUBMITTED"/, "time self-service must submit drafts through the state machine");
 expect(consolePath, consoleSource, /overlap and overtime integrity are enforced server-side/i, "time UI must disclose server-side integrity controls");
 
 const livePath = "components/work-pay-live-workspace.tsx";
@@ -106,5 +110,8 @@ if (failures.length) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
+
+const behavior = spawnSync(process.execPath, ["--test", "scripts/time-client-action.test.mjs"], { stdio: "inherit" });
+if (behavior.error || behavior.status !== 0) process.exit(1);
 
 console.log("Validated time governance contract: identity-bound self-service, schedule/integrity validation, approval separation, four-eyes payroll locking, notifications and audit evidence are enforced.");

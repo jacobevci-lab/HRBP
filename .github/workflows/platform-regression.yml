@@ -64,6 +64,8 @@ jobs:
           for script in seed-staging seed-work-pay-staging seed-access-staging seed-growth-staging seed-connected-growth-staging seed-services-staging seed-service-governance-staging seed-governance-planning-staging; do
             node "scripts/$script.mjs" >> .audit/seed.log 2>&1 || { tail -40 .audit/seed.log; exit 1; }
           done
+      - name: Verify time self-service receipt recovery
+        run: node --test scripts/time-client-action.test.mjs
       - name: Build production application
         run: |
           node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs scripts/locale-preference.test.mjs scripts/locale-progress.test.mjs scripts/core-workspace-resilience.test.mjs scripts/core-workspace-browser-wiring.test.mjs scripts/module-workspace-resilience.test.mjs scripts/leave-validation.test.mjs scripts/leave-client-action.test.mjs scripts/leave-decision.test.mjs scripts/action-center-leave.test.mjs scripts/action-center-queue.test.mjs
@@ -90,6 +92,7 @@ jobs:
           node scripts/module-workspace-browser-regression.mjs
           node scripts/core-workspace-browser-regression.mjs
           node scripts/platform-remediation-gate.mjs
+          node scripts/time-browser-regression.mjs
       - name: Preserve complete audit evidence
         if: always()
         uses: actions/upload-artifact@v4
