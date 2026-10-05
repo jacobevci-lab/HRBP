@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { AlertTriangle, BadgeDollarSign, BookOpenCheck, BriefcaseBusiness, CalendarCheck2, CheckCircle2, ClipboardCheck, Clock3, ExternalLink, FileClock, HeartHandshake, ReceiptText, RefreshCw, Search, ShieldAlert, SlidersHorizontal, Target, TimerReset, UserMinus, UserPlus, UsersRound, Workflow } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
+import { LeaveDecisionButtons, type LeaveDecisionRegistry } from "@/components/leave-decision-buttons";
+import { actionCenterLeaveControl, isActionCenterLeaveItem } from "@/lib/action-center-leave-control";
 
 type ActionKind = "workflow" | "hr-service" | "employee-relations" | "documents" | "onboarding" | "offboarding" | "leave" | "time-attendance" | "compensation" | "payroll" | "benefits" | "performance" | "learning" | "development-plan" | "succession" | "recruiting" | "policies" | "workforce-planning" | "privacy" | "engagement";
 type Urgency = "normal" | "warning" | "critical";
@@ -289,6 +291,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const leaveAttempts = useRef<LeaveDecisionRegistry>(new Map());
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -568,7 +571,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
     if (item.secondaryAction.type === "return-offer") return {
       label: locale === "tr" ? "Taslağa döndür" : "Return to draft",
       busy: locale === "tr" ? "Döndürülüyor…" : "Returning…",
-      confirm: locale === "tr" ? `“${item.title}” kaydını düzeltme için taslağa döndürmek istiyor musun?` : `Return “${item.title}” to draft for revision?`,
+      confirm: locale === "tr" ? `“${item.title}” kaydını düzeltme için taslağa döndürmek istiyor musun?` : `Return “${item.title}” to draft?`,
       success: locale === "tr" ? "Teklif taslağa döndürüldü." : "Offer returned to draft."
     };
     if (item.secondaryAction.type === "request-policy-changes") return {
@@ -604,7 +607,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
   }
 
   async function executeSecondaryAction(item: LifecycleActionItem) {
-    if (!item.secondaryAction) return;
+    if (!item.secondaryAction || isActionCenterLeaveItem(item)) return;
     const copy = secondaryActionCopy(item);
     if (!copy || !window.confirm(copy.confirm)) return;
 
@@ -614,10 +617,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
     try {
       let endpoint = "";
       let payload: Record<string, unknown> = {};
-      if (item.secondaryAction.type === "reject-leave") {
-        endpoint = `/api/leave/requests/${encodeURIComponent(item.secondaryAction.requestId)}/decision`;
-        payload = { decision: "REJECTED" };
-      } else if (item.secondaryAction.type === "reject-time") {
+      if (item.secondaryAction.type === "reject-time") {
         endpoint = `/api/time/entries/${encodeURIComponent(item.secondaryAction.entryId)}/transition`;
         payload = { status: "REJECTED" };
       } else if (item.secondaryAction.type === "reject-compensation") {
@@ -664,7 +664,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
   }
 
   async function executeQuickAction(item: LifecycleActionItem) {
-    if (!item.action) return;
+    if (!item.action || isActionCenterLeaveItem(item)) return;
     const copy = quickActionCopy(item);
     if (!copy || !window.confirm(copy.confirm)) return;
 
@@ -677,9 +677,6 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       if (item.action.type === "complete-workflow") {
         endpoint = `/api/workflows/instances/${encodeURIComponent(item.action.instanceId)}/tasks/${encodeURIComponent(item.action.taskId)}/complete`;
         payload = { result: { source: "lifecycle-action-center", completedAt: new Date().toISOString() } };
-      } else if (item.action.type === "approve-leave") {
-        endpoint = `/api/leave/requests/${encodeURIComponent(item.action.requestId)}/decision`;
-        payload = { decision: "APPROVED" };
       } else if (item.action.type === "approve-time") {
         endpoint = `/api/time/entries/${encodeURIComponent(item.action.entryId)}/transition`;
         payload = { status: "APPROVED" };
@@ -917,6 +914,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
             {loading && items.length === 0 ? <tr><td colSpan={7} className="workflow-action-empty">{locale === "tr" ? "Aksiyon merkezi yükleniyor…" : "Loading action center…"}</td></tr> : null}
             {!loading && visibleItems.length === 0 ? <tr><td colSpan={7} className="workflow-action-empty"><CheckCircle2 size={17}/>{locale === "tr" ? "Bu görünümde bekleyen aksiyon yok." : "No pending actions in this view."}</td></tr> : null}
             {visibleItems.map((item) => {
+              const leaveControl = actionCenterLeaveControl(item);
               const workflowAction = item.action?.type === "complete-workflow" ? item.action : null;
               const focused = item.kind === "workflow" && (workflowAction?.taskId === initialTaskId || workflowAction?.instanceId === initialInstanceId);
               return <tr key={item.id} id={`action-item-${item.id}`} data-workflow-instance={workflowAction?.instanceId} className={focused ? "focused" : undefined}>
@@ -926,7 +924,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
                 <td><span className={`workflow-due ${item.urgency}`}>{formatDate(item.dueAt)}</span></td>
                 <td><span className={`workflow-urgency ${item.urgency}`}>{urgencyLabel(item.urgency)}</span></td>
                 <td><span className="workflow-task-status">{item.status}</span></td>
-                <td>{item.action ? <div className="workflow-row-actions"><button className="primary-button compact" type="button" disabled={busyId === item.id} onClick={() => void executeQuickAction(item)}>{busyId === item.id ? quickActionCopy(item)?.busy : quickActionCopy(item)?.label}</button>{item.secondaryAction ? <button className="secondary-button compact" type="button" disabled={busyId === item.id} onClick={() => void executeSecondaryAction(item)}>{busyId === item.id ? secondaryActionCopy(item)?.busy : secondaryActionCopy(item)?.label}</button> : null}</div> : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>}</td>
+                <td>{isActionCenterLeaveItem(item) ? (leaveControl ? <LeaveDecisionButtons
+                  requestId={leaveControl.requestId}
+                  allowedDecisions={leaveControl.allowedDecisions}
+                  attemptRegistry={leaveAttempts.current}
+                  disabled={loading || error !== null || busyId !== null}
+                /> : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>) : item.action ? <div className="workflow-row-actions"><button className="primary-button compact" type="button" disabled={busyId === item.id} onClick={() => void executeQuickAction(item)}>{busyId === item.id ? quickActionCopy(item)?.busy : quickActionCopy(item)?.label}</button>{item.secondaryAction ? <button className="secondary-button compact" type="button" disabled={busyId === item.id} onClick={() => void executeSecondaryAction(item)}>{busyId === item.id ? secondaryActionCopy(item)?.busy : secondaryActionCopy(item)?.label}</button> : null}</div> : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>}</td>
               </tr>;
             })}
           </tbody>

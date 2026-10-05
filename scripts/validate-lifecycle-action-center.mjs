@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
 async function source(path) { return readFile(path, "utf8"); }
 const failures = [];
@@ -57,8 +58,8 @@ expect(componentPath, component, /summary\.performance/, "Action Center must exp
 expect(componentPath, component, /summary\.learning/, "Action Center must expose learning attention count");
 expect(componentPath, component, /hrbp:lifecycle-actions-changed/, "Action Center must refresh when an owning domain commits a lifecycle mutation");
 expect(componentPath, component, /item\.action\.type === "complete-workflow"[\s\S]*\/api\/workflows\/instances\//, "workflow completion must keep using the governed workflow endpoint");
-expect(componentPath, component, /item\.action\.type === "approve-leave"[\s\S]*\/api\/leave\/requests\//, "leave quick approval must use the governed leave decision endpoint");
-expect(componentPath, component, /item\.secondaryAction\.type === "reject-leave"[\s\S]*decision:\s*"REJECTED"/, "leave quick rejection must use the governed leave decision endpoint");
+expect(componentPath, component, /actionCenterLeaveControl\(item\)[\s\S]*<LeaveDecisionButtons[\s\S]*allowedDecisions=\{leaveControl\.allowedDecisions\}/, "leave actions must use the shared control with only queue-provided decisions");
+expect(componentPath, component, /attemptRegistry=\{leaveAttempts\.current\}/, "leave decisions must retain their attempted-record registry across filters and refresh");
 expect(componentPath, component, /item\.action\.type === "approve-time"[\s\S]*\/api\/time\/entries\//, "time quick approval must use the governed time transition endpoint");
 expect(componentPath, component, /item\.secondaryAction\.type === "reject-time"[\s\S]*status:\s*"REJECTED"/, "time quick rejection must use the governed time transition endpoint");
 expect(componentPath, component, /item\.action\.type === "approve-compensation"[\s\S]*decision:\s*"APPROVE"/, "compensation quick approval must preserve the independent decision API");
@@ -134,4 +135,7 @@ if (failures.length) {
   console.error("Lifecycle action center validation failed:\n- " + failures.join("\n- "));
   process.exit(1);
 }
+// Execute the actual adapter, shared row and parent integration, not only source patterns.
+const behavior = spawnSync(process.execPath, ["--test", "scripts/action-center-leave.test.mjs"], { stdio: "inherit" });
+if (behavior.error || behavior.status !== 0) process.exit(1);
 console.log("Lifecycle action center validation passed.");

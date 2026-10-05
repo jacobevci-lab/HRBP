@@ -7,18 +7,26 @@ import { useLocale } from "@/components/locale-provider";
 import { acknowledgeLeaveNotification, submitLeaveAction, type LeaveActionResult } from "@/lib/leave-client-action";
 
 type Decision = "APPROVED" | "REJECTED";
+export type LeaveDecisionRegistry = Map<string, LeaveActionResult>;
+type Props = {
+  requestId: string;
+  allowedDecisions?: readonly Decision[];
+  attemptRegistry?: LeaveDecisionRegistry;
+  disabled?: boolean;
+};
 
-// A different record always owns a fresh lock; late replies cannot affect its controls.
-export function LeaveDecisionButtons({ requestId }: { requestId: string }) {
-  return <LeaveDecisionControl key={requestId} requestId={requestId}/>;
+// The optional page-owned registry survives filtered-row unmounts and queue refreshes.
+// It contains only attempted IDs/results in memory, not durable cross-tab idempotency.
+export function LeaveDecisionButtons(props: Props) {
+  return <LeaveDecisionControl key={props.requestId} {...props}/>;
 }
 
-function LeaveDecisionControl({ requestId }: { requestId: string }) {
+function LeaveDecisionControl({ requestId, allowedDecisions = ["APPROVED", "REJECTED"], attemptRegistry, disabled = false }: Props) {
   const router = useRouter();
   const { locale } = useLocale();
   const c = (en: string, tr: string) => locale === "tr" ? tr : en;
   const [busy, setBusy] = useState<Decision | null>(null);
-  const [result, setResult] = useState<LeaveActionResult | null>(null);
+  const [result, setResult] = useState<LeaveActionResult | null>(attemptRegistry?.get(requestId) ?? null);
   const [reloading, setReloading] = useState(false);
   const locked = useRef(false);
   const reloadLock = useRef(false);
@@ -31,7 +39,7 @@ function LeaveDecisionControl({ requestId }: { requestId: string }) {
   }, []);
 
   async function decide(decision: Decision) {
-    if (locked.current) return;
+    if (disabled || locked.current || attemptRegistry?.has(requestId) || !allowedDecisions.includes(decision)) return;
     // Lock before confirmation as well as before the first await.
     locked.current = true;
     if (!window.confirm(decision === "APPROVED"
@@ -40,6 +48,9 @@ function LeaveDecisionControl({ requestId }: { requestId: string }) {
       locked.current = false;
       return;
     }
+    // Seal before sending. If filtering removes this component mid-request, a new
+    // instance must show uncertainty instead of enabling the opposite decision.
+    attemptRegistry?.set(requestId, { outcome: "unknown" });
     setBusy(decision);
     controller.current = new AbortController();
     let outcome: LeaveActionResult;
@@ -47,6 +58,7 @@ function LeaveDecisionControl({ requestId }: { requestId: string }) {
       outcome = await submitLeaveAction({ kind: "decision", requestId, decision }, { signal: controller.current.signal });
     } catch { outcome = { outcome: "unknown" }; }
     if (!mounted.current) return;
+    attemptRegistry?.set(requestId, outcome);
     setBusy(null);
     setResult(outcome);
     // Every attempted decision seals this row until a fresh page read. In particular,
@@ -79,8 +91,8 @@ function LeaveDecisionControl({ requestId }: { requestId: string }) {
 
   return <div data-leave-decision-id={requestId} style={{ display: "grid", gap: 5, maxWidth: 260 }} aria-busy={busy !== null}>
     {!result ? <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-      <button type="button" className="secondary-button" data-decision="APPROVED" disabled={busy !== null} onClick={() => void decide("APPROVED")}><Check size={14}/>{busy === "APPROVED" ? c("Saving…", "Kaydediliyor…") : c("Approve", "Onayla")}</button>
-      <button type="button" className="secondary-button" data-decision="REJECTED" disabled={busy !== null} onClick={() => void decide("REJECTED")}><X size={14}/>{busy === "REJECTED" ? c("Saving…", "Kaydediliyor…") : c("Reject", "Reddet")}</button>
+      {allowedDecisions.includes("APPROVED") ? <button type="button" className="secondary-button" data-decision="APPROVED" disabled={disabled || busy !== null} onClick={() => void decide("APPROVED")}><Check size={14}/>{busy === "APPROVED" ? c("Saving…", "Kaydediliyor…") : c("Approve", "Onayla")}</button> : null}
+      {allowedDecisions.includes("REJECTED") ? <button type="button" className="secondary-button" data-decision="REJECTED" disabled={disabled || busy !== null} onClick={() => void decide("REJECTED")}><X size={14}/>{busy === "REJECTED" ? c("Saving…", "Kaydediliyor…") : c("Reject", "Reddet")}</button> : null}
     </div> : <>
       <small role={result.outcome === "saved" ? "status" : "alert"} data-leave-decision-result={result.outcome}>{message}</small>
       <small>{c("Reloading discards unsaved page input; no decision is replayed.", "Yenileme, sayfadaki kaydedilmemiş bilgileri siler; karar tekrar gönderilmez.")}</small>
