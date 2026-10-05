@@ -92,7 +92,10 @@ export async function submitLeaveAction(action: LeaveClientAction, options: {
   try {
     if (controller.signal.aborted) return { outcome: "unknown" };
     const response = await (options.fetchImpl ?? fetch)(action.kind === "create"
-      ? "/api/leave/requests" : `/api/leave/requests/${encodeURIComponent(action.requestId)}/${action.kind === "decision" ? "decision" : "self-cancel"}`, {
+      ? "/api/leave/requests"
+      : action.kind === "decision"
+        ? `/api/leave/requests/${encodeURIComponent(action.requestId)}/decision`
+        : `/api/leave/requests/${encodeURIComponent(action.requestId)}/self-cancel`, {
       method: "POST", credentials: "same-origin", redirect: "error", cache: "no-store",
       signal: controller.signal,
       headers: { Accept: "application/json", ...(action.kind !== "cancel" ? { "content-type": "application/json" } : {}) },
