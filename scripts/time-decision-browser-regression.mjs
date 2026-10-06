@@ -101,7 +101,7 @@ try{
     if(actionCenter){const r=await context.request.get(origin+"/api/action-center");assert.equal(r.status(),200);snapshot=await r.json();assert.ok(snapshot.data.items.some(item=>item.action?.entryId===f.record.id));}
     const handler=async route=>{const response=await route.fetch();assert.equal(response.status(),200);if(mode==="html-after-commit")await route.fulfill({status:200,contentType:"text/html",body:"<html>interrupted</html>"});else await route.abort("failed");};
     await context.route(origin+f.path,handler);page.once("dialog",d=>d.accept());await f.button("APPROVED").click();
-    if(actionCenter)await f.control.locator('[data-time-decision-result="unknown"]').waitFor();else await f.control.locator('[data-time-transition-result="unknown"]').waitFor();
+    if(actionCenter)await f.control.locator('[data-time-decision-result="unknown"]').waitFor();else await page.locator('[data-time-entry-id="'+f.record.id+'"][data-time-transition-result="unknown"]').waitFor();
     assert.equal(await f.button("APPROVED").count(),0);assert.equal(await f.button("REJECTED").count(),0);
     await eventually(async()=>{const row=await state(f);return row.status==="APPROVED"&&row.approvedById===actor.id;});
     assert.equal(await auditCount(f),1);assert.equal(await unread(f),true);assert.equal(patches.length,beforePatches);
