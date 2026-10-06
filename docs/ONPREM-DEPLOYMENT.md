@@ -118,7 +118,7 @@ The repository currently has no committed Prisma migration history; therefore `d
 
 - It is a single-host Compose profile, not a high-availability cluster.
 - TLS termination, enterprise secrets management, KMS/BYOK, centralized logging and external monitoring belong to the customer deployment architecture.
-- MinIO image variables are overrideable; regulated deployments should pin vendor-approved immutable tags/digests.
+- The bundled object-store defaults use pinned historical MinIO Community images from Quay because the old Docker Hub repositories are no longer a reliable fresh-install source. For a commercial customer deployment, review MinIO/AGPL support and redistribution obligations and override these images with the customer's approved/licensed S3-compatible distribution where required.
 - Scheduled maintenance endpoints/jobs still need an operations runbook or external scheduler appropriate to the target environment.
 - Backup RPO/RTO, retention, immutable/off-site copies and restore cadence must be agreed with each customer; the product rehearsal proves mechanics, not the customer's full disaster-recovery program.
 - Cloudflare remains a separate hosted deployment path; successful on-prem packaging does not imply the existing Cloudflare production build issue is resolved.
