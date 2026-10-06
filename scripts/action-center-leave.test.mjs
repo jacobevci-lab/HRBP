@@ -129,7 +129,9 @@ function centerHarness(rows, { loading = false, error = null, busy = null } = {}
     'next/link': { default: 'link' }, 'lucide-react': icons, 'react/jsx-runtime': { jsx, jsxs: jsx },
     '@/components/locale-provider': { useLocale: () => ({ locale: 'en' }) },
     '@/components/leave-decision-buttons': { LeaveDecisionButtons: 'LEAVE_CONTROL' },
+    '@/components/time-decision-buttons': { TimeDecisionButtons: 'TIME_CONTROL' },
     '@/lib/action-center-leave-control': adapter,
+    '@/lib/action-center-time-control': { actionCenterTimeControl: () => null, isActionCenterTimeItem: () => false },
     '@/lib/action-center-queue': load('lib/action-center-queue.ts'),
     react: {
       useState(value) { const i = si++; if (initial) values[i] = typeof value === 'function' ? value() : value; return [values[i], value => { values[i] = typeof value === 'function' ? value(values[i]) : value; }]; },

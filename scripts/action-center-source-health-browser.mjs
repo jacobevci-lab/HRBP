@@ -71,7 +71,7 @@ try {
         assert.ok((await center.locator('[data-queue-source-health]').innerText()).includes(locale === 'tr' ? 'İşe alım' : 'Recruiting'));
         assert.equal(await center.locator('.workflow-action-metrics strong').first().innerText(), '—');
         assert.equal(await center.locator('tbody tr[id]').count(), 1);
-        assert.equal(await center.locator('tbody .primary-button').isEnabled(), true);
+        assert.equal(await center.locator('tbody [data-time-decision="APPROVED"]').isEnabled(), true);
       });
       await check(`${locale}: empty partial source cannot claim there is no pending work`, async () => {
         mode = 'empty'; await refresh(); await ready();
@@ -95,7 +95,7 @@ try {
         mode = 'invalid'; await refresh();
         await page.waitForFunction(() => document.querySelector('.workflow-action-center')?.dataset.queueState === 'unavailable');
         assert.equal(await center.getAttribute('data-source-state'), 'unverified');
-        for (const button of await center.locator('tbody .workflow-row-actions button').all()) assert.equal(await button.isDisabled(), true);
+        for (const button of await center.locator('tbody [data-time-decision]').all()) assert.equal(await button.isDisabled(), true);
       });
       await check(`${locale}: explicit recovery clears warnings and preserves filters without domain replay`, async () => {
         mode = 'healthy'; await refresh(); await ready();
