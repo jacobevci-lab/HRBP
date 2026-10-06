@@ -54,7 +54,7 @@ jobs:
           mkdir -p /tmp/hrbp-prisma-baseline
           npx prisma migrate diff \
             --from-empty \
-            --to-schema ./prisma \
+            --to-schema-datamodel ./prisma \
             --script \
             --output /tmp/hrbp-prisma-baseline/migration.sql
           test -s /tmp/hrbp-prisma-baseline/migration.sql
