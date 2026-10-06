@@ -32,24 +32,10 @@ rm -rf "$BACKUP_ROOT"
 mkdir -p "$BACKUP_ROOT"
 
 printf 'Starting isolated recovery rehearsal stack %s...\n' "$COMPOSE_PROJECT_NAME" >&2
-"${COMPOSE[@]}" up -d postgres minio >/dev/null
+"${COMPOSE[@]}" up -d --wait postgres object-storage >/dev/null
 
-ready=0
-for _ in {1..60}; do
-  if "${COMPOSE[@]}" exec -T postgres sh -ec 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null' 2>/dev/null; then
-    ready=1
-    break
-  fi
-  sleep 1
-done
-[[ "$ready" -eq 1 ]] || { printf 'ERROR: rehearsal PostgreSQL did not become ready\n' >&2; exit 1; }
-
-"${COMPOSE[@]}" run --rm --no-deps -T --entrypoint /bin/sh minio-init -ec '
-  mc alias set hrbp http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
-  until mc ready hrbp >/dev/null 2>&1; do sleep 2; done
-  mc mb --ignore-existing "hrbp/$OBJECT_STORAGE_BUCKET" >/dev/null
-  mc anonymous set none "hrbp/$OBJECT_STORAGE_BUCKET" >/dev/null
-  printf original-object | mc pipe "hrbp/$OBJECT_STORAGE_BUCKET/recovery-probe.txt" >/dev/null
+"${COMPOSE[@]}" run --rm --no-deps -T --entrypoint /bin/sh object-storage-tool -ec '
+  printf original-object | rclone rcat "hrbp:$OBJECT_STORAGE_BUCKET/recovery-probe.txt"
 '
 
 "${COMPOSE[@]}" exec -T postgres sh -ec '
@@ -70,38 +56,37 @@ printf 'Mutating isolated data after backup...\n' >&2
     INSERT INTO should_disappear (id) VALUES (1);
   " >/dev/null
 '
-"${COMPOSE[@]}" run --rm --no-deps -T --entrypoint /bin/sh minio-init -ec '
-  mc alias set hrbp http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
-  printf mutated-object | mc pipe "hrbp/$OBJECT_STORAGE_BUCKET/recovery-probe.txt" >/dev/null
-  printf extra-object | mc pipe "hrbp/$OBJECT_STORAGE_BUCKET/recovery-extra.txt" >/dev/null
+"${COMPOSE[@]}" run --rm --no-deps -T --entrypoint /bin/sh object-storage-tool -ec '
+  printf mutated-object | rclone rcat "hrbp:$OBJECT_STORAGE_BUCKET/recovery-probe.txt"
+  printf extra-object | rclone rcat "hrbp:$OBJECT_STORAGE_BUCKET/recovery-extra.txt"
 '
 
 bash "$ROOT_DIR/scripts/onprem-restore.sh" "$BACKUP_DIR" --confirm-erase >/dev/null
 
-db_value="$("${COMPOSE[@]}" exec -T postgres sh -ec   'psql -Atq -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT value FROM recovery_probe WHERE id = 1;"' | tr -d '\r')"
+db_value="$("${COMPOSE[@]}" exec -T postgres sh -ec \
+  'psql -Atq -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT value FROM recovery_probe WHERE id = 1;"' | tr -d '\r')"
 [[ "$db_value" == "original-db" ]] || {
   printf 'ERROR: database restore mismatch: %s\n' "$db_value" >&2
   exit 1
 }
 
-extra_table="$("${COMPOSE[@]}" exec -T postgres sh -ec   'psql -Atq -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT to_regclass('''public.should_disappear''') IS NULL;"' | tr -d '\r')"
+extra_table="$("${COMPOSE[@]}" exec -T postgres sh -ec \
+  'psql -Atq -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT to_regclass('''public.should_disappear''') IS NULL;"' | tr -d '\r')"
 [[ "$extra_table" == "t" ]] || {
   printf 'ERROR: restore did not remove post-backup database objects\n' >&2
   exit 1
 }
 
-object_value="$("${COMPOSE[@]}" run --rm --no-deps -T --entrypoint /bin/sh minio-init -ec '
-  mc alias set hrbp http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
-  mc cat "hrbp/$OBJECT_STORAGE_BUCKET/recovery-probe.txt"
+object_value="$("${COMPOSE[@]}" run --rm --no-deps -T --entrypoint /bin/sh object-storage-tool -ec '
+  rclone cat "hrbp:$OBJECT_STORAGE_BUCKET/recovery-probe.txt"
 ' 2>/dev/null)"
 [[ "$object_value" == "original-object" ]] || {
   printf 'ERROR: object restore mismatch: %s\n' "$object_value" >&2
   exit 1
 }
 
-if "${COMPOSE[@]}" run --rm --no-deps -T --entrypoint /bin/sh minio-init -ec '
-  mc alias set hrbp http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
-  mc stat "hrbp/$OBJECT_STORAGE_BUCKET/recovery-extra.txt" >/dev/null
+if "${COMPOSE[@]}" run --rm --no-deps -T --entrypoint /bin/sh object-storage-tool -ec '
+  rclone lsf "hrbp:$OBJECT_STORAGE_BUCKET/recovery-extra.txt" | grep -q .
 ' >/dev/null 2>&1; then
   printf 'ERROR: restore did not remove post-backup object\n' >&2
   exit 1
