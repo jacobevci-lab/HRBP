@@ -60,6 +60,14 @@ jobs:
           docker build --target runtime --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:onprem-ci .
           docker image inspect hrbp-one:onprem-ci --format '{{json .Config.Healthcheck}}' | grep -q '/api/health/runtime'
           test "$(docker image inspect hrbp-one:onprem-ci --format '{{.Config.User}}')" = "node"
+      - name: Rehearse on-prem backup and restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/onprem-backup.sh
+          bash -n scripts/onprem-restore.sh
+          bash -n scripts/onprem-recovery-rehearsal.sh
+          npm run onprem:recovery:rehearsal
       - name: Seed notification maintenance smoke records
         shell: bash
         run: |
