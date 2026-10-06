@@ -56,16 +56,16 @@ export function TimeEntryTransitionButtons({ entryId, targets }: { entryId: stri
     }
   }
 
-  if (uncertain) return <div style={{ display: "grid", gap: 5, minWidth: 180 }}>
+  if (uncertain) return <div data-time-entry-id={entryId} data-time-transition-result="unknown" style={{ display: "grid", gap: 5, minWidth: 180 }}>
     <small style={{ color: "#b42318", maxWidth: 260 }}>{error}</small>
     <button className="secondary-button" type="button" onClick={() => window.location.reload()}>
       {locale === "tr" ? "Yenile ve kaydı kontrol et" : "Reload and check the entry"}
     </button>
   </div>;
 
-  return <div style={{ display: "grid", gap: 5, minWidth: 112 }}>
+  return <div data-time-entry-id={entryId} style={{ display: "grid", gap: 5, minWidth: 112 }}>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-      {targets.map((status) => <button key={status} className="secondary-button" disabled={Boolean(busy)} onClick={() => void transition(status)}>{busy === status ? (locale === "tr" ? "Kaydediliyor…" : "Saving…") : label(status, locale)} <Icon status={status}/></button>)}
+      {targets.map((status) => <button key={status} className="secondary-button" data-time-transition={status} disabled={Boolean(busy)} onClick={() => void transition(status)}>{busy === status ? (locale === "tr" ? "Kaydediliyor…" : "Saving…") : label(status, locale)} <Icon status={status}/></button>)}
     </div>
     {error ? <small style={{ color: "#b42318", maxWidth: 260 }}>{error}</small> : null}
   </div>;

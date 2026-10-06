@@ -84,6 +84,8 @@ jobs:
           node scripts/platform-auth-browser-audit.mjs || { tail -70 .audit/server.log; exit 1; }
           node scripts/action-center-queue-browser.mjs
           node scripts/action-center-source-health-browser.mjs
+          node scripts/time-decision-browser-regression.mjs
+          HRBP_TIME_DECISION_SURFACE=action-center node scripts/time-decision-browser-regression.mjs
           node scripts/leave-decision-browser-regression.mjs
           HRBP_LEAVE_DECISION_SURFACE=action-center node scripts/leave-decision-browser-regression.mjs
           node scripts/leave-api-regression.mjs
