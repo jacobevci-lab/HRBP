@@ -38,24 +38,20 @@ printf 'Starting isolated recovery rehearsal stack %s...\n' "$COMPOSE_PROJECT_NA
   printf original-object | rclone rcat "hrbp:$OBJECT_STORAGE_BUCKET/recovery-probe.txt"
 '
 
-"${COMPOSE[@]}" exec -T postgres sh -ec '
-  psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
-    CREATE TABLE recovery_probe (id integer PRIMARY KEY, value text NOT NULL);
-    INSERT INTO recovery_probe (id, value) VALUES (1, '''original-db''');
-  " >/dev/null
-'
+"${COMPOSE[@]}" exec -T postgres sh -ec 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null <<'SQL'
+CREATE TABLE recovery_probe (id integer PRIMARY KEY, value text NOT NULL);
+INSERT INTO recovery_probe (id, value) VALUES (1, 'original-db');
+SQL
 
 BACKUP_DIR="$(bash "$ROOT_DIR/scripts/onprem-backup.sh" "$BACKUP_ROOT" | tail -n 1)"
 [[ -d "$BACKUP_DIR" ]] || { printf 'ERROR: backup was not created\n' >&2; exit 1; }
 
 printf 'Mutating isolated data after backup...\n' >&2
-"${COMPOSE[@]}" exec -T postgres sh -ec '
-  psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
-    UPDATE recovery_probe SET value = '''mutated-db''' WHERE id = 1;
-    CREATE TABLE should_disappear (id integer PRIMARY KEY);
-    INSERT INTO should_disappear (id) VALUES (1);
-  " >/dev/null
-'
+"${COMPOSE[@]}" exec -T postgres sh -ec 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' >/dev/null <<'SQL'
+UPDATE recovery_probe SET value = 'mutated-db' WHERE id = 1;
+CREATE TABLE should_disappear (id integer PRIMARY KEY);
+INSERT INTO should_disappear (id) VALUES (1);
+SQL
 "${COMPOSE[@]}" run --rm --no-deps -T --entrypoint /bin/sh object-storage-tool -ec '
   printf mutated-object | rclone rcat "hrbp:$OBJECT_STORAGE_BUCKET/recovery-probe.txt"
   printf extra-object | rclone rcat "hrbp:$OBJECT_STORAGE_BUCKET/recovery-extra.txt"
@@ -63,15 +59,21 @@ printf 'Mutating isolated data after backup...\n' >&2
 
 bash "$ROOT_DIR/scripts/onprem-restore.sh" "$BACKUP_DIR" --confirm-erase >/dev/null
 
-db_value="$("${COMPOSE[@]}" exec -T postgres sh -ec \
-  'psql -Atq -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT value FROM recovery_probe WHERE id = 1;"' | tr -d '\r')"
+db_value="$(
+  "${COMPOSE[@]}" exec -T postgres sh -ec 'psql -Atq -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' | tr -d '\r\n'
+SELECT value FROM recovery_probe WHERE id = 1;
+SQL
+)"
 [[ "$db_value" == "original-db" ]] || {
   printf 'ERROR: database restore mismatch: %s\n' "$db_value" >&2
   exit 1
 }
 
-extra_table="$("${COMPOSE[@]}" exec -T postgres sh -ec \
-  'psql -Atq -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT to_regclass('''public.should_disappear''') IS NULL;"' | tr -d '\r')"
+extra_table="$(
+  "${COMPOSE[@]}" exec -T postgres sh -ec 'psql -Atq -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL' | tr -d '\r\n'
+SELECT to_regclass('public.should_disappear') IS NULL;
+SQL
+)"
 [[ "$extra_table" == "t" ]] || {
   printf 'ERROR: restore did not remove post-backup database objects\n' >&2
   exit 1
