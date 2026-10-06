@@ -39,11 +39,19 @@ services:
         mc alias set hrbp http://minio:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
         until mc ready hrbp >/dev/null 2>&1; do sleep 2; done
         mc mb --ignore-existing "hrbp/${OBJECT_STORAGE_BUCKET}"
-        mc anonymous set none "hrbp/$${OBJECT_STORAGE_BUCKET}"
+        mc anonymous set none "hrbp/${OBJECT_STORAGE_BUCKET}"
+        cat > /tmp/hrbp-app-policy.json <<EOF
+        {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject","s3:PutObject"],"Resource":["arn:aws:s3:::${OBJECT_STORAGE_BUCKET}/*"]}]}
+        EOF
+        mc admin policy create hrbp hrbp-app /tmp/hrbp-app-policy.json
+        mc admin user add hrbp "${OBJECT_STORAGE_ACCESS_KEY}" "${OBJECT_STORAGE_SECRET_KEY}"
+        mc admin policy attach hrbp hrbp-app --user "${OBJECT_STORAGE_ACCESS_KEY}"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env.onprem}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env.onprem}
       OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-hrbp-private}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?set OBJECT_STORAGE_ACCESS_KEY in .env.onprem}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?set OBJECT_STORAGE_SECRET_KEY in .env.onprem}
     restart: "no"
     networks: [hrbp_internal]
 
@@ -81,8 +89,8 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-hrbp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hrbp}
       OBJECT_STORAGE_ENDPOINT: http://minio:9000
-      OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
-      OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?set OBJECT_STORAGE_ACCESS_KEY in .env.onprem}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?set OBJECT_STORAGE_SECRET_KEY in .env.onprem}
       OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-hrbp-private}
       APP_URL: ${APP_URL:?set APP_URL in .env.onprem}
       HRBP_ALLOW_INSECURE_CONTEXT_HEADERS: "false"
