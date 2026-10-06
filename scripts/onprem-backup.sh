@@ -35,17 +35,21 @@ COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 printf 'Backing up PostgreSQL...\n' >&2
 "${COMPOSE[@]}" exec -T postgres sh -ec 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null'
-"${COMPOSE[@]}" exec -T postgres sh -ec   'exec pg_dump --format=custom --compress=6 --no-owner --no-acl -U "$POSTGRES_USER" -d "$POSTGRES_DB"'   > "$TARGET/postgres.dump"
+"${COMPOSE[@]}" exec -T postgres sh -ec \
+  'exec pg_dump --format=custom --compress=6 --no-owner --no-acl -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  > "$TARGET/postgres.dump"
 
-printf 'Backing up private object storage...\n' >&2
-"${COMPOSE[@]}" run --rm --no-deps -T   -v "$TARGET/objects:/backup"   --entrypoint /bin/sh minio-init -ec '
-    mc alias set hrbp http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
-    until mc ready hrbp >/dev/null 2>&1; do sleep 2; done
-    mc mirror --overwrite "hrbp/$OBJECT_STORAGE_BUCKET" /backup
+printf 'Backing up private S3-compatible object storage...\n' >&2
+"${COMPOSE[@]}" run --rm --no-deps -T \
+  -v "$TARGET/objects:/backup" \
+  --entrypoint /bin/sh object-storage-tool -ec '
+    exec rclone sync "hrbp:$OBJECT_STORAGE_BUCKET" /backup --create-empty-src-dirs
   '
 
 printf 'Capturing release metadata...\n' >&2
-if "${COMPOSE[@]}" exec -T app node -e   "fetch('http://127.0.0.1:3000/api/health/runtime').then(async r=>{const t=await r.text();if(!r.ok)process.exit(2);process.stdout.write(t)}).catch(()=>process.exit(3))"   > "$TARGET/runtime-health.json" 2>/dev/null; then
+if "${COMPOSE[@]}" exec -T app node -e \
+  "fetch('http://127.0.0.1:3000/api/health/runtime').then(async r=>{const t=await r.text();if(!r.ok)process.exit(2);process.stdout.write(t)}).catch(()=>process.exit(3))" \
+  > "$TARGET/runtime-health.json" 2>/dev/null; then
   :
 else
   printf '{"available":false,"reason":"application-not-running-or-unhealthy"}\n' > "$TARGET/runtime-health.json"
@@ -60,7 +64,7 @@ cat > "$TARGET/manifest.json" <<EOF
   "formatVersion": 1,
   "createdAtUtc": "$STAMP",
   "databaseFormat": "postgres-custom",
-  "objectFormat": "minio-mirror",
+  "objectFormat": "s3-rclone-mirror",
   "restorePolicy": "verify-checksums-and-explicit-erase-confirmation"
 }
 EOF
