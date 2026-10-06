@@ -1,17 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
 import { ArrowRight, Check, LockKeyhole, RotateCcw, X } from "lucide-react";
+import { useLocale } from "@/components/locale-provider";
+import { acknowledgeTimeNotification, submitTimeAction, timeActionMessage, type TimeStatus } from "@/lib/time-client-action";
 
-type TimeStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "LOCKED";
-
-function label(status: TimeStatus) {
-  if (status === "SUBMITTED") return "Submit";
-  if (status === "APPROVED") return "Approve";
-  if (status === "REJECTED") return "Reject";
-  if (status === "LOCKED") return "Lock";
-  return "Return to draft";
+function label(status: TimeStatus, locale: "en" | "tr") {
+  const tr = locale === "tr";
+  if (status === "SUBMITTED") return tr ? "Gönder" : "Submit";
+  if (status === "APPROVED") return tr ? "Onayla" : "Approve";
+  if (status === "REJECTED") return tr ? "Reddet" : "Reject";
+  if (status === "LOCKED") return tr ? "Bordroya kilitle" : "Lock";
+  return tr ? "Taslağa döndür" : "Return to draft";
 }
 
 function Icon({ status }: { status: TimeStatus }) {
@@ -22,50 +22,51 @@ function Icon({ status }: { status: TimeStatus }) {
   return <ArrowRight size={13}/>;
 }
 
-async function acknowledgeTimeNotification(entryId: string) {
-  try {
-    const response = await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ resourceType: "TimeEntry", resourceId: entryId, read: true })
-    });
-    if (response.ok) window.dispatchEvent(new Event("hrbp:notifications-changed"));
-  } catch {
-    // Badge cleanup is best-effort and cannot invalidate a completed transition.
-  }
-}
-
 export function TimeEntryTransitionButtons({ entryId, targets }: { entryId: string; targets: TimeStatus[] }) {
-  const router = useRouter();
+  const { locale } = useLocale();
+  const busyRef = useRef(false);
   const [busy, setBusy] = useState<TimeStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [uncertain, setUncertain] = useState(false);
   if (!targets.length) return <span style={{ color: "var(--muted)" }}>—</span>;
 
   async function transition(status: TimeStatus) {
+    if (busyRef.current || uncertain) return;
+    const confirmed = window.confirm(locale === "tr"
+      ? `Bu zaman kaydını “${label(status, locale)}” durumuna geçirmek istiyor musunuz?`
+      : `Move this time entry to “${label(status, locale)}”?`);
+    if (!confirmed || busyRef.current) return;
+    busyRef.current = true;
     setBusy(status);
     setError(null);
     try {
-      const response = await fetch(`/api/time/entries/${entryId}/transition`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status })
-      });
-      const payload = await response.json().catch(() => null) as { error?: string } | null;
-      if (!response.ok) throw new Error(payload?.error || "Time-entry transition failed.");
-      if (status === "APPROVED" || status === "REJECTED") await acknowledgeTimeNotification(entryId);
-      window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
-      router.refresh();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Time-entry transition failed.");
+      const result = await submitTimeAction({ kind: "transition", entryId, status });
+      if (result.outcome === "saved") {
+        if (status === "APPROVED" || status === "REJECTED") await acknowledgeTimeNotification(entryId);
+        window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
+        window.dispatchEvent(new Event("hrbp:notifications-changed"));
+        window.location.reload();
+        return;
+      }
+      setError(timeActionMessage(result, locale));
+      if (result.outcome === "unknown") setUncertain(true);
     } finally {
+      busyRef.current = false;
       setBusy(null);
     }
   }
 
+  if (uncertain) return <div style={{ display: "grid", gap: 5, minWidth: 180 }}>
+    <small style={{ color: "#b42318", maxWidth: 260 }}>{error}</small>
+    <button className="secondary-button" type="button" onClick={() => window.location.reload()}>
+      {locale === "tr" ? "Yenile ve kaydı kontrol et" : "Reload and check the entry"}
+    </button>
+  </div>;
+
   return <div style={{ display: "grid", gap: 5, minWidth: 112 }}>
     <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-      {targets.map((status) => <button key={status} className="secondary-button" disabled={Boolean(busy)} onClick={() => transition(status)}>{busy === status ? "Saving…" : label(status)} <Icon status={status}/></button>)}
+      {targets.map((status) => <button key={status} className="secondary-button" disabled={Boolean(busy)} onClick={() => void transition(status)}>{busy === status ? (locale === "tr" ? "Kaydediliyor…" : "Saving…") : label(status, locale)} <Icon status={status}/></button>)}
     </div>
-    {error ? <small style={{ color: "#b42318", maxWidth: 220 }}>{error}</small> : null}
+    {error ? <small style={{ color: "#b42318", maxWidth: 260 }}>{error}</small> : null}
   </div>;
 }
