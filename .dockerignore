@@ -1,0 +1,14 @@
+.git
+node_modules
+.next
+.open-next
+.wrangler
+.prisma-worker
+.audit
+coverage
+*.log
+.env
+.env.local
+.env.*
+!.env.example
+!.env.onprem.example
