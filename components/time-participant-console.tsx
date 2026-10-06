@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, CheckCircle2, CircleAlert, Clock3, Send, ShieldCheck, TimerReset } from "lucide-react";
 import { useLocale } from "@/components/locale-provider";
 import type { TimeParticipantData } from "@/lib/time-participant-data";
+import { submitTimeAction, timeActionMessage, type TimeClientAction } from "@/lib/time-client-action";
 
 function dateOnly(value: string) { return value.slice(0, 10); }
 function timeOnly(value: string | null) {
@@ -27,28 +28,29 @@ export function TimeParticipantConsole({ employmentId, data }: { employmentId: s
   const router = useRouter();
   const { locale } = useLocale();
   const c = (en: string, tr: string) => locale === "tr" ? tr : en;
+  const pendingRef = useRef(false);
   const [pending, setPending] = useState<string | null>(null);
+  const [uncertain, setUncertain] = useState(false);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
-  async function mutate(key: string, url: string, payload: Record<string, unknown>) {
+  async function mutate(key: string, action: TimeClientAction) {
+    if (pendingRef.current || uncertain) return false;
+    pendingRef.current = true;
     setPending(key);
     setNotice(null);
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      const body = await response.json().catch(() => ({})) as { error?: string };
-      if (!response.ok) throw new Error(body.error || c(`Request failed (${response.status})`, `İstek başarısız (${response.status})`));
-      setNotice({ tone: "ok", text: c("Time action saved and audit evidence written.", "Zaman işlemi kaydedildi ve denetim kanıtı yazıldı.") });
-      router.refresh();
-      return true;
-    } catch (error) {
-      setNotice({ tone: "error", text: error instanceof Error ? error.message : c("Time action failed.", "Zaman işlemi başarısız.") });
+      const result = await submitTimeAction(action);
+      if (result.outcome === "saved") {
+        setNotice({ tone: "ok", text: timeActionMessage(result, locale) });
+        window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
+        router.refresh();
+        return true;
+      }
+      setNotice({ tone: "error", text: timeActionMessage(result, locale) });
+      if (result.outcome === "unknown") setUncertain(true);
       return false;
     } finally {
+      pendingRef.current = false;
       setPending(null);
     }
   }
@@ -59,7 +61,7 @@ export function TimeParticipantConsole({ employmentId, data }: { employmentId: s
       <div className="performance-console-health"><ShieldCheck size={16}/><span>{c("Identity-bound self-service", "Kimliğe bağlı self-servis")}</span></div>
     </div>
 
-    {notice ? <div className={`performance-notice ${notice.tone}`}><span>{notice.tone === "ok" ? <CheckCircle2 size={15}/> : <CircleAlert size={15}/>}</span>{notice.text}</div> : null}
+    {notice ? <div className={`performance-notice ${notice.tone}`}><span>{notice.tone === "ok" ? <CheckCircle2 size={15}/> : <CircleAlert size={15}/>}</span><span>{notice.text}</span>{uncertain ? <button className="secondary-button" type="button" onClick={() => window.location.reload()}>{c("Reload and check records", "Yenile ve kayıtları kontrol et")}</button> : null}</div> : null}
     {!data.schedule ? <div className="performance-notice error"><CircleAlert size={15}/><span>{c("No effective work schedule is assigned. You can save a draft, but submission is blocked until Time Administration assigns an active schedule.", "Etkin çalışma planı atanmamış. Taslak kaydedebilirsiniz ancak Time Administration aktif bir plan atayana kadar gönderim engellenir.")}</span></div> : null}
 
     <div className="performance-create-grid">
@@ -69,20 +71,20 @@ export function TimeParticipantConsole({ employmentId, data }: { employmentId: s
         const values = new FormData(form);
         const startAt = iso(values.get("startAt"));
         const endAt = iso(values.get("endAt"));
-        void mutate("new-entry", "/api/time/entries", {
+        void mutate("new-entry", { kind: "create", input: {
           employmentId,
-          workDate: values.get("workDate"),
+          workDate: String(values.get("workDate") || ""),
           startAt,
           endAt,
-          minutes: values.get("minutes"),
-          overtimeMinutes: values.get("overtimeMinutes") || 0
-        }).then((ok) => { if (ok) form.reset(); });
+          minutes: String(values.get("minutes") || ""),
+          overtimeMinutes: String(values.get("overtimeMinutes") || "0")
+        } }).then((ok) => { if (ok) form.reset(); });
       }}>
         <div className="performance-form-title"><CalendarClock size={17}/><div><strong>{c("New time draft", "Yeni zaman taslağı")}</strong><small>{c("Intervals, overlap and overtime integrity are enforced server-side", "Aralık, çakışma ve fazla mesai bütünlüğü sunucu tarafında zorunlu")}</small></div></div>
         <label>{c("Work date", "Çalışma tarihi")}<input name="workDate" type="date" required/></label>
         <div className="performance-form-row"><label>{c("Start", "Başlangıç")}<input name="startAt" type="datetime-local"/></label><label>{c("End", "Bitiş")}<input name="endAt" type="datetime-local"/></label></div>
         <div className="performance-form-row"><label>{c("Worked minutes", "Çalışılan dakika")}<input name="minutes" type="number" min="1" max="1440" step="1" required/></label><label>{c("Overtime minutes", "Fazla mesai dakikası")}<input name="overtimeMinutes" type="number" min="0" max="1440" step="1" defaultValue="0"/></label></div>
-        <button className="create-button" disabled={pending !== null}>{pending === "new-entry" ? c("Saving…", "Kaydediliyor…") : c("Save governed draft", "Yönetişimli taslağı kaydet")}</button>
+        <button className="create-button" disabled={pending !== null || uncertain}>{pending === "new-entry" ? c("Saving…", "Kaydediliyor…") : c("Save governed draft", "Yönetişimli taslağı kaydet")}</button>
       </form>
 
       <div className="performance-form">
@@ -97,7 +99,7 @@ export function TimeParticipantConsole({ employmentId, data }: { employmentId: s
 
     <div className="performance-ops-panel goal-operations">
       <div className="performance-panel-title"><TimerReset size={16}/><div><strong>{c("My recent time entries", "Son zaman kayıtlarım")}</strong><small>{data.entries.length} {c("records", "kayıt")}</small></div></div>
-      <div className="growth-lifecycle-list">{data.entries.length ? data.entries.map((row) => <article className="growth-lifecycle-row" key={row.id}><div className="growth-lifecycle-copy"><strong>{dateOnly(row.workDate)} · {hours(row.minutes)}</strong><small>{timeOnly(row.startAt)} → {timeOnly(row.endAt)} · OT {hours(row.overtimeMinutes)} · {row.source}</small></div><em className={`growth-pill ${row.status.toLowerCase()}`}>{statusLabel(row.status, locale)}</em><div className="growth-lifecycle-actions">{["DRAFT", "REJECTED"].includes(row.status) ? <button className="secondary-button" type="button" disabled={pending !== null || !data.schedule} onClick={() => void mutate(`submit-${row.id}`, `/api/time/entries/${row.id}/transition`, { status: "SUBMITTED" })}>{pending === `submit-${row.id}` ? "…" : <><Send size={13}/> {c("Submit", "Gönder")}</>}</button> : null}</div></article>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No recent time entries.", "Yakın tarihli zaman kaydı yok.")}</span></div>}</div>
+      <div className="growth-lifecycle-list">{data.entries.length ? data.entries.map((row) => <article className="growth-lifecycle-row" key={row.id}><div className="growth-lifecycle-copy"><strong>{dateOnly(row.workDate)} · {hours(row.minutes)}</strong><small>{timeOnly(row.startAt)} → {timeOnly(row.endAt)} · OT {hours(row.overtimeMinutes)} · {row.source}</small></div><em className={`growth-pill ${row.status.toLowerCase()}`}>{statusLabel(row.status, locale)}</em><div className="growth-lifecycle-actions">{["DRAFT", "REJECTED"].includes(row.status) ? <button className="secondary-button" type="button" disabled={pending !== null || uncertain || !data.schedule} onClick={() => void mutate(`submit-${row.id}`, { kind: "transition", entryId: row.id, status: "SUBMITTED" })}>{pending === `submit-${row.id}` ? "…" : <><Send size={13}/> {c("Submit", "Gönder")}</>}</button> : null}</div></article>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No recent time entries.", "Yakın tarihli zaman kaydı yok.")}</span></div>}</div>
     </div>
   </section>;
 }

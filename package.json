@@ -23,7 +23,7 @@
     "connected-growth:validate": "node scripts/validate-connected-growth.mjs",
     "development-plan:validate": "node scripts/validate-development-plans.mjs",
     "leave:validate": "node scripts/validate-leave-governance.mjs",
-    "time:validate": "node scripts/validate-time-governance.mjs",
+    "time:validate": "node scripts/validate-time-governance.mjs && node --test scripts/time-client-action.test.mjs",
     "compensation:validate": "node scripts/validate-compensation-governance.mjs",
     "payroll:validate": "node scripts/validate-payroll-governance.mjs",
     "recruiting-access:validate": "node scripts/validate-recruiting-access.mjs",
