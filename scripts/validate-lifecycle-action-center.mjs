@@ -64,8 +64,9 @@ expect(componentPath, component, /hrbp:lifecycle-actions-changed/, "Action Cente
 expect(componentPath, component, /item\.action\.type === "complete-workflow"[\s\S]*\/api\/workflows\/instances\//, "workflow completion must keep using the governed workflow endpoint");
 expect(componentPath, component, /actionCenterLeaveControl\(item\)[\s\S]*<LeaveDecisionButtons[\s\S]*allowedDecisions=\{leaveControl\.allowedDecisions\}/, "leave actions must use the shared control with only queue-provided decisions");
 expect(componentPath, component, /attemptRegistry=\{leaveAttempts\.current\}/, "leave decisions must retain their attempted-record registry across filters and refresh");
-expect(componentPath, component, /item\.action\.type === "approve-time"[\s\S]*\/api\/time\/entries\//, "time quick approval must use the governed time transition endpoint");
-expect(componentPath, component, /item\.secondaryAction\.type === "reject-time"[\s\S]*status:\s*"REJECTED"/, "time quick rejection must use the governed time transition endpoint");
+expect(componentPath, component, /actionCenterTimeControl\(item\)[\s\S]*<TimeDecisionButtons[\s\S]*allowedDecisions=\{timeControl\.allowedDecisions\}/, "time decisions must use the receipt-safe shared control with queue-provided decisions");
+expect(componentPath, component, /attemptRegistry=\{timeAttempts\.current\}/, "time decisions must retain attempted-record state across filters and refresh");
+reject(componentPath, component, /\/api\/time\/entries\//, "Action Center generic handlers must not bypass the checked time decision control");
 expect(componentPath, component, /item\.action\.type === "approve-compensation"[\s\S]*decision:\s*"APPROVE"/, "compensation quick approval must preserve the independent decision API");
 expect(componentPath, component, /item\.secondaryAction\.type === "reject-compensation"[\s\S]*decision:\s*"REJECT"/, "compensation rejection must preserve the independent decision API");
 expect(componentPath, component, /item\.action\.type === "apply-compensation"[\s\S]*decision:\s*"APPLY"/, "compensation apply must use the governed application path");
@@ -140,6 +141,6 @@ if (failures.length) {
   process.exit(1);
 }
 // Execute the actual adapter, shared row and parent integration, not only source patterns.
-const behavior = spawnSync(process.execPath, ["--test", "scripts/action-center-leave.test.mjs", "scripts/action-center-queue.test.mjs"], { stdio: "inherit" });
+const behavior = spawnSync(process.execPath, ["--test", "scripts/action-center-leave.test.mjs", "scripts/action-center-time.test.mjs", "scripts/action-center-queue.test.mjs"], { stdio: "inherit" });
 if (behavior.error || behavior.status !== 0) process.exit(1);
 console.log("Lifecycle action center validation passed.");

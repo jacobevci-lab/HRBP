@@ -103,6 +103,14 @@ function harness(fetchImpl, locale = 'en') {
     'next/link': { default: 'link' }, 'lucide-react': icons, 'react/jsx-runtime': { jsx, jsxs: jsx },
     '@/components/locale-provider': { useLocale: () => ({ locale }) },
     '@/components/leave-decision-buttons': { LeaveDecisionButtons: 'LEAVE_CONTROL' },
+    '@/components/time-decision-buttons': { TimeDecisionButtons: 'TIME_CONTROL' },
+    '@/lib/action-center-time-control': {
+      actionCenterTimeControl: (item) => item?.kind === 'time-attendance' ? {
+        entryId: item.action?.entryId ?? item.secondaryAction?.entryId,
+        allowedDecisions: [item.action?.type === 'approve-time' ? 'APPROVED' : null, item.secondaryAction?.type === 'reject-time' ? 'REJECTED' : null].filter(Boolean)
+      } : null,
+      isActionCenterTimeItem: (item) => item?.kind === 'time-attendance' || item?.action?.type === 'approve-time' || item?.secondaryAction?.type === 'reject-time'
+    },
     '@/lib/action-center-leave-control': { actionCenterLeaveControl: () => null, isActionCenterLeaveItem: () => false },
     '@/lib/action-center-queue': { ...queue, createActionQueueLoader: () => queue.createActionQueueLoader({ fetchImpl }) },
     react: {
@@ -120,11 +128,11 @@ for (const locale of ['en','tr']) test(`${locale}: unavailable queue retains row
   let calls = 0, writes = 0;
   const h = harness(async (_url, init) => { if (init.method !== 'GET') { writes++; throw new Error(); } return ++calls === 2 ? Response.json({ error: 'raw-private' }, { status: 503 }) : Response.json(envelope()); }, locale);
   await h.flush(); assert.equal(h.nodes()[0].props['data-queue-state'], 'ready');
-  const retainedClick = h.nodes().find(n => n.props.className === 'primary-button compact').props.onClick;
-  h.values[3] = 'QA'; h.values[4] = true; h.refresh(); retainedClick(); await h.flush();
+  assert.equal(h.nodes().find(n => n.type === 'TIME_CONTROL').props.disabled, false);
+  h.values[3] = 'QA'; h.values[4] = true; h.refresh(); await h.flush();
   assert.equal(writes, 0); assert.equal(h.nodes()[0].props['data-queue-state'], 'unavailable');
   assert.ok(h.nodes().some(n => n.type === 'tr' && n.props.id === 'action-item-time:qa1'));
-  assert.ok(h.nodes().filter(n => /^(primary|secondary)-button compact$/.test(n.props.className || '') && n.props.onClick && n.props.disabled).length >= 2);
+  assert.equal(h.nodes().find(n => n.type === 'TIME_CONTROL').props.disabled, true);
   assert.ok(!JSON.stringify(h.nodes()).includes('raw-private')); h.refresh(); await h.flush();
   assert.equal(h.values[3], 'QA'); assert.equal(h.values[4], true); assert.equal(h.nodes()[0].props['data-queue-state'], 'ready'); h.unmount();
 });

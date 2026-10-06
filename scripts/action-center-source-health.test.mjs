@@ -83,6 +83,14 @@ function harness(fetchImpl, locale = 'en') {
     'next/link': { default: 'link' }, 'lucide-react': icons, 'react/jsx-runtime': { jsx, jsxs: jsx },
     '@/components/locale-provider': { useLocale: () => ({ locale }) },
     '@/components/leave-decision-buttons': { LeaveDecisionButtons: 'LEAVE_CONTROL' },
+    '@/components/time-decision-buttons': { TimeDecisionButtons: 'TIME_CONTROL' },
+    '@/lib/action-center-time-control': {
+      actionCenterTimeControl: (item) => item?.kind === 'time-attendance' ? {
+        entryId: item.action?.entryId ?? item.secondaryAction?.entryId,
+        allowedDecisions: [item.action?.type === 'approve-time' ? 'APPROVED' : null, item.secondaryAction?.type === 'reject-time' ? 'REJECTED' : null].filter(Boolean)
+      } : null,
+      isActionCenterTimeItem: (item) => item?.kind === 'time-attendance' || item?.action?.type === 'approve-time' || item?.secondaryAction?.type === 'reject-time'
+    },
     '@/lib/action-center-leave-control': { actionCenterLeaveControl: () => null, isActionCenterLeaveItem: () => false },
     '@/lib/action-center-queue': { ...queue, createActionQueueLoader: () => queue.createActionQueueLoader({ fetchImpl }) },
     react: {
@@ -105,7 +113,7 @@ for (const locale of ['en','tr']) {
     assert.ok(JSON.stringify(banner).includes(queue.actionQueueSourceLabels.recruitingDegraded[locale]));
     const metrics = h.nodes().find(n => n.props.className === 'workflow-action-metrics');
     assert.ok(descend(metrics).filter(n => n.type === 'strong').every(n => n.props.children === '—'));
-    assert.equal(h.nodes().find(n => n.props.className === 'primary-button compact').props.disabled, false);
+    assert.equal(h.nodes().find(n => n.type === 'TIME_CONTROL').props.disabled, false);
     h.unmount();
   });
   for (const flags of [{ ...healthy(), engagementDegraded: true }, {}]) test(`${locale}: incomplete empty view never claims no pending work (${Object.keys(flags).length} flags)`, async () => {
