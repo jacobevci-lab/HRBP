@@ -157,7 +157,9 @@ test('Next config embeds only the allowlisted public build label and health stay
   const route=await readFile(new URL('../app/api/health/runtime/route.ts',import.meta.url),'utf8');
   assert.match(config,/env:\s*\{\s*HRBP_BUILD_REVISION:\s*getBuildRevision\(\)\s*\}/);
   assert.doesNotMatch(config,/\.\.\.process\.env/);
-  assert.match(route,/runtimeHealth\(process\.env\.HRBP_BUILD_REVISION, probe\)/);
+  assert.match(route,/process\.env\.HRBP_BUILD_REVISION/);
+  assert.match(route,/process\.env\.HRBP_RUNTIME_PROFILE/);
+  assert.match(route,/runtimeHealth\([\s\S]*HRBP_BUILD_REVISION[\s\S]*probe[\s\S]*HRBP_RUNTIME_PROFILE/);
   assert.doesNotMatch(route,/prisma|@\/lib\/db|SESSION_SECRET|DATABASE_URL/);
   assert.match(route,/force-dynamic/);assert.match(route,/no-store/);
 });
