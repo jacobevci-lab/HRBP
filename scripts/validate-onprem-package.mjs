@@ -17,8 +17,10 @@ const required = [
 ];
 for (const token of required) assert.ok(compose.includes(token), `Missing on-prem compose contract: ${token}`);
 
-const postgresBlock = compose.split("\n  redis:")[0];
-const minioBlock = (compose.split("\n  minio:")[1] ?? "").split("\n  minio-init:")[0];
+const postgresBlock = (compose.split("\n  postgres:\n")[1] ?? "").split("\n  minio:\n")[0];
+const minioBlock = (compose.split("\n  minio:\n")[1] ?? "").split("\n  minio-init:\n")[0];
+assert.ok(postgresBlock, "PostgreSQL service block must be present.");
+assert.ok(minioBlock, "MinIO service block must be present.");
 assert.ok(!/\n\s+ports:/.test(postgresBlock), "PostgreSQL must not publish a host port.");
 assert.ok(!/\n\s+ports:/.test(minioBlock), "MinIO must not publish a host port.");
 assert.ok(!compose.includes("--accept-data-loss"), "Schema bootstrap must never accept destructive changes automatically.");
