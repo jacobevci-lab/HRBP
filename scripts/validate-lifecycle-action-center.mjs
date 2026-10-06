@@ -67,11 +67,10 @@ expect(componentPath, component, /attemptRegistry=\{leaveAttempts\.current\}/, "
 expect(componentPath, component, /actionCenterTimeControl\(item\)[\s\S]*<TimeDecisionButtons[\s\S]*allowedDecisions=\{timeControl\.allowedDecisions\}/, "time decisions must use the receipt-safe shared control with queue-provided decisions");
 expect(componentPath, component, /attemptRegistry=\{timeAttempts\.current\}/, "time decisions must retain attempted-record state across filters and refresh");
 reject(componentPath, component, /\/api\/time\/entries\//, "Action Center generic handlers must not bypass the checked time decision control");
-expect(componentPath, component, /item\.action\.type === "approve-compensation"[\s\S]*decision:\s*"APPROVE"/, "compensation quick approval must preserve the independent decision API");
-expect(componentPath, component, /item\.secondaryAction\.type === "reject-compensation"[\s\S]*decision:\s*"REJECT"/, "compensation rejection must preserve the independent decision API");
-expect(componentPath, component, /item\.action\.type === "apply-compensation"[\s\S]*decision:\s*"APPLY"/, "compensation apply must use the governed application path");
-expect(componentPath, component, /item\.action\.type === "approve-payroll"[\s\S]*status:\s*"APPROVED"/, "payroll approval must preserve the separated approval transition");
-expect(componentPath, component, /status:\s*"PAID"/, "payroll payment completion must use the governed paid transition");
+expect(componentPath, component, /actionCenterCompensationControl\(item\)[\s\S]*<CompensationActionButtons[\s\S]*allowedActions=\{compensationControl\.allowedActions\}[\s\S]*attemptRegistry=\{compensationAttempts\.current\}/, "compensation actions must use the receipt-safe shared control with queue-provided actions and persistent attempt state");
+expect(componentPath, component, /actionCenterPayrollControl\(item\)[\s\S]*<PayrollActionButton[\s\S]*action=\{payrollControl\.action\}[\s\S]*attemptRegistry=\{payrollAttempts\.current\}/, "payroll transitions must use the receipt-safe shared control with queue-provided state and persistent attempt state");
+reject(componentPath, component, /\/api\/compensation\/changes\//, "Action Center generic handlers must not bypass the checked compensation action control");
+reject(componentPath, component, /\/api\/payroll\/runs\//, "Action Center generic handlers must not bypass the checked payroll action control");
 expect(componentPath, component, /window\.confirm\(copy\.confirm\)/, "state-changing Action Center quick actions must require explicit confirmation");
 expect(componentPath, component, /workflow-row-actions[\s\S]*executeSecondaryAction/, "paired decisions must render both governed primary and rejection controls");
 expect(componentPath, component, /if \(!response\.ok\) throw[\s\S]*await refresh\(\)/, "quick actions must refresh only after a successful governed mutation");
