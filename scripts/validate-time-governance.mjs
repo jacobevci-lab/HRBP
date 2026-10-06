@@ -77,6 +77,13 @@ expect(consolePath, consoleSource, /\/api\/time\/entries/, "time self-service mu
 expect(consolePath, consoleSource, /status:\s*"SUBMITTED"/, "time self-service must submit drafts through the state machine");
 expect(consolePath, consoleSource, /overlap and overtime integrity are enforced server-side/i, "time UI must disclose server-side integrity controls");
 
+const clientPath = "lib/time-client-action.ts";
+const clientAction = await source(clientPath);
+expect(clientPath, clientAction, /"\/api\/time\/entries"/, "checked time client action must target the governed create endpoint");
+expect(clientPath, clientAction, /\/api\/time\/entries\/\$\{encodeURIComponent\(action\.entryId\)\}\/transition/, "checked time client action must target the governed transition endpoint");
+expect(clientPath, clientAction, /response\.status === expected[\s\S]*matches\(action, body\.data\)/, "time client action must verify the expected record before success");
+expect(clientPath, clientAction, /No POST retry|never retried automatically|return \{ outcome: "unknown" \}/i, "time client action must fail closed on an unverified outcome");
+
 const livePath = "components/work-pay-live-workspace.tsx";
 const live = await source(livePath);
 expect(livePath, live, /can\(ctx,\s*"time:self-entry"\)/, "time live controls must recognize self-service separately");
