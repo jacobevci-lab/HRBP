@@ -51,6 +51,15 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run cf:build
+      - name: Validate on-prem Compose and build runtime image
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .env.onprem.example .env.onprem
+          docker compose --env-file .env.onprem -f docker-compose.onprem.yml config > /tmp/hrbp-onprem-compose.yml
+          docker build --target runtime --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:onprem-ci .
+          docker image inspect hrbp-one:onprem-ci --format '{{json .Config.Healthcheck}}' | grep -q '/api/health/runtime'
+          test "$(docker image inspect hrbp-one:onprem-ci --format '{{.Config.User}}')" = "node"
       - name: Seed notification maintenance smoke records
         shell: bash
         run: |

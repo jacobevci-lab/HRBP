@@ -1,0 +1,118 @@
+name: hrbp-one
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hrbp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.onprem}
+      POSTGRES_DB: ${POSTGRES_DB:-hrbp}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hrbp} -d ${POSTGRES_DB:-hrbp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [hrbp_internal]
+
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:latest}
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env.onprem}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env.onprem}
+    volumes:
+      - minio_data:/data
+    networks: [hrbp_internal]
+
+  minio-init:
+    image: ${MINIO_MC_IMAGE:-minio/mc:latest}
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        mc alias set hrbp http://minio:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
+        until mc ready hrbp >/dev/null 2>&1; do sleep 2; done
+        mc mb --ignore-existing "hrbp/${OBJECT_STORAGE_BUCKET}"
+        mc anonymous set none "hrbp/${OBJECT_STORAGE_BUCKET}"
+        cat > /tmp/hrbp-app-policy.json <<EOF
+        {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject","s3:PutObject"],"Resource":["arn:aws:s3:::${OBJECT_STORAGE_BUCKET}/*"]}]}
+        EOF
+        mc admin policy create hrbp hrbp-app /tmp/hrbp-app-policy.json
+        mc admin user add hrbp "${OBJECT_STORAGE_ACCESS_KEY}" "${OBJECT_STORAGE_SECRET_KEY}"
+        mc admin policy attach hrbp hrbp-app --user "${OBJECT_STORAGE_ACCESS_KEY}"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env.onprem}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env.onprem}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-hrbp-private}
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?set OBJECT_STORAGE_ACCESS_KEY in .env.onprem}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?set OBJECT_STORAGE_SECRET_KEY in .env.onprem}
+    restart: "no"
+    networks: [hrbp_internal]
+
+  schema:
+    build:
+      context: .
+      dockerfile: Dockerfile.onprem
+      target: schema
+      args:
+        GITHUB_SHA: ${GITHUB_SHA:-}
+    env_file: [.env.onprem]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hrbp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hrbp}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks: [hrbp_internal]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.onprem
+      target: runtime
+      args:
+        GITHUB_SHA: ${GITHUB_SHA:-}
+    restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    env_file: [.env.onprem]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hrbp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hrbp}
+      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?set OBJECT_STORAGE_ACCESS_KEY in .env.onprem}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?set OBJECT_STORAGE_SECRET_KEY in .env.onprem}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-hrbp-private}
+      APP_URL: ${APP_URL:?set APP_URL in .env.onprem}
+      HRBP_ALLOW_INSECURE_CONTEXT_HEADERS: "false"
+    ports:
+      - "${HRBP_HTTP_BIND:-127.0.0.1}:${HRBP_HTTP_PORT:-3000}:3000"
+    depends_on:
+      schema:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/runtime').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+    networks: [hrbp_internal]
+
+volumes:
+  postgres_data:
+  minio_data:
+
+networks:
+  hrbp_internal:
+    driver: bridge

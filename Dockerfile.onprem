@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1.7
+FROM node:22-bookworm-slim AS base
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM base AS deps
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY prisma ./prisma
+RUN npm run db:generate
+
+FROM deps AS builder
+ARG GITHUB_SHA=
+ENV GITHUB_SHA=$GITHUB_SHA
+COPY . .
+RUN npm run build
+
+# Schema tooling is deliberately separated from the runtime image.
+# It never accepts destructive schema changes automatically.
+FROM builder AS schema
+CMD ["npm", "run", "db:push"]
+
+FROM base AS runtime
+ENV NODE_ENV=production
+COPY package.json package-lock.json ./
+COPY --from=builder /app/node_modules ./node_modules
+RUN npm prune --omit=dev
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/prisma ./prisma
+RUN chown -R node:node /app
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health/runtime').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+CMD ["npm", "run", "start", "--", "--hostname", "0.0.0.0", "--port", "3000"]
