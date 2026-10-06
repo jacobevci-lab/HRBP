@@ -50,6 +50,40 @@ jobs:
         run: npx prisma db push --skip-generate
       - run: npm run typecheck
       - run: npm run build
+      - name: Build and smoke on-prem Node standalone
+        shell: bash
+        run: |
+          set -euo pipefail
+          HRBP_BUILD_TARGET=onprem npx next build > /tmp/hrbp-onprem-build.log 2>&1 || {
+            tail -100 /tmp/hrbp-onprem-build.log
+            exit 1
+          }
+          test -f .next/standalone/server.js
+          (
+            cd .next/standalone
+            HOSTNAME=127.0.0.1 PORT=3200 DATABASE_URL="$DATABASE_URL" HRBP_RUNTIME_PROFILE=onprem-node \
+              node server.js > /tmp/hrbp-onprem-server.log 2>&1
+          ) &
+          ONPREM_PID=$!
+          trap 'kill $ONPREM_PID 2>/dev/null || true' EXIT
+          ready=0
+          for i in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:3200/api/health/runtime > /tmp/hrbp-onprem-runtime.json \
+              && curl --fail --silent http://127.0.0.1:3200/api/health/db > /tmp/hrbp-onprem-db.json; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1 || { cat /tmp/hrbp-onprem-server.log; exit 1; }
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const runtime=JSON.parse(await readFile('/tmp/hrbp-onprem-runtime.json','utf8'));
+          const db=JSON.parse(await readFile('/tmp/hrbp-onprem-db.json','utf8'));
+          if(runtime.runtime!=='onprem-node'||runtime.ok!==true) process.exit(1);
+          if(db.status!=='ok'||db.transport!=='direct') process.exit(1);
+          console.log({runtime:runtime.runtime,revision:runtime.release?.revision,database:db.status,transport:db.transport});
+          NODE
       - run: npm run cf:build
       - name: Seed notification maintenance smoke records
         shell: bash
