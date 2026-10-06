@@ -6,8 +6,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 import { LeaveDecisionButtons, type LeaveDecisionRegistry } from "@/components/leave-decision-buttons";
 import { TimeDecisionButtons, type TimeDecisionRegistry } from "@/components/time-decision-buttons";
+import { CompensationActionCenterButtons, type CompensationActionRegistry } from "@/components/compensation-action-center-buttons";
+import { PayrollActionCenterButton, type PayrollActionRegistry } from "@/components/payroll-action-center-button";
 import { actionCenterLeaveControl, isActionCenterLeaveItem } from "@/lib/action-center-leave-control";
 import { actionCenterTimeControl, isActionCenterTimeItem } from "@/lib/action-center-time-control";
+import { actionCenterCompensationControl, isActionCenterCompensationItem } from "@/lib/action-center-compensation-control";
+import { actionCenterPayrollControl, isActionCenterPayrollItem } from "@/lib/action-center-payroll-control";
 import { createActionQueueLoader, queueFailureMessage, actionQueueSourceHealth, sourceHealthMessage, type QueueSourceHealth } from "@/lib/action-center-queue";
 import type { ActionKind, Urgency, LifecycleActionItem, ActionSummary } from "@/lib/action-center-queue-types";
 
@@ -115,6 +119,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
   const [success, setSuccess] = useState<string | null>(null);
   const leaveAttempts = useRef<LeaveDecisionRegistry>(new Map());
   const timeAttempts = useRef<TimeDecisionRegistry>(new Map());
+  const compensationAttempts = useRef<CompensationActionRegistry>(new Map());
+  const payrollAttempts = useRef<PayrollActionRegistry>(new Map());
 
   const queueLoader = useRef<ReturnType<typeof createActionQueueLoader> | null>(null);
   const quickActionBusy = useRef(false);
@@ -212,24 +218,6 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
       confirm: locale === "tr" ? `“${item.title}” kaydını onaylamak istiyor musun?` : `Approve “${item.title}”?`,
       success: locale === "tr" ? "İzin talebi onaylandı." : "Leave request approved."
-    };
-    if (item.action.type === "approve-compensation") return {
-      label: locale === "tr" ? "Ücreti onayla" : "Approve compensation",
-      busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
-      confirm: locale === "tr" ? "Bu ücret değişikliği için bağımsız onayı vermek istiyor musun?" : "Give independent approval for this compensation change?",
-      success: locale === "tr" ? "Ücret değişikliği bağımsız olarak onaylandı." : "Compensation change independently approved."
-    };
-    if (item.action.type === "apply-compensation") return {
-      label: locale === "tr" ? "Ücreti uygula" : "Apply compensation",
-      busy: locale === "tr" ? "Uygulanıyor…" : "Applying…",
-      confirm: locale === "tr" ? "Onaylı ücret değişikliğini çalışan kaydına uygulamak istiyor musun?" : "Apply the approved compensation change to the employee record?",
-      success: locale === "tr" ? "Onaylı ücret değişikliği uygulandı." : "Approved compensation change applied."
-    };
-    if (item.action.type === "approve-payroll") return {
-      label: locale === "tr" ? "Bordroyu onayla" : "Approve payroll",
-      busy: locale === "tr" ? "Onaylanıyor…" : "Approving…",
-      confirm: locale === "tr" ? "Bu bordro çalıştırmasını bağımsız olarak onaylamak istiyor musun?" : "Independently approve this payroll run?",
-      success: locale === "tr" ? "Bordro çalıştırması onaylandı." : "Payroll run approved."
     };
     if (item.action.type === "approve-requisition") return {
       label: locale === "tr" ? "Talebi onayla" : "Approve requisition",
@@ -375,12 +363,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” için itiraz incelemesini başlatmak istiyor musun?` : `Start review for “${item.title}”?`,
       success: locale === "tr" ? "İtiraz incelemesi başlatıldı." : "Appeal review started."
     };
-    return {
-      label: locale === "tr" ? "Ödendi işaretle" : "Mark paid",
-      busy: locale === "tr" ? "İşleniyor…" : "Processing…",
-      confirm: locale === "tr" ? "Onaylı bordro çalıştırmasını ödendi olarak işaretlemek istiyor musun?" : "Mark the approved payroll run as paid?",
-      success: locale === "tr" ? "Bordro çalıştırması ödendi olarak işaretlendi." : "Payroll run marked paid."
-    };
+    return null;
   }
 
   function secondaryActionCopy(item: LifecycleActionItem) {
@@ -427,16 +410,11 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       confirm: locale === "tr" ? `“${item.title}” kampanyasını taslağa döndürmek istiyor musun?` : `Return “${item.title}” to draft?`,
       success: locale === "tr" ? "Bağlılık kampanyası taslağa döndürüldü." : "Engagement campaign returned to draft."
     };
-    return {
-      label: locale === "tr" ? "Reddet" : "Reject",
-      busy: locale === "tr" ? "Reddediliyor…" : "Rejecting…",
-      confirm: locale === "tr" ? "Bu ücret değişikliğini reddetmek istiyor musun?" : "Reject this compensation change?",
-      success: locale === "tr" ? "Ücret değişikliği reddedildi." : "Compensation change rejected."
-    };
+    return null;
   }
 
   async function executeSecondaryAction(item: LifecycleActionItem) {
-    if (!item.secondaryAction || isActionCenterLeaveItem(item) || isActionCenterTimeItem(item) || !queueLoader.current?.ready || quickActionBusy.current || loading || error !== null) return;
+    if (!item.secondaryAction || isActionCenterLeaveItem(item) || isActionCenterTimeItem(item) || isActionCenterCompensationItem(item) || isActionCenterPayrollItem(item) || !queueLoader.current?.ready || quickActionBusy.current || loading || error !== null) return;
     const copy = secondaryActionCopy(item);
     if (!copy || !window.confirm(copy.confirm)) return;
     if (!queueLoader.current?.ready || quickActionBusy.current) return;
@@ -448,10 +426,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
     try {
       let endpoint = "";
       let payload: Record<string, unknown> = {};
-      if (item.secondaryAction.type === "reject-compensation") {
-        endpoint = `/api/compensation/changes/${encodeURIComponent(item.secondaryAction.changeId)}/decision`;
-        payload = { decision: "REJECT" };
-      } else if (item.secondaryAction.type === "return-requisition") {
+      if (item.secondaryAction.type === "return-requisition") {
         endpoint = `/api/recruiting/requisitions/${encodeURIComponent(item.secondaryAction.requisitionId)}/status`;
         payload = { status: "DRAFT" };
       } else if (item.secondaryAction.type === "return-offer") {
@@ -493,7 +468,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
   }
 
   async function executeQuickAction(item: LifecycleActionItem) {
-    if (!item.action || isActionCenterLeaveItem(item) || isActionCenterTimeItem(item) || !queueLoader.current?.ready || quickActionBusy.current || loading || error !== null) return;
+    if (!item.action || isActionCenterLeaveItem(item) || isActionCenterTimeItem(item) || isActionCenterCompensationItem(item) || isActionCenterPayrollItem(item) || !queueLoader.current?.ready || quickActionBusy.current || loading || error !== null) return;
     const copy = quickActionCopy(item);
     if (!copy || !window.confirm(copy.confirm)) return;
     if (!queueLoader.current?.ready || quickActionBusy.current) return;
@@ -508,18 +483,6 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       if (item.action.type === "complete-workflow") {
         endpoint = `/api/workflows/instances/${encodeURIComponent(item.action.instanceId)}/tasks/${encodeURIComponent(item.action.taskId)}/complete`;
         payload = { result: { source: "lifecycle-action-center", completedAt: new Date().toISOString() } };
-      } else if (item.action.type === "approve-compensation") {
-        endpoint = `/api/compensation/changes/${encodeURIComponent(item.action.changeId)}/decision`;
-        payload = { decision: "APPROVE" };
-      } else if (item.action.type === "apply-compensation") {
-        endpoint = `/api/compensation/changes/${encodeURIComponent(item.action.changeId)}/decision`;
-        payload = { decision: "APPLY" };
-      } else if (item.action.type === "approve-payroll") {
-        endpoint = `/api/payroll/runs/${encodeURIComponent(item.action.runId)}/transition`;
-        payload = { status: "APPROVED" };
-      } else if (item.action.type === "mark-payroll-paid") {
-        endpoint = `/api/payroll/runs/${encodeURIComponent(item.action.runId)}/transition`;
-        payload = { status: "PAID" };
       } else if (item.action.type === "approve-requisition") {
         endpoint = `/api/recruiting/requisitions/${encodeURIComponent(item.action.requisitionId)}/status`;
         payload = { status: "OPEN" };
@@ -751,6 +714,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
             {visibleItems.map((item) => {
               const leaveControl = actionCenterLeaveControl(item);
               const timeControl = actionCenterTimeControl(item);
+              const compensationControl = actionCenterCompensationControl(item);
+              const payrollControl = actionCenterPayrollControl(item);
               const workflowAction = item.action?.type === "complete-workflow" ? item.action : null;
               const focused = item.kind === "workflow" && (workflowAction?.taskId === initialTaskId || workflowAction?.instanceId === initialInstanceId);
               return <tr key={item.id} id={`action-item-${item.id}`} data-workflow-instance={workflowAction?.instanceId} className={focused ? "focused" : undefined}>
@@ -769,6 +734,16 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
                   entryId={timeControl.entryId}
                   allowedDecisions={timeControl.allowedDecisions}
                   attemptRegistry={timeAttempts.current}
+                  disabled={loading || queueFailure || error !== null || busyId !== null}
+                /> : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>) : isActionCenterCompensationItem(item) ? (compensationControl ? <CompensationActionCenterButtons
+                  changeId={compensationControl.changeId}
+                  allowedActions={compensationControl.allowedActions}
+                  attemptRegistry={compensationAttempts.current}
+                  disabled={loading || queueFailure || error !== null || busyId !== null}
+                /> : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>) : isActionCenterPayrollItem(item) ? (payrollControl ? <PayrollActionCenterButton
+                  runId={payrollControl.runId}
+                  target={payrollControl.target}
+                  attemptRegistry={payrollAttempts.current}
                   disabled={loading || queueFailure || error !== null || busyId !== null}
                 /> : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>) : item.action ? <div className="workflow-row-actions"><button className="primary-button compact" type="button" disabled={loading || queueFailure || error !== null || busyId !== null} onClick={() => void executeQuickAction(item)}>{busyId === item.id ? quickActionCopy(item)?.busy : quickActionCopy(item)?.label}</button>{item.secondaryAction ? <button className="secondary-button compact" type="button" disabled={loading || queueFailure || error !== null || busyId !== null} onClick={() => void executeSecondaryAction(item)}>{busyId === item.id ? secondaryActionCopy(item)?.busy : secondaryActionCopy(item)?.label}</button> : null}</div> : <Link className="secondary-button compact" href={item.href}>{locale === "tr" ? "Aç" : "Open"}<ExternalLink size={13}/></Link>}</td>
               </tr>;

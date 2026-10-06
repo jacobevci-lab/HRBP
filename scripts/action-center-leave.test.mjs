@@ -130,8 +130,12 @@ function centerHarness(rows, { loading = false, error = null, busy = null } = {}
     '@/components/locale-provider': { useLocale: () => ({ locale: 'en' }) },
     '@/components/leave-decision-buttons': { LeaveDecisionButtons: 'LEAVE_CONTROL' },
     '@/components/time-decision-buttons': { TimeDecisionButtons: 'TIME_CONTROL' },
+    '@/components/compensation-action-center-buttons': { CompensationActionCenterButtons: 'COMP_CONTROL' },
+    '@/components/payroll-action-center-button': { PayrollActionCenterButton: 'PAY_CONTROL' },
     '@/lib/action-center-leave-control': adapter,
     '@/lib/action-center-time-control': { actionCenterTimeControl: () => null, isActionCenterTimeItem: () => false },
+    '@/lib/action-center-compensation-control': { actionCenterCompensationControl: () => null, isActionCenterCompensationItem: () => false },
+    '@/lib/action-center-payroll-control': { actionCenterPayrollControl: () => null, isActionCenterPayrollItem: () => false },
     '@/lib/action-center-queue': load('lib/action-center-queue.ts'),
     react: {
       useState(value) { const i = si++; if (initial) values[i] = typeof value === 'function' ? value() : value; return [values[i], value => { values[i] = typeof value === 'function' ? value(values[i]) : value; }]; },

@@ -104,6 +104,8 @@ function harness(fetchImpl, locale = 'en') {
     '@/components/locale-provider': { useLocale: () => ({ locale }) },
     '@/components/leave-decision-buttons': { LeaveDecisionButtons: 'LEAVE_CONTROL' },
     '@/components/time-decision-buttons': { TimeDecisionButtons: 'TIME_CONTROL' },
+    '@/components/compensation-action-center-buttons': { CompensationActionCenterButtons: 'COMP_CONTROL' },
+    '@/components/payroll-action-center-button': { PayrollActionCenterButton: 'PAY_CONTROL' },
     '@/lib/action-center-time-control': {
       actionCenterTimeControl: (item) => item?.kind === 'time-attendance' ? {
         entryId: item.action?.entryId ?? item.secondaryAction?.entryId,
@@ -111,6 +113,8 @@ function harness(fetchImpl, locale = 'en') {
       } : null,
       isActionCenterTimeItem: (item) => item?.kind === 'time-attendance' || item?.action?.type === 'approve-time' || item?.secondaryAction?.type === 'reject-time'
     },
+    '@/lib/action-center-compensation-control': { actionCenterCompensationControl: () => null, isActionCenterCompensationItem: () => false },
+    '@/lib/action-center-payroll-control': { actionCenterPayrollControl: () => null, isActionCenterPayrollItem: () => false },
     '@/lib/action-center-leave-control': { actionCenterLeaveControl: () => null, isActionCenterLeaveItem: () => false },
     '@/lib/action-center-queue': { ...queue, createActionQueueLoader: () => queue.createActionQueueLoader({ fetchImpl }) },
     react: {
