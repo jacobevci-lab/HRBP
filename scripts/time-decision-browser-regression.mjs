@@ -78,6 +78,7 @@ try{
     let release,started;const gate=new Promise(r=>{release=r;}),arrived=new Promise(r=>{started=r;});
     const handler=async route=>{started();await gate;const response=await route.fetch();await route.fulfill({response});};
     await context.route(origin+f.path,handler);const before=posts.length;page.once("dialog",d=>d.accept());
+    const savedReload=actionCenter?null:page.waitForNavigation({waitUntil:"networkidle",timeout:15000});
     try{
      await f.control.evaluate((el,isAC)=>{const a=isAC?'[data-time-decision="APPROVED"]':'[data-time-transition="APPROVED"]';const r=isAC?'[data-time-decision="REJECTED"]':'[data-time-transition="REJECTED"]';el.querySelector(a)?.click();el.querySelector(r)?.click();},actionCenter);
      await Promise.race([arrived,new Promise((_,reject)=>setTimeout(()=>reject(new Error("No transition request")),10000))]);
@@ -85,15 +86,20 @@ try{
     }finally{release();}
     await eventually(async()=>{const row=await state(f);return row.status==="APPROVED"&&row.approvedById===actor.id;});
     assert.equal(await auditCount(f),1);await eventually(async()=>!(await unread(f)));
+    if(savedReload)await savedReload;
     await context.unroute(origin+f.path,handler);
    });
 
    await check(name("rejection stays committed when badge cleanup fails"),async()=>{
     f=await fixture();
     const fail=route=>route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"Simulated notification failure"})});
-    await context.route(origin+"/api/notifications",fail);page.once("dialog",d=>d.accept());await f.button("REJECTED").click();
+    await context.route(origin+"/api/notifications",fail);page.once("dialog",d=>d.accept());
+    const savedReload=actionCenter?null:page.waitForNavigation({waitUntil:"networkidle",timeout:15000});
+    await f.button("REJECTED").click();
     await eventually(async()=>{const row=await state(f);return row.status==="REJECTED"&&row.approvedById===actor.id;});
-    assert.equal(await auditCount(f),1);assert.equal(await unread(f),true);await context.unroute(origin+"/api/notifications",fail);
+    assert.equal(await auditCount(f),1);assert.equal(await unread(f),true);
+    if(savedReload)await savedReload;
+    await context.unroute(origin+"/api/notifications",fail);
    });
 
    for(const mode of["html-after-commit","lost-after-commit"])await check(name(mode+" becomes unknown and never replays"),async()=>{
