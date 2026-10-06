@@ -41,6 +41,7 @@ printf 'Backing up PostgreSQL...\n' >&2
 
 printf 'Backing up private S3-compatible object storage...\n' >&2
 "${COMPOSE[@]}" run --rm --no-deps -T \
+  --user "$(id -u):$(id -g)" \
   -v "$TARGET/objects:/backup" \
   --entrypoint /bin/sh object-storage-tool -ec '
     exec rclone sync "hrbp:$OBJECT_STORAGE_BUCKET" /backup --create-empty-src-dirs
