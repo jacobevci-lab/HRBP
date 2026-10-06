@@ -17,42 +17,35 @@ services:
       retries: 10
     networks: [hrbp_internal]
 
-  minio:
-    image: ${MINIO_IMAGE:-minio/minio:latest}
+  object-storage:
+    image: ${OBJECT_STORAGE_IMAGE:-chrislusf/seaweedfs:4.48}
     restart: unless-stopped
-    command: server /data
+    command: ["mini", "-dir=/data", "-admin.port=12646"]
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env.onprem}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env.onprem}
+      AWS_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY:?set OBJECT_STORAGE_ACCESS_KEY in .env.onprem}
+      AWS_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_KEY:?set OBJECT_STORAGE_SECRET_KEY in .env.onprem}
+      S3_BUCKET: ${OBJECT_STORAGE_BUCKET:-hrbp-private}
     volumes:
-      - minio_data:/data
+      - object_storage_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:9333/cluster/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 12
     networks: [hrbp_internal]
 
-  minio-init:
-    image: ${MINIO_MC_IMAGE:-minio/mc:latest}
-    depends_on:
-      minio:
-        condition: service_started
-    entrypoint: ["/bin/sh", "-ec"]
-    command:
-      - |
-        mc alias set hrbp http://minio:9000 "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}"
-        until mc ready hrbp >/dev/null 2>&1; do sleep 2; done
-        mc mb --ignore-existing "hrbp/${OBJECT_STORAGE_BUCKET}"
-        mc anonymous set none "hrbp/${OBJECT_STORAGE_BUCKET}"
-        cat > /tmp/hrbp-app-policy.json <<EOF
-        {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject","s3:PutObject"],"Resource":["arn:aws:s3:::${OBJECT_STORAGE_BUCKET}/*"]}]}
-        EOF
-        mc admin policy create hrbp hrbp-app /tmp/hrbp-app-policy.json
-        mc admin user add hrbp "${OBJECT_STORAGE_ACCESS_KEY}" "${OBJECT_STORAGE_SECRET_KEY}"
-        mc admin policy attach hrbp hrbp-app --user "${OBJECT_STORAGE_ACCESS_KEY}"
+  object-storage-tool:
+    image: ${OBJECT_STORAGE_TOOL_IMAGE:-rclone/rclone:1.75.1}
+    profiles: ["tools"]
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER in .env.onprem}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env.onprem}
-      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-hrbp-private}
-      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?set OBJECT_STORAGE_ACCESS_KEY in .env.onprem}
-      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?set OBJECT_STORAGE_SECRET_KEY in .env.onprem}
-    restart: "no"
+      RCLONE_CONFIG_HRBP_TYPE: s3
+      RCLONE_CONFIG_HRBP_PROVIDER: Other
+      RCLONE_CONFIG_HRBP_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY:?set OBJECT_STORAGE_ACCESS_KEY in .env.onprem}
+      RCLONE_CONFIG_HRBP_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_KEY:?set OBJECT_STORAGE_SECRET_KEY in .env.onprem}
+      RCLONE_CONFIG_HRBP_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://object-storage:8333}
+      RCLONE_CONFIG_HRBP_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      RCLONE_CONFIG_HRBP_FORCE_PATH_STYLE: "true"
     networks: [hrbp_internal]
 
   schema:
@@ -88,10 +81,11 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-hrbp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hrbp}
-      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://object-storage:8333}
       OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?set OBJECT_STORAGE_ACCESS_KEY in .env.onprem}
       OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?set OBJECT_STORAGE_SECRET_KEY in .env.onprem}
       OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-hrbp-private}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
       APP_URL: ${APP_URL:?set APP_URL in .env.onprem}
       HRBP_ALLOW_INSECURE_CONTEXT_HEADERS: "false"
     ports:
@@ -99,8 +93,8 @@ services:
     depends_on:
       schema:
         condition: service_completed_successfully
-      minio-init:
-        condition: service_completed_successfully
+      object-storage:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health/runtime').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 30s
@@ -111,7 +105,7 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  object_storage_data:
 
 networks:
   hrbp_internal:
