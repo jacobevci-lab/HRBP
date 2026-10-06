@@ -33,7 +33,7 @@ jobs:
           mkdir -p prisma/migrations/0_baseline
           npx prisma migrate diff \
             --from-empty \
-            --to-schema ./prisma \
+            --to-schema-datamodel ./prisma \
             --script \
             --output prisma/migrations/0_baseline/migration.sql
           printf 'provider = "postgresql"\n' > prisma/migrations/migration_lock.toml
