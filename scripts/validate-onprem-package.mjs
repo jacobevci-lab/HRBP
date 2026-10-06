@@ -91,6 +91,7 @@ for (const token of [
 ]) assert.ok(backup.includes(token), `Backup safety contract missing: ${token}`);
 assert.ok(!backup.includes("--accept-data-loss"), "Backup path must never force schema changes.");
 assert.ok(!backup.includes("mc "), "Backup must not depend on retired MinIO-only tooling.");
+assert.ok(backup.includes('--user "$(id -u):$(id -g)"'), "Backup recovery tooling must preserve host ownership for bind-mounted artifacts.");
 
 for (const token of [
   "--confirm-erase",
