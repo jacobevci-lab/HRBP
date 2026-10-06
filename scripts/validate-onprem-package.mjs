@@ -70,6 +70,9 @@ for (const key of [
 }
 assert.match(env, /HRBP_LOCAL_AUTH_ENABLED=false/);
 assert.match(env, /HRBP_HTTP_BIND=127\.0\.0\.1/);
+assert.match(env, /MINIO_IMAGE=quay\.io\/minio\/minio:RELEASE\./, "Embedded object-store image must use a pinned, still-pullable Quay release path.");
+assert.match(env, /MINIO_MC_IMAGE=quay\.io\/minio\/mc:RELEASE\./, "MinIO client image must use a pinned Quay release path.");
+assert.ok(!/MINIO_(?:MC_)?IMAGE=.*:latest/.test(env), "On-prem object-store images must not use mutable latest tags.");
 assert.ok(ignore.includes(".env.*"), "Docker context must exclude environment files.");
 assert.ok(ignore.includes("!.env.onprem.example"), "Docker context must retain the safe example.");
 assert.ok(gitignore.includes(".env.onprem"), "Real on-prem environment file must be gitignored.");
