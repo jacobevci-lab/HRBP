@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
 async function source(path) { return readFile(path, "utf8"); }
@@ -104,7 +105,7 @@ const button = await source(buttonPath);
 expect(buttonPath, button, /status\s*===\s*"APPROVAL"[\s\S]*access\.approve/, "UI approval action must require explicit approval access");
 expect(buttonPath, button, /status\s*===\s*"APPROVED"[\s\S]*access\.pay/, "UI payment action must require explicit payment access");
 expect(buttonPath, button, /access\.prepare/, "UI preparation actions must require preparation access");
-expect(buttonPath, button, /payload\?\.blockers/, "payroll readiness blockers must be surfaced to the operator");
+expect(buttonPath, button, /payrollActionMessage/, "payroll readiness blockers must be surfaced through the checked receipt result");
 expect(buttonPath, button, /Lock & validate/, "payroll UI must disclose the input-lock boundary");
 
 const workspacePath = "components/work-pay-live-workspace.tsx";
@@ -147,5 +148,8 @@ if (failures.length) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
+
+const clientBehavior = spawnSync(process.execPath, ["--test", "scripts/payroll-client-action.test.mjs"], { stdio: "inherit" });
+if (clientBehavior.error || clientBehavior.status !== 0) process.exit(1);
 
 console.log("Validated payroll governance contract: employee-bound payslip self-service, granular authority, controlled period setup, server-owned ledger totals, input readiness and fingerprint locking, four-eyes approval, payment separation, state-aware lifecycle, operator controls and durable notifications are enforced.");

@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
 async function source(path) { return readFile(path, "utf8"); }
@@ -80,7 +81,7 @@ expectAbsent(createConsolePath, createConsole, /currentAnnualBase:\s*values\.get
 
 const decisionConsolePath = "components/compensation-decision-buttons.tsx";
 const decisionConsole = await source(decisionConsolePath);
-expect(decisionConsolePath, decisionConsole, /\/submit/, "drafts must have an explicit submit action");
+expect(decisionConsolePath, decisionConsole, /submitCompensationAction/, "compensation mutations must use the checked receipt client");
 expect(decisionConsolePath, decisionConsole, /canApprove[\s\S]*!isRequester/, "approval controls must hide self-approval actions");
 expect(decisionConsolePath, decisionConsole, /canApply[\s\S]*!isRequester/, "apply controls must hide requester application actions");
 
@@ -96,5 +97,8 @@ if (failures.length) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
+
+const clientBehavior = spawnSync(process.execPath, ["--test", "scripts/compensation-client-action.test.mjs"], { stdio: "inherit" });
+if (clientBehavior.error || clientBehavior.status !== 0) process.exit(1);
 
 console.log("Validated compensation governance contract: scoped proposals, server-owned salary baselines, explicit submission, four-eyes approval, effective-dated history integrity and payroll handoff are enforced.");
