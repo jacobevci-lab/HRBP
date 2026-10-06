@@ -26,6 +26,14 @@ assert.ok(!/\n\s+ports:/.test(minioBlock), "MinIO must not publish a host port."
 assert.ok(!compose.includes("--accept-data-loss"), "Schema bootstrap must never accept destructive changes automatically.");
 assert.ok(compose.includes("POSTGRES_PASSWORD:?set POSTGRES_PASSWORD"));
 assert.ok(compose.includes("MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD"));
+assert.ok(compose.includes("OBJECT_STORAGE_ACCESS_KEY:?set OBJECT_STORAGE_ACCESS_KEY"));
+assert.ok(compose.includes("OBJECT_STORAGE_SECRET_KEY:?set OBJECT_STORAGE_SECRET_KEY"));
+assert.ok(compose.includes("mc admin policy create hrbp hrbp-app"));
+assert.ok(compose.includes("mc admin user add hrbp"));
+assert.ok(compose.includes("mc admin policy attach hrbp hrbp-app --user"));
+assert.ok(compose.includes('"s3:GetObject","s3:PutObject"'));
+assert.ok(!compose.includes("OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}"), "Application must not use MinIO root access key.");
+assert.ok(!compose.includes("OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}"), "Application must not use MinIO root secret.");
 assert.ok(compose.includes("APP_URL:?set APP_URL"));
 
 assert.match(dockerfile, /npm prune --omit=dev/);
@@ -38,7 +46,7 @@ assert.ok(compose.includes("no-new-privileges:true") && compose.includes("cap_dr
 assert.ok(!dockerfile.includes("--accept-data-loss"));
 
 for (const key of [
-  "POSTGRES_PASSWORD", "MINIO_ROOT_PASSWORD", "HRBP_SESSION_SECRET",
+  "POSTGRES_PASSWORD", "MINIO_ROOT_PASSWORD", "OBJECT_STORAGE_SECRET_KEY", "HRBP_SESSION_SECRET",
   "HRBP_ENGAGEMENT_RESPONSE_SECRET", "HRBP_DOCUMENT_SCAN_TOKEN",
   "HRBP_MAINTENANCE_TOKEN", "HRBP_OIDC_CLIENT_SECRET"
 ]) {
