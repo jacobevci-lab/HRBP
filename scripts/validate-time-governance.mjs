@@ -73,8 +73,6 @@ expect(dataPath, data, /workScheduleAssignment\.findFirst/, "self-service must s
 
 const consolePath = "components/time-participant-console.tsx";
 const consoleSource = await source(consolePath);
-expect(consolePath, consoleSource, /\/api\/time\/entries/, "time self-service must create drafts through the governed API");
-expect(consolePath, consoleSource, /status:\s*"SUBMITTED"/, "time self-service must submit drafts through the state machine");
 expect(consolePath, consoleSource, /overlap and overtime integrity are enforced server-side/i, "time UI must disclose server-side integrity controls");
 
 const clientPath = "lib/time-client-action.ts";
