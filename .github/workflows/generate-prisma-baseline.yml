@@ -1,0 +1,58 @@
+name: Generate Prisma Baseline
+
+on:
+  push:
+    branches: [feat/versioned-schema-migrations-20261006]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: hrbp-prisma-baseline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline:
+    if: ${{ !contains(github.event.head_commit.message, '[baseline-generated]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/versioned-schema-migrations-20261006
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npx prisma validate
+      - name: Generate deterministic baseline migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf prisma/migrations
+          mkdir -p prisma/migrations/0_baseline
+          npx prisma migrate diff \
+            --from-empty \
+            --to-schema ./prisma \
+            --script \
+            --output prisma/migrations/0_baseline/migration.sql
+          printf 'provider = "postgresql"\n' > prisma/migrations/migration_lock.toml
+          test -s prisma/migrations/0_baseline/migration.sql
+          grep -q 'CREATE TABLE' prisma/migrations/0_baseline/migration.sql
+          find prisma -maxdepth 1 -type f -name '*.prisma' -print | sort
+          wc -l prisma/migrations/0_baseline/migration.sql
+      - name: Commit generated baseline
+        shell: bash
+        env:
+          BRANCH: feat/versioned-schema-migrations-20261006
+        run: |
+          set -euo pipefail
+          git add prisma/migrations/0_baseline/migration.sql prisma/migrations/migration_lock.toml
+          if git diff --cached --quiet; then
+            echo 'Baseline already matches the current Prisma schema.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'chore(db): generate Prisma baseline migration [baseline-generated]'
+          git push origin "HEAD:$BRANCH"
