@@ -55,7 +55,7 @@ fi
 
 printf 'Existing pre-migration HRBP database detected; verifying exact schema before baseline adoption...\n' >&2
 set +e
-npx prisma migrate diff   --from-url "$DATABASE_URL"   --to-schema "$SCHEMA_DIR"   --exit-code   > /tmp/hrbp-prisma-migration-diff.txt 2>&1
+npx prisma migrate diff   --from-url "$DATABASE_URL"   --to-schema-datamodel "$SCHEMA_DIR"   --exit-code   > /tmp/hrbp-prisma-migration-diff.txt 2>&1
 diff_status=$?
 set -e
 
@@ -66,11 +66,11 @@ case "$diff_status" in
     exec npx prisma migrate deploy
     ;;
   2)
-    cat /tmp/hrbp-prisma-baseline-diff.txt >&2
+    cat /tmp/hrbp-prisma-migration-diff.txt >&2
     fail "database schema differs from the approved baseline; refusing automatic adoption"
     ;;
   *)
-    cat /tmp/hrbp-prisma-baseline-diff.txt >&2
+    cat /tmp/hrbp-prisma-migration-diff.txt >&2
     fail "could not verify existing database schema for baseline adoption"
     ;;
 esac
