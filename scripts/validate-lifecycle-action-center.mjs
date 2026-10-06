@@ -141,6 +141,6 @@ if (failures.length) {
   process.exit(1);
 }
 // Execute the actual adapter, shared row and parent integration, not only source patterns.
-const behavior = spawnSync(process.execPath, ["--test", "scripts/action-center-leave.test.mjs", "scripts/action-center-time.test.mjs", "scripts/action-center-queue.test.mjs"], { stdio: "inherit" });
+const behavior = spawnSync(process.execPath, ["--test", "scripts/action-center-leave.test.mjs", "scripts/action-center-time.test.mjs", "scripts/action-center-restricted-pay.test.mjs", "scripts/action-center-queue.test.mjs"], { stdio: "inherit" });
 if (behavior.error || behavior.status !== 0) process.exit(1);
 console.log("Lifecycle action center validation passed.");
