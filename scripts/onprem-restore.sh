@@ -18,8 +18,8 @@ Usage:
   scripts/onprem-restore.sh BACKUP_DIR --confirm-erase
 
 This is destructive. It stops the application, recreates the configured
-PostgreSQL database, and mirrors the backup object set over the live bucket.
-The application is deliberately left stopped after restore.
+PostgreSQL database, and synchronizes the backup object set over the live
+S3-compatible bucket. The application is deliberately left stopped after restore.
 EOF
   exit 64
 }
@@ -56,17 +56,7 @@ printf 'Stopping application mutation surfaces...\n' >&2
 "${COMPOSE[@]}" stop app schema >/dev/null 2>&1 || true
 
 printf 'Starting recovery dependencies...\n' >&2
-"${COMPOSE[@]}" up -d postgres minio >/dev/null
-
-ready=0
-for _ in {1..60}; do
-  if "${COMPOSE[@]}" exec -T postgres sh -ec 'pg_isready -U "$POSTGRES_USER" -d postgres >/dev/null' 2>/dev/null; then
-    ready=1
-    break
-  fi
-  sleep 1
-done
-[[ "$ready" -eq 1 ]] || fail "PostgreSQL did not become ready"
+"${COMPOSE[@]}" up -d --wait postgres object-storage >/dev/null
 
 "${COMPOSE[@]}" exec -T postgres sh -ec '
   case "$POSTGRES_DB" in
@@ -82,15 +72,15 @@ printf 'Recreating PostgreSQL database...\n' >&2
   dropdb --if-exists --force -U "$POSTGRES_USER" "$POSTGRES_DB"
   createdb -U "$POSTGRES_USER" -O "$POSTGRES_USER" "$POSTGRES_DB"
 '
-"${COMPOSE[@]}" exec -T postgres sh -ec   'exec pg_restore --exit-on-error --no-owner --no-acl -U "$POSTGRES_USER" -d "$POSTGRES_DB"'   < "$BACKUP_DIR/postgres.dump"
+"${COMPOSE[@]}" exec -T postgres sh -ec \
+  'exec pg_restore --exit-on-error --no-owner --no-acl -U "$POSTGRES_USER" -d "$POSTGRES_DB"' \
+  < "$BACKUP_DIR/postgres.dump"
 
-printf 'Restoring private object storage...\n' >&2
-"${COMPOSE[@]}" run --rm --no-deps -T   -v "$BACKUP_DIR/objects:/backup:ro"   --entrypoint /bin/sh minio-init -ec '
-    mc alias set hrbp http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null
-    until mc ready hrbp >/dev/null 2>&1; do sleep 2; done
-    mc mb --ignore-existing "hrbp/$OBJECT_STORAGE_BUCKET" >/dev/null
-    mc anonymous set none "hrbp/$OBJECT_STORAGE_BUCKET" >/dev/null
-    mc mirror --overwrite --remove /backup "hrbp/$OBJECT_STORAGE_BUCKET"
+printf 'Restoring private S3-compatible object storage...\n' >&2
+"${COMPOSE[@]}" run --rm --no-deps -T \
+  -v "$BACKUP_DIR/objects:/backup:ro" \
+  --entrypoint /bin/sh object-storage-tool -ec '
+    exec rclone sync /backup "hrbp:$OBJECT_STORAGE_BUCKET" --create-empty-src-dirs --delete-during
   '
 
 printf '\nRestore completed. The application remains stopped by design.\n' >&2
