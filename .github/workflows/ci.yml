@@ -46,6 +46,22 @@ jobs:
       - run: npm run routes:validate
       - run: npm run ui:validate
       - run: npx prisma validate
+      - name: Emit Prisma baseline preview
+        if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'feat/versioned-schema-migrations-20261006' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/hrbp-prisma-baseline
+          npx prisma migrate diff \
+            --from-empty \
+            --to-schema ./prisma \
+            --script \
+            --output /tmp/hrbp-prisma-baseline/migration.sql
+          test -s /tmp/hrbp-prisma-baseline/migration.sql
+          echo 'HRBP_PRISMA_BASELINE_BEGIN'
+          base64 -w0 /tmp/hrbp-prisma-baseline/migration.sql
+          echo
+          echo 'HRBP_PRISMA_BASELINE_END'
       - name: Prepare CI database
         run: npx prisma db push --skip-generate
       - run: npm run typecheck
