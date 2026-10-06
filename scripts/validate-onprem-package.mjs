@@ -1,12 +1,28 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
-const [compose, dockerfile, env, ignore, gitignore] = await Promise.all([
+const [
+  compose,
+  dockerfile,
+  env,
+  ignore,
+  gitignore,
+  backup,
+  restore,
+  rehearsal,
+  docs,
+  packageJson
+] = await Promise.all([
   readFile("docker-compose.onprem.yml", "utf8"),
   readFile("Dockerfile.onprem", "utf8"),
   readFile(".env.onprem.example", "utf8"),
   readFile(".dockerignore", "utf8"),
-  readFile(".gitignore", "utf8")
+  readFile(".gitignore", "utf8"),
+  readFile("scripts/onprem-backup.sh", "utf8"),
+  readFile("scripts/onprem-restore.sh", "utf8"),
+  readFile("scripts/onprem-recovery-rehearsal.sh", "utf8"),
+  readFile("docs/ONPREM-DEPLOYMENT.md", "utf8"),
+  readFile("package.json", "utf8")
 ]);
 
 const required = [
@@ -57,5 +73,58 @@ assert.match(env, /HRBP_HTTP_BIND=127\.0\.0\.1/);
 assert.ok(ignore.includes(".env.*"), "Docker context must exclude environment files.");
 assert.ok(ignore.includes("!.env.onprem.example"), "Docker context must retain the safe example.");
 assert.ok(gitignore.includes(".env.onprem"), "Real on-prem environment file must be gitignored.");
+assert.ok(gitignore.includes("backups/"), "Local backup artifacts must never be committed.");
 
-console.log("On-prem package validation passed.");
+for (const token of [
+  "umask 077",
+  ".incomplete",
+  "pg_dump --format=custom",
+  "mc mirror --overwrite",
+  "runtime-health.json",
+  "images.json",
+  "sha256sum postgres.dump"
+]) assert.ok(backup.includes(token), `Backup safety contract missing: ${token}`);
+assert.ok(!backup.includes("--accept-data-loss"), "Backup path must never force schema changes.");
+
+for (const token of [
+  "--confirm-erase",
+  "sha256sum -c SHA256SUMS",
+  "stop app schema",
+  "dropdb --if-exists --force",
+  "createdb -U",
+  "pg_restore --exit-on-error",
+  "mc mirror --overwrite --remove",
+  "reserved database",
+  "application remains stopped"
+]) assert.ok(restore.includes(token), `Restore safety contract missing: ${token}`);
+assert.ok(!restore.includes("db push"), "Restore must not run implicit schema mutation.");
+assert.ok(!restore.includes("--accept-data-loss"), "Restore must not bypass destructive-schema protection.");
+
+for (const token of [
+  "HRBP_DISPOSABLE_RECOVERY_REHEARSAL",
+  "hrbp-recovery-",
+  "POSTGRES_DB=\"hrbp_recovery\"",
+  "original-db",
+  "mutated-db",
+  "should_disappear",
+  "original-object",
+  "recovery-extra.txt",
+  "--confirm-erase"
+]) assert.ok(rehearsal.includes(token), `Recovery rehearsal contract missing: ${token}`);
+
+const pkg = JSON.parse(packageJson);
+assert.equal(
+  pkg.scripts?.["onprem:recovery:rehearsal"],
+  "HRBP_DISPOSABLE_RECOVERY_REHEARSAL=true bash scripts/onprem-recovery-rehearsal.sh",
+  "Recovery rehearsal must be available as an explicit operator/CI command."
+);
+
+for (const token of [
+  "scripts/onprem-backup.sh",
+  "scripts/onprem-restore.sh",
+  "recovery rehearsal",
+  "application remains stopped",
+  "Versioned migrations"
+]) assert.ok(docs.includes(token), `On-prem runbook missing recovery guidance: ${token}`);
+
+console.log("On-prem package and recovery safety validation passed.");
