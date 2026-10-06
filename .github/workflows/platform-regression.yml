@@ -66,7 +66,7 @@ jobs:
           done
       - name: Build production application
         run: |
-          node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs scripts/locale-preference.test.mjs scripts/locale-progress.test.mjs scripts/core-workspace-resilience.test.mjs scripts/core-workspace-browser-wiring.test.mjs scripts/module-workspace-resilience.test.mjs scripts/leave-validation.test.mjs scripts/leave-client-action.test.mjs scripts/leave-decision.test.mjs scripts/action-center-leave.test.mjs scripts/action-center-queue.test.mjs
+          node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs scripts/locale-preference.test.mjs scripts/locale-progress.test.mjs scripts/core-workspace-resilience.test.mjs scripts/core-workspace-browser-wiring.test.mjs scripts/module-workspace-resilience.test.mjs scripts/leave-validation.test.mjs scripts/leave-client-action.test.mjs scripts/leave-decision.test.mjs scripts/action-center-leave.test.mjs scripts/action-center-queue.test.mjs scripts/action-center-source-health.test.mjs
           npx next build > .audit/build.log 2>&1 || { tail -80 .audit/build.log; exit 1; }
       - name: Browser, link, API and workflow audit
         run: |
@@ -83,6 +83,7 @@ jobs:
           node scripts/platform-audit.mjs || { tail -70 .audit/server.log; exit 1; }
           node scripts/platform-auth-browser-audit.mjs || { tail -70 .audit/server.log; exit 1; }
           node scripts/action-center-queue-browser.mjs
+          node scripts/action-center-source-health-browser.mjs
           node scripts/leave-decision-browser-regression.mjs
           HRBP_LEAVE_DECISION_SURFACE=action-center node scripts/leave-decision-browser-regression.mjs
           node scripts/leave-api-regression.mjs

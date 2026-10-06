@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 import { LeaveDecisionButtons, type LeaveDecisionRegistry } from "@/components/leave-decision-buttons";
 import { actionCenterLeaveControl, isActionCenterLeaveItem } from "@/lib/action-center-leave-control";
-import { createActionQueueLoader, queueFailureMessage } from "@/lib/action-center-queue";
+import { createActionQueueLoader, queueFailureMessage, actionQueueSourceHealth, sourceHealthMessage, type QueueSourceHealth } from "@/lib/action-center-queue";
 import type { ActionKind, Urgency, LifecycleActionItem, ActionSummary } from "@/lib/action-center-queue-types";
 
 type Filter = "all" | "critical" | "overdue" | "due-soon" | ActionKind;
@@ -117,6 +117,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
   const quickActionBusy = useRef(false);
   const [queueFailure, setQueueFailure] = useState(false);
   const [loadedAt, setLoadedAt] = useState<string | null>(null);
+  const [sourceHealth, setSourceHealth] = useState<QueueSourceHealth | null>(null);
+  const hasIncompleteSources = sourceHealth !== null && sourceHealth.state !== "reported";
 
   const refresh = useCallback(async () => {
     queueLoader.current ??= createActionQueueLoader();
@@ -129,6 +131,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
       setItems(result.data.items);
       setSummary(result.data.summary);
       setLoadedAt(result.data.generatedAt);
+      setSourceHealth(actionQueueSourceHealth(result.data));
     } else {
       setQueueFailure(true);
       setError(queueFailureMessage(result.reason, locale));
@@ -137,6 +140,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         setItems([]);
         setSummary(emptySummary);
         setLoadedAt(null);
+        setSourceHealth(null);
       }
     }
     setLoading(false);
@@ -669,7 +673,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
   }
 
   return (
-    <section className="workflow-action-center card" aria-busy={loading} data-queue-state={loading ? "loading" : queueFailure ? "unavailable" : "ready"}>
+    <section className="workflow-action-center card" aria-busy={loading} data-queue-state={loading ? "loading" : queueFailure ? "unavailable" : "ready"} data-source-state={loading || queueFailure ? "unverified" : sourceHealth?.state ?? "unknown"}>
       <div className="workflow-action-head">
         <div>
           <span className="section-kicker">{locale === "tr" ? "Yaşam döngüsü aksiyon merkezi" : "Lifecycle action center"}</span>
@@ -683,40 +687,40 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
 
       <div className="workflow-action-metrics">
         <button type="button" className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>
-          <Workflow size={17}/><span>{locale === "tr" ? "Tüm açık işler" : "All open work"}</span><strong>{loading || queueFailure ? "—" : summary.total}</strong>
+          <Workflow size={17}/><span>{locale === "tr" ? "Tüm açık işler" : "All open work"}</span><strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.total}</strong>
         </button>
         <button type="button" className={`${filter === "critical" ? "active" : ""} ${summary.critical ? "danger" : ""}`} onClick={() => setFilter("critical")}>
-          <ShieldAlert size={17}/><span>{locale === "tr" ? "Kritik" : "Critical"}</span><strong>{loading || queueFailure ? "—" : summary.critical}</strong>
+          <ShieldAlert size={17}/><span>{locale === "tr" ? "Kritik" : "Critical"}</span><strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.critical}</strong>
         </button>
         <button type="button" className={`${filter === "overdue" ? "active" : ""} ${summary.overdue ? "danger" : ""}`} onClick={() => setFilter("overdue")}>
-          <AlertTriangle size={17}/><span>{locale === "tr" ? "Geciken" : "Overdue"}</span><strong>{loading || queueFailure ? "—" : summary.overdue}</strong>
+          <AlertTriangle size={17}/><span>{locale === "tr" ? "Geciken" : "Overdue"}</span><strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.overdue}</strong>
         </button>
         <button type="button" className={filter === "due-soon" ? "active" : ""} onClick={() => setFilter("due-soon")}>
-          <Clock3 size={17}/><span>{locale === "tr" ? "24 saat içinde" : "Due in 24h"}</span><strong>{loading || queueFailure ? "—" : summary.dueSoon}</strong>
+          <Clock3 size={17}/><span>{locale === "tr" ? "24 saat içinde" : "Due in 24h"}</span><strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.dueSoon}</strong>
         </button>
       </div>
 
       <div className="workflow-action-source-filters" role="group" aria-label={locale === "tr" ? "Kaynak filtresi" : "Source filter"}>
-        <button type="button" className={filter === "workflow" ? "active" : ""} onClick={() => setFilter("workflow")}>{locale === "tr" ? "İş akışı" : "Workflow"} <strong>{loading || queueFailure ? "—" : summary.workflow}</strong></button>
-        <button type="button" className={filter === "recruiting" ? "active" : ""} onClick={() => setFilter("recruiting")}><BriefcaseBusiness size={14}/>{locale === "tr" ? "İşe Alım" : "Recruiting"} <strong>{loading || queueFailure ? "—" : summary.recruiting}</strong></button>
-        <button type="button" className={filter === "policies" ? "active" : ""} onClick={() => setFilter("policies")}><BookOpenCheck size={14}/>{locale === "tr" ? "Politikalar" : "Policies"} <strong>{loading || queueFailure ? "—" : summary.policies}</strong></button>
-        <button type="button" className={filter === "workforce-planning" ? "active" : ""} onClick={() => setFilter("workforce-planning")}><Target size={14}/>{locale === "tr" ? "İşgücü Planlama" : "Workforce Planning"} <strong>{loading || queueFailure ? "—" : summary.workforcePlanning}</strong></button>
-        <button type="button" className={filter === "privacy" ? "active" : ""} onClick={() => setFilter("privacy")}><ShieldAlert size={14}/>{locale === "tr" ? "Gizlilik" : "Privacy"} <strong>{loading || queueFailure ? "—" : summary.privacy}</strong></button>
-        <button type="button" className={filter === "engagement" ? "active" : ""} onClick={() => setFilter("engagement")}><UsersRound size={14}/>{locale === "tr" ? "Bağlılık" : "Engagement"} <strong>{loading || queueFailure ? "—" : summary.engagement}</strong></button>
-        <button type="button" className={filter === "hr-service" ? "active" : ""} onClick={() => setFilter("hr-service")}>{locale === "tr" ? "İK Hizmeti" : "HR Service"} <strong>{loading || queueFailure ? "—" : summary.hrService}</strong></button>
-        <button type="button" className={filter === "employee-relations" ? "active" : ""} onClick={() => setFilter("employee-relations")}>{locale === "tr" ? "Çalışan İlişkileri" : "Employee Relations"} <strong>{loading || queueFailure ? "—" : summary.employeeRelations}</strong></button>
-        <button type="button" className={filter === "documents" ? "active" : ""} onClick={() => setFilter("documents")}><FileClock size={14}/>{locale === "tr" ? "Dokümanlar" : "Documents"} <strong>{loading || queueFailure ? "—" : summary.documents}</strong></button>
-        <button type="button" className={filter === "onboarding" ? "active" : ""} onClick={() => setFilter("onboarding")}><UserPlus size={14}/>{locale === "tr" ? "İşe Başlatma" : "Onboarding"} <strong>{loading || queueFailure ? "—" : summary.onboarding}</strong></button>
-        <button type="button" className={filter === "offboarding" ? "active" : ""} onClick={() => setFilter("offboarding")}><UserMinus size={14}/>{locale === "tr" ? "İşten Ayrılış" : "Offboarding"} <strong>{loading || queueFailure ? "—" : summary.offboarding}</strong></button>
-        <button type="button" className={filter === "leave" ? "active" : ""} onClick={() => setFilter("leave")}><CalendarCheck2 size={14}/>{locale === "tr" ? "İzin" : "Leave"} <strong>{loading || queueFailure ? "—" : summary.leave}</strong></button>
-        <button type="button" className={filter === "time-attendance" ? "active" : ""} onClick={() => setFilter("time-attendance")}><TimerReset size={14}/>{locale === "tr" ? "Zaman" : "Time"} <strong>{loading || queueFailure ? "—" : summary.timeAttendance}</strong></button>
-        <button type="button" className={filter === "compensation" ? "active" : ""} onClick={() => setFilter("compensation")}><BadgeDollarSign size={14}/>{locale === "tr" ? "Ücret" : "Compensation"} <strong>{loading || queueFailure ? "—" : summary.compensation}</strong></button>
-        <button type="button" className={filter === "payroll" ? "active" : ""} onClick={() => setFilter("payroll")}><ReceiptText size={14}/>{locale === "tr" ? "Bordro" : "Payroll"} <strong>{loading || queueFailure ? "—" : summary.payroll}</strong></button>
-        <button type="button" className={filter === "benefits" ? "active" : ""} onClick={() => setFilter("benefits")}><HeartHandshake size={14}/>{locale === "tr" ? "Yan Haklar" : "Benefits"} <strong>{loading || queueFailure ? "—" : summary.benefits}</strong></button>
-        <button type="button" className={filter === "performance" ? "active" : ""} onClick={() => setFilter("performance")}><ClipboardCheck size={14}/>{locale === "tr" ? "Performans" : "Performance"} <strong>{loading || queueFailure ? "—" : summary.performance}</strong></button>
-        <button type="button" className={filter === "learning" ? "active" : ""} onClick={() => setFilter("learning")}><BookOpenCheck size={14}/>{locale === "tr" ? "Eğitim" : "Learning"} <strong>{loading || queueFailure ? "—" : summary.learning}</strong></button>
-        <button type="button" className={filter === "development-plan" ? "active" : ""} onClick={() => setFilter("development-plan")}><Target size={14}/>{locale === "tr" ? "Gelişim" : "Development"} <strong>{loading || queueFailure ? "—" : summary.developmentPlans}</strong></button>
-        <button type="button" className={filter === "succession" ? "active" : ""} onClick={() => setFilter("succession")}><UsersRound size={14}/>{locale === "tr" ? "Yedekleme" : "Succession"} <strong>{loading || queueFailure ? "—" : summary.succession}</strong></button>
+        <button type="button" className={filter === "workflow" ? "active" : ""} onClick={() => setFilter("workflow")}>{locale === "tr" ? "İş akışı" : "Workflow"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.workflow}</strong></button>
+        <button type="button" className={filter === "recruiting" ? "active" : ""} onClick={() => setFilter("recruiting")}><BriefcaseBusiness size={14}/>{locale === "tr" ? "İşe Alım" : "Recruiting"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.recruiting}</strong></button>
+        <button type="button" className={filter === "policies" ? "active" : ""} onClick={() => setFilter("policies")}><BookOpenCheck size={14}/>{locale === "tr" ? "Politikalar" : "Policies"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.policies}</strong></button>
+        <button type="button" className={filter === "workforce-planning" ? "active" : ""} onClick={() => setFilter("workforce-planning")}><Target size={14}/>{locale === "tr" ? "İşgücü Planlama" : "Workforce Planning"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.workforcePlanning}</strong></button>
+        <button type="button" className={filter === "privacy" ? "active" : ""} onClick={() => setFilter("privacy")}><ShieldAlert size={14}/>{locale === "tr" ? "Gizlilik" : "Privacy"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.privacy}</strong></button>
+        <button type="button" className={filter === "engagement" ? "active" : ""} onClick={() => setFilter("engagement")}><UsersRound size={14}/>{locale === "tr" ? "Bağlılık" : "Engagement"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.engagement}</strong></button>
+        <button type="button" className={filter === "hr-service" ? "active" : ""} onClick={() => setFilter("hr-service")}>{locale === "tr" ? "İK Hizmeti" : "HR Service"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.hrService}</strong></button>
+        <button type="button" className={filter === "employee-relations" ? "active" : ""} onClick={() => setFilter("employee-relations")}><span>{locale === "tr" ? "Çalışan İlişkileri" : "Employee Relations"}</span> <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.employeeRelations}</strong></button>
+        <button type="button" className={filter === "documents" ? "active" : ""} onClick={() => setFilter("documents")}><FileClock size={14}/>{locale === "tr" ? "Dokümanlar" : "Documents"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.documents}</strong></button>
+        <button type="button" className={filter === "onboarding" ? "active" : ""} onClick={() => setFilter("onboarding")}><UserPlus size={14}/>{locale === "tr" ? "İşe Başlatma" : "Onboarding"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.onboarding}</strong></button>
+        <button type="button" className={filter === "offboarding" ? "active" : ""} onClick={() => setFilter("offboarding")}><UserMinus size={14}/>{locale === "tr" ? "İşten Ayrılış" : "Offboarding"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.offboarding}</strong></button>
+        <button type="button" className={filter === "leave" ? "active" : ""} onClick={() => setFilter("leave")}><CalendarCheck2 size={14}/>{locale === "tr" ? "İzin" : "Leave"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.leave}</strong></button>
+        <button type="button" className={filter === "time-attendance" ? "active" : ""} onClick={() => setFilter("time-attendance")}><TimerReset size={14}/>{locale === "tr" ? "Zaman" : "Time"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.timeAttendance}</strong></button>
+        <button type="button" className={filter === "compensation" ? "active" : ""} onClick={() => setFilter("compensation")}><BadgeDollarSign size={14}/>{locale === "tr" ? "Ücret" : "Compensation"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.compensation}</strong></button>
+        <button type="button" className={filter === "payroll" ? "active" : ""} onClick={() => setFilter("payroll")}><ReceiptText size={14}/>{locale === "tr" ? "Bordro" : "Payroll"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.payroll}</strong></button>
+        <button type="button" className={filter === "benefits" ? "active" : ""} onClick={() => setFilter("benefits")}><HeartHandshake size={14}/>{locale === "tr" ? "Yan Haklar" : "Benefits"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.benefits}</strong></button>
+        <button type="button" className={filter === "performance" ? "active" : ""} onClick={() => setFilter("performance")}><ClipboardCheck size={14}/>{locale === "tr" ? "Performans" : "Performance"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.performance}</strong></button>
+        <button type="button" className={filter === "learning" ? "active" : ""} onClick={() => setFilter("learning")}><BookOpenCheck size={14}/>{locale === "tr" ? "Eğitim" : "Learning"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.learning}</strong></button>
+        <button type="button" className={filter === "development-plan" ? "active" : ""} onClick={() => setFilter("development-plan")}><Target size={14}/>{locale === "tr" ? "Gelişim" : "Development"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.developmentPlans}</strong></button>
+        <button type="button" className={filter === "succession" ? "active" : ""} onClick={() => setFilter("succession")}><UsersRound size={14}/>{locale === "tr" ? "Yedekleme" : "Succession"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.succession}</strong></button>
       </div>
 
       <div className="workflow-action-refine">
@@ -741,9 +745,12 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
           <strong>{loading || queueFailure ? "—" : items.filter((item) => Boolean(item.action || item.secondaryAction)).length}</strong>
         </button>
         {(query || actionableOnly) ? <button type="button" className="secondary-button compact" onClick={() => { setQuery(""); setActionableOnly(false); }}>{locale === "tr" ? "Temizle" : "Clear"}</button> : null}
-        <span className="workflow-action-result-count">{loading || queueFailure ? "—" : `${visibleItems.length} / ${items.length}`}</span>
+        <span className="workflow-action-result-count">{loading || queueFailure ? "—" : `${hasIncompleteSources ? (locale === "tr" ? "Yüklenmiş kayıtlar: " : "Loaded records: ") : ""}${visibleItems.length} / ${items.length}`}</span>
       </div>
 
+      {!loading && !queueFailure && hasIncompleteSources && sourceHealth ? <div className="workflow-action-message" role="status" data-queue-source-health={sourceHealth.state}>
+        <AlertTriangle size={15} style={{ flexShrink: 0 }}/><span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{sourceHealthMessage(sourceHealth, locale)}</span>
+      </div> : null}
       {error ? <div className="workflow-action-message error" role="alert"><AlertTriangle size={15}/>{error}</div> : null}
       {loading && items.length > 0 ? <div className="workflow-action-message" role="status">{locale === "tr" ? "Liste yenileniyor; önceki kayıtlar gösteriliyor. Hızlı işlemler geçici olarak kapalı." : "Refreshing the queue; previous records are shown. Quick actions are temporarily disabled."}</div> : null}
       {!loading && queueFailure && items.length > 0 ? <div className="workflow-action-message" role="status">{locale === "tr" ? "Önceki liste gösteriliyor; kayıtların güncelliği doğrulanamadı. Yenile düğmesi yalnızca listeyi okur, işlem tekrarlamaz." : "Showing the previous list; its freshness could not be verified. Refresh only reads the queue and never repeats an action."}</div> : null}
@@ -755,7 +762,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
           <thead><tr><th>{locale === "tr" ? "Kaynak" : "Source"}</th><th>{locale === "tr" ? "Aksiyon" : "Action"}</th><th>{locale === "tr" ? "Konu" : "Subject"}</th><th>SLA</th><th>{locale === "tr" ? "Öncelik" : "Priority"}</th><th>{locale === "tr" ? "Durum" : "Status"}</th><th>{locale === "tr" ? "İşlem" : "Operation"}</th></tr></thead>
           <tbody>
             {loading && items.length === 0 ? <tr><td colSpan={7} className="workflow-action-empty">{locale === "tr" ? "Aksiyon merkezi yükleniyor…" : "Loading action center…"}</td></tr> : null}
-            {!loading && !queueFailure && visibleItems.length === 0 ? <tr><td colSpan={7} className="workflow-action-empty"><CheckCircle2 size={17}/>{locale === "tr" ? "Bu görünümde bekleyen aksiyon yok." : "No pending actions in this view."}</td></tr> : null}
+            {!loading && !queueFailure && visibleItems.length === 0 ? <tr><td colSpan={7} className="workflow-action-empty">{hasIncompleteSources ? <span data-queue-incomplete-empty>{locale === "tr" ? "Bu görünümde yüklenmiş kayıt yok. Eksik veya durumu bilinmeyen kaynaklarda bekleyen işler olabilir." : "No loaded records match this view. Unavailable or unreported sources may still contain pending work."}</span> : <><CheckCircle2 size={17}/>{locale === "tr" ? "Bu görünümde bekleyen aksiyon yok." : "No pending actions in this view."}</>}</td></tr> : null}
             {visibleItems.map((item) => {
               const leaveControl = actionCenterLeaveControl(item);
               const workflowAction = item.action?.type === "complete-workflow" ? item.action : null;
