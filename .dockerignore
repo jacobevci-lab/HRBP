@@ -1,0 +1,14 @@
+.git
+.github
+.next
+.open-next
+node_modules
+.audit
+.env
+.env.*
+!.env.example
+deploy/onprem/.env
+deploy/onprem/backups
+*.log
+coverage
+.DS_Store

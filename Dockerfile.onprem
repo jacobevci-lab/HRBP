@@ -1,0 +1,34 @@
+# syntax=docker/dockerfile:1.7
+FROM node:22-bookworm-slim AS base
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+FROM base AS builder
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+RUN mkdir -p public
+ARG HRBP_SOURCE_REVISION=
+ENV HRBP_BUILD_TARGET=onprem
+ENV GITHUB_SHA=${HRBP_SOURCE_REVISION}
+RUN npm run build
+
+FROM builder AS schema
+ENV NODE_ENV=production
+CMD ["node", "scripts/onprem-schema-bootstrap.mjs"]
+
+FROM base AS runtime
+ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+ENV HRBP_RUNTIME_PROFILE=onprem-node
+RUN useradd --system --uid 10001 --create-home --home-dir /home/hrbp hrbp
+COPY --from=builder --chown=hrbp:hrbp /app/.next/standalone ./
+COPY --from=builder --chown=hrbp:hrbp /app/.next/static ./.next/static
+COPY --from=builder --chown=hrbp:hrbp /app/public ./public
+USER hrbp
+EXPOSE 3000
+CMD ["node", "server.js"]

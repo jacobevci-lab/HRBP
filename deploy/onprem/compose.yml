@@ -1,0 +1,124 @@
+name: hrbp-one
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hrbp}
+      POSTGRES_USER: ${POSTGRES_USER:-hrbp_admin}
+      POSTGRES_PASSWORD: ${HRBP_DB_ADMIN_PASSWORD:?set HRBP_DB_ADMIN_PASSWORD}
+      HRBP_DB_APP_PASSWORD: ${HRBP_DB_APP_PASSWORD:?set HRBP_DB_APP_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init.sh:/docker-entrypoint-initdb.d/10-hrbp-runtime-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [backend]
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    restart: unless-stopped
+    command: ["sh","-ec","exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD}
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [backend]
+  minio:
+    image: ${MINIO_IMAGE:-minio/minio:RELEASE.2025-09-07T16-13-09Z}
+    restart: unless-stopped
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
+    volumes: [minio_data:/data]
+    networks: [backend]
+  schema-bootstrap:
+    image: ${HRBP_SCHEMA_IMAGE:-hrbp-one-schema:onprem}
+    build:
+      context: ../..
+      dockerfile: Dockerfile.onprem
+      target: schema
+      args:
+        HRBP_SOURCE_REVISION: ${HRBP_SOURCE_REVISION:-}
+    profiles: ["bootstrap"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hrbp_admin}:${HRBP_DB_ADMIN_PASSWORD:?set HRBP_DB_ADMIN_PASSWORD}@postgres:5432/${POSTGRES_DB:-hrbp}
+      HRBP_DB_APP_ROLE: hrbp_app
+      HRBP_AUTH_TENANT_ID: ${HRBP_AUTH_TENANT_ID:?set HRBP_AUTH_TENANT_ID}
+      HRBP_TENANT_NAME: ${HRBP_TENANT_NAME:?set HRBP_TENANT_NAME}
+      HRBP_TENANT_REGION: ${HRBP_TENANT_REGION:?set HRBP_TENANT_REGION}
+    networks: [backend]
+  app:
+    image: ${HRBP_IMAGE:-hrbp-one:onprem}
+    build:
+      context: ../..
+      dockerfile: Dockerfile.onprem
+      target: runtime
+      args:
+        HRBP_SOURCE_REVISION: ${HRBP_SOURCE_REVISION:-}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://hrbp_app:${HRBP_DB_APP_PASSWORD:?set HRBP_DB_APP_PASSWORD}@postgres:5432/${POSTGRES_DB:-hrbp}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD}@redis:6379
+      OBJECT_STORAGE_ENDPOINT: http://minio:9000
+      OBJECT_STORAGE_ACCESS_KEY: ${OBJECT_STORAGE_ACCESS_KEY:?set OBJECT_STORAGE_ACCESS_KEY}
+      OBJECT_STORAGE_SECRET_KEY: ${OBJECT_STORAGE_SECRET_KEY:?set OBJECT_STORAGE_SECRET_KEY}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-hrbp-private}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
+      APP_URL: ${APP_URL:?set APP_URL}
+      HRBP_SESSION_SECRET: ${HRBP_SESSION_SECRET:?set HRBP_SESSION_SECRET}
+      HRBP_ENGAGEMENT_RESPONSE_SECRET: ${HRBP_ENGAGEMENT_RESPONSE_SECRET:?set HRBP_ENGAGEMENT_RESPONSE_SECRET}
+      HRBP_DOCUMENT_SCAN_TOKEN: ${HRBP_DOCUMENT_SCAN_TOKEN:?set HRBP_DOCUMENT_SCAN_TOKEN}
+      HRBP_MAINTENANCE_TOKEN: ${HRBP_MAINTENANCE_TOKEN:?set HRBP_MAINTENANCE_TOKEN}
+      HRBP_LOCAL_AUTH_ENABLED: ${HRBP_LOCAL_AUTH_ENABLED:-false}
+      HRBP_OIDC_ISSUER: ${HRBP_OIDC_ISSUER:-}
+      HRBP_OIDC_CLIENT_ID: ${HRBP_OIDC_CLIENT_ID:-}
+      HRBP_OIDC_CLIENT_SECRET: ${HRBP_OIDC_CLIENT_SECRET:-}
+      HRBP_OIDC_SCOPES: ${HRBP_OIDC_SCOPES:-openid profile email}
+      HRBP_OIDC_REDIRECT_URI: ${HRBP_OIDC_REDIRECT_URI:-}
+      HRBP_AUTH_TENANT_ID: ${HRBP_AUTH_TENANT_ID:?set HRBP_AUTH_TENANT_ID}
+      HRBP_BOOTSTRAP_ADMIN_EMAIL: ${HRBP_BOOTSTRAP_ADMIN_EMAIL:-}
+      HRBP_ALLOWED_EMAIL_DOMAINS: ${HRBP_ALLOWED_EMAIL_DOMAINS:-}
+      HRBP_OIDC_JIT_PROVISIONING: ${HRBP_OIDC_JIT_PROVISIONING:-false}
+      HRBP_ALLOW_INSECURE_CONTEXT_HEADERS: "false"
+      HRBP_RUNTIME_PROFILE: onprem-node
+    ports:
+      - "${HRBP_BIND_ADDRESS:-127.0.0.1}:${HRBP_HTTP_PORT:-3000}:3000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /app/.next/cache:size=128m,mode=0770,uid=10001,gid=10001
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD","node","-e","Promise.all([fetch('http://127.0.0.1:3000/api/health/runtime'),fetch('http://127.0.0.1:3000/api/health/db')]).then(r=>process.exit(r.every(x=>x.ok)?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 8s
+      retries: 10
+      start_period: 20s
+    networks: [backend,frontend]
+networks:
+  frontend: {}
+  backend:
+    internal: true
+volumes:
+  postgres_data: {}
+  redis_data: {}
+  minio_data: {}
