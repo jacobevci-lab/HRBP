@@ -8,7 +8,7 @@ This profile packages the application with PostgreSQL and private S3-compatible 
 - The application binds to `127.0.0.1:3000` by default so a customer reverse proxy/TLS gateway can terminate HTTPS.
 - Local authentication is disabled in the production example. Configure enterprise OIDC before exposing the service.
 - Required database, storage, session and service secrets must be supplied through `.env.onprem`, which is ignored by Git and excluded from the Docker build context.
-- The object bucket is created as private.
+- The object bucket is created as private. The application uses a dedicated MinIO service user scoped to GetObject/PutObject on that bucket; MinIO root credentials remain bootstrap/admin-only.
 - Runtime containers use an unprivileged Node user.
 - The schema service never uses Prisma's destructive `--accept-data-loss` option.
 
@@ -20,7 +20,7 @@ This profile packages the application with PostgreSQL and private S3-compatible 
    cp .env.onprem.example .env.onprem
    openssl rand -hex 48
    ```
-3. Set `APP_URL`, OIDC issuer/client/redirect values, the customer tenant identifier and bootstrap administrator email.
+3. Set `APP_URL`, OIDC issuer/client/redirect values, the customer tenant identifier, bootstrap administrator email and distinct object-storage application credentials. Do not reuse the MinIO root credentials.
 4. Start the stack:
    ```bash
    docker compose --env-file .env.onprem -f docker-compose.onprem.yml up -d --build
