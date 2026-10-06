@@ -46,6 +46,7 @@ services:
       RCLONE_CONFIG_HRBP_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://object-storage:8333}
       RCLONE_CONFIG_HRBP_REGION: ${OBJECT_STORAGE_REGION:-us-east-1}
       RCLONE_CONFIG_HRBP_FORCE_PATH_STYLE: "true"
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:-hrbp-private}
     networks: [hrbp_internal]
 
   schema:
