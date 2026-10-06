@@ -24,6 +24,7 @@ check('No unexpected authenticated fallback',browser.adminProtectedFallbacks.len
 check('Rendered internal links respond successfully',browser.nonSuccessfulLinks.length===0,browser.nonSuccessfulLinks);
 check('Mobile pages fit viewport without document-level clipping',browser.mobileOverflow.length===0,browser.mobileOverflow);
 for(const path of ['/module/engagement','/module/workforce-planning','/module/ai-assistant'])check('Turkish live labels: '+path,browser.ui.some(x=>x.path===path&&x.turkishSelected&&x.remainingEnglishLabels.length===0));
+check('Employee lifecycle heading is localized in both directions',browser.ui.some(x=>x.path==='/module/employee-360/lifecycle'&&x.turkishSelected&&x.englishSelected&&x.turkishHeading==='Yaşam döngüsü yönetimi'));
 const db=new PrismaClient();const pass=process.env.HRBP_TEST_ADMIN_PASSWORD;
 async function http(path,method='GET',cookie,body,headers={}){return fetch(origin+path,{method,redirect:'manual',headers:{origin,'content-type':'application/json',...(cookie?{cookie}:{}),...headers},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});}
 async function login(){const r=await http('/api/auth/local','POST',undefined,{identifier:'audit.employee',password:pass});assert.equal(r.status,200);return r.headers.get('set-cookie').split(';')[0];}

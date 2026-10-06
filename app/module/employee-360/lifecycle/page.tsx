@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CircleAlert, ShieldCheck } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { can } from "@/lib/authorization";
+import { getServerLocale } from "@/lib/i18n-server";
 import { getServerRequestContext } from "@/lib/server-session";
 
 export const dynamic = "force-dynamic";
@@ -9,17 +10,56 @@ export const revalidate = 0;
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
+const copy = {
+  en: {
+    eyebrow: "HRBP One / Employee lifecycle",
+    liveEyebrow: "HRBP One / Employee 360 / Lifecycle",
+    title: "Lifecycle command",
+    summary: "Governed employee movement and separation controls.",
+    liveSummary: "Execute controlled employee movement without bypassing position, audit, privacy or separation controls.",
+    authTitle: "Authentication required",
+    authBody: "Employee lifecycle mutations are not available on the public staging surface.",
+    signIn: "Sign in with enterprise SSO",
+    selectSummary: "Select an employee from the People directory before initiating a governed change.",
+    noContextTitle: "No authorized employee context",
+    noContextBody: "Open an employee record first, then return to lifecycle actions.",
+    openPeople: "Open People",
+    back: "Back to Employee 360",
+    unavailableTitle: "Lifecycle data is temporarily unavailable",
+    unavailableBody: "The employee data plane could not initialize. No mutation was attempted.",
+    returnToEmployee: "Return to Employee 360"
+  },
+  tr: {
+    eyebrow: "HRBP One / Çalışan yaşam döngüsü",
+    liveEyebrow: "HRBP One / Çalışan 360 / Yaşam döngüsü",
+    title: "Yaşam döngüsü yönetimi",
+    summary: "Çalışan hareketlerini ve ayrılış kontrollerini yönetişimli biçimde yönetin.",
+    liveSummary: "Pozisyon, denetim, gizlilik veya ayrılış kontrollerini atlamadan kontrollü çalışan hareketlerini yönetin.",
+    authTitle: "Kimlik doğrulama gerekli",
+    authBody: "Çalışan yaşam döngüsü değişiklikleri herkese açık önizleme alanında kullanılamaz.",
+    signIn: "Kurumsal SSO ile giriş yap",
+    selectSummary: "Yönetişimli bir değişiklik başlatmadan önce Çalışanlar dizininden bir çalışan seçin.",
+    noContextTitle: "Yetkili çalışan bağlamı yok",
+    noContextBody: "Önce bir çalışan kaydı açın, ardından yaşam döngüsü işlemlerine geri dönün.",
+    openPeople: "Çalışanları aç",
+    back: "Çalışan 360'a dön",
+    unavailableTitle: "Yaşam döngüsü verileri geçici olarak kullanılamıyor",
+    unavailableBody: "Çalışan veri katmanı başlatılamadı. Herhangi bir değişiklik işlemi denenmedi.",
+    returnToEmployee: "Çalışan 360'a dön"
+  }
+} as const;
+
 export default async function EmployeeLifecyclePage({ searchParams }: { searchParams: SearchParams }) {
-  const search = await searchParams;
+  const [search, ctx, locale] = await Promise.all([searchParams, getServerRequestContext(), getServerLocale()]);
   const personId = typeof search.person === "string" ? search.person : "";
-  const ctx = await getServerRequestContext();
+  const text = copy[locale];
 
   if (!ctx) {
-    return <AppShell><section className="page-heading"><div><div className="eyebrow">HRBP One / Employee lifecycle</div><h1>Lifecycle command</h1><p>Governed employee movement and separation controls.</p></div></section><section className="card employee-restricted-card"><ShieldCheck size={22}/><div><h3>Authentication required</h3><p>Employee lifecycle mutations are not available on the public staging surface.</p><Link className="secondary-button" style={{ marginTop: 12 }} href={`/auth/sign-in?returnTo=${encodeURIComponent(`/module/employee-360/lifecycle?person=${personId}`)}`}>Sign in with enterprise SSO</Link></div></section></AppShell>;
+    return <AppShell><section className="page-heading"><div><div className="eyebrow">{text.eyebrow}</div><h1>{text.title}</h1><p>{text.summary}</p></div></section><section className="card employee-restricted-card"><ShieldCheck size={22}/><div><h3>{text.authTitle}</h3><p>{text.authBody}</p><Link className="secondary-button" style={{ marginTop: 12 }} href={`/auth/sign-in?returnTo=${encodeURIComponent(`/module/employee-360/lifecycle?person=${personId}`)}`}>{text.signIn}</Link></div></section></AppShell>;
   }
 
   if (!personId || !can(ctx, "people:read")) {
-    return <AppShell><section className="page-heading"><div><div className="eyebrow">HRBP One / Employee lifecycle</div><h1>Lifecycle command</h1><p>Select an employee from the People directory before initiating a governed change.</p></div></section><section className="card module-table"><div className="empty-state"><CircleAlert size={24}/><h3>No authorized employee context</h3><p>Open an employee record first, then return to lifecycle actions.</p><Link className="secondary-button" href="/module/people">Open People</Link></div></section></AppShell>;
+    return <AppShell><section className="page-heading"><div><div className="eyebrow">{text.eyebrow}</div><h1>{text.title}</h1><p>{text.selectSummary}</p></div></section><section className="card module-table"><div className="empty-state"><CircleAlert size={24}/><h3>{text.noContextTitle}</h3><p>{text.noContextBody}</p><Link className="secondary-button" href="/module/people">{text.openPeople}</Link></div></section></AppShell>;
   }
 
   try {
@@ -32,13 +72,13 @@ export default async function EmployeeLifecyclePage({ searchParams }: { searchPa
 
     return <AppShell>
       <section className="page-heading module-heading">
-        <div><div className="eyebrow">HRBP One / Employee 360 / Lifecycle</div><h1>Lifecycle command</h1><p>Execute controlled employee movement without bypassing position, audit, privacy or separation controls.</p></div>
-        <div className="module-heading-actions"><Link className="secondary-button" href={`/module/employee-360?person=${encodeURIComponent(person.id)}&tab=employment`}>Back to Employee 360</Link></div>
+        <div><div className="eyebrow">{text.liveEyebrow}</div><h1>{text.title}</h1><p>{text.liveSummary}</p></div>
+        <div className="module-heading-actions"><Link className="secondary-button" href={`/module/employee-360?person=${encodeURIComponent(person.id)}&tab=employment`}>{text.back}</Link></div>
       </section>
       <EmployeeLifecycleConsole personId={person.id} employeeName={person.name} currentPosition={person.position} currentDepartment={person.department} canMove={canMove} canOffboard={canOffboard}/>
     </AppShell>;
   } catch (error) {
     console.error("[HRBP] Employee lifecycle command failed to initialize.", error);
-    return <AppShell><section className="page-heading"><div><div className="eyebrow">HRBP One / Employee lifecycle</div><h1>Lifecycle command</h1><p>Governed employee movement and separation controls.</p></div></section><section className="card module-table"><div className="empty-state"><CircleAlert size={24}/><h3>Lifecycle data is temporarily unavailable</h3><p>The employee data plane could not initialize. No mutation was attempted.</p><Link className="secondary-button" href={`/module/employee-360?person=${encodeURIComponent(personId)}`}>Return to Employee 360</Link></div></section></AppShell>;
+    return <AppShell><section className="page-heading"><div><div className="eyebrow">{text.eyebrow}</div><h1>{text.title}</h1><p>{text.summary}</p></div></section><section className="card module-table"><div className="empty-state"><CircleAlert size={24}/><h3>{text.unavailableTitle}</h3><p>{text.unavailableBody}</p><Link className="secondary-button" href={`/module/employee-360?person=${encodeURIComponent(personId)}`}>{text.returnToEmployee}</Link></div></section></AppShell>;
   }
 }
