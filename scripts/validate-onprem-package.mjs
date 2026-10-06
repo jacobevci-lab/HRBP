@@ -10,7 +10,7 @@ const [compose, dockerfile, env, ignore, gitignore] = await Promise.all([
 ]);
 
 const required = [
-  "postgres:", "redis:", "minio:", "minio-init:", "schema:", "app:",
+  "postgres:", "minio:", "minio-init:", "schema:", "app:",
   "service_completed_successfully", "service_healthy",
   "HRBP_ALLOW_INSECURE_CONTEXT_HEADERS: \"false\"",
   "/api/health/runtime", "target: runtime", "target: schema"
@@ -18,10 +18,8 @@ const required = [
 for (const token of required) assert.ok(compose.includes(token), `Missing on-prem compose contract: ${token}`);
 
 const postgresBlock = compose.split("\n  redis:")[0];
-const redisBlock = (compose.split("\n  redis:")[1] ?? "").split("\n  minio:")[0];
 const minioBlock = (compose.split("\n  minio:")[1] ?? "").split("\n  minio-init:")[0];
 assert.ok(!/\n\s+ports:/.test(postgresBlock), "PostgreSQL must not publish a host port.");
-assert.ok(!/\n\s+ports:/.test(redisBlock), "Redis must not publish a host port.");
 assert.ok(!/\n\s+ports:/.test(minioBlock), "MinIO must not publish a host port.");
 assert.ok(!compose.includes("--accept-data-loss"), "Schema bootstrap must never accept destructive changes automatically.");
 assert.ok(compose.includes("POSTGRES_PASSWORD:?set POSTGRES_PASSWORD"));

@@ -1,10 +1,10 @@
 # HRBP One — On-prem deployment profile
 
-This profile packages the application with PostgreSQL, Redis and private S3-compatible object storage for a single customer-controlled environment. It is the first productized on-prem profile; it does not remove tenant scoping or authorization controls from the application.
+This profile packages the application with PostgreSQL and private S3-compatible object storage for a single customer-controlled environment. It is the first productized on-prem profile; it does not remove tenant scoping or authorization controls from the application.
 
 ## Security defaults
 
-- PostgreSQL, Redis and MinIO have no host-published ports.
+- PostgreSQL and MinIO have no host-published ports.
 - The application binds to `127.0.0.1:3000` by default so a customer reverse proxy/TLS gateway can terminate HTTPS.
 - Local authentication is disabled in the production example. Configure enterprise OIDC before exposing the service.
 - Required database, storage, session and service secrets must be supplied through `.env.onprem`, which is ignored by Git and excluded from the Docker build context.
@@ -49,7 +49,7 @@ The repository currently has no committed Prisma migration history; therefore `d
 
 ## Backup and recovery
 
-PostgreSQL is the system of record. MinIO stores private document objects; Redis is ephemeral coordination/cache and does not replace PostgreSQL.
+PostgreSQL is the system of record. MinIO stores private document objects.
 
 Example logical database backup:
 

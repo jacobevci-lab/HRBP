@@ -17,19 +17,6 @@ services:
       retries: 10
     networks: [hrbp_internal]
 
-  redis:
-    image: ${REDIS_IMAGE:-redis:7-alpine}
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    networks: [hrbp_internal]
-
   minio:
     image: ${MINIO_IMAGE:-minio/minio:latest}
     restart: unless-stopped
@@ -93,7 +80,6 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-hrbp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hrbp}
-      REDIS_URL: redis://redis:6379
       OBJECT_STORAGE_ENDPOINT: http://minio:9000
       OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER}
       OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
@@ -105,8 +91,6 @@ services:
     depends_on:
       schema:
         condition: service_completed_successfully
-      redis:
-        condition: service_healthy
       minio-init:
         condition: service_completed_successfully
     healthcheck:
@@ -119,7 +103,6 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:
   minio_data:
 
 networks:
