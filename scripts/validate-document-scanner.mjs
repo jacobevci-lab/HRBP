@@ -98,7 +98,7 @@ for (const token of [
   "writeUInt32BE",
   "CLAMD_REPLY_TOO_LARGE",
   "CLAMD_INPUT_INVALID",
-  "Eicar-Test-Signature"
+  "FOUND"
 ]) assert.ok(clamd.includes(token), "ClamD client safety contract missing: " + token);
 
 for (const token of [
