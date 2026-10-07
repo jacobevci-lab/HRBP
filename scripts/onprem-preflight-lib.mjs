@@ -151,6 +151,91 @@ export function validateOnpremEnv(env) {
     warnings.push("HRBP_HTTP_BIND exposes the app beyond loopback; terminate TLS and restrict network access before production use.");
   }
 
+  const smtpEnabledRaw = (env.HRBP_SMTP_ENABLED ?? "false").toLowerCase();
+  if (!["true", "false"].includes(smtpEnabledRaw)) {
+    errors.push("HRBP_SMTP_ENABLED must be explicitly true or false.");
+  }
+  const smtpEnabled = smtpEnabledRaw === "true";
+  const emailEvents = (env.HRBP_NOTIFICATION_EMAIL_EVENTS ?? "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (emailEvents.some((value) => !/^[A-Z][A-Z0-9_]{2,127}$/.test(value))) {
+    errors.push("HRBP_NOTIFICATION_EMAIL_EVENTS contains an invalid event name.");
+  }
+  if (new Set(emailEvents).size !== emailEvents.length) {
+    errors.push("HRBP_NOTIFICATION_EMAIL_EVENTS must not contain duplicate events.");
+  }
+  if (emailEvents.length > 200) {
+    errors.push("HRBP_NOTIFICATION_EMAIL_EVENTS must contain at most 200 events.");
+  }
+
+  const allowRestrictedRaw = (env.HRBP_NOTIFICATION_EMAIL_ALLOW_RESTRICTED ?? "false").toLowerCase();
+  if (!["true", "false"].includes(allowRestrictedRaw)) {
+    errors.push("HRBP_NOTIFICATION_EMAIL_ALLOW_RESTRICTED must be explicitly true or false.");
+  }
+
+  const emailBatch = env.HRBP_NOTIFICATION_EMAIL_BATCH_SIZE ?? "10";
+  if (!/^[0-9]+$/.test(emailBatch) || Number(emailBatch) < 1 || Number(emailBatch) > 50) {
+    errors.push("HRBP_NOTIFICATION_EMAIL_BATCH_SIZE must be between 1 and 50.");
+  }
+
+  if (smtpEnabled) {
+    for (const key of ["HRBP_SMTP_HOST", "HRBP_SMTP_USERNAME", "HRBP_SMTP_PASSWORD", "HRBP_SMTP_FROM"]) {
+      if (!env[key] || isPlaceholder(env[key])) errors.push(`${key} is required when HRBP_SMTP_ENABLED=true.`);
+    }
+    if (!emailEvents.length) errors.push("HRBP_NOTIFICATION_EMAIL_EVENTS must contain at least one event when SMTP delivery is enabled.");
+
+    const host = env.HRBP_SMTP_HOST ?? "";
+    if (!/^[A-Za-z0-9.-]{1,253}$/.test(host) || host.includes("..") || /^[-.]|[-.]$/.test(host)) {
+      errors.push("HRBP_SMTP_HOST must be a valid hostname without a URL scheme.");
+    }
+
+    const port = env.HRBP_SMTP_PORT ?? "587";
+    if (!/^[0-9]+$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
+      errors.push("HRBP_SMTP_PORT must be between 1 and 65535.");
+    }
+
+    const secure = (env.HRBP_SMTP_SECURE ?? "false").toLowerCase();
+    if (!["true", "false"].includes(secure)) errors.push("HRBP_SMTP_SECURE must be explicitly true or false.");
+
+    const smtpPassword = env.HRBP_SMTP_PASSWORD ?? "";
+    if (smtpPassword.length < 16) errors.push("HRBP_SMTP_PASSWORD must be at least 16 characters.");
+    if (/\s/.test(smtpPassword)) errors.push("HRBP_SMTP_PASSWORD must not contain whitespace.");
+    if (smtpPassword && smtpPassword === env.HRBP_SMTP_USERNAME) errors.push("HRBP_SMTP_PASSWORD must not equal HRBP_SMTP_USERNAME.");
+    if (smtpPassword && secretValues.some(([, value]) => value === smtpPassword)) {
+      errors.push("HRBP_SMTP_PASSWORD must not reuse another application secret.");
+    }
+
+    const from = env.HRBP_SMTP_FROM ?? "";
+    if (/[\r\n]/.test(from) || from.length > 320 || !/[A-Za-z0-9.!#$%&'*+/=?^_\`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(from)) {
+      errors.push("HRBP_SMTP_FROM must contain one valid email address and no line breaks.");
+    }
+
+    const servername = env.HRBP_SMTP_TLS_SERVERNAME ?? "";
+    if (servername && (!/^[A-Za-z0-9.-]{1,253}$/.test(servername) || servername.includes(".."))) {
+      errors.push("HRBP_SMTP_TLS_SERVERNAME must be a valid TLS server name.");
+    }
+
+    const messageIdDomain = env.HRBP_SMTP_MESSAGE_ID_DOMAIN ?? "";
+    if (messageIdDomain && (!/^[A-Za-z0-9.-]{1,253}$/.test(messageIdDomain) || messageIdDomain.includes(".."))) {
+      errors.push("HRBP_SMTP_MESSAGE_ID_DOMAIN must be a valid domain.");
+    }
+
+    for (const [key, minimum, maximum] of [
+      ["HRBP_SMTP_CONNECTION_TIMEOUT_MS", 3000, 20000],
+      ["HRBP_SMTP_GREETING_TIMEOUT_MS", 3000, 20000],
+      ["HRBP_SMTP_SOCKET_TIMEOUT_MS", 5000, 30000]
+    ]) {
+      const raw = env[key];
+      if (raw !== undefined && (!/^[0-9]+$/.test(raw) || Number(raw) < minimum || Number(raw) > maximum)) {
+        errors.push(`${key} must be between ${minimum} and ${maximum} milliseconds.`);
+      }
+    }
+  } else if (emailEvents.length) {
+    warnings.push("HRBP_NOTIFICATION_EMAIL_EVENTS is configured while HRBP_SMTP_ENABLED=false; email mirroring is disabled.");
+  }
+
   const cadence = env.HRBP_MAINTENANCE_INTERVAL_SECONDS;
   if (cadence !== undefined && (!/^[0-9]+$/.test(cadence) || Number(cadence) < 300 || Number(cadence) > 86400)) {
     errors.push("HRBP_MAINTENANCE_INTERVAL_SECONDS must be between 300 and 86400 seconds.");
