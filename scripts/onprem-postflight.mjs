@@ -92,16 +92,27 @@ if (mode === "post-deploy") {
   migrationStatus = "clean";
 }
 
-let schedulerHealthy = false;
-while (Date.now() < deadline) {
-  const scheduler = compose(["exec", "-T", "maintenance-scheduler", "node", "scripts/onprem-maintenance-health.mjs"]);
-  if (!scheduler.error && scheduler.status === 0) {
-    schedulerHealthy = true;
-    break;
+const runningServices = compose(["ps", "--status", "running", "--services"]);
+const running = new Set(
+  !runningServices.error && runningServices.status === 0
+    ? runningServices.stdout.split(/\r?\n/).map((value) => value.trim()).filter(Boolean)
+    : []
+);
+let schedulerStatus = "healthy";
+if (mode === "pre-upgrade" && !running.has("maintenance-scheduler")) {
+  schedulerStatus = "not-running-pre-upgrade";
+} else {
+  let schedulerHealthy = false;
+  while (Date.now() < deadline) {
+    const scheduler = compose(["exec", "-T", "maintenance-scheduler", "node", "scripts/onprem-maintenance-health.mjs"]);
+    if (!scheduler.error && scheduler.status === 0) {
+      schedulerHealthy = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5000));
   }
-  await new Promise((resolve) => setTimeout(resolve, 5000));
+  if (!schedulerHealthy) fail("Maintenance scheduler did not become healthy after deployment.");
 }
-if (!schedulerHealthy) fail("Maintenance scheduler did not become healthy after deployment.");
 
 console.log(JSON.stringify({
   ok: true,
@@ -118,5 +129,5 @@ console.log(JSON.stringify({
   },
   mode,
   migrations: migrationStatus,
-  scheduler: "healthy"
+  scheduler: schedulerStatus
 }));
