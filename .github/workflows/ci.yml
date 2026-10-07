@@ -34,6 +34,7 @@ jobs:
       DATABASE_URL: postgresql://hrbp:hrbp@localhost:5432/hrbp
       HRBP_MAINTENANCE_TOKEN: ci-maintenance-token-1234567890
       HRBP_DOCUMENT_SCAN_TOKEN: ci-document-scan-token-1234567890
+      HRBP_METRICS_TOKEN: ci-metrics-token-12345678901234567890
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -126,6 +127,7 @@ jobs:
           npx wrangler dev --local --port 8787 \
             --var HRBP_MAINTENANCE_TOKEN:$HRBP_MAINTENANCE_TOKEN \
             --var HRBP_DOCUMENT_SCAN_TOKEN:$HRBP_DOCUMENT_SCAN_TOKEN \
+            --var HRBP_METRICS_TOKEN:$HRBP_METRICS_TOKEN \
             > /tmp/hrbp-wrangler.log 2>&1 &
           WRANGLER_PID=$!
           trap 'kill $WRANGLER_PID 2>/dev/null || true' EXIT
@@ -372,6 +374,35 @@ jobs:
 
           await db.$disconnect();
           console.log('Document scan claim/retry/finalization/stale-lock protocol passed.');
+          NODE
+
+          node --input-type=module <<'NODE'
+          const base = 'http://127.0.0.1:8787/api/internal/metrics';
+          const rejected = await fetch(base, { headers: { accept: 'text/plain' } });
+          if (rejected.status !== 401) {
+            console.error('Operational metrics did not reject an unauthenticated scrape.', rejected.status);
+            process.exit(1);
+          }
+
+          const accepted = await fetch(base, {
+            headers: {
+              accept: 'text/plain',
+              authorization: 'Bearer ' + process.env.HRBP_METRICS_TOKEN
+            }
+          });
+          const text = await accepted.text();
+          if (!accepted.ok ||
+              !/^hrbp_operational_metrics_up 1$/m.test(text) ||
+              !/^hrbp_notification_outbox_records\{channel="IN_APP",status="DELIVERED"\} [0-9]+$/m.test(text) ||
+              !/^hrbp_document_scan_records\{status="CLEAN"\} [0-9]+$/m.test(text)) {
+            console.error('Operational metrics snapshot is incomplete.', accepted.status, text.slice(0, 2000));
+            process.exit(1);
+          }
+          if (/ci-tenant|ci-user|ci-document-scan-version|ci-document-scan-stale-exhausted/.test(text)) {
+            console.error('Operational metrics leaked tenant, user or resource identifiers.');
+            process.exit(1);
+          }
+          console.log('Operational metrics authentication/aggregation protocol passed.');
           NODE
 
           node --input-type=module <<'NODE'

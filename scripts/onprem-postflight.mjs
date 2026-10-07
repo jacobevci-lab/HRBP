@@ -52,6 +52,25 @@ async function boundedJson(pathname) {
   return { response, body };
 }
 
+async function boundedMetrics() {
+  const token = env.HRBP_METRICS_TOKEN || "";
+  if (token.length < 24) throw new Error("metrics token is missing");
+  const response = await fetch(`${origin}/api/internal/metrics`, {
+    redirect: "error",
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+    headers: {
+      Accept: "text/plain",
+      Authorization: `Bearer ${token}`
+    }
+  });
+  const length = Number(response.headers.get("content-length") || "0");
+  if (length > 64 * 1024) throw new Error("oversized metrics response");
+  const text = await response.text();
+  if (Buffer.byteLength(text) > 64 * 1024) throw new Error("oversized metrics response");
+  return { response, text };
+}
+
 async function waitFor(pathname, predicate, label) {
   let last = "unavailable";
   while (Date.now() < deadline) {
@@ -89,6 +108,22 @@ const notifications = await waitFor(
     typeof body?.email?.configured === "boolean" && Number.isInteger(body?.email?.eventCount),
   "Notification provider health"
 );
+
+let operationalMetrics = "not-required-pre-upgrade";
+if (mode === "post-deploy") {
+  try {
+    const { response, text } = await boundedMetrics();
+    if (!response.ok ||
+        !/^hrbp_operational_metrics_up 1$/m.test(text) ||
+        !/^hrbp_notification_outbox_records\{channel="IN_APP",status="PENDING"\} [0-9]+$/m.test(text) ||
+        !/^hrbp_document_scan_records\{status="PENDING"\} [0-9]+$/m.test(text)) {
+      fail("Operational metrics endpoint is not healthy.");
+    }
+    operationalMetrics = "healthy";
+  } catch {
+    fail("Operational metrics endpoint is not healthy.");
+  }
+}
 
 function compose(args, { discardStdout = false } = {}) {
   return spawnSync("docker", ["compose", "--env-file", envFile, "-f", "docker-compose.onprem.yml", ...args], {
@@ -174,6 +209,7 @@ console.log(JSON.stringify({
     smtpConfigured: notifications?.email?.configured ?? false,
     emailEventCount: notifications?.email?.eventCount ?? 0
   },
+  operationalMetrics,
   objectStorage: "healthy",
   mode,
   migrations: migrationStatus,

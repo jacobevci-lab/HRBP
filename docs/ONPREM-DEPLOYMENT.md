@@ -40,7 +40,7 @@ The bundled single-node object-store implementation is SeaweedFS. SeaweedFS is A
    npm run onprem:postflight
    docker compose --env-file .env.onprem -f docker-compose.onprem.yml ps
    ```
-   Postflight waits for application runtime, PostgreSQL connectivity, configured authentication, notification-provider readiness, private object storage, clean Prisma migration status, a healthy document scanner and a healthy maintenance scheduler.
+   Postflight waits for application runtime, PostgreSQL connectivity, configured authentication, notification-provider readiness, the authenticated operational-metrics surface, private object storage, clean Prisma migration status, a healthy document scanner and a healthy maintenance scheduler.
 7. Place the service behind the customer's HTTPS reverse proxy and restrict direct access to port 3000.
 
 The `schema` one-shot service runs the guarded versioned migration runner only after PostgreSQL is healthy. Fresh databases are created with committed `prisma migrate deploy` history. Existing installations from the pre-migration releases are never marked automatically unless their live PostgreSQL schema exactly matches the committed Prisma datamodel. The application starts only after the schema job and object-store health check succeed.
@@ -111,6 +111,30 @@ DOCUMENT_SCANNER_IMAGE=clamav/clamav:1.5.4-debian
 `HRBP_DOCUMENT_SCAN_MAX_BYTES` must be at least `DOCUMENT_UPLOAD_MAX_BYTES`; otherwise the deployment preflight fails. The ClamAV team recommends substantial memory for the standard signature set, so customer sizing must reserve dedicated scanner capacity instead of assuming the engine is a lightweight sidecar. Signature updates require outbound access to the ClamAV update infrastructure unless the customer provides an approved internal mirror.
 
 A scanner outage is fail-closed: documents remain unavailable until a clean verdict is recorded. Do not bypass `PENDING`, `SCANNING`, `FAILED` or `QUARANTINED` states to restore document availability.
+
+## Private operational metrics
+
+The application exposes a Prometheus-compatible operational snapshot at `/api/internal/metrics`. The endpoint is intentionally separate from public health checks and requires the dedicated `HRBP_METRICS_TOKEN` bearer credential.
+
+The metrics surface is aggregation-only. It does not publish tenant IDs, user IDs, employee data, resource IDs, notification event names, document names, object keys or scanner references. Notification channels are collapsed to `IN_APP`, `EMAIL` and `OTHER`; document scanning is exposed only as queue/status counts and bounded age gauges.
+
+Example local scrape:
+
+```bash
+curl --fail --silent --show-error \
+  -H "Authorization: Bearer $HRBP_METRICS_TOKEN" \
+  http://127.0.0.1:${HRBP_HTTP_PORT:-3000}/api/internal/metrics
+```
+
+The current snapshot includes:
+
+- notification outbox counts by bounded channel/status, due-job count, oldest actionable age and oldest dispatcher-lock age,
+- document malware-scan counts by state, due-job count, oldest pending age and oldest scanner-lock age,
+- scrape health and collection duration.
+
+Keep the endpoint on the private management path. Do not publish it through the customer-facing reverse proxy. A remote Prometheus/monitoring collector should reach it only through the customer's approved private management network or an authenticated monitoring proxy. `HRBP_METRICS_TOKEN` must not be reused as the maintenance, scanner, session, object-storage, database, OIDC or SMTP secret; install/upgrade preflight enforces this separation.
+
+Postflight performs an authenticated scrape and fails deployment verification when the metrics endpoint is unavailable or does not expose the expected bounded metric families. Container health remains the liveness source for the maintenance scheduler and document-scanner sidecars; the application metrics endpoint complements rather than replaces those checks.
 
 ## Optional SMTP email delivery
 
