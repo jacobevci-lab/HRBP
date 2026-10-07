@@ -46,6 +46,8 @@ jobs:
       - run: npm run routes:validate
       - run: npm run ui:validate
       - run: npx prisma validate
+      - name: Emit generated Prisma baseline for migration bootstrap
+        run: node scripts/emit-prisma-baseline.mjs
       - name: Prepare CI database
         run: npx prisma db push --skip-generate
       - run: npm run typecheck
