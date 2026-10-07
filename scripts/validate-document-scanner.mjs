@@ -47,6 +47,7 @@ for (const token of [
 for (const token of [
   'internalBearerAuthorized(request, "HRBP_DOCUMENT_SCAN_TOKEN")',
   'body.action === "claim"',
+  "Unsupported document scanner action.",
   "recoverStaleScanLocks",
   "scanAttempts: { increment: 1 }",
   "scanStatus: VaultScanStatus.SCANNING",
