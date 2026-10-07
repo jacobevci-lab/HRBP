@@ -2,26 +2,24 @@
 
 ## Document malware scanning
 
-Document versions are immutable and follow this lifecycle:
+Document versions are immutable and follow a fail-closed lifecycle:
 
-1. `POST /api/documents/{documentId}/versions` reserves a version with a SHA-256 hash and `PENDING` scan state.
-2. `PUT /api/documents/{documentId}/versions/{versionId}/upload` proxies the binary into private S3/MinIO-compatible storage after authorization, MIME/size checks and server-side SHA-256 verification.
-3. The scanner reads the private object out-of-band and reports the result to `POST /api/internal/document-scan` with `Authorization: Bearer $HRBP_DOCUMENT_SCAN_TOKEN`.
-4. Only a latest version in `CLEAN` state can be downloaded. `PENDING`, `FAILED` and `QUARANTINED` versions stay blocked.
+1. `POST /api/documents/{documentId}/versions` reserves a version with its SHA-256 hash and `PENDING` state.
+2. `PUT /api/documents/{documentId}/versions/{versionId}/upload` writes the binary to private object storage only after authorization, MIME/size checks and server-side SHA-256 verification. Upload completion resets the durable scan queue for immediate work.
+3. The authenticated scanner protocol at `POST /api/internal/document-scan` claims one eligible job at a time and conditionally moves it `PENDING → SCANNING`.
+4. A claimed object can be downloaded only through the internal scan endpoint while the version is actively `SCANNING`. The worker therefore needs the scanner token but receives no object-storage credentials or object key.
+5. The on-prem worker verifies the immutable size/hash, streams the bytes to private ClamD using the `INSTREAM` protocol and records `CLEAN`, `QUARANTINED` or `FAILED`.
+6. Only a latest version in `CLEAN` state can be downloaded by users. `PENDING`, `SCANNING`, `FAILED` and `QUARANTINED` remain blocked.
 
-Example scanner callback body:
+The queue stores attempt count, lock timestamp and next-attempt time. A stale `SCANNING` lock is recovered to `PENDING`; transient scanner failures use bounded exponential retry. After the retry budget is exhausted the version becomes `FAILED` and remains unavailable. Final scan callbacks are conditional and idempotent: replaying the same final verdict is harmless, while a different later verdict cannot overwrite an already-final state.
 
-```json
-{
-  "versionId": "document-version-id",
-  "status": "CLEAN",
-  "engine": "scanner-name",
-  "reference": "scan-job-123",
-  "message": "No malware detected"
-}
-```
+The on-prem worker performs its own content-integrity verification before malware scanning. A mismatch between the claimed immutable metadata and the bytes returned from object storage is immediately `QUARANTINED` as `CONTENT_INTEGRITY_MISMATCH`.
 
-The callback token should be a long random secret stored in the deployment secret manager, never in source control.
+ClamD runs on the private Compose network only. Port 3310 is not published to the host, and the worker has no direct S3 credential surface. Signature data persists in its own volume and is updated by the ClamAV image's normal signature-update process.
+
+For compatibility, the internal endpoint still accepts a direct final scanner callback with `versionId`, `status`, `engine`, optional `reference` and optional bounded `message`; the same final-state concurrency rules apply.
+
+The callback token is a long random secret stored in the deployment secret manager and is never committed to source control.
 
 ## Operational maintenance
 
