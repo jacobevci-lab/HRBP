@@ -65,6 +65,10 @@ jobs:
           docker build --target scheduler --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:scheduler-ci .
           docker image inspect hrbp-one:scheduler-ci --format '{{json .Config.Healthcheck}}' | grep -q 'onprem-maintenance-health.mjs'
           test "$(docker image inspect hrbp-one:scheduler-ci --format '{{.Config.User}}')" = "node"
+          docker build --target scanner --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:scanner-ci .
+          docker image inspect hrbp-one:scanner-ci --format '{{json .Config.Healthcheck}}' | grep -q 'document-scan-health.mjs'
+          test "$(docker image inspect hrbp-one:scanner-ci --format '{{.Config.User}}')" = "node"
+          docker compose --env-file .env.onprem -f docker-compose.onprem.yml pull document-scanner-engine
       - name: Rehearse on-prem backup and restore
         shell: bash
         run: |
@@ -75,6 +79,9 @@ jobs:
           bash -n scripts/onprem-upgrade.sh
           node --check scripts/onprem-preflight.mjs
           node --check scripts/onprem-postflight.mjs
+          node --check scripts/document-scan-worker.mjs
+          node --check scripts/document-scan-health.mjs
+          node --check scripts/clamd-client.mjs
           npm run onprem:recovery:rehearsal
       - name: Seed notification maintenance smoke records
         shell: bash
