@@ -92,7 +92,7 @@
     "db:migrate:files:validate": "node scripts/validate-prisma-migration-files.mjs",
     "onprem:preflight": "node scripts/onprem-preflight.mjs --env-file .env.onprem --phase install",
     "onprem:postflight": "node scripts/onprem-postflight.mjs --env-file .env.onprem",
-    "onprem:upgrade": "bash scripts/onprem-upgrade.sh --maintenance-window"
+    "onprem:upgrade": "bash scripts/onprem-upgrade.sh"
   },
   "dependencies": {
     "@prisma/adapter-pg": "6.19.3",
