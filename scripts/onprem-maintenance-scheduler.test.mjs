@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -88,6 +89,46 @@ test("scheduler state writes atomically and reads back structured JSON", async (
       at: "2026-10-07T00:00:00.000Z",
       code: "OUTCOME_UNKNOWN_CHECK_BEFORE_RETRY"
     });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("restore helper preserves and clears the durable ambiguous-outcome latch", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "hrbp-scheduler-restore-"));
+  const source = path.join(dir, "scheduler-status.json");
+  const env = { ...process.env, HRBP_MAINTENANCE_STATE_DIR: dir };
+  const run = () => spawnSync(process.execPath, ["scripts/onprem-restore-scheduler-state.mjs", source], {
+    cwd: process.cwd(), env, encoding: "utf8"
+  });
+  try {
+    await writeFile(source, JSON.stringify({
+      blocked: {
+        at: "2026-10-07T01:02:03.000Z",
+        job: "audit-integrity",
+        code: "OUTCOME_UNKNOWN_CHECK_BEFORE_RETRY"
+      }
+    }));
+    let result = run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(await readStateFile(dir, "blocked.json"), {
+      at: "2026-10-07T01:02:03.000Z",
+      reason: "Restored backup recorded an ambiguous maintenance POST outcome. Inspect restored application state before explicitly resuming scheduled maintenance.",
+      job: "audit-integrity",
+      code: "OUTCOME_UNKNOWN_CHECK_BEFORE_RETRY",
+      restoredFromBackup: true
+    });
+
+    await writeFile(source, JSON.stringify({ blocked: null }));
+    result = run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(await readStateFile(dir, "blocked.json"), null);
+
+    await writeStateFile(dir, "blocked.json", { at: "2026-10-07T02:00:00.000Z", job: "workflow-reminders", code: "UNEXPECTED_RESPONSE_STOPPED" });
+    await writeFile(source, JSON.stringify({ available: false, reason: "maintenance-scheduler-not-running" }));
+    result = run();
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal((await readStateFile(dir, "blocked.json"))?.code, "UNEXPECTED_RESPONSE_STOPPED");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
