@@ -193,7 +193,7 @@ The approved release must be checked out **before** beginning the maintenance wi
 For the normal single-host profile, use the guarded upgrade command:
 
 ```bash
-npm run onprem:upgrade
+npm run onprem:upgrade -- --maintenance-window
 ```
 
 The command requires explicit maintenance-window acknowledgement and performs the following sequence:
