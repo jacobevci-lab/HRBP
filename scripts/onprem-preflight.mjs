@@ -65,7 +65,8 @@ const compose = command("docker", ["compose", "version"], { allowMissing: true }
 if (!compose || compose.status !== 0) result.errors.push("Docker Compose plugin is required.");
 
 if (result.errors.length === 0) {
-  const config = command("docker", ["compose", "--env-file", envFile, "-f", "docker-compose.onprem.yml", "config", "--quiet"]);
+  const composeEnv = { ...process.env, HRBP_ENV_FILE: envFile };
+  const config = command("docker", ["compose", "--env-file", envFile, "-f", "docker-compose.onprem.yml", "config", "--quiet"], { env: composeEnv });
   if (!config || config.status !== 0) result.errors.push("Docker Compose configuration validation failed.");
 }
 
