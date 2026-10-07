@@ -54,7 +54,7 @@ COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 "${COMPOSE[@]}" config >/dev/null
 
 printf 'Stopping application mutation surfaces...\n' >&2
-"${COMPOSE[@]}" stop maintenance-scheduler app schema >/dev/null 2>&1 || true
+"${COMPOSE[@]}" stop document-scanner maintenance-scheduler app schema >/dev/null 2>&1 || true
 
 printf 'Starting recovery dependencies...\n' >&2
 "${COMPOSE[@]}" up -d --wait postgres object-storage >/dev/null
@@ -89,5 +89,5 @@ printf 'Restoring maintenance scheduler safety latch...\n' >&2
   -v "$BACKUP_DIR/scheduler-status.json:/restore/scheduler-status.json:ro" \
   maintenance-scheduler node scripts/onprem-restore-scheduler-state.mjs /restore/scheduler-status.json
 
-printf '\nRestore completed. The application and maintenance scheduler remain stopped by design.\n' >&2
+printf '\nRestore completed. The application, document scanner and maintenance scheduler remain stopped by design.\n' >&2
 printf 'Before reopening service, check out the release recorded by runtime-health.json/images.json, review schema compatibility, then start the stack and perform the documented smoke tests.\n' >&2
