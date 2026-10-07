@@ -72,6 +72,9 @@ jobs:
           bash -n scripts/onprem-backup.sh
           bash -n scripts/onprem-restore.sh
           bash -n scripts/onprem-recovery-rehearsal.sh
+          bash -n scripts/onprem-upgrade.sh
+          node --check scripts/onprem-preflight.mjs
+          node --check scripts/onprem-postflight.mjs
           npm run onprem:recovery:rehearsal
       - name: Seed notification maintenance smoke records
         shell: bash
