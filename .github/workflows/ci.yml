@@ -34,6 +34,7 @@ jobs:
       DATABASE_URL: postgresql://hrbp:hrbp@localhost:5432/hrbp
       HRBP_MAINTENANCE_TOKEN: ci-maintenance-token-1234567890
       HRBP_DOCUMENT_SCAN_TOKEN: ci-document-scan-token-1234567890
+      HRBP_METRICS_TOKEN: ci-metrics-token-12345678901234567890
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -126,6 +127,7 @@ jobs:
           npx wrangler dev --local --port 8787 \
             --var HRBP_MAINTENANCE_TOKEN:$HRBP_MAINTENANCE_TOKEN \
             --var HRBP_DOCUMENT_SCAN_TOKEN:$HRBP_DOCUMENT_SCAN_TOKEN \
+            --var HRBP_METRICS_TOKEN:$HRBP_METRICS_TOKEN \
             > /tmp/hrbp-wrangler.log 2>&1 &
           WRANGLER_PID=$!
           trap 'kill $WRANGLER_PID 2>/dev/null || true' EXIT
