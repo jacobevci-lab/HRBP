@@ -53,12 +53,15 @@ expect(smtpPath, smtp, /minVersion:\s*"TLSv1\.2"/, "SMTP TLS must require TLS 1.
 expect(smtpPath, smtp, /disableFileAccess:\s*true/, "SMTP messages must not read attachments from local files");
 expect(smtpPath, smtp, /disableUrlAccess:\s*true/, "SMTP messages must not fetch remote attachment/content URLs");
 expect(smtpPath, smtp, /hrbp-\$\{notification\.outboxId\}/, "SMTP messages must use a stable outbox-derived Message-ID");
+expect(smtpPath, smtp, /HRBP secure notification/, "restricted SMTP messages must use a generic subject");
+expect(smtpPath, smtp, /const href = restricted \? "\/" : notificationDisplayResourceHref/, "restricted SMTP messages must not expose resource-specific paths");
 expect(smtpPath, smtp, /SMTP_DELIVERY_FAILED/, "SMTP provider errors must be reduced to bounded machine diagnostics");
 reject(smtpPath, smtp, /rejectUnauthorized:\s*false/, "SMTP TLS verification must never be disabled");
 
 const outboxPath = "lib/notification-outbox.ts";
 const outbox = await source(outboxPath);
 expect(outboxPath, outbox, /shouldMirrorNotificationToEmail/, "transactional outbox must apply centralized email routing policy");
+expect(outboxPath, outbox, /EMAIL_NOTIFICATION_POLICY_BLOCKED/, "explicit EMAIL records must not bypass centralized routing/classification policy");
 expect(outboxPath, outbox, /channel:\s*"EMAIL"/, "email delivery must use independent EMAIL outbox records");
 expect(outboxPath, outbox, /:channel:email/, "email mirroring must have a channel-specific dedupe key");
 
@@ -68,6 +71,7 @@ expect(dispatcherPath, dispatcher, /notificationEmailBatchSize/, "SMTP work must
 expect(dispatcherPath, dispatcher, /channel:\s*"EMAIL"/, "dispatcher must select EMAIL work separately");
 expect(dispatcherPath, dispatcher, /fanOutEmailRole/, "role email delivery must fan out into user-scoped outbox records");
 expect(dispatcherPath, dispatcher, /sendSmtpNotification/, "dispatcher must invoke the governed SMTP provider");
+expect(dispatcherPath, dispatcher, /notificationEmailPolicyAllows\(candidate\.eventType, candidate\.classification\)/, "queued EMAIL work must re-evaluate policy at delivery time");
 expect(dispatcherPath, dispatcher, /NOTIFICATION_CHANNEL_UNSUPPORTED/, "unsupported channels must fail visibly instead of being ignored");
 
 const preflightPath = "scripts/onprem-preflight-lib.mjs";
