@@ -198,7 +198,7 @@ assert.ok(backup.includes('--user "$(id -u):$(id -g)"'), "Backup recovery toolin
 for (const token of [
   "--confirm-erase",
   "sha256sum -c SHA256SUMS",
-  "stop app schema",
+  "stop maintenance-scheduler app schema",
   "up -d --wait postgres object-storage",
   "dropdb --if-exists --force",
   "createdb -U",
@@ -206,7 +206,7 @@ for (const token of [
   'rclone sync /backup "hrbp:$OBJECT_STORAGE_BUCKET"',
   "--delete-during",
   "reserved database",
-  "application remains stopped"
+  "application and maintenance scheduler remain stopped"
 ]) assert.ok(restore.includes(token), `Restore safety contract missing: ${token}`);
 assert.ok(!restore.includes("db push"), "Restore must not run implicit schema mutation.");
 assert.ok(!restore.includes("--accept-data-loss"), "Restore must not bypass destructive-schema protection.");
