@@ -92,6 +92,16 @@ function compose(args) {
   });
 }
 
+const bucket = env.OBJECT_STORAGE_BUCKET || "hrbp-private";
+if (!/^[A-Za-z0-9._-]{3,63}$/.test(bucket)) fail("OBJECT_STORAGE_BUCKET is invalid for postflight.");
+const objectStorage = compose([
+  "run", "--rm", "--no-deps", "-T", "object-storage-tool",
+  "lsf", `hrbp:${bucket}`, "--max-depth", "1"
+]);
+if (objectStorage.error || objectStorage.status !== 0) {
+  fail("Private object storage/bucket access is not healthy.");
+}
+
 let migrationStatus = "not-checked-pre-upgrade";
 if (mode === "post-deploy") {
   const migration = compose(["run", "--rm", "--no-deps", "-T", "schema", "npm", "run", "db:migrate:status"]);
@@ -135,6 +145,7 @@ console.log(JSON.stringify({
   authentication: {
     mode: auth?.authentication ?? null
   },
+  objectStorage: "healthy",
   mode,
   migrations: migrationStatus,
   scheduler: schedulerStatus
