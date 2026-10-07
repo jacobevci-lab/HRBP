@@ -17,6 +17,7 @@ const base = {
   HRBP_OIDC_ISSUER: "https://login.example.com/tenant/v2.0",
   HRBP_OIDC_CLIENT_ID: "client-id-123",
   HRBP_OIDC_CLIENT_SECRET: "oidc-secret-abcdefghijklmnop",
+  HRBP_OIDC_SCOPES: "openid profile email",
   HRBP_OIDC_REDIRECT_URI: "https://hrbp.acme.internal/api/auth/callback",
   HRBP_AUTH_TENANT_ID: "acme-prod",
   HRBP_BOOTSTRAP_ADMIN_EMAIL: "admin@acme.internal",
@@ -76,4 +77,15 @@ test("warns when local auth or non-loopback app exposure is enabled", () => {
   });
   assert.equal(result.ok, true);
   assert.equal(result.warnings.length, 2);
+});
+
+test("rejects incomplete OIDC scopes and non-origin APP_URL", () => {
+  const result = validateOnpremEnv({
+    ...base,
+    APP_URL: "https://hrbp.acme.internal/subpath",
+    HRBP_OIDC_SCOPES: "openid profile"
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((entry) => entry.includes("without a path")));
+  assert.ok(result.errors.some((entry) => entry.includes("include email")));
 });
