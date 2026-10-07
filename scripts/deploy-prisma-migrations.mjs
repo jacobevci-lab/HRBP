@@ -1,8 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { Client } from "pg";
-
-export const BASELINE_MIGRATION = "20261007000000_baseline_current_schema";
-const schemaPath = "prisma";
+import { BASELINE_MIGRATION, PRISMA_SCHEMA_PATH as schemaPath } from "./prisma-migration-contract.mjs";
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
