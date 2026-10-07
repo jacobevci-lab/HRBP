@@ -60,6 +60,7 @@ for (const token of [
   "retryDelayMs",
   "RETRY_BUDGET_EXHAUSTED",
   "finalScanStatuses.includes",
+  "current.scanAttempts !== 0",
   "idempotent: true",
   "Document scan state changed concurrently"
 ]) assert.ok(route.includes(token), "Internal scan protocol missing: " + token);
