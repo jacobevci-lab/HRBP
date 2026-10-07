@@ -196,7 +196,7 @@ for (const token of [
   "Runtime/release identity",
   "Private object storage/bucket access is not healthy",
   '"object-storage-tool"',
-  '"lsf"'
+  '"lsd"'
 ]) assert.ok(postflight.includes(token), `On-prem postflight contract missing: ${token}`);
 for (const token of [
   "--maintenance-window",
