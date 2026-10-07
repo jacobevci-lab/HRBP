@@ -96,9 +96,10 @@ for (const forbidden of [
 ]) assert.ok(!worker.includes(forbidden), "Scanner worker must not receive storage credential surface: " + forbidden);
 
 for (const token of [
-  '"zPING\\0"',
-  '"zVERSION\\0"',
-  '"zINSTREAM\\0"',
+  'clamdCommand("PING")',
+  'clamdCommand("VERSION")',
+  'Buffer.from("z" + command + "\\0", "utf8")',
+  'Buffer.from("zINSTREAM\\0", "utf8")',
   "writeUInt32BE",
   "CLAMD_REPLY_TOO_LARGE",
   "CLAMD_INPUT_INVALID",
