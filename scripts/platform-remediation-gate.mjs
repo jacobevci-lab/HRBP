@@ -60,6 +60,9 @@ try{
  check('Administrator can revoke one account session set',accountRevoke.status===200,accountRevoke.status);
  check('Account revocation invalidates existing employee cookie',(await http('/api/people','GET',employeeBeforeAccountRevoke)).status===401);
  const employeeBeforeTenantRevoke=await login();
+ const badTenantRevoke=await http('/api/settings/session-revocation','POST',adminCookie,{action:'revoke-tenant',confirmation:'wrong-tenant'});
+ check('Tenant-wide revocation rejects incorrect confirmation',badTenantRevoke.status===409,badTenantRevoke.status);
+ check('Rejected tenant-wide revocation preserves employee session',(await http('/api/people','GET',employeeBeforeTenantRevoke)).status===200);
  const tenantRevoke=await http('/api/settings/session-revocation','POST',adminCookie,{action:'revoke-tenant',confirmation:'tenant-acme-global'});
  check('Administrator can revoke all tenant sessions',tenantRevoke.status===200,tenantRevoke.status);
  check('Tenant revocation invalidates employee cookie',(await http('/api/people','GET',employeeBeforeTenantRevoke)).status===401);
