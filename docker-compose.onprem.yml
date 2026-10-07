@@ -56,7 +56,7 @@ services:
       target: schema
       args:
         GITHUB_SHA: ${GITHUB_SHA:-}
-    env_file: [.env.onprem]
+    env_file: ["${HRBP_ENV_FILE:-.env.onprem}"]
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-hrbp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hrbp}
     depends_on:
@@ -78,7 +78,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    env_file: [.env.onprem]
+    env_file: ["${HRBP_ENV_FILE:-.env.onprem}"]
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-hrbp}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-hrbp}
@@ -116,7 +116,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    env_file: [.env.onprem]
+    env_file: ["${HRBP_ENV_FILE:-.env.onprem}"]
     environment:
       HRBP_MAINTENANCE_URL: http://app:3000/api/internal/maintenance
       HRBP_MAINTENANCE_TOKEN: ${HRBP_MAINTENANCE_TOKEN:?set HRBP_MAINTENANCE_TOKEN in .env.onprem}
