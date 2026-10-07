@@ -20,22 +20,28 @@ The bundled single-node object-store implementation is SeaweedFS. SeaweedFS is A
 ## First installation
 
 1. Install Docker Engine with the Compose plugin.
-2. Copy the example and replace every `CHANGE_ME` value:
+2. Copy the example, restrict the secret file, and replace every `CHANGE_ME` value:
    ```bash
    cp .env.onprem.example .env.onprem
+   chmod 600 .env.onprem
    openssl rand -hex 48
    ```
 3. Set `APP_URL`, OIDC issuer/client/redirect values, the customer tenant identifier, bootstrap administrator email and a strong object-storage secret.
-4. Start the stack:
+4. Run the install preflight. It validates secret-file permissions, placeholder/secret hygiene, OIDC URL consistency, pinned images, Docker/Compose availability, Compose configuration and basic disk headroom without printing secret values:
+   ```bash
+   npm run onprem:preflight
+   ```
+5. Start the stack:
    ```bash
    docker compose --env-file .env.onprem -f docker-compose.onprem.yml up -d --build
    ```
-5. Verify:
+6. Verify the complete local runtime rather than liveness only:
    ```bash
+   npm run onprem:postflight
    docker compose --env-file .env.onprem -f docker-compose.onprem.yml ps
-   curl --fail http://127.0.0.1:3000/api/health/runtime
    ```
-6. Place the service behind the customer's HTTPS reverse proxy and restrict direct access to port 3000.
+   Postflight waits for application runtime, PostgreSQL connectivity, configured authentication, clean Prisma migration status and a healthy maintenance scheduler.
+7. Place the service behind the customer's HTTPS reverse proxy and restrict direct access to port 3000.
 
 The `schema` one-shot service runs the guarded versioned migration runner only after PostgreSQL is healthy. Fresh databases are created with committed `prisma migrate deploy` history. Existing installations from the pre-migration releases are never marked automatically unless their live PostgreSQL schema exactly matches the committed Prisma datamodel. The application starts only after the schema job and object-store health check succeed.
 
@@ -182,20 +188,58 @@ The rehearsal never targets the normal `hrbp-one` Compose project and tears down
 
 ## Upgrade procedure
 
-Before every upgrade:
+The approved release must be checked out **before** beginning the maintenance window. HRBP One intentionally does not run `git pull`, `git fetch` or automatic source checkout inside the upgrade command.
 
-1. Run `bash scripts/onprem-backup.sh <approved-backup-root>`.
-2. Copy the completed backup to the customer's protected backup target and verify retention.
-3. Record/retain the running application revision from the backup metadata.
-4. Pull/check out the approved release.
-5. Review the release's committed Prisma migration directories and approved change notes.
-6. Rebuild and start the stack with the same command used for installation. The schema service runs only committed migrations.
-7. If migration deployment or legacy parity verification fails, keep the application closed and use a vendor-reviewed migration/restore plan. Do not force or bypass the migration state.
-8. Verify health, OIDC login, Action Center, document access and the customer's critical HR workflows before reopening access.
+For the normal single-host profile, use the guarded upgrade command:
 
-If rollback requires a data restore, first check out the release recorded with the backup, then use the guarded restore procedure above. Starting a newer binary against an older restored database is not an approved rollback path.
+```bash
+npm run onprem:upgrade
+```
 
-Versioned migrations are now the production schema contract. The guarded baseline adoption path exists only to bring installations created before this migration history into that contract. Recovery tooling remains the rollback safety boundary for data-changing upgrades; migration history is forward-only and does not replace backup/restore discipline.
+The command requires explicit maintenance-window acknowledgement and performs the following sequence:
+
+1. Runs the upgrade preflight with a clean tracked source-tree requirement.
+2. Builds the target `schema`, `app` and `maintenance-scheduler` images **before downtime** so compile/package failures do not create an outage.
+3. Stops the maintenance scheduler and application mutation surfaces.
+4. Takes a quiesced PostgreSQL + object-store backup and preserves migration/scheduler evidence.
+5. Writes a checksummed `upgrade-intent.json` beside the backup.
+6. Applies only committed Prisma migration history and waits for a verified schema-service exit code.
+7. Starts the target application and scheduler.
+8. Runs bounded postflight checks for runtime, database, authentication, migration state and scheduler health.
+9. Writes a checksummed `upgrade-receipt.json` only after every postflight gate succeeds.
+
+An example with explicit paths:
+
+```bash
+bash scripts/onprem-upgrade.sh --maintenance-window \
+  --env-file /etc/hrbp/.env.onprem \
+  --backup-root /srv/hrbp-backups
+```
+
+### Fail-closed upgrade behavior
+
+The upgrade command never automatically executes a destructive restore. If a failure happens after the maintenance window begins, it leaves the deployment for operator inspection and prints the verified backup location when one exists.
+
+Do not respond to a failed migration by forcing `migrate resolve`, falling back to `db push`, or starting an older application binary against a potentially newer schema. Inspect the schema container logs and:
+
+- use a reviewed forward migration when the database state is valid but the release needs correction, or
+- check out the release recorded in the backup evidence and use the guarded restore procedure when restore is the safer recovery path.
+
+The preflight also rejects a dirty tracked source tree for upgrades. This prevents local edits from becoming an unrecorded customer release.
+
+### Manual verification commands
+
+Operators can run the gates independently:
+
+```bash
+node scripts/onprem-preflight.mjs --env-file .env.onprem --phase upgrade --require-clean-source
+node scripts/onprem-postflight.mjs --env-file .env.onprem --timeout-seconds 600
+npm run db:migrate:status
+```
+
+Postflight talks only to the host-local application port and uses bounded responses. It does not print authentication secrets, database URLs or upstream error bodies.
+
+Versioned migrations remain the production schema contract. The guarded legacy-baseline path exists only to bring installations created before migration history into that contract. Recovery tooling remains the rollback safety boundary for data-changing upgrades; migration history is forward-only and does not replace backup/restore discipline.
 
 ## Operational limits of this profile
 
