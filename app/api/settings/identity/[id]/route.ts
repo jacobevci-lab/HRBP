@@ -87,6 +87,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (action === "activate") {
     if (current.status === ConnectionStatus.ACTIVE) return Response.json({ data: current });
+    if (current.status !== ConnectionStatus.DRAFT) {
+      return Response.json({ error: "Only a validated DRAFT identity provider can be activated." }, { status: 409 });
+    }
     const attestation = asText(body.attestation, 500);
     if (!attestation || attestation.length < 12) {
       return Response.json({ error: "Activation requires an attestation of at least 12 characters." }, { status: 400 });
