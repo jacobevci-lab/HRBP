@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { Client } from "pg";
-import { BASELINE_MIGRATION, PRISMA_SCHEMA_PATH as schemaPath } from "./prisma-migration-contract.mjs";
+import { BASELINE_MIGRATION, PRISMA_BASELINE_SCHEMA_PATH, PRISMA_SCHEMA_PATH as schemaPath } from "./prisma-migration-contract.mjs";
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
@@ -53,7 +53,7 @@ if (userTableCount === 0) {
 }
 
 console.log(
-  `Legacy database without Prisma migration history detected (${userTableCount} public tables). Verifying exact schema parity before baseline adoption.`
+  `Legacy database without Prisma migration history detected (${userTableCount} public tables). Verifying exact parity against the immutable baseline datamodel before baseline adoption.`
 );
 
 // Prisma 6 reads DATABASE_URL from the schema datasource, so the database URL is
@@ -65,7 +65,7 @@ const diffStatus = prisma(
     "--from-schema-datasource",
     schemaPath,
     "--to-schema-datamodel",
-    schemaPath,
+    PRISMA_BASELINE_SCHEMA_PATH,
     "--exit-code"
   ],
   { allowExitCodes: [0, 2] }
