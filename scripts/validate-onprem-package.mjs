@@ -20,6 +20,10 @@ const [
   maintenanceRunner,
   maintenanceScheduler,
   maintenanceState,
+  preflightLib,
+  preflightCli,
+  postflight,
+  upgrade,
   baselineSql,
   migrationLock
 ] = await Promise.all([
@@ -41,6 +45,10 @@ const [
   readFile("scripts/run-operational-maintenance.mjs", "utf8"),
   readFile("scripts/onprem-maintenance-scheduler.mjs", "utf8"),
   readFile("scripts/onprem-maintenance-state.mjs", "utf8"),
+  readFile("scripts/onprem-preflight-lib.mjs", "utf8"),
+  readFile("scripts/onprem-preflight.mjs", "utf8"),
+  readFile("scripts/onprem-postflight.mjs", "utf8"),
+  readFile("scripts/onprem-upgrade.sh", "utf8"),
   readFile("prisma/migrations/20261007000000_baseline_current_schema/migration.sql", "utf8"),
   readFile("prisma/migrations/migration_lock.toml", "utf8")
 ]);
@@ -156,6 +164,47 @@ for (const token of [
   'LAST_RUN_FAILED'
 ]) assert.ok(maintenanceState.includes(token), `Scheduler state safety contract missing: ${token}`);
 
+for (const token of [
+  "REQUIRED_SECRET_MINIMUMS",
+  "CHANGE_ME",
+  "APP_URL must be a valid HTTPS URL",
+  "HRBP_OIDC_REDIRECT_URI must use APP_URL origin",
+  "must use different secrets",
+  "must not contain wildcard domains",
+  "must use an explicit tag or digest"
+]) assert.ok(preflightLib.includes(token), `On-prem preflight policy missing: ${token}`);
+for (const token of [
+  "validateSecretFileMode",
+  "--require-clean-source",
+  "docker",
+  "compose",
+  "config",
+  "--quiet",
+  "Tracked release files are modified",
+  "Less than 1 GiB"
+]) assert.ok(preflightCli.includes(token), `On-prem preflight execution contract missing: ${token}`);
+for (const token of [
+  "/api/health/runtime",
+  "/api/health/db",
+  "/api/health/auth",
+  "db:migrate:status",
+  "onprem-maintenance-health.mjs",
+  "timeoutSeconds"
+]) assert.ok(postflight.includes(token), `On-prem postflight contract missing: ${token}`);
+for (const token of [
+  "--maintenance-window",
+  "Building target release before downtime",
+  'stop maintenance-scheduler app',
+  "Taking quiesced pre-upgrade backup",
+  "--abort-on-container-exit",
+  "--exit-code-from schema",
+  "onprem-postflight.mjs",
+  "fail-closed-no-automatic-schema-rollback",
+  "Do not force migrations"
+]) assert.ok(upgrade.includes(token), `On-prem upgrade safety contract missing: ${token}`);
+assert.ok(!/\bgit\s+(?:pull|fetch|checkout)\b/.test(upgrade), "Upgrade orchestration must never change the approved source revision automatically.");
+assert.ok(!upgrade.includes("onprem-restore.sh") || upgrade.includes("If restore is required"), "Upgrade must not automatically execute destructive restore.");
+
 for (const key of [
   "POSTGRES_PASSWORD", "OBJECT_STORAGE_SECRET_KEY", "HRBP_SESSION_SECRET",
   "HRBP_ENGAGEMENT_RESPONSE_SECRET", "HRBP_DOCUMENT_SCAN_TOKEN",
@@ -243,6 +292,10 @@ assert.equal(pkg.scripts?.["db:migrate:deploy"], "prisma migrate deploy --schema
 assert.equal(pkg.scripts?.["db:migrate:upgrade"], "node scripts/deploy-prisma-migrations.mjs");
 assert.equal(pkg.scripts?.["db:migrate:verify"], "node scripts/verify-prisma-migrations.mjs");
 assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-maintenance-scheduler.test.mjs"), "On-prem validation must execute scheduler safety tests.");
+assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-preflight.test.mjs"), "On-prem validation must execute preflight safety tests.");
+assert.equal(pkg.scripts?.["onprem:preflight"], "node scripts/onprem-preflight.mjs --env-file .env.onprem --phase install");
+assert.equal(pkg.scripts?.["onprem:postflight"], "node scripts/onprem-postflight.mjs --env-file .env.onprem");
+assert.equal(pkg.scripts?.["onprem:upgrade"], "bash scripts/onprem-upgrade.sh --maintenance-window");
 
 for (const token of [
   "scripts/onprem-backup.sh",
