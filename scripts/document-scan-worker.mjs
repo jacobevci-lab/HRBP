@@ -202,8 +202,8 @@ async function processJob(job) {
       await complete(job, "QUARANTINED", engine, result.signature, "Malware signature detected");
       return { state: "quarantined-malware" };
     }
-    await complete(job, "FAILED", engine, result.code, "Malware engine could not establish a clean verdict");
-    return { state: "failed-verdict" };
+    await release(job, result.code);
+    return { state: "released" };
   } catch (error) {
     const reason = error instanceof Error && /^[A-Z0-9_]+$/.test(error.message)
       ? error.message
