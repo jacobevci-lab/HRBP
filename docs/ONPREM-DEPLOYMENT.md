@@ -90,7 +90,7 @@ The queue uses durable database state:
 
 `PENDING → SCANNING → CLEAN | QUARANTINED | FAILED`
 
-Claims increment a bounded attempt counter and carry a database lock timestamp. Every download, release and worker completion is bound to that exact claim attempt, so a stale worker from an earlier lease cannot finalize or release a newer scanner claim. A worker crash eventually returns a stale `SCANNING` claim to `PENDING`. Transient object/engine failures use exponential retry and become `FAILED` only after the configured attempt budget is exhausted. Final callback processing is conditional and idempotent so an older/replayed result cannot overwrite a different final verdict.
+Claims increment a bounded attempt counter and carry a database lock timestamp. Every download, release and worker completion is bound to that exact claim attempt, so a stale worker from an earlier lease cannot finalize or release a newer scanner claim. A worker crash normally returns a stale `SCANNING` claim to `PENDING`; if the stale lease already consumed the final allowed attempt, it is finalized as `FAILED` with audit evidence instead of becoming an unclaimable `PENDING` record. Transient object/engine failures use exponential retry and become `FAILED` only after the configured attempt budget is exhausted. Final callback processing is conditional and idempotent so an older/replayed result cannot overwrite a different final verdict.
 
 Before bytes reach ClamAV, the worker verifies the downloaded object against the SHA-256 hash and size recorded with the immutable document version. A mismatch is immediately `QUARANTINED` by the HRBP integrity gate rather than retried or treated as clean.
 
