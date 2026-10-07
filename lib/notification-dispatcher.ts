@@ -5,7 +5,7 @@ import {
   Prisma
 } from "@prisma/client";
 import { db } from "@/lib/db";
-import { notificationEmailBatchSize } from "@/lib/notification-email-config";
+import { notificationEmailBatchSize, notificationEmailPolicyAllows } from "@/lib/notification-email-config";
 import { sendSmtpNotification } from "@/lib/smtp-notification-provider";
 import { runtimeNumber } from "@/lib/runtime-env";
 
@@ -158,6 +158,10 @@ async function fanOutEmailRole(candidate: NotificationCandidate) {
 }
 
 async function deliverEmail(candidate: NotificationCandidate) {
+  if (!notificationEmailPolicyAllows(candidate.eventType, candidate.classification)) {
+    throw new Error("EMAIL_NOTIFICATION_POLICY_BLOCKED");
+  }
+
   if (!candidate.recipientUserId) {
     await fanOutEmailRole(candidate);
     return;
@@ -275,7 +279,9 @@ export async function runNotificationDispatcher() {
       });
       if (completion.count === 1) delivered += 1;
     } catch (error) {
-      const deadLetter = attempt >= maxAttempts;
+      const boundedError = errorMessage(error);
+      const nonRetryable = ["EMAIL_NOTIFICATION_POLICY_BLOCKED", "SMTP_RECIPIENT_INVALID", "NOTIFICATION_CHANNEL_UNSUPPORTED"].includes(boundedError);
+      const deadLetter = nonRetryable || attempt >= maxAttempts;
       const now = new Date();
       const completion = await db.notificationOutbox.updateMany({
         where: {
@@ -288,7 +294,7 @@ export async function runNotificationDispatcher() {
           status: deadLetter ? NotificationOutboxStatus.DEAD_LETTER : NotificationOutboxStatus.FAILED,
           lockedAt: null,
           nextAttemptAt: deadLetter ? now : new Date(now.getTime() + retryDelayMs(attempt)),
-          lastError: errorMessage(error)
+          lastError: boundedError
         }
       });
       if (completion.count === 1) {
