@@ -16,6 +16,8 @@ type LocalAccount = {
   localFailedAttempts: number;
   localLockedUntil: string | null;
   lastLocalLoginAt: string | null;
+  sessionVersion: number;
+  sessionsRevokedAt: string | null;
 };
 
 const roles = [
@@ -154,7 +156,7 @@ export function LocalAccountAdmin() {
               <td><strong>{item.displayName}</strong><small>{item.subject}{item.email ? ` · ${item.email}` : ""}</small></td>
               <td>{item.role.replaceAll("_", " ")}</td>
               <td><span className={item.localAuthEnabled ? "settings-live-state ok" : "settings-live-state attention"}>{item.localAuthEnabled ? (tr ? "Etkin" : "Enabled") : (tr ? "Kapalı" : "Disabled")}</span></td>
-              <td>{fmt(locale, item.lastLocalLoginAt)}</td>
+              <td>{fmt(locale, item.lastLocalLoginAt)}{item.sessionsRevokedAt ? <small>{tr ? "Son iptal" : "Last revoke"}: {fmt(locale, item.sessionsRevokedAt)}</small> : null}</td>
               <td>{locked ? <span className="settings-live-state attention">{tr ? "Kilitli" : "Locked"}</span> : <span className="settings-live-state ok">{tr ? "Açık" : "Clear"}</span>}</td>
               <td>
                 <div className="local-account-actions">
@@ -163,6 +165,10 @@ export function LocalAccountAdmin() {
                     : <button type="button" className="secondary-button compact" disabled={busy === item.id} onClick={() => void mutate(item.id, { action: "enable" }, tr ? "Yerel giriş etkinleştirildi." : "Local sign-in enabled.")}><ShieldCheck size={13}/>{tr ? "Etkinleştir" : "Enable"}</button>}
                   {locked ? <button type="button" className="secondary-button compact" disabled={busy === item.id} onClick={() => void mutate(item.id, { action: "unlock" }, tr ? "Hesap kilidi açıldı." : "Account unlocked.")}><UnlockKeyhole size={13}/>{tr ? "Kilidi aç" : "Unlock"}</button> : null}
                   <button type="button" className="secondary-button compact" onClick={() => { setResetId(resetId === item.id ? null : item.id); setResetPassword(""); }}><RotateCcw size={13}/>{tr ? "Parola" : "Password"}</button>
+                  <button type="button" className="secondary-button compact" disabled={busy === item.id} onClick={() => {
+                    const confirmed = window.confirm(tr ? "Bu hesabın tüm aktif HRBP oturumları hemen geçersiz kılınacak. Devam edilsin mi?" : "All active HRBP sessions for this account will be invalidated immediately. Continue?");
+                    if (confirmed) void mutate(item.id, { action: "revoke-sessions" }, tr ? "Tüm oturumlar iptal edildi." : "All sessions revoked.");
+                  }}><ShieldCheck size={13}/>{tr ? "Oturumları iptal et" : "Revoke sessions"}</button>
                 </div>
                 {resetId === item.id ? <div className="local-account-reset"><input type="password" value={resetPassword} minLength={12} maxLength={256} autoComplete="new-password" onChange={(event) => setResetPassword(event.target.value)} placeholder={tr ? "Yeni parola (12+)" : "New password (12+)"}/><button type="button" className="primary-button compact" disabled={busy === item.id} onClick={() => void submitReset(item.id)}><KeyRound size={13}/>{tr ? "Kaydet" : "Save"}</button></div> : null}
               </td>
