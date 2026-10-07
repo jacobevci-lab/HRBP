@@ -127,6 +127,7 @@ for (const token of [
   "condition: service_healthy"
 ]) assert.ok(workerBlock.includes(token), "Scanner worker Compose contract missing: " + token);
 assert.ok(!workerBlock.includes("OBJECT_STORAGE_SECRET_KEY"), "Scanner worker must not inherit explicit object-storage credentials.");
+assert.ok(!workerBlock.includes("env_file:"), "Scanner worker must not inherit the full application secret file.");
 assert.ok(compose.includes("clamav_db:"), "ClamAV signature database must use a named volume.");
 
 for (const token of [
