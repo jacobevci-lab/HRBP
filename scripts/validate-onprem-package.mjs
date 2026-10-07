@@ -7,6 +7,7 @@ const [
   env,
   ignore,
   gitignore,
+  gitAttributes,
   backup,
   restore,
   rehearsal,
@@ -24,6 +25,7 @@ const [
   readFile(".env.onprem.example", "utf8"),
   readFile(".dockerignore", "utf8"),
   readFile(".gitignore", "utf8"),
+  readFile(".gitattributes", "utf8"),
   readFile("scripts/onprem-backup.sh", "utf8"),
   readFile("scripts/onprem-restore.sh", "utf8"),
   readFile("scripts/onprem-recovery-rehearsal.sh", "utf8"),
@@ -124,6 +126,8 @@ assert.ok(ignore.includes(".env.*"), "Docker context must exclude environment fi
 assert.ok(ignore.includes("!.env.onprem.example"), "Docker context must retain the safe example.");
 assert.ok(gitignore.includes(".env.onprem"), "Real on-prem environment file must be gitignored.");
 assert.ok(gitignore.includes("backups/"), "Local backup artifacts must never be committed.");
+assert.ok(gitAttributes.includes("prisma/migrations/**/*.sql text eol=lf"), "Migration SQL must be byte-stable across platforms.");
+assert.ok(gitAttributes.includes("scripts/*.sh text eol=lf"), "Release shell scripts must use LF line endings.");
 
 for (const token of [
   "umask 077",
