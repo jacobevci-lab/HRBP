@@ -83,6 +83,12 @@ const auth = await waitFor(
   (body) => body?.status === "ok" && body?.configured === true,
   "Authentication health"
 );
+const notifications = await waitFor(
+  "/api/health/notifications",
+  (body) => body?.status === "ok" && typeof body?.email?.enabled === "boolean" &&
+    typeof body?.email?.configured === "boolean" && Number.isInteger(body?.email?.eventCount),
+  "Notification provider health"
+);
 
 function compose(args, { discardStdout = false } = {}) {
   return spawnSync("docker", ["compose", "--env-file", envFile, "-f", "docker-compose.onprem.yml", ...args], {
@@ -146,6 +152,11 @@ console.log(JSON.stringify({
   },
   authentication: {
     mode: auth?.authentication ?? null
+  },
+  notifications: {
+    smtpEnabled: notifications?.email?.enabled ?? false,
+    smtpConfigured: notifications?.email?.configured ?? false,
+    emailEventCount: notifications?.email?.eventCount ?? 0
   },
   objectStorage: "healthy",
   mode,

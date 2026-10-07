@@ -73,6 +73,35 @@ The storage service is intentionally not exposed on a host port. Customer deploy
 
 The embedded credential currently controls the private application bucket and recovery tooling. It must be treated as a high-value service secret. A future external-storage profile should use the customer's native bucket/IAM policy to reduce privileges to the exact HRBP object operations.
 
+## Optional SMTP email delivery
+
+The on-prem Node runtime can deliver selected outbox events through an authenticated SMTP relay. SMTP is disabled by default and must pass the normal install/upgrade preflight before production use.
+
+Minimum configuration:
+
+```dotenv
+HRBP_SMTP_ENABLED=true
+HRBP_NOTIFICATION_EMAIL_EVENTS=LOCAL_AUTH_ACCOUNT_LOCKED,HR_SERVICE_ESCALATED
+HRBP_NOTIFICATION_EMAIL_ALLOW_RESTRICTED=false
+HRBP_NOTIFICATION_EMAIL_BATCH_SIZE=10
+HRBP_SMTP_HOST=smtp.customer.internal
+HRBP_SMTP_PORT=587
+HRBP_SMTP_SECURE=false
+HRBP_SMTP_USERNAME=hrbp-smtp
+HRBP_SMTP_PASSWORD=<customer-secret>
+HRBP_SMTP_FROM=HRBP <hrbp@customer.example>
+```
+
+Port 465 can be used with `HRBP_SMTP_SECURE=true`. Other ports use mandatory STARTTLS. TLS certificate verification cannot be disabled and the provider requires TLS 1.2 or newer.
+
+Only events named in `HRBP_NOTIFICATION_EMAIL_EVENTS` are mirrored. `HIGHLY_RESTRICTED` events are never emailed. `RESTRICTED` events require the separate explicit restricted-email flag and their SMTP content is minimized to a generic secure-notification subject/body with a link back to HRBP.
+
+The in-app notification and the email copy remain separate outbox records. A failed email therefore does not roll back or erase the in-app notification. SMTP work uses a small independent batch and normal retry/dead-letter governance.
+
+Customer monitoring should alert on EMAIL records in `FAILED` or `DEAD_LETTER`. The Settings & Operations notification console exposes channel/status diagnostics without projecting employee payload content or SMTP credentials.
+
+After deployment, a tenant settings administrator can use **Send test email** to exercise the real SMTP path to their own account email. The endpoint cannot be used as an arbitrary mail relay, records requested/succeeded/failed audit evidence, and permits at most one verification request per actor per minute.
+
 ## On-prem operational maintenance scheduler
 
 The Compose profile includes a dedicated `maintenance-scheduler` sidecar. It is built from a minimal Node stage, runs as the unprivileged Node user, has a read-only root filesystem, drops Linux capabilities, publishes no host port, and can reach the maintenance API only through the private Compose service name `app:3000`.

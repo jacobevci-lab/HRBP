@@ -36,9 +36,94 @@ const settingsPath = "components/settings-live-page.tsx";
 const settings = await source(settingsPath);
 expect(settingsPath, settings, /NotificationOperationsConsole canWrite=\{canWrite\}/, "tenant settings must mount notification operations console with write authority state");
 
+
+const emailConfigPath = "lib/notification-email-config.ts";
+const emailConfig = await source(emailConfigPath);
+expect(emailConfigPath, emailConfig, /HRBP_SMTP_ENABLED/, "email mirroring must be explicitly feature-gated");
+expect(emailConfigPath, emailConfig, /HIGHLY_RESTRICTED[\s\S]*return false/, "highly restricted events must never be mirrored to SMTP");
+expect(emailConfigPath, emailConfig, /HRBP_NOTIFICATION_EMAIL_ALLOW_RESTRICTED/, "restricted email mirroring must require an explicit separate gate");
+expect(emailConfigPath, emailConfig, /Math\.min\(50,[\s\S]*HRBP_NOTIFICATION_EMAIL_BATCH_SIZE/, "email delivery batch size must remain independently bounded");
+
+const smtpPath = "lib/smtp-notification-provider.ts";
+const smtp = await source(smtpPath);
+expect(smtpPath, smtp, /from "nodemailer"/, "SMTP provider must use the pinned transport implementation");
+expect(smtpPath, smtp, /requireTLS:\s*!secure/, "STARTTLS SMTP must require TLS");
+expect(smtpPath, smtp, /rejectUnauthorized:\s*true/, "SMTP TLS certificate verification must remain mandatory");
+expect(smtpPath, smtp, /minVersion:\s*"TLSv1\.2"/, "SMTP TLS must require TLS 1.2 or newer");
+expect(smtpPath, smtp, /disableFileAccess:\s*true/, "SMTP messages must not read attachments from local files");
+expect(smtpPath, smtp, /disableUrlAccess:\s*true/, "SMTP messages must not fetch remote attachment/content URLs");
+expect(smtpPath, smtp, /stableMessageId\s*=\s*[\s\S]{0,160}notification\.outboxId[\s\S]{0,160}messageIdDomain\(from\)/, "SMTP messages must use a stable outbox-derived Message-ID");
+expect(smtpPath, smtp, /HRBP secure notification/, "restricted SMTP messages must use a generic subject");
+expect(smtpPath, smtp, /const href = restricted \? "\/" : notificationDisplayResourceHref/, "restricted SMTP messages must not expose resource-specific paths");
+expect(smtpPath, smtp, /SMTP_DELIVERY_FAILED/, "SMTP provider errors must be reduced to bounded machine diagnostics");
+reject(smtpPath, smtp, /rejectUnauthorized:\s*false/, "SMTP TLS verification must never be disabled");
+
+const outboxPath = "lib/notification-outbox.ts";
+const outbox = await source(outboxPath);
+expect(outboxPath, outbox, /shouldMirrorNotificationToEmail/, "transactional outbox must apply centralized email routing policy");
+expect(outboxPath, outbox, /EMAIL_NOTIFICATION_POLICY_BLOCKED/, "explicit EMAIL records must not bypass centralized routing/classification policy");
+expect(outboxPath, outbox, /channel:\s*"EMAIL"/, "email delivery must use independent EMAIL outbox records");
+expect(outboxPath, outbox, /:channel:email/, "email mirroring must have a channel-specific dedupe key");
+
+const dispatcherPath = "lib/notification-dispatcher.ts";
+const dispatcher = await source(dispatcherPath);
+expect(dispatcherPath, dispatcher, /notificationEmailBatchSize/, "SMTP work must use an independent bounded batch");
+expect(dispatcherPath, dispatcher, /channel:\s*"EMAIL"/, "dispatcher must select EMAIL work separately");
+expect(dispatcherPath, dispatcher, /fanOutEmailRole/, "role email delivery must fan out into user-scoped outbox records");
+expect(dispatcherPath, dispatcher, /sendSmtpNotification/, "dispatcher must invoke the governed SMTP provider");
+expect(dispatcherPath, dispatcher, /notificationEmailPolicyAllows\(candidate\.eventType, candidate\.classification\)/, "queued EMAIL work must re-evaluate policy at delivery time");
+expect(dispatcherPath, dispatcher, /NOTIFICATION_CHANNEL_UNSUPPORTED/, "unsupported channels must fail visibly instead of being ignored");
+
+const preflightPath = "scripts/onprem-preflight-lib.mjs";
+const preflight = await source(preflightPath);
+expect(preflightPath, preflight, /HRBP_SMTP_ENABLED/, "on-prem preflight must understand SMTP enablement");
+expect(preflightPath, preflight, /HRBP_SMTP_PASSWORD must not reuse another application secret/, "SMTP password must not reuse application secrets");
+expect(preflightPath, preflight, /HRBP_NOTIFICATION_EMAIL_EVENTS must contain at least one event/, "enabled SMTP must require explicit event routing");
+
+
+
+const smtpTestRoutePath = "app/api/settings/notifications/smtp-test/route.ts";
+const smtpTestRoute = await source(smtpTestRoutePath);
+expect(smtpTestRoutePath, smtpTestRoute, /settings:write/, "SMTP test must require tenant settings write authority");
+expect(smtpTestRoutePath, smtpTestRoute, /mutationOriginAllowed\(request\)/, "SMTP test must enforce mutation origin checks");
+expect(smtpTestRoutePath, smtpTestRoute, /id:\s*ctx\.actorId[\s\S]*tenantId:\s*ctx\.tenantId/, "SMTP test recipient must be the requesting tenant-scoped account");
+expect(smtpTestRoutePath, smtpTestRoute, /sendSmtpNotification/, "SMTP test must exercise the real SMTP provider");
+expect(smtpTestRoutePath, smtpTestRoute, /settings\.smtp-test-requested[\s\S]*settings\.smtp-test-succeeded[\s\S]*settings\.smtp-test-failed/, "SMTP test attempts and outcomes must be audited");
+expect(smtpTestRoutePath, smtpTestRoute, /occurredAt:\s*\{\s*gte:\s*new Date\(Date\.now\(\) - 60_000\)/, "SMTP test must be rate-limited with tenant/actor audit evidence");
+expect(smtpTestRoutePath, smtpTestRoute, /status:\s*429[\s\S]*retry-after/, "SMTP test rate limiting must return bounded retry guidance");
+reject(smtpTestRoutePath, smtpTestRoute, /recipient\s*[:=]\s*body\.|to\s*[:=]\s*body\./, "SMTP test must not accept an arbitrary external recipient");
+
+const smtpTestUiPath = "components/smtp-test-action.tsx";
+const smtpTestUi = await source(smtpTestUiPath);
+expect(smtpTestUiPath, smtpTestUi, /\/api\/settings\/notifications\/smtp-test/, "settings UI must call the governed SMTP test route");
+expect(smtpTestUiPath, smtpTestUi, /Send test email|Test e-postası gönder/, "settings UI must expose an explicit SMTP verification action");
+
+
+
+const healthPath = "app/api/health/notifications/route.ts";
+const health = await source(healthPath);
+expect(healthPath, health, /smtpConfigurationStatus/, "notification health must use the shared SMTP readiness contract");
+expect(healthPath, health, /status:\s*healthy \? "ok" : "error"/, "notification health must fail closed when SMTP is enabled but incomplete");
+expect(healthPath, health, /eventCount:\s*smtp\.events\.length/, "notification health must expose only bounded event-count metadata");
+reject(healthPath, health, /HRBP_SMTP_PASSWORD|HRBP_SMTP_USERNAME|missing:/, "notification health must not expose SMTP credential names or missing-secret details");
+
+const postflightPath = "scripts/onprem-postflight.mjs";
+const postflight = await source(postflightPath);
+expect(postflightPath, postflight, /\/api\/health\/notifications/, "on-prem postflight must verify notification provider readiness");
+expect(postflightPath, postflight, /smtpEnabled[\s\S]*smtpConfigured[\s\S]*emailEventCount/, "postflight evidence must record secret-free SMTP readiness");
+
+
 const packagePath = "package.json";
 const pkg = await source(packagePath);
+const lockPath = "package-lock.json";
+const lock = JSON.parse(await source(lockPath));
 expect(packagePath, pkg, /notification-operations:validate/, "notification operations validator must be registered");
+expect(packagePath, pkg, /"nodemailer":\s*"10\.0\.15"/, "SMTP transport must be pinned exactly");
+if (lock.packages?.[""]?.dependencies?.nodemailer !== "10.0.15") failures.push(lockPath + ": root SMTP dependency must match package.json pin");
+const lockedMailer = lock.packages?.["node_modules/nodemailer"];
+if (lockedMailer?.version !== "10.0.15" || lockedMailer?.integrity !== "sha512-EUqp5PhtcsYXs9Fq/lS7s/8zlTrnBqmzZWzFFROrNikMiz+om/YRKMwqN907t+0A1KKyT8jd39CBUbFZmaZmcA==") {
+  failures.push(lockPath + ": pinned Nodemailer artifact metadata changed unexpectedly");
+}
 expect(packagePath, pkg, /prebuild[\s\S]*notification-operations:validate/, "notification operations validation must run before production builds");
 
 if (failures.length) {

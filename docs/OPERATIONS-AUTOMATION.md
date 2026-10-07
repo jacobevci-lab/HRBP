@@ -48,14 +48,33 @@ The endpoint remains scheduler-agnostic. A Cloudflare scheduled worker or enterp
 
 ### Transactional notification outbox
 
-`NotificationOutbox` stores delivery intent independently from a future email, in-app, Teams/Slack, webhook or other channel adapter. Current maintenance events include:
+`NotificationOutbox` stores delivery intent independently for in-app, SMTP email and future Teams/Slack, webhook or other channel adapters. Current maintenance events include:
 
 - `HR_SERVICE_ESCALATED` → current or newly auto-routed assignee when available;
 - `POLICY_EXCEPTION_EXPIRED` → exception requestor;
 - `POLICY_EXCEPTION_CLOSED_ON_RETIREMENT` → exception requestor;
 - `POLICY_RETIRED` → policy owner.
 
-Outbox records start in `PENDING` and include channel, optional recipient, template key, resource reference, classification, retry metadata and a JSON payload. Delivery workers should claim eligible `PENDING` records, move them through `PROCESSING`, and finish them as `DELIVERED`, `FAILED` or `DEAD_LETTER` with retry/backoff controls. The current bulk intentionally separates durable event creation from provider-specific delivery so SMTP/webhook failures cannot roll back HR or policy state.
+Outbox records start in `PENDING` and include channel, optional recipient, template key, resource reference, classification, retry metadata and a JSON payload. Delivery workers should claim eligible `PENDING` records, move them through `PROCESSING`, and finish them as `DELIVERED`, `FAILED` or `DEAD_LETTER` with retry/backoff controls. Durable event creation remains separate from provider-specific delivery so SMTP failures cannot roll back HR or policy state; SMTP is the first external adapter using that contract.
+
+### SMTP email delivery
+
+External email delivery is optional and disabled by default. When `HRBP_SMTP_ENABLED=true`, the transactional outbox can mirror explicitly allowlisted event types into independent `EMAIL` records. Email mirroring never replaces the in-app record; the two channels have separate dedupe keys, claims, retries and dead-letter state.
+
+Required controls:
+
+- `HRBP_NOTIFICATION_EMAIL_EVENTS` is an explicit event-type allowlist. Empty means no email mirroring.
+- `HIGHLY_RESTRICTED` notifications are never mirrored to SMTP.
+- `RESTRICTED` notifications require the additional `HRBP_NOTIFICATION_EMAIL_ALLOW_RESTRICTED=true` gate and use generic subject/body text plus a link to the secured application rather than sensitive payload details.
+- SMTP uses either implicit TLS or mandatory STARTTLS. Certificate validation is always enabled and TLS 1.2+ is required.
+- Provider errors are reduced to bounded machine diagnostics before being written to the outbox.
+- Role recipients are fanned out into user-scoped `EMAIL` outbox records before delivery so one recipient failure does not hide the state of others.
+- A stable outbox-derived Message-ID is reused across retries to reduce duplicate delivery risk when a transport outcome is ambiguous. SMTP remains an at-least-once channel; downstream mail infrastructure must tolerate duplicate Message-ID delivery.
+- Email delivery has an independent bounded batch via `HRBP_NOTIFICATION_EMAIL_BATCH_SIZE` so SMTP latency cannot consume the entire in-app notification batch.
+
+On-prem installation/upgrade preflight validates SMTP host, port, credentials, event allowlist, TLS-related names, timeout bounds and secret reuse whenever SMTP is enabled. The Settings & Operations page surfaces SMTP readiness without exposing provider credentials. A settings administrator can send a self-addressed verification email through the real SMTP provider; the target address is always the authenticated administrator's tenant-scoped account, the action/outcome is audited, and the verification endpoint is rate-limited to one request per minute per actor.
+
+Cloudflare-hosted deployments must not assume raw SMTP socket delivery is available merely because the code can be bundled. Keep `HRBP_SMTP_ENABLED=false` there unless the runtime/provider path has been separately validated; a future HTTPS mail provider can implement the same `EMAIL` outbox contract without changing domain notification producers.
 
 Relevant runtime settings are documented in `.env.example`:
 
@@ -65,3 +84,12 @@ Relevant runtime settings are documented in `.env.example`:
 - `HRBP_SERVICE_SLA_WARNING_MINUTES`
 - `HRBP_SERVICE_SLA_SEVERE_MINUTES`
 - `HRBP_MAINTENANCE_BATCH_SIZE`
+- `HRBP_SMTP_ENABLED`
+- `HRBP_NOTIFICATION_EMAIL_EVENTS`
+- `HRBP_NOTIFICATION_EMAIL_ALLOW_RESTRICTED`
+- `HRBP_NOTIFICATION_EMAIL_BATCH_SIZE`
+- `HRBP_SMTP_HOST`
+- `HRBP_SMTP_PORT`
+- `HRBP_SMTP_USERNAME`
+- `HRBP_SMTP_PASSWORD`
+- `HRBP_SMTP_FROM`
