@@ -111,9 +111,8 @@ export async function GET(request: Request) {
       notificationCounts.set(key, (notificationCounts.get(key) ?? 0) + row._count._all);
     }
 
-    const scanCounts = new Map<VaultScanStatus, number>(
-      scanStatuses.map((status) => [status, 0])
-    );
+    const scanCounts = new Map<VaultScanStatus, number>();
+    for (const status of scanStatuses) scanCounts.set(status, 0);
     for (const row of scanGroups) {
       scanCounts.set(row.scanStatus, row._count._all);
     }
