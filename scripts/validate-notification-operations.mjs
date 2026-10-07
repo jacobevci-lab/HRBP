@@ -89,6 +89,8 @@ expect(smtpTestRoutePath, smtpTestRoute, /mutationOriginAllowed\(request\)/, "SM
 expect(smtpTestRoutePath, smtpTestRoute, /id:\s*ctx\.actorId[\s\S]*tenantId:\s*ctx\.tenantId/, "SMTP test recipient must be the requesting tenant-scoped account");
 expect(smtpTestRoutePath, smtpTestRoute, /sendSmtpNotification/, "SMTP test must exercise the real SMTP provider");
 expect(smtpTestRoutePath, smtpTestRoute, /settings\.smtp-test-requested[\s\S]*settings\.smtp-test-succeeded[\s\S]*settings\.smtp-test-failed/, "SMTP test attempts and outcomes must be audited");
+expect(smtpTestRoutePath, smtpTestRoute, /occurredAt:\s*\{\s*gte:\s*new Date\(Date\.now\(\) - 60_000\)/, "SMTP test must be rate-limited with tenant/actor audit evidence");
+expect(smtpTestRoutePath, smtpTestRoute, /status:\s*429[\s\S]*retry-after/, "SMTP test rate limiting must return bounded retry guidance");
 reject(smtpTestRoutePath, smtpTestRoute, /recipient\s*[:=]\s*body\.|to\s*[:=]\s*body\./, "SMTP test must not accept an arbitrary external recipient");
 
 const smtpTestUiPath = "components/smtp-test-action.tsx";
