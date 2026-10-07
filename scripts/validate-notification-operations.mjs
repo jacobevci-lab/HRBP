@@ -81,6 +81,22 @@ expect(preflightPath, preflight, /HRBP_SMTP_PASSWORD must not reuse another appl
 expect(preflightPath, preflight, /HRBP_NOTIFICATION_EMAIL_EVENTS must contain at least one event/, "enabled SMTP must require explicit event routing");
 
 
+
+const smtpTestRoutePath = "app/api/settings/notifications/smtp-test/route.ts";
+const smtpTestRoute = await source(smtpTestRoutePath);
+expect(smtpTestRoutePath, smtpTestRoute, /settings:write/, "SMTP test must require tenant settings write authority");
+expect(smtpTestRoutePath, smtpTestRoute, /mutationOriginAllowed\(request\)/, "SMTP test must enforce mutation origin checks");
+expect(smtpTestRoutePath, smtpTestRoute, /id:\s*ctx\.actorId[\s\S]*tenantId:\s*ctx\.tenantId/, "SMTP test recipient must be the requesting tenant-scoped account");
+expect(smtpTestRoutePath, smtpTestRoute, /sendSmtpNotification/, "SMTP test must exercise the real SMTP provider");
+expect(smtpTestRoutePath, smtpTestRoute, /settings\.smtp-test-requested[\s\S]*settings\.smtp-test-succeeded[\s\S]*settings\.smtp-test-failed/, "SMTP test attempts and outcomes must be audited");
+reject(smtpTestRoutePath, smtpTestRoute, /recipient\s*[:=]\s*body\.|to\s*[:=]\s*body\./, "SMTP test must not accept an arbitrary external recipient");
+
+const smtpTestUiPath = "components/smtp-test-action.tsx";
+const smtpTestUi = await source(smtpTestUiPath);
+expect(smtpTestUiPath, smtpTestUi, /\/api\/settings\/notifications\/smtp-test/, "settings UI must call the governed SMTP test route");
+expect(smtpTestUiPath, smtpTestUi, /Send test email|Test e-postası gönder/, "settings UI must expose an explicit SMTP verification action");
+
+
 const packagePath = "package.json";
 const pkg = await source(packagePath);
 expect(packagePath, pkg, /notification-operations:validate/, "notification operations validator must be registered");
