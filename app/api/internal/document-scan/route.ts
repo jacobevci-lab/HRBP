@@ -214,7 +214,8 @@ async function completeScanJob(input: {
         (!input.attempt || current.scanAttempts !== input.attempt)) {
       return { kind: "conflict" as const, status: current.scanStatus };
     }
-    if (current.scanStatus === VaultScanStatus.PENDING && input.attempt !== null) {
+    if (current.scanStatus === VaultScanStatus.PENDING &&
+        (input.attempt !== null || current.scanAttempts !== 0)) {
       return { kind: "conflict" as const, status: current.scanStatus };
     }
 
