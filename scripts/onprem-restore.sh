@@ -83,5 +83,10 @@ printf 'Restoring private S3-compatible object storage...\n' >&2
     exec rclone sync /backup "hrbp:$OBJECT_STORAGE_BUCKET" --create-empty-src-dirs --delete-during
   '
 
+printf 'Restoring maintenance scheduler safety latch...\n' >&2
+"${COMPOSE[@]}" run --rm --no-deps -T \
+  -v "$BACKUP_DIR/scheduler-status.json:/restore/scheduler-status.json:ro" \
+  maintenance-scheduler node scripts/onprem-restore-scheduler-state.mjs /restore/scheduler-status.json
+
 printf '\nRestore completed. The application and maintenance scheduler remain stopped by design.\n' >&2
 printf 'Before reopening service, check out the release recorded by runtime-health.json/images.json, review schema compatibility, then start the stack and perform the documented smoke tests.\n' >&2
