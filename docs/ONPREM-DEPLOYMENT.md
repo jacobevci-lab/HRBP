@@ -206,7 +206,7 @@ The command requires explicit maintenance-window acknowledgement and performs th
 6. Stores the bounded current-state probe as checksummed `pre-upgrade-health.json` and writes checksummed `upgrade-intent.json`.
 7. Applies only committed Prisma migration history and waits for a verified schema-service exit code.
 8. Starts the target application and scheduler.
-9. Runs bounded postflight checks for runtime, **exact deployed release revision**, database, authentication, clean migration state and scheduler health.
+9. Runs bounded postflight checks for runtime, **exact deployed release revision**, database, authentication, private S3 bucket access, clean migration state and scheduler health.
 10. Writes a checksummed `upgrade-receipt.json` only after every postflight gate succeeds.
 
 An example with explicit paths:
@@ -239,7 +239,7 @@ node scripts/onprem-postflight.mjs --env-file .env.onprem --mode post-deploy --t
 npm run db:migrate:status
 ```
 
-Postflight talks only to the host-local application port and uses bounded responses. It does not print authentication secrets, database URLs or upstream error bodies.
+Postflight talks only to the host-local application port, verifies the configured private S3 bucket through the provider-neutral recovery client, and uses bounded responses. Object names are not emitted as operator output. It does not print authentication secrets, database URLs or upstream error bodies.
 
 Versioned migrations remain the production schema contract. The guarded legacy-baseline path exists only to bring installations created before migration history into that contract. Recovery tooling remains the rollback safety boundary for data-changing upgrades; migration history is forward-only and does not replace backup/restore discipline.
 
