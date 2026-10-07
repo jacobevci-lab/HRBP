@@ -11,7 +11,7 @@ Document versions are immutable and follow a fail-closed lifecycle:
 5. The on-prem worker verifies the immutable size/hash, streams the bytes to private ClamD using the `INSTREAM` protocol and records `CLEAN`, `QUARANTINED` or `FAILED`.
 6. Only a latest version in `CLEAN` state can be downloaded by users. `PENDING`, `SCANNING`, `FAILED` and `QUARANTINED` remain blocked.
 
-The queue stores attempt count, lock timestamp and next-attempt time. A stale `SCANNING` lock is recovered to `PENDING`; transient scanner failures use bounded exponential retry. After the retry budget is exhausted the version becomes `FAILED` and remains unavailable. Final scan callbacks are conditional and idempotent: replaying the same final verdict is harmless, while a different later verdict cannot overwrite an already-final state.
+The queue stores attempt count, lock timestamp and next-attempt time. Worker download/release/finalization requests carry the exact claim attempt; stale workers are rejected after another worker has recovered and re-claimed the record. A stale `SCANNING` lock is recovered to `PENDING`; transient scanner failures use bounded exponential retry. After the retry budget is exhausted the version becomes `FAILED` and remains unavailable. Final scan callbacks are conditional and idempotent: replaying the same final verdict is harmless, while a different later verdict cannot overwrite an already-final state.
 
 The on-prem worker performs its own content-integrity verification before malware scanning. A mismatch between the claimed immutable metadata and the bytes returned from object storage is immediately `QUARANTINED` as `CONTENT_INTEGRITY_MISMATCH`.
 
