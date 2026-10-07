@@ -37,7 +37,23 @@ The bundled single-node object-store implementation is SeaweedFS. SeaweedFS is A
    ```
 6. Place the service behind the customer's HTTPS reverse proxy and restrict direct access to port 3000.
 
-The `schema` one-shot service currently runs `prisma db push` only after PostgreSQL is healthy. A destructive schema change causes that step to stop instead of being accepted automatically. The application starts only after the schema job and object-store health check succeed.
+The `schema` one-shot service runs the guarded versioned migration runner only after PostgreSQL is healthy. Fresh databases are created with committed `prisma migrate deploy` history. Existing installations from the pre-migration releases are never marked automatically unless their live PostgreSQL schema exactly matches the committed Prisma datamodel. The application starts only after the schema job and object-store health check succeed.
+
+## Versioned database migrations
+
+The first committed migration is `20261007000000_baseline_current_schema`. It represents the exact schema that existed before migration history was introduced.
+
+The schema runner handles three cases:
+
+- **Fresh install:** no application tables exist, so `prisma migrate deploy` applies the committed baseline and every later migration.
+- **Already versioned install:** `_prisma_migrations` exists, so only pending committed migrations are deployed.
+- **Legacy pre-migration install:** application tables exist but `_prisma_migrations` does not. The runner first executes a Prisma schema diff against the live database. Only an empty diff allows baseline adoption via `prisma migrate resolve --applied 20261007000000_baseline_current_schema`; pending migrations are then deployed.
+
+If a legacy database differs from the committed datamodel, baseline adoption fails closed and no migration marker is written. The deployment must remain stopped until the difference is reviewed and an explicit vendor migration plan is prepared.
+
+Production installation and upgrade procedures must not use `prisma db push`. That command remains available only for disposable development/test fixtures. Every production schema change after this baseline requires a reviewed migration directory committed under `prisma/migrations/`.
+
+CI independently verifies that the migration history can create an empty database, that migration history and the current Prisma datamodel have zero drift, that an exact legacy schema can be safely baselined, and that a deliberately drifted legacy schema is rejected without writing migration history.
 
 ## Object storage
 
@@ -123,13 +139,14 @@ Before every upgrade:
 2. Copy the completed backup to the customer's protected backup target and verify retention.
 3. Record/retain the running application revision from the backup metadata.
 4. Pull/check out the approved release.
-5. Rebuild and start the stack with the same command used for installation.
-6. If the schema service reports a destructive change, stop the upgrade and use a vendor-reviewed migration plan. Do not force the schema.
-7. Verify health, OIDC login, Action Center, document access and the customer's critical HR workflows before reopening access.
+5. Review the release's committed Prisma migration directories and approved change notes.
+6. Rebuild and start the stack with the same command used for installation. The schema service runs only committed migrations.
+7. If migration deployment or legacy parity verification fails, keep the application closed and use a vendor-reviewed migration/restore plan. Do not force or bypass the migration state.
+8. Verify health, OIDC login, Action Center, document access and the customer's critical HR workflows before reopening access.
 
 If rollback requires a data restore, first check out the release recorded with the backup, then use the guarded restore procedure above. Starting a newer binary against an older restored database is not an approved rollback path.
 
-The repository currently has no committed Prisma migration history; therefore `db push` is an interim bootstrap mechanism, not the final enterprise upgrade strategy. **Versioned migrations** with baseline adoption and forward-tested upgrade paths remain the next release-readiness gate. The recovery tooling provides the safety prerequisite but does not make unversioned schema mutation an acceptable long-term upgrade model.
+Versioned migrations are now the production schema contract. The guarded baseline adoption path exists only to bring installations created before this migration history into that contract. Recovery tooling remains the rollback safety boundary for data-changing upgrades; migration history is forward-only and does not replace backup/restore discipline.
 
 ## Operational limits of this profile
 
