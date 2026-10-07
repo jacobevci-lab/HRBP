@@ -27,7 +27,7 @@ const [
   readFile("scripts/onprem-recovery-rehearsal.sh", "utf8"),
   readFile("docs/ONPREM-DEPLOYMENT.md", "utf8"),
   readFile("package.json", "utf8"),
-  readFile("scripts/onprem-migrate.mjs", "utf8"),
+  readFile("scripts/deploy-prisma-migrations.mjs", "utf8"),
   readFile("scripts/verify-prisma-migrations.mjs", "utf8"),
   readFile("prisma/migrations/20261007000000_baseline_current_schema/migration.sql", "utf8"),
   readFile("prisma/migrations/migration_lock.toml", "utf8")
@@ -171,6 +171,7 @@ assert.equal(
   "Recovery rehearsal must be available as an explicit operator/CI command."
 );
 assert.equal(pkg.scripts?.["db:migrate:deploy"], "prisma migrate deploy --schema=prisma");
+assert.equal(pkg.scripts?.["db:migrate:upgrade"], "node scripts/deploy-prisma-migrations.mjs");
 assert.equal(pkg.scripts?.["db:migrate:verify"], "node scripts/verify-prisma-migrations.mjs");
 
 for (const token of [
