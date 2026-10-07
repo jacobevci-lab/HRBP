@@ -105,12 +105,17 @@ export async function GET(request: Request) {
           })
         : null;
 
-      return { user, employmentId: person?.employments[0]?.id };
+      const policy = await db.tenantSecurityPolicy.findUnique({
+        where: { tenantId: config.tenantId },
+        select: { sessionMaxMinutes: true }
+      });
+      return { user, employmentId: person?.employments[0]?.id, sessionMaxMinutes: policy?.sessionMaxMinutes ?? 480 };
     });
 
     const headers = new Headers({ location: sanitizeReturnTo(transaction.returnTo), "cache-control": "no-store" });
     headers.append("set-cookie", createSessionCookie({
       authMethod: "oidc",
+      sessionVersion: identity.user.sessionVersion,
       tenantId: identity.user.tenantId,
       actorId: identity.user.id,
       role: identity.user.role,
@@ -118,7 +123,7 @@ export async function GET(request: Request) {
       displayName: identity.user.displayName,
       email: identity.user.email ?? undefined,
       subject: identity.user.subject
-    }));
+    }, identity.sessionMaxMinutes));
     headers.append("set-cookie", clearOidcTransactionCookie());
     return new Response(null, { status: 302, headers });
   } catch (error) {
