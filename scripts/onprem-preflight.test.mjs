@@ -14,6 +14,7 @@ const base = {
   HRBP_ENGAGEMENT_RESPONSE_SECRET: "engagement-secret-abcdefghijklmnopqrstuvwxyz-ABCDEFGHIJKLMNOPQRSTUVWXYZ",
   HRBP_DOCUMENT_SCAN_TOKEN: "document-token-abcdefghijklmnopqrstuvwxyz",
   HRBP_MAINTENANCE_TOKEN: "maintenance-token-abcdefghijklmnopqrstuvwxyz",
+  HRBP_METRICS_TOKEN: "metrics-token-abcdefghijklmnopqrstuvwxyz",
   HRBP_OIDC_ISSUER: "https://login.example.com/tenant/v2.0",
   HRBP_OIDC_CLIENT_ID: "client-id-123",
   HRBP_OIDC_CLIENT_SECRET: "oidc-secret-abcdefghijklmnop",
@@ -88,6 +89,16 @@ test("rejects incomplete OIDC scopes and non-origin APP_URL", () => {
   assert.equal(result.ok, false);
   assert.ok(result.errors.some((entry) => entry.includes("without a path")));
   assert.ok(result.errors.some((entry) => entry.includes("include email")));
+});
+
+test("rejects metrics token reuse with another privileged service", () => {
+  const result = validateOnpremEnv({
+    ...base,
+    HRBP_METRICS_TOKEN: base.HRBP_MAINTENANCE_TOKEN
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((entry) => entry.includes("different secrets")));
+  assert.ok(!JSON.stringify(result).includes(base.HRBP_MAINTENANCE_TOKEN));
 });
 
 test("validation diagnostics never echo secret values", () => {
