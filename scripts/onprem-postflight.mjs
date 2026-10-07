@@ -84,11 +84,12 @@ const auth = await waitFor(
   "Authentication health"
 );
 
-function compose(args) {
+function compose(args, { discardStdout = false } = {}) {
   return spawnSync("docker", ["compose", "--env-file", envFile, "-f", "docker-compose.onprem.yml", ...args], {
     cwd: process.cwd(),
     encoding: "utf8",
-    maxBuffer: 8 * 1024 * 1024
+    maxBuffer: 8 * 1024 * 1024,
+    ...(discardStdout ? { stdio: ["ignore", "ignore", "pipe"] } : {})
   });
 }
 
@@ -96,8 +97,8 @@ const bucket = env.OBJECT_STORAGE_BUCKET || "hrbp-private";
 if (!/^[A-Za-z0-9._-]{3,63}$/.test(bucket)) fail("OBJECT_STORAGE_BUCKET is invalid for postflight.");
 const objectStorage = compose([
   "run", "--rm", "--no-deps", "-T", "object-storage-tool",
-  "lsf", `hrbp:${bucket}`, "--max-depth", "1"
-]);
+  "lsd", `hrbp:${bucket}`, "--max-depth", "1"
+], { discardStdout: true });
 if (objectStorage.error || objectStorage.status !== 0) {
   fail("Private object storage/bucket access is not healthy.");
 }
