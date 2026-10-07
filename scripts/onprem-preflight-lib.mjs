@@ -26,9 +26,12 @@ export const REQUIRED_KEYS = Object.freeze([
   "HRBP_OIDC_ISSUER",
   "HRBP_OIDC_CLIENT_ID",
   "HRBP_OIDC_CLIENT_SECRET",
+  "HRBP_OIDC_SCOPES",
   "HRBP_OIDC_REDIRECT_URI",
   "HRBP_AUTH_TENANT_ID",
-  "HRBP_BOOTSTRAP_ADMIN_EMAIL"
+  "HRBP_BOOTSTRAP_ADMIN_EMAIL",
+  "HRBP_ALLOWED_EMAIL_DOMAINS",
+  "HRBP_LOCAL_AUTH_ENABLED"
 ]);
 
 function parseLine(line, index) {
@@ -101,6 +104,10 @@ export function validateOnpremEnv(env) {
   }
 
   if (!validUrl(env.APP_URL, { httpsOnly: true })) errors.push("APP_URL must be a valid HTTPS URL.");
+  else {
+    const app = new URL(env.APP_URL);
+    if ((app.pathname && app.pathname !== "/") || app.search) errors.push("APP_URL must be an HTTPS origin without a path or query string.");
+  }
   if (!validUrl(env.HRBP_OIDC_ISSUER, { httpsOnly: true })) errors.push("HRBP_OIDC_ISSUER must be a valid HTTPS URL.");
   if (!validUrl(env.HRBP_OIDC_REDIRECT_URI, { httpsOnly: true })) errors.push("HRBP_OIDC_REDIRECT_URI must be a valid HTTPS URL.");
 
@@ -112,8 +119,15 @@ export function validateOnpremEnv(env) {
     }
   }
 
-  if ((env.HRBP_LOCAL_AUTH_ENABLED ?? "false").toLowerCase() !== "false") {
+  const localAuth = (env.HRBP_LOCAL_AUTH_ENABLED ?? "").toLowerCase();
+  if (!["true", "false"].includes(localAuth)) errors.push("HRBP_LOCAL_AUTH_ENABLED must be explicitly true or false.");
+  else if (localAuth === "true") {
     warnings.push("Local authentication is enabled; production on-prem deployments should normally use enterprise OIDC only.");
+  }
+
+  const scopes = new Set((env.HRBP_OIDC_SCOPES ?? "").split(/\s+/).filter(Boolean));
+  for (const scope of ["openid", "profile", "email"]) {
+    if (!scopes.has(scope)) errors.push(`HRBP_OIDC_SCOPES must include ${scope}.`);
   }
 
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(env.POSTGRES_USER ?? "")) errors.push("POSTGRES_USER contains unsupported characters.");
