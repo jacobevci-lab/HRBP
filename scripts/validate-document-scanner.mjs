@@ -49,6 +49,8 @@ for (const token of [
   'body.action === "claim"',
   "Unsupported document scanner action.",
   "recoverStaleScanLocks",
+  "STALE_RETRY_BUDGET_EXHAUSTED",
+  "Malware scanner stale lock exhausted the retry budget",
   "scanAttempts: { increment: 1 }",
   "scanStatus: VaultScanStatus.SCANNING",
   'body.action === "download"',
