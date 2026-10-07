@@ -70,6 +70,9 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "kmsKeyRef is required when customerManagedKey is enabled." }, { status: 400 });
   }
 
+  const previousSessionMaxMinutes = existing?.sessionMaxMinutes ?? 480;
+  const sessionPolicyTightened = sessionValue < previousSessionMaxMinutes;
+
   const next = {
     dataRegion,
     kmsKeyRef,
@@ -89,12 +92,20 @@ export async function PATCH(request: Request) {
       update: next,
       create: { tenantId: ctx.tenantId, ...next }
     });
+    if (sessionPolicyTightened) {
+      await tx.userAccount.updateMany({
+        where: { tenantId: ctx.tenantId, active: true },
+        data: { sessionVersion: { increment: 1 }, sessionsRevokedAt: new Date() }
+      });
+    }
     await appendAudit(tx, ctx, {
       action: "settings.security-policy-updated",
       resourceType: "TenantSecurityPolicy",
       resourceId: policy.id,
       classification: DataClassification.RESTRICTED,
-      purpose: "Tenant security posture configuration update"
+      purpose: sessionPolicyTightened
+        ? "Tenant security posture configuration update; active sessions revoked because session maximum was tightened"
+        : "Tenant security posture configuration update"
     });
     return policy;
   });
