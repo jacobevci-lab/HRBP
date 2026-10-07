@@ -36,7 +36,7 @@ command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required"
 
 BACKUP_DIR="$(cd "$BACKUP_DIR" && pwd -P)"
 [[ ! -e "$BACKUP_DIR/.incomplete" ]] || fail "backup is marked incomplete"
-for required in postgres.dump manifest.json runtime-health.json images.json SHA256SUMS objects; do
+for required in postgres.dump manifest.json runtime-health.json images.json migration-history.json scheduler-status.json SHA256SUMS objects; do
   [[ -e "$BACKUP_DIR/$required" ]] || fail "backup is missing $required"
 done
 if find "$BACKUP_DIR/objects" -type l -print -quit | grep -q .; then
@@ -53,7 +53,7 @@ COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 "${COMPOSE[@]}" config >/dev/null
 
 printf 'Stopping application mutation surfaces...\n' >&2
-"${COMPOSE[@]}" stop app schema >/dev/null 2>&1 || true
+"${COMPOSE[@]}" stop maintenance-scheduler app schema >/dev/null 2>&1 || true
 
 printf 'Starting recovery dependencies...\n' >&2
 "${COMPOSE[@]}" up -d --wait postgres object-storage >/dev/null
@@ -83,5 +83,5 @@ printf 'Restoring private S3-compatible object storage...\n' >&2
     exec rclone sync /backup "hrbp:$OBJECT_STORAGE_BUCKET" --create-empty-src-dirs --delete-during
   '
 
-printf '\nRestore completed. The application remains stopped by design.\n' >&2
+printf '\nRestore completed. The application and maintenance scheduler remain stopped by design.\n' >&2
 printf 'Before reopening service, check out the release recorded by runtime-health.json/images.json, review schema compatibility, then start the stack and perform the documented smoke tests.\n' >&2
