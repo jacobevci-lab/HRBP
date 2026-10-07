@@ -8,6 +8,7 @@ import { runtimeNumber } from "@/lib/runtime-env";
 import type { RequestContext } from "@/lib/request-context";
 
 const finalScanStatuses = [VaultScanStatus.CLEAN, VaultScanStatus.QUARANTINED, VaultScanStatus.FAILED] as const;
+type FinalScanStatus = typeof finalScanStatuses[number];
 const activeScanStatuses = [VaultScanStatus.PENDING, VaultScanStatus.SCANNING] as const;
 
 function scannerContext(tenantId: string): RequestContext {
@@ -191,7 +192,7 @@ async function releaseScanJob(versionId: string, expectedAttempt: number, reason
 
 async function completeScanJob(input: {
   versionId: string;
-  status: VaultScanStatus.CLEAN | VaultScanStatus.QUARANTINED | VaultScanStatus.FAILED;
+  status: FinalScanStatus;
   engine: string;
   reference: string | null;
   message: string | null;
