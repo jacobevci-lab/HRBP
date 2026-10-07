@@ -248,7 +248,7 @@ for (const token of [
   "scripts/onprem-backup.sh",
   "scripts/onprem-restore.sh",
   "recovery rehearsal",
-  "application remains stopped",
+  "application and maintenance scheduler remain stopped",
   "SeaweedFS",
   "rclone",
   "Versioned migrations",
