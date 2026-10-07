@@ -27,6 +27,23 @@ export async function POST(request: Request) {
     }, { status: 409, headers: { "cache-control": "no-store" } });
   }
 
+  const recent = await db.auditEvent.findFirst({
+    where: {
+      tenantId: ctx.tenantId,
+      actorId: ctx.actorId,
+      action: "settings.smtp-test-requested",
+      occurredAt: { gte: new Date(Date.now() - 60_000) }
+    },
+    orderBy: { occurredAt: "desc" },
+    select: { id: true }
+  });
+  if (recent) {
+    return Response.json({ error: "Wait before sending another SMTP verification email." }, {
+      status: 429,
+      headers: { "cache-control": "no-store", "retry-after": "60" }
+    });
+  }
+
   const user = await db.userAccount.findFirst({
     where: { id: ctx.actorId, tenantId: ctx.tenantId, active: true },
     select: { id: true, email: true }
