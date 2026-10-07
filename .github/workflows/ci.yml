@@ -172,6 +172,12 @@ jobs:
           const versionId = 'ci-document-scan-version';
           const hash = createHash('sha256').update('ci-scan-payload').digest('hex');
 
+          await db.tenant.upsert({
+            where: { id: 'ci-tenant' },
+            update: {},
+            create: { id: 'ci-tenant', name: 'CI Tenant', region: 'test' }
+          });
+
           await db.documentVersion.upsert({
             where: { id: versionId },
             update: {
