@@ -54,10 +54,10 @@ const [
 ]);
 
 const required = [
-  "postgres:", "object-storage:", "object-storage-tool:", "schema:", "app:", "maintenance-scheduler:",
+  "postgres:", "object-storage:", "object-storage-tool:", "schema:", "app:", "document-scanner-engine:", "document-scanner:", "maintenance-scheduler:",
   "service_completed_successfully", "service_healthy",
   "HRBP_ALLOW_INSECURE_CONTEXT_HEADERS: \"false\"",
-  "/api/health/runtime", "target: runtime", "target: schema"
+  "/api/health/runtime", "target: runtime", "target: schema", "target: scanner"
 ];
 for (const token of required) assert.ok(compose.includes(token), `Missing on-prem compose contract: ${token}`);
 
@@ -67,6 +67,26 @@ assert.ok(postgresBlock, "PostgreSQL service block must be present.");
 assert.ok(objectStorageBlock, "Embedded object-storage service block must be present.");
 assert.ok(!/\n\s+ports:/.test(postgresBlock), "PostgreSQL must not publish a host port.");
 assert.ok(!/\n\s+ports:/.test(objectStorageBlock), "Embedded object storage must not publish a host port.");
+const scannerEngineBlock = (compose.split("\n  document-scanner-engine:\n")[1] ?? "").split("\n  document-scanner:\n")[0];
+const scannerBlock = (compose.split("\n  document-scanner:\n")[1] ?? "").split("\n  maintenance-scheduler:\n")[0];
+assert.ok(scannerEngineBlock, "Document scanner engine service block must be present.");
+assert.ok(scannerBlock, "Document scanner worker service block must be present.");
+assert.ok(!/\n\s+ports:/.test(scannerEngineBlock), "ClamAV engine must not publish a host port.");
+assert.ok(!/\n\s+ports:/.test(scannerBlock), "Document scanner worker must not publish a host port.");
+assert.ok(scannerEngineBlock.includes("clamav/clamav:1.5.4-debian"), "Document scanner engine must use the reviewed pinned ClamAV release.");
+assert.ok(scannerEngineBlock.includes("clamav_db:/var/lib/clamav"), "ClamAV signature data must persist across restarts.");
+for (const token of [
+  "target: scanner",
+  "read_only: true",
+  "no-new-privileges:true",
+  "cap_drop:",
+  "HRBP_DOCUMENT_SCAN_URL: http://app:3000/api/internal/document-scan",
+  "HRBP_CLAMD_HOST: document-scanner-engine",
+  "condition: service_healthy"
+]) assert.ok(scannerBlock.includes(token), `Document scanner Compose contract missing: ${token}`);
+assert.ok(!scannerBlock.includes("OBJECT_STORAGE_SECRET_KEY"), "Document scanner worker must not receive object-storage credentials.");
+assert.ok(compose.includes("clamav_db:"), "ClamAV signatures must use a durable named volume.");
+
 const schedulerBlock = (compose.split("\n  maintenance-scheduler:\n")[1] ?? "").split("\nvolumes:\n")[0];
 assert.ok(schedulerBlock, "Maintenance scheduler service block must be present.");
 assert.ok(!/\n\s+ports:/.test(schedulerBlock), "Maintenance scheduler must not publish a host port.");
@@ -98,8 +118,8 @@ assert.ok(compose.includes("OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-
 assert.ok(compose.includes("APP_URL:?set APP_URL"));
 assert.equal(
   (compose.match(/env_file: \["\$\{HRBP_ENV_FILE:-\.env\.onprem\}"\]/g) ?? []).length,
-  3,
-  "Schema, app and scheduler must all honor the selected on-prem env file path."
+  4,
+  "Schema, app, document scanner and scheduler must all honor the selected on-prem env file path."
 );
 
 assert.match(dockerfile, /COPY package\.json package-lock\.json/);
@@ -110,6 +130,10 @@ assert.match(dockerfile, /USER node/);
 assert.match(dockerfile, /HEALTHCHECK[\s\S]*api\/health\/runtime/);
 assert.match(dockerfile, /FROM builder AS schema/);
 assert.match(dockerfile, /FROM base AS scheduler/);
+assert.match(dockerfile, /FROM base AS scanner/);
+assert.ok(dockerfile.includes('CMD ["node", "scripts/document-scan-worker.mjs"]'), "Scanner image must start the document scan worker.");
+assert.ok(dockerfile.includes("document-scan-health.mjs"), "Scanner image must have its own health probe.");
+assert.ok(dockerfile.includes("/var/run/hrbp-scanner"), "Scanner image must prepare its bounded heartbeat state.");
 assert.ok(dockerfile.includes('CMD ["node", "scripts/onprem-maintenance-scheduler.mjs"]'), "Scheduler image must start the bounded scheduler.");
 assert.ok(dockerfile.includes("onprem-maintenance-health.mjs"), "Scheduler image must have its own health probe.");
 assert.ok(dockerfile.includes("onprem-restore-scheduler-state.mjs"), "Scheduler image must include the restore latch helper.");
@@ -236,7 +260,8 @@ assert.match(env, /HRBP_HTTP_BIND=127\.0\.0\.1/);
 assert.match(env, /HRBP_MAINTENANCE_INTERVAL_SECONDS=900/);
 assert.match(env, /OBJECT_STORAGE_IMAGE=chrislusf\/seaweedfs:4\.48/);
 assert.match(env, /OBJECT_STORAGE_TOOL_IMAGE=rclone\/rclone:1\.75\.1/);
-assert.ok(!/^(?:POSTGRES|OBJECT_STORAGE|MINIO).*IMAGE=.*:latest$/m.test(env), "On-prem images must not use mutable latest tags.");
+assert.match(env, /DOCUMENT_SCANNER_IMAGE=clamav\/clamav:1\.5\.4-debian/);
+assert.ok(!/^(?:POSTGRES|OBJECT_STORAGE|DOCUMENT_SCANNER|MINIO).*IMAGE=.*:latest$/m.test(env), "On-prem images must not use mutable latest tags.");
 assert.ok(!env.includes("MINIO_"), "Retired MinIO bootstrap settings must not remain in the production example.");
 assert.ok(ignore.includes(".env.*"), "Docker context must exclude environment files.");
 assert.ok(ignore.includes("!.env.onprem.example"), "Docker context must retain the safe example.");
@@ -314,6 +339,7 @@ assert.equal(pkg.scripts?.["db:migrate:upgrade"], "node scripts/deploy-prisma-mi
 assert.equal(pkg.scripts?.["db:migrate:verify"], "node scripts/verify-prisma-migrations.mjs");
 assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-maintenance-scheduler.test.mjs"), "On-prem validation must execute scheduler safety tests.");
 assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-preflight.test.mjs"), "On-prem validation must execute preflight safety tests.");
+assert.ok(pkg.scripts?.["onprem:validate"]?.includes("document-scanner:validate"), "On-prem validation must execute document scanner safety tests.");
 assert.equal(pkg.scripts?.["onprem:preflight"], "node scripts/onprem-preflight.mjs --env-file .env.onprem --phase install");
 assert.equal(pkg.scripts?.["onprem:postflight"], "node scripts/onprem-postflight.mjs --env-file .env.onprem");
 assert.equal(pkg.scripts?.["onprem:upgrade"], "bash scripts/onprem-upgrade.sh");
@@ -330,7 +356,11 @@ for (const token of [
   "baseline adoption",
   "maintenance-scheduler",
   "blocked.json",
-  "--acknowledge-unknown"
+  "--acknowledge-unknown",
+  "ClamAV",
+  "document-scanner",
+  "QUARANTINED",
+  "CLEAN"
 ]) assert.ok(docs.includes(token), `On-prem runbook missing recovery guidance: ${token}`);
 
 console.log("On-prem package, recovery and versioned migration safety validation passed.");
