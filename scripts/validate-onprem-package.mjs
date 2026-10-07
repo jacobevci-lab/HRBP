@@ -99,6 +99,7 @@ assert.match(dockerfile, /FROM builder AS schema/);
 assert.match(dockerfile, /FROM base AS scheduler/);
 assert.ok(dockerfile.includes('CMD ["node", "scripts/onprem-maintenance-scheduler.mjs"]'), "Scheduler image must start the bounded scheduler.");
 assert.ok(dockerfile.includes("onprem-maintenance-health.mjs"), "Scheduler image must have its own health probe.");
+assert.ok(dockerfile.includes("onprem-restore-scheduler-state.mjs"), "Scheduler image must include the restore latch helper.");
 assert.ok(dockerfile.includes("/var/lib/hrbp-scheduler"), "Scheduler image must prepare durable state ownership.");
 assert.ok(compose.includes("no-new-privileges:true") && compose.includes("cap_drop:"), "Application container must drop ambient Linux privileges.");
 assert.ok(!dockerfile.includes("--accept-data-loss"));
@@ -206,6 +207,8 @@ for (const token of [
   'rclone sync /backup "hrbp:$OBJECT_STORAGE_BUCKET"',
   "--delete-during",
   "reserved database",
+  "onprem-restore-scheduler-state.mjs",
+  "scheduler-status.json:/restore/scheduler-status.json:ro",
   "application and maintenance scheduler remain stopped"
 ]) assert.ok(restore.includes(token), `Restore safety contract missing: ${token}`);
 assert.ok(!restore.includes("db push"), "Restore must not run implicit schema mutation.");
