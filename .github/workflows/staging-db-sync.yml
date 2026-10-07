@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+      - run: npm ci
       - run: npx prisma validate
       - name: Verify staging database secret
         run: |
@@ -25,8 +25,8 @@ jobs:
             echo "HRBP_STAGING_DATABASE_URL is not configured"
             exit 1
           fi
-      - name: Synchronize staging schema
-        run: npx prisma db push
+      - name: Apply guarded versioned migrations
+        run: npm run db:migrate:upgrade
       - name: Generate Prisma client for staging seed
         run: npx prisma generate
       - name: Seed enterprise staging workspace

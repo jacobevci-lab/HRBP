@@ -1,0 +1,5 @@
+# Keep release-critical scripts and migration history byte-stable across developer platforms.
+prisma/migrations/**/*.sql text eol=lf
+prisma/migrations/migration_lock.toml text eol=lf
+scripts/*.sh text eol=lf
+scripts/*.mjs text eol=lf
