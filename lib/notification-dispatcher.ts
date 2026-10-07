@@ -1,5 +1,12 @@
-import { DataClassification, NotificationOutboxStatus, PlatformRole, Prisma } from "@prisma/client";
+import {
+  DataClassification,
+  NotificationOutboxStatus,
+  PlatformRole,
+  Prisma
+} from "@prisma/client";
 import { db } from "@/lib/db";
+import { notificationEmailBatchSize } from "@/lib/notification-email-config";
+import { sendSmtpNotification } from "@/lib/smtp-notification-provider";
 import { runtimeNumber } from "@/lib/runtime-env";
 
 function retryDelayMs(attempt: number) {
@@ -11,7 +18,7 @@ function retryDelayMs(attempt: number) {
 
 function errorMessage(error: unknown) {
   const value = error instanceof Error ? error.message : String(error);
-  return value.replace(/\s+/g, " ").trim().slice(0, 1200) || "Unknown notification delivery error";
+  return value.replace(/s+/g, " ").trim().slice(0, 1200) || "Unknown notification delivery error";
 }
 
 function platformRole(value: string): PlatformRole | null {
@@ -33,10 +40,11 @@ async function recoverStaleLocks(now: Date) {
   return result.count;
 }
 
-type InAppCandidate = {
+type NotificationCandidate = {
   id: string;
   tenantId: string;
   eventType: string;
+  channel: string;
   recipientUserId: string | null;
   recipientRole: string | null;
   templateKey: string | null;
@@ -45,21 +53,42 @@ type InAppCandidate = {
   dedupeKey: string;
   payload: Prisma.JsonValue | null;
   classification: DataClassification;
+  status: NotificationOutboxStatus;
+  attempts: number;
+  nextAttemptAt: Date;
 };
 
-async function deliverInApp(candidate: InAppCandidate) {
+const candidateSelect = {
+  id: true,
+  tenantId: true,
+  eventType: true,
+  channel: true,
+  recipientUserId: true,
+  recipientRole: true,
+  templateKey: true,
+  resourceType: true,
+  resourceId: true,
+  dedupeKey: true,
+  payload: true,
+  classification: true,
+  status: true,
+  attempts: true,
+  nextAttemptAt: true
+} as const;
+
+async function deliverInApp(candidate: NotificationCandidate) {
   if (candidate.recipientUserId) return;
-  if (!candidate.recipientRole) throw new Error("IN_APP notification has no user or role recipient");
+  if (!candidate.recipientRole) throw new Error("IN_APP_RECIPIENT_REQUIRED");
 
   const role = platformRole(candidate.recipientRole);
-  if (!role) throw new Error(`Unsupported notification role ${candidate.recipientRole}`);
+  if (!role) throw new Error("IN_APP_ROLE_UNSUPPORTED");
 
   const recipients = await db.userAccount.findMany({
     where: { tenantId: candidate.tenantId, role, active: true },
     select: { id: true },
     take: 1000
   });
-  if (recipients.length === 0) throw new Error(`No active users found for notification role ${candidate.recipientRole}`);
+  if (recipients.length === 0) throw new Error("IN_APP_ROLE_RECIPIENTS_UNAVAILABLE");
 
   const deliveredAt = new Date();
   await db.$transaction(async (tx) => {
@@ -88,38 +117,112 @@ async function deliverInApp(candidate: InAppCandidate) {
   });
 }
 
+async function fanOutEmailRole(candidate: NotificationCandidate) {
+  if (!candidate.recipientRole) throw new Error("EMAIL_RECIPIENT_REQUIRED");
+  const role = platformRole(candidate.recipientRole);
+  if (!role) throw new Error("EMAIL_ROLE_UNSUPPORTED");
+
+  const recipients = await db.userAccount.findMany({
+    where: {
+      tenantId: candidate.tenantId,
+      role,
+      active: true,
+      email: { not: null }
+    },
+    select: { id: true },
+    take: 1000
+  });
+  if (recipients.length === 0) throw new Error("EMAIL_ROLE_RECIPIENTS_UNAVAILABLE");
+
+  await db.$transaction(async (tx) => {
+    for (const recipient of recipients) {
+      const dedupeKey = `${candidate.dedupeKey}:user:${recipient.id}`;
+      await tx.notificationOutbox.upsert({
+        where: { tenantId_dedupeKey: { tenantId: candidate.tenantId, dedupeKey } },
+        update: {},
+        create: {
+          tenantId: candidate.tenantId,
+          eventType: candidate.eventType,
+          channel: "EMAIL",
+          recipientUserId: recipient.id,
+          templateKey: candidate.templateKey,
+          resourceType: candidate.resourceType,
+          resourceId: candidate.resourceId,
+          dedupeKey,
+          ...(candidate.payload === null ? {} : { payload: candidate.payload as Prisma.InputJsonValue }),
+          classification: candidate.classification
+        }
+      });
+    }
+  });
+}
+
+async function deliverEmail(candidate: NotificationCandidate) {
+  if (!candidate.recipientUserId) {
+    await fanOutEmailRole(candidate);
+    return;
+  }
+
+  const recipient = await db.userAccount.findFirst({
+    where: {
+      id: candidate.recipientUserId,
+      tenantId: candidate.tenantId,
+      active: true
+    },
+    select: { email: true }
+  });
+  if (!recipient?.email) throw new Error("EMAIL_RECIPIENT_UNAVAILABLE");
+
+  await sendSmtpNotification({
+    outboxId: candidate.id,
+    tenantId: candidate.tenantId,
+    eventType: candidate.eventType,
+    recipient: recipient.email,
+    resourceType: candidate.resourceType,
+    resourceId: candidate.resourceId,
+    classification: candidate.classification,
+    payload: candidate.payload
+  });
+}
+
 export async function runNotificationDispatcher() {
   const startedAt = new Date();
   const maxBatch = Math.min(500, Math.max(10, Math.floor(runtimeNumber("HRBP_NOTIFICATION_BATCH_SIZE", 100))));
+  const emailBatch = notificationEmailBatchSize();
   const maxAttempts = Math.min(20, Math.max(2, Math.floor(runtimeNumber("HRBP_NOTIFICATION_MAX_ATTEMPTS", 5))));
   const recovered = await recoverStaleLocks(startedAt);
 
-  const candidates = await db.notificationOutbox.findMany({
-    where: {
-      status: { in: [NotificationOutboxStatus.PENDING, NotificationOutboxStatus.FAILED] },
-      nextAttemptAt: { lte: startedAt },
-      attempts: { lt: maxAttempts }
-    },
-    orderBy: [{ nextAttemptAt: "asc" }, { createdAt: "asc" }],
-    take: maxBatch,
-    select: {
-      id: true,
-      tenantId: true,
-      eventType: true,
-      channel: true,
-      recipientUserId: true,
-      recipientRole: true,
-      templateKey: true,
-      resourceType: true,
-      resourceId: true,
-      dedupeKey: true,
-      payload: true,
-      classification: true,
-      status: true,
-      attempts: true,
-      nextAttemptAt: true
-    }
-  });
+  const baseWhere = {
+    status: { in: [NotificationOutboxStatus.PENDING, NotificationOutboxStatus.FAILED] },
+    nextAttemptAt: { lte: startedAt },
+    attempts: { lt: maxAttempts }
+  } as const;
+
+  const [inAppCandidates, emailCandidates, unsupportedCandidates] = await Promise.all([
+    db.notificationOutbox.findMany({
+      where: { ...baseWhere, channel: "IN_APP" },
+      orderBy: [{ nextAttemptAt: "asc" }, { createdAt: "asc" }],
+      take: maxBatch,
+      select: candidateSelect
+    }),
+    db.notificationOutbox.findMany({
+      where: { ...baseWhere, channel: "EMAIL" },
+      orderBy: [{ nextAttemptAt: "asc" }, { createdAt: "asc" }],
+      take: emailBatch,
+      select: candidateSelect
+    }),
+    db.notificationOutbox.findMany({
+      where: { ...baseWhere, channel: { notIn: ["IN_APP", "EMAIL"] } },
+      orderBy: [{ nextAttemptAt: "asc" }, { createdAt: "asc" }],
+      take: 20,
+      select: candidateSelect
+    })
+  ]);
+  const candidates: NotificationCandidate[] = [
+    ...inAppCandidates,
+    ...emailCandidates,
+    ...unsupportedCandidates
+  ];
 
   let claimed = 0;
   let delivered = 0;
@@ -150,20 +253,37 @@ export async function runNotificationDispatcher() {
     try {
       if (candidate.channel === "IN_APP") {
         await deliverInApp(candidate);
+      } else if (candidate.channel === "EMAIL") {
+        await deliverEmail(candidate);
       } else {
-        throw new Error(`Unsupported notification channel: ${candidate.channel}`);
+        throw new Error("NOTIFICATION_CHANNEL_UNSUPPORTED");
       }
 
       const completion = await db.notificationOutbox.updateMany({
-        where: { id: candidate.id, tenantId: candidate.tenantId, status: NotificationOutboxStatus.PROCESSING, attempts: attempt },
-        data: { status: NotificationOutboxStatus.DELIVERED, deliveredAt: new Date(), lockedAt: null, lastError: null }
+        where: {
+          id: candidate.id,
+          tenantId: candidate.tenantId,
+          status: NotificationOutboxStatus.PROCESSING,
+          attempts: attempt
+        },
+        data: {
+          status: NotificationOutboxStatus.DELIVERED,
+          deliveredAt: new Date(),
+          lockedAt: null,
+          lastError: null
+        }
       });
       if (completion.count === 1) delivered += 1;
     } catch (error) {
       const deadLetter = attempt >= maxAttempts;
       const now = new Date();
       const completion = await db.notificationOutbox.updateMany({
-        where: { id: candidate.id, tenantId: candidate.tenantId, status: NotificationOutboxStatus.PROCESSING, attempts: attempt },
+        where: {
+          id: candidate.id,
+          tenantId: candidate.tenantId,
+          status: NotificationOutboxStatus.PROCESSING,
+          attempts: attempt
+        },
         data: {
           status: deadLetter ? NotificationOutboxStatus.DEAD_LETTER : NotificationOutboxStatus.FAILED,
           lockedAt: null,
@@ -183,6 +303,9 @@ export async function runNotificationDispatcher() {
     completedAt: new Date().toISOString(),
     recovered,
     candidates: candidates.length,
+    inAppCandidates: inAppCandidates.length,
+    emailCandidates: emailCandidates.length,
+    unsupportedCandidates: unsupportedCandidates.length,
     claimed,
     delivered,
     failed,
