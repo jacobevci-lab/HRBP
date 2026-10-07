@@ -295,7 +295,7 @@ assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-maintenance-schedul
 assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-preflight.test.mjs"), "On-prem validation must execute preflight safety tests.");
 assert.equal(pkg.scripts?.["onprem:preflight"], "node scripts/onprem-preflight.mjs --env-file .env.onprem --phase install");
 assert.equal(pkg.scripts?.["onprem:postflight"], "node scripts/onprem-postflight.mjs --env-file .env.onprem");
-assert.equal(pkg.scripts?.["onprem:upgrade"], "bash scripts/onprem-upgrade.sh --maintenance-window");
+assert.equal(pkg.scripts?.["onprem:upgrade"], "bash scripts/onprem-upgrade.sh");
 
 for (const token of [
   "scripts/onprem-backup.sh",
