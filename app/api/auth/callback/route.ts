@@ -91,8 +91,9 @@ export async function GET(request: Request) {
         });
       }
 
-      const person = email
-        ? await db.person.findFirst({
+      const [person, tenant, securityPolicy] = await Promise.all([
+        email
+          ? db.person.findFirst({
             where: { tenantId: config.tenantId, workEmail: { equals: email, mode: "insensitive" } },
             select: {
               employments: {
@@ -102,15 +103,26 @@ export async function GET(request: Request) {
                 select: { id: true }
               }
             }
-          })
-        : null;
+            })
+          : Promise.resolve(null),
+        db.tenant.findUnique({ where: { id: config.tenantId }, select: { sessionVersion: true } }),
+        db.tenantSecurityPolicy.findUnique({ where: { tenantId: config.tenantId }, select: { sessionMaxMinutes: true } })
+      ]);
+      if (!tenant) throw new Error("TENANT_NOT_FOUND");
 
-      return { user, employmentId: person?.employments[0]?.id };
+      return {
+        user,
+        employmentId: person?.employments[0]?.id,
+        tenantSessionVersion: tenant.sessionVersion,
+        sessionMaxMinutes: securityPolicy?.sessionMaxMinutes ?? 480
+      };
     });
 
     const headers = new Headers({ location: sanitizeReturnTo(transaction.returnTo), "cache-control": "no-store" });
     headers.append("set-cookie", createSessionCookie({
       authMethod: "oidc",
+      accountSessionVersion: identity.user.sessionVersion,
+      tenantSessionVersion: identity.tenantSessionVersion,
       tenantId: identity.user.tenantId,
       actorId: identity.user.id,
       role: identity.user.role,
@@ -118,7 +130,7 @@ export async function GET(request: Request) {
       displayName: identity.user.displayName,
       email: identity.user.email ?? undefined,
       subject: identity.user.subject
-    }));
+    }, identity.sessionMaxMinutes));
     headers.append("set-cookie", clearOidcTransactionCookie());
     return new Response(null, { status: 302, headers });
   } catch (error) {
