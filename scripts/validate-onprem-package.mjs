@@ -85,6 +85,7 @@ for (const token of [
   "condition: service_healthy"
 ]) assert.ok(scannerBlock.includes(token), `Document scanner Compose contract missing: ${token}`);
 assert.ok(!scannerBlock.includes("OBJECT_STORAGE_SECRET_KEY"), "Document scanner worker must not receive object-storage credentials.");
+assert.ok(!scannerBlock.includes("env_file:"), "Document scanner worker must not inherit the full application secret file.");
 assert.ok(compose.includes("clamav_db:"), "ClamAV signatures must use a durable named volume.");
 
 const schedulerBlock = (compose.split("\n  maintenance-scheduler:\n")[1] ?? "").split("\nvolumes:\n")[0];
@@ -118,8 +119,8 @@ assert.ok(compose.includes("OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-
 assert.ok(compose.includes("APP_URL:?set APP_URL"));
 assert.equal(
   (compose.match(/env_file: \["\$\{HRBP_ENV_FILE:-\.env\.onprem\}"\]/g) ?? []).length,
-  4,
-  "Schema, app, document scanner and scheduler must all honor the selected on-prem env file path."
+  3,
+  "Schema, app and scheduler must honor the selected on-prem env file path; the scanner worker uses an explicit least-privilege environment."
 );
 
 assert.match(dockerfile, /COPY package\.json package-lock\.json/);
