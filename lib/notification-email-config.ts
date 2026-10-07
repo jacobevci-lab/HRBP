@@ -34,18 +34,21 @@ export function smtpConfigurationStatus() {
   return { enabled, configured: missing.length === 0, missing: [...new Set(missing)], events };
 }
 
+export function notificationEmailPolicyAllows(eventType: string, classification: DataClassification) {
+  if (!runtimeBoolean("HRBP_SMTP_ENABLED", false)) return false;
+  if (!notificationEmailEvents().includes(eventType)) return false;
+  if (classification === DataClassification.HIGHLY_RESTRICTED) return false;
+  if (classification === DataClassification.RESTRICTED &&
+      !runtimeBoolean("HRBP_NOTIFICATION_EMAIL_ALLOW_RESTRICTED", false)) return false;
+  return true;
+}
+
 export function shouldMirrorNotificationToEmail(input: {
   eventType: string;
   classification: DataClassification;
   explicitChannel?: string | null;
 }) {
-  if (input.explicitChannel) return false;
-  if (!runtimeBoolean("HRBP_SMTP_ENABLED", false)) return false;
-  if (!notificationEmailEvents().includes(input.eventType)) return false;
-  if (input.classification === DataClassification.HIGHLY_RESTRICTED) return false;
-  if (input.classification === DataClassification.RESTRICTED &&
-      !runtimeBoolean("HRBP_NOTIFICATION_EMAIL_ALLOW_RESTRICTED", false)) return false;
-  return true;
+  return !input.explicitChannel && notificationEmailPolicyAllows(input.eventType, input.classification);
 }
 
 export function notificationEmailBatchSize() {
