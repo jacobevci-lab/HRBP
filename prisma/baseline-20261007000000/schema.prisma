@@ -1,0 +1,787 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DataClassification {
+  INTERNAL
+  CONFIDENTIAL
+  RESTRICTED
+  HIGHLY_RESTRICTED
+}
+
+enum EmploymentStatus {
+  PREBOARDING
+  ACTIVE
+  LEAVE
+  SUSPENDED
+  TERMINATED
+}
+
+enum PositionStatus {
+  PLANNED
+  OPEN
+  FILLED
+  FROZEN
+  CLOSED
+}
+
+enum CaseStatus {
+  DRAFT
+  OPEN
+  INVESTIGATING
+  ACTION_REQUIRED
+  RESOLVED
+  CLOSED
+}
+
+enum DocumentStatus {
+  ACTIVE
+  SUPERSEDED
+  EXPIRED
+  DELETED
+}
+
+enum OrganizationUnitType {
+  LEGAL_ENTITY
+  BUSINESS_UNIT
+  DIVISION
+  DEPARTMENT
+  TEAM
+  COST_CENTER
+}
+
+enum PlatformRole {
+  EMPLOYEE
+  MANAGER
+  HRBP
+  HR_OPERATIONS
+  RECRUITER
+  TIME_ADMIN
+  TALENT_ADMIN
+  COMPENSATION_ADMIN
+  PAYROLL_ADMIN
+  ER_INVESTIGATOR
+  LEGAL
+  PRIVACY_OFFICER
+  SECURITY_AUDITOR
+  TENANT_ADMIN
+}
+
+enum LifecycleEventType {
+  HIRED
+  TRANSFERRED
+  PROMOTED
+  MANAGER_CHANGED
+  COMPENSATION_CHANGED
+  LEAVE_STARTED
+  LEAVE_ENDED
+  TERMINATED
+  REHIRED
+}
+
+enum RequisitionStatus {
+  DRAFT
+  APPROVAL
+  OPEN
+  ON_HOLD
+  CLOSED
+  CANCELLED
+}
+
+enum ApplicationStage {
+  APPLIED
+  SCREENING
+  INTERVIEW
+  ASSESSMENT
+  OFFER
+  HIRED
+  REJECTED
+  WITHDRAWN
+}
+
+enum OfferStatus {
+  DRAFT
+  APPROVAL
+  SENT
+  ACCEPTED
+  DECLINED
+  EXPIRED
+  WITHDRAWN
+}
+
+enum OnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+}
+
+enum OnboardingTaskStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  BLOCKED
+  COMPLETED
+  WAIVED
+}
+
+enum TimeEntryStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  LOCKED
+}
+
+enum LeaveRequestStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  TAKEN
+}
+
+enum LeaveUnit {
+  DAYS
+  HOURS
+}
+
+enum CompensationChangeStatus {
+  DRAFT
+  APPROVAL
+  APPROVED
+  REJECTED
+  APPLIED
+  CANCELLED
+}
+
+enum PayrollPeriodStatus {
+  OPEN
+  INPUT_LOCKED
+  CALCULATING
+  REVIEW
+  APPROVED
+  PAID
+  CLOSED
+}
+
+enum PayrollRunStatus {
+  DRAFT
+  VALIDATING
+  CALCULATED
+  EXCEPTION
+  APPROVAL
+  APPROVED
+  PAID
+  CANCELLED
+}
+
+enum PayrollLineType {
+  EARNING
+  DEDUCTION
+  TAX
+  EMPLOYER_COST
+  REIMBURSEMENT
+}
+
+model Tenant {
+  id                  String   @id @default(cuid())
+  name                String
+  region              String
+  createdAt           DateTime @default(now())
+  users               UserAccount[]
+  people              Person[]
+  employments         Employment[]
+  orgUnits            OrganizationUnit[]
+  positions           Position[]
+  cases               EmployeeCase[]
+  documents           DocumentRecord[]
+  lifecycle           EmployeeLifecycleEvent[]
+  audit               AuditEvent[]
+  requisitions        Requisition[]
+  candidates          Candidate[]
+  applications        Application[]
+  offers              Offer[]
+  onboardingPlans     OnboardingPlan[]
+  onboardingTasks     OnboardingTask[]
+  workSchedules       WorkSchedule[]
+  scheduleAssignments WorkScheduleAssignment[]
+  timeEntries         TimeEntry[]
+  leaveTypes          LeaveType[]
+  leaveBalances       LeaveBalance[]
+  leaveRequests       LeaveRequest[]
+  compensationChanges CompensationChange[]
+  payrollCountryPacks PayrollCountryPack[]
+  payrollPeriods      PayrollPeriod[]
+  payrollRuns         PayrollRun[]
+  payrollResults      PayrollResult[]
+  payrollLineItems    PayrollLineItem[]
+}
+
+model UserAccount {
+  id                     String @id @default(cuid())
+  tenantId               String
+  subject                String
+  displayName            String
+  email                  String?
+  role                   PlatformRole
+  active                 Boolean @default(true)
+  localAuthEnabled       Boolean @default(false)
+  localPasswordHash      String?
+  localPasswordUpdatedAt DateTime?
+  localFailedAttempts    Int @default(0)
+  localLockedUntil       DateTime?
+  lastLocalLoginAt       DateTime?
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignments CaseAssignment[]
+
+  @@unique([tenantId, subject])
+  @@index([tenantId, role])
+}
+
+model Person {
+  id              String   @id @default(cuid())
+  tenantId        String
+  employeeNumber  String?
+  givenName       String
+  familyName      String
+  workEmail       String?
+  personalEmail   String?
+  classification  DataClassification @default(CONFIDENTIAL)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  identity        PersonalIdentity?
+  employments     Employment[]
+  documents       DocumentRecord[]
+  cases           EmployeeCase[]
+  lifecycle       EmployeeLifecycleEvent[]
+  candidateOrigin Candidate?
+  onboardingPlans OnboardingPlan[]
+
+  @@unique([tenantId, employeeNumber])
+  @@index([tenantId, familyName, givenName])
+}
+
+model PersonalIdentity {
+  id             String @id @default(cuid())
+  personId       String @unique
+  dateOfBirth    DateTime?
+  nationality    String?
+  nationalIdHash String?
+  bankToken      String?
+  classification DataClassification @default(RESTRICTED)
+  person         Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+}
+
+model OrganizationUnit {
+  id        String @id @default(cuid())
+  tenantId  String
+  parentId  String?
+  code      String
+  name      String
+  type      OrganizationUnitType
+  validFrom DateTime
+  validTo   DateTime?
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  parent    OrganizationUnit? @relation("OrgHierarchy", fields: [parentId], references: [id])
+  children  OrganizationUnit[] @relation("OrgHierarchy")
+  positions Position[]
+
+  @@unique([tenantId, code, validFrom])
+  @@index([tenantId, parentId])
+  @@index([tenantId, type, validTo])
+}
+
+model Position {
+  id           String @id @default(cuid())
+  tenantId     String
+  orgUnitId    String
+  positionCode String
+  title        String
+  jobFamily    String?
+  grade        String?
+  location     String?
+  status       PositionStatus @default(OPEN)
+  critical     Boolean @default(false)
+  validFrom    DateTime
+  validTo      DateTime?
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  orgUnit      OrganizationUnit @relation(fields: [orgUnitId], references: [id], onDelete: Restrict)
+  employments  Employment[]
+  requisitions Requisition[]
+
+  @@unique([tenantId, positionCode, validFrom])
+  @@index([tenantId, status, validTo])
+}
+
+model Employment {
+  id                      String @id @default(cuid())
+  tenantId                String
+  personId                String
+  positionId              String?
+  managerEmploymentId     String?
+  status                  EmploymentStatus @default(PREBOARDING)
+  startDate               DateTime
+  endDate                 DateTime?
+  tenant                  Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person                  Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  position                Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  manager                 Employment? @relation("EmploymentManager", fields: [managerEmploymentId], references: [id], onDelete: SetNull)
+  directReports           Employment[] @relation("EmploymentManager")
+  compensation            CompensationHistory[]
+  onboardingPlans         OnboardingPlan[]
+  scheduleAssignments     WorkScheduleAssignment[]
+  timeEntries             TimeEntry[]
+  leaveBalances           LeaveBalance[]
+  leaveRequests           LeaveRequest[]
+  compensationChanges     CompensationChange[]
+  payrollResults          PayrollResult[]
+
+  @@index([tenantId, personId, status])
+  @@index([tenantId, managerEmploymentId])
+}
+
+model CompensationHistory {
+  id            String @id @default(cuid())
+  employmentId  String
+  currency      String
+  annualBase    Decimal @db.Decimal(18,2)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  employment    Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@index([employmentId, effectiveFrom])
+}
+
+model Requisition {
+  id              String @id @default(cuid())
+  tenantId        String
+  positionId      String?
+  title           String
+  status          RequisitionStatus @default(DRAFT)
+  openings        Int @default(1)
+  hiringManagerId String?
+  recruiterId     String?
+  targetHireDate  DateTime?
+  openedAt        DateTime?
+  createdAt       DateTime @default(now())
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  position        Position? @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  applications    Application[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, positionId])
+}
+
+model Candidate {
+  id                   String @id @default(cuid())
+  tenantId             String
+  givenName            String
+  familyName           String
+  email                String
+  phone                String?
+  source               String?
+  privacyNoticeVersion String?
+  retentionUntil       DateTime?
+  classification       DataClassification @default(RESTRICTED)
+  hiredPersonId        String? @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  tenant               Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  hiredPerson          Person? @relation(fields: [hiredPersonId], references: [id], onDelete: SetNull)
+  applications         Application[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId, retentionUntil])
+}
+
+model Application {
+  id            String @id @default(cuid())
+  tenantId      String
+  candidateId   String
+  requisitionId String
+  stage         ApplicationStage @default(APPLIED)
+  source        String?
+  appliedAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  requisition   Requisition @relation(fields: [requisitionId], references: [id], onDelete: Restrict)
+  offer         Offer?
+
+  @@unique([candidateId, requisitionId])
+  @@index([tenantId, stage, requisitionId])
+}
+
+model Offer {
+  id            String @id @default(cuid())
+  tenantId      String
+  applicationId String @unique
+  status        OfferStatus @default(DRAFT)
+  currency      String
+  annualBase    Decimal @db.Decimal(18,2)
+  startDate     DateTime
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status])
+}
+
+model OnboardingPlan {
+  id              String @id @default(cuid())
+  tenantId        String
+  personId        String
+  employmentId    String?
+  status          OnboardingStatus @default(NOT_STARTED)
+  targetStartDate DateTime
+  ownerId         String?
+  createdAt       DateTime @default(now())
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person          Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+  employment      Employment? @relation(fields: [employmentId], references: [id], onDelete: SetNull)
+  tasks           OnboardingTask[]
+
+  @@index([tenantId, status, targetStartDate])
+  @@index([tenantId, personId])
+}
+
+model OnboardingTask {
+  id        String @id @default(cuid())
+  tenantId  String
+  planId    String
+  title     String
+  ownerType String
+  status    OnboardingTaskStatus @default(NOT_STARTED)
+  dueDate   DateTime?
+  sensitive Boolean @default(false)
+  createdAt DateTime @default(now())
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  plan      OnboardingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, planId, status])
+}
+
+model WorkSchedule {
+  id              String @id @default(cuid())
+  tenantId        String
+  code            String
+  name            String
+  timezone        String
+  weeklyMinutes   Int
+  active          Boolean @default(true)
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  assignments     WorkScheduleAssignment[]
+
+  @@unique([tenantId, code, effectiveFrom])
+  @@index([tenantId, active])
+}
+
+model WorkScheduleAssignment {
+  id           String @id @default(cuid())
+  tenantId     String
+  employmentId String
+  scheduleId   String
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employment   Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  schedule     WorkSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+
+  @@unique([employmentId, effectiveFrom])
+  @@index([tenantId, scheduleId, effectiveTo])
+}
+
+model TimeEntry {
+  id           String @id @default(cuid())
+  tenantId     String
+  employmentId String
+  workDate     DateTime
+  startAt      DateTime?
+  endAt        DateTime?
+  minutes      Int
+  overtimeMinutes Int @default(0)
+  status       TimeEntryStatus @default(DRAFT)
+  source       String?
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employment   Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, workDate, status])
+  @@index([tenantId, employmentId, workDate])
+}
+
+model LeaveType {
+  id               String @id @default(cuid())
+  tenantId         String
+  code             String
+  name             String
+  unit             LeaveUnit @default(DAYS)
+  paid             Boolean @default(true)
+  requiresApproval Boolean @default(true)
+  annualAllowance  Decimal? @db.Decimal(8,2)
+  active           Boolean @default(true)
+  tenant           Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  balances         LeaveBalance[]
+  requests         LeaveRequest[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active])
+}
+
+model LeaveBalance {
+  id           String @id @default(cuid())
+  tenantId     String
+  employmentId String
+  leaveTypeId  String
+  periodYear   Int
+  opening      Decimal @default(0) @db.Decimal(8,2)
+  accrued      Decimal @default(0) @db.Decimal(8,2)
+  used         Decimal @default(0) @db.Decimal(8,2)
+  adjustment   Decimal @default(0) @db.Decimal(8,2)
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employment   Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  leaveType    LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([employmentId, leaveTypeId, periodYear])
+  @@index([tenantId, periodYear])
+}
+
+model LeaveRequest {
+  id           String @id @default(cuid())
+  tenantId     String
+  employmentId String
+  leaveTypeId  String
+  startsAt     DateTime
+  endsAt       DateTime
+  units        Decimal @db.Decimal(8,2)
+  status       LeaveRequestStatus @default(PENDING)
+  reason       String?
+  approverId   String?
+  decidedAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employment   Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  leaveType    LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, startsAt])
+  @@index([tenantId, employmentId, startsAt])
+}
+
+model CompensationChange {
+  id              String @id @default(cuid())
+  tenantId        String
+  employmentId    String
+  currency        String
+  currentAnnualBase Decimal? @db.Decimal(18,2)
+  proposedAnnualBase Decimal @db.Decimal(18,2)
+  effectiveAt     DateTime
+  status          CompensationChangeStatus @default(DRAFT)
+  reason          String?
+  requestedById   String
+  approvedById    String?
+  approvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employment      Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, effectiveAt])
+  @@index([tenantId, employmentId, effectiveAt])
+}
+
+model PayrollCountryPack {
+  id            String @id @default(cuid())
+  tenantId      String
+  countryCode   String
+  name          String
+  version       String
+  currency      String
+  active        Boolean @default(true)
+  effectiveFrom DateTime
+  effectiveTo   DateTime?
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  periods       PayrollPeriod[]
+
+  @@unique([tenantId, countryCode, version])
+  @@index([tenantId, active])
+}
+
+model PayrollPeriod {
+  id            String @id @default(cuid())
+  tenantId      String
+  countryPackId String
+  code          String
+  startsAt      DateTime
+  endsAt        DateTime
+  payDate       DateTime
+  status        PayrollPeriodStatus @default(OPEN)
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  countryPack   PayrollCountryPack @relation(fields: [countryPackId], references: [id], onDelete: Restrict)
+  runs          PayrollRun[]
+
+  @@unique([tenantId, countryPackId, code])
+  @@index([tenantId, status, payDate])
+}
+
+model PayrollRun {
+  id              String @id @default(cuid())
+  tenantId        String
+  payrollPeriodId String
+  runNumber       Int @default(1)
+  status          PayrollRunStatus @default(DRAFT)
+  startedAt       DateTime @default(now())
+  calculatedAt    DateTime?
+  approvedById    String?
+  approvedAt      DateTime?
+  paidAt          DateTime?
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  payrollPeriod   PayrollPeriod @relation(fields: [payrollPeriodId], references: [id], onDelete: Restrict)
+  results         PayrollResult[]
+
+  @@unique([payrollPeriodId, runNumber])
+  @@index([tenantId, status, startedAt])
+}
+
+model PayrollResult {
+  id             String @id @default(cuid())
+  tenantId       String
+  payrollRunId   String
+  employmentId   String
+  currency       String
+  grossPay       Decimal @db.Decimal(18,2)
+  taxablePay     Decimal @db.Decimal(18,2)
+  taxAmount      Decimal @db.Decimal(18,2)
+  deductions     Decimal @db.Decimal(18,2)
+  netPay         Decimal @db.Decimal(18,2)
+  employerCost   Decimal? @db.Decimal(18,2)
+  classification DataClassification @default(RESTRICTED)
+  calculatedAt   DateTime @default(now())
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  payrollRun     PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employment     Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  lineItems      PayrollLineItem[]
+
+  @@unique([payrollRunId, employmentId])
+  @@index([tenantId, employmentId, calculatedAt])
+}
+
+model PayrollLineItem {
+  id             String @id @default(cuid())
+  tenantId       String
+  payrollResultId String
+  type           PayrollLineType
+  code           String
+  label          String
+  quantity       Decimal? @db.Decimal(12,4)
+  rate           Decimal? @db.Decimal(18,4)
+  amount         Decimal @db.Decimal(18,2)
+  taxable        Boolean @default(false)
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  payrollResult  PayrollResult @relation(fields: [payrollResultId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, payrollResultId, type])
+}
+
+model EmployeeCase {
+  id              String @id @default(cuid())
+  tenantId        String
+  subjectPersonId String?
+  caseNumber      String
+  caseType        String
+  title           String
+  status          CaseStatus @default(OPEN)
+  classification  DataClassification @default(HIGHLY_RESTRICTED)
+  ownerUserId     String
+  openedAt        DateTime @default(now())
+  closedAt        DateTime?
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  subject         Person? @relation(fields: [subjectPersonId], references: [id], onDelete: SetNull)
+  assignments     CaseAssignment[]
+  documents       DocumentRecord[]
+
+  @@unique([tenantId, caseNumber])
+  @@index([tenantId, ownerUserId, status])
+}
+
+model CaseAssignment {
+  id         String @id @default(cuid())
+  caseId     String
+  userId     String
+  assignedAt DateTime @default(now())
+  case       EmployeeCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  user       UserAccount @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, userId])
+}
+
+model DocumentRecord {
+  id             String @id @default(cuid())
+  tenantId       String
+  personId       String?
+  caseId         String?
+  fileName       String
+  contentType    String
+  objectKey      String @unique
+  purpose        String
+  classification DataClassification @default(RESTRICTED)
+  status         DocumentStatus @default(ACTIVE)
+  createdById    String
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime?
+  retentionUntil DateTime?
+  legalHold      Boolean @default(false)
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person         Person? @relation(fields: [personId], references: [id], onDelete: SetNull)
+  case           EmployeeCase? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, personId, status])
+  @@index([tenantId, caseId])
+}
+
+model EmployeeLifecycleEvent {
+  id           String @id @default(cuid())
+  tenantId     String
+  personId     String
+  employmentId String?
+  type         LifecycleEventType
+  effectiveAt  DateTime
+  summary      String
+  actorId      String
+  createdAt    DateTime @default(now())
+  tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person       Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, personId, effectiveAt])
+}
+
+model AuditEvent {
+  id             String @id @default(cuid())
+  tenantId       String
+  actorId        String
+  action         String
+  resourceType   String
+  resourceId     String
+  purpose        String?
+  classification DataClassification
+  ipAddress      String?
+  occurredAt     DateTime @default(now())
+  hash           String
+  previousHash   String?
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, occurredAt])
+  @@index([tenantId, resourceType, resourceId])
+}
