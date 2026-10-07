@@ -1,4 +1,5 @@
 import { DataClassification, Prisma } from "@prisma/client";
+import { runtimeString } from "@/lib/runtime-env";
 
 export type NotificationOutboxEvent = {
   tenantId: string;
@@ -14,6 +15,21 @@ export type NotificationOutboxEvent = {
   payload?: Prisma.InputJsonValue;
 };
 
+
+function emailEventAllowlist() {
+  return new Set(
+    (runtimeString("HRBP_NOTIFICATION_EMAIL_EVENTS") ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter((value) => /^[A-Z][A-Z0-9_]{2,127}$/.test(value))
+      .slice(0, 200)
+  );
+}
+
+function shouldMirrorToEmail(event: NotificationOutboxEvent) {
+  return event.channel === undefined && emailEventAllowlist().has(event.eventType);
+}
+
 /**
  * Writes notification intent inside the caller's domain transaction.
  *
@@ -22,7 +38,7 @@ export type NotificationOutboxEvent = {
  * commit without its notification intent, and vice versa.
  */
 export async function enqueueNotificationOutbox(tx: Prisma.TransactionClient, event: NotificationOutboxEvent) {
-  return tx.notificationOutbox.upsert({
+  const primary = await tx.notificationOutbox.upsert({
     where: {
       tenantId_dedupeKey: {
         tenantId: event.tenantId,
@@ -49,4 +65,32 @@ export async function enqueueNotificationOutbox(tx: Prisma.TransactionClient, ev
       dedupeKey: true
     }
   });
+
+  if (shouldMirrorToEmail(event)) {
+    const emailDedupeKey = `${event.dedupeKey}:channel:email`;
+    await tx.notificationOutbox.upsert({
+      where: {
+        tenantId_dedupeKey: {
+          tenantId: event.tenantId,
+          dedupeKey: emailDedupeKey
+        }
+      },
+      update: {},
+      create: {
+        tenantId: event.tenantId,
+        eventType: event.eventType,
+        channel: "EMAIL",
+        recipientUserId: event.recipientUserId ?? null,
+        recipientRole: event.recipientRole ?? null,
+        templateKey: event.templateKey ?? null,
+        resourceType: event.resourceType,
+        resourceId: event.resourceId,
+        dedupeKey: emailDedupeKey,
+        classification: event.classification ?? DataClassification.CONFIDENTIAL,
+        ...(event.payload === undefined ? {} : { payload: event.payload })
+      }
+    });
+  }
+
+  return primary;
 }
