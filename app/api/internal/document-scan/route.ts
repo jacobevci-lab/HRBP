@@ -253,6 +253,10 @@ export async function POST(request: Request) {
 
   const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "JSON body must be an object." }, { status: 400 });
+  if (body.action !== undefined &&
+      !["claim", "download", "release", "complete"].includes(String(body.action))) {
+    return Response.json({ error: "Unsupported document scanner action." }, { status: 400 });
+  }
 
   if (body.action === "claim") {
     const job = await claimScanJob();
