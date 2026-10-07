@@ -40,7 +40,7 @@ The bundled single-node object-store implementation is SeaweedFS. SeaweedFS is A
    npm run onprem:postflight
    docker compose --env-file .env.onprem -f docker-compose.onprem.yml ps
    ```
-   Postflight waits for application runtime, PostgreSQL connectivity, configured authentication, clean Prisma migration status and a healthy maintenance scheduler.
+   Postflight waits for application runtime, PostgreSQL connectivity, configured authentication, notification-provider readiness, private object storage, clean Prisma migration status, a healthy document scanner and a healthy maintenance scheduler.
 7. Place the service behind the customer's HTTPS reverse proxy and restrict direct access to port 3000.
 
 The `schema` one-shot service runs the guarded versioned migration runner only after PostgreSQL is healthy. Fresh databases are created with committed `prisma migrate deploy` history. Existing installations from the pre-migration releases are never marked automatically unless their live PostgreSQL schema exactly matches the committed Prisma datamodel. The application starts only after the schema job and object-store health check succeed.
@@ -226,14 +226,14 @@ The restore flow:
 
 1. verifies `SHA256SUMS` before changing live state,
 2. rejects incomplete backups and object symlinks,
-3. stops the maintenance scheduler plus application/schema mutation surfaces,
+3. stops the document scanner, maintenance scheduler and application/schema mutation surfaces,
 4. starts only the database and private object-store recovery dependencies,
 5. recreates the configured non-system PostgreSQL database and restores the logical dump,
 6. synchronizes the backed-up S3 object set back to the bucket and deletes objects created after the backup,
 7. restores any backed-up ambiguous-outcome maintenance latch into the durable scheduler state volume,
-8. leaves the application and maintenance scheduler stopped.
+8. leaves the application, document scanner and maintenance scheduler stopped.
 
-The application and maintenance scheduler remain stopped after restore by design. If the backup recorded an ambiguous maintenance outcome, the restored scheduler latch remains blocked even on a new recovery host; inspect the affected domain before explicitly acknowledging/resuming it. Restore is monotonic for this safety state: an older backup that was unblocked never clears a newer existing unknown-outcome latch, because external side effects may not be reversed by database/object restore. Before reopening service, check out the application release corresponding to `runtime-health.json` / `images.json`, review schema compatibility, start the stack, then verify runtime health, OIDC sign-in, Action Center, document access, and customer-critical HR workflows. Do not use restore as a substitute for a reviewed database migration.
+The application, document scanner and maintenance scheduler remain stopped after restore by design. If the backup recorded an ambiguous maintenance outcome, the restored scheduler latch remains blocked even on a new recovery host; inspect the affected domain before explicitly acknowledging/resuming it. Restore is monotonic for this safety state: an older backup that was unblocked never clears a newer existing unknown-outcome latch, because external side effects may not be reversed by database/object restore. Before reopening service, check out the application release corresponding to `runtime-health.json` / `images.json`, review schema compatibility, start the stack, then verify runtime health, OIDC sign-in, Action Center, document access, and customer-critical HR workflows. Do not use restore as a substitute for a reviewed database migration.
 
 ## Automated recovery rehearsal
 
