@@ -12,13 +12,13 @@ function position(token) {
 
 test("upgrade sequence builds before downtime and backs up before migration", () => {
   const preflight = position("onprem-preflight.mjs");
-  const currentHealth = position("Verifying current deployment health before upgrade");
+  const currentHealth = position("--mode pre-upgrade");
   const build = position("Building target release before downtime");
   const stop = position("stop maintenance-scheduler app");
   const backup = position("onprem-backup.sh");
   const migration = position("--exit-code-from schema");
   const start = position("Starting target application and maintenance scheduler");
-  const postflight = position("onprem-postflight.mjs");
+  const postflight = position("--mode post-deploy");
 
   assert.ok(preflight < currentHealth);
   assert.ok(currentHealth < build);
