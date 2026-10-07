@@ -220,7 +220,7 @@ jobs:
             process.exit(1);
           }
 
-          result = await post({ action: 'release', versionId, reason: 'CI_TRANSIENT_FAILURE' });
+          result = await post({ action: 'release', versionId, attempt: 1, reason: 'CI_TRANSIENT_FAILURE' });
           if (!result.response.ok || result.body?.data?.status !== 'PENDING') {
             console.error('Document scan release did not requeue the claimed job.', result.body);
             process.exit(1);
@@ -236,6 +236,7 @@ jobs:
           result = await post({
             action: 'complete',
             versionId,
+            attempt: 2,
             status: 'CLEAN',
             engine: 'CI scanner',
             reference: 'ci-clean',
@@ -249,6 +250,7 @@ jobs:
           result = await post({
             action: 'complete',
             versionId,
+            attempt: 2,
             status: 'CLEAN',
             engine: 'CI scanner',
             reference: 'ci-clean',
@@ -262,6 +264,7 @@ jobs:
           result = await post({
             action: 'complete',
             versionId,
+            attempt: 2,
             status: 'QUARANTINED',
             engine: 'CI scanner',
             reference: 'late-conflict',
