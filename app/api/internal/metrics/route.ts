@@ -52,6 +52,8 @@ export async function GET(request: Request) {
     const [
       notificationGroups,
       oldestNotification,
+      oldestNotificationLock,
+      dueNotificationJobs,
       scanGroups,
       oldestPendingScan,
       oldestScanningLock,
@@ -69,6 +71,22 @@ export async function GET(request: Request) {
         },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { createdAt: true }
+      }),
+      db.notificationOutbox.findFirst({
+        where: {
+          status: NotificationOutboxStatus.PROCESSING,
+          lockedAt: { not: null }
+        },
+        orderBy: [{ lockedAt: "asc" }, { id: "asc" }],
+        select: { lockedAt: true }
+      }),
+      db.notificationOutbox.count({
+        where: {
+          status: {
+            in: [NotificationOutboxStatus.PENDING, NotificationOutboxStatus.FAILED]
+          },
+          nextAttemptAt: { lte: now }
+        }
       }),
       db.documentVersion.groupBy({
         by: ["scanStatus"],
@@ -137,6 +155,12 @@ export async function GET(request: Request) {
       "# HELP hrbp_notification_outbox_oldest_actionable_age_seconds Age of the oldest pending or retryable notification record.",
       "# TYPE hrbp_notification_outbox_oldest_actionable_age_seconds gauge",
       `hrbp_notification_outbox_oldest_actionable_age_seconds ${ageSeconds(oldestNotification?.createdAt, now)}`,
+      "# HELP hrbp_notification_outbox_due_jobs Notification records currently eligible for dispatch.",
+      "# TYPE hrbp_notification_outbox_due_jobs gauge",
+      `hrbp_notification_outbox_due_jobs ${dueNotificationJobs}`,
+      "# HELP hrbp_notification_outbox_oldest_processing_lock_age_seconds Age of the oldest active notification dispatcher lock.",
+      "# TYPE hrbp_notification_outbox_oldest_processing_lock_age_seconds gauge",
+      `hrbp_notification_outbox_oldest_processing_lock_age_seconds ${ageSeconds(oldestNotificationLock?.lockedAt, now)}`,
       "# HELP hrbp_document_scan_records Current document-version records by malware scan status.",
       "# TYPE hrbp_document_scan_records gauge"
     );
