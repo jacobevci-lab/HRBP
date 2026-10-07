@@ -22,7 +22,7 @@ No schema migration, production configuration, secrets, Cloudflare plan or custo
 
 Immediate account validation adds database reads to authenticated requests. React cache only deduplicates server-component session resolution within one render request. Measure database and Worker resource budgets under production load.
 
-This is not a new durable server-side session store: logout removes the browser cookie, but copied bearer cookies are not individually denylisted. Account deactivation/role changes are checked on subsequent requests, not a cancellation of already-running transactions. Re-enabling an unchanged account can make an otherwise unexpired cookie valid again. Distributed session revocation, idle timeout and live identity-provider revocation remain separate improvements.
+The later session-revocation hardening adds tenant/account session versions and tenant maximum-session enforcement on every verified request. Copied cookies can therefore be invalidated centrally without waiting for their signed expiry. Revocation still applies at the next request boundary; it does not cancel an already-running transaction. Live identity-provider event/revocation integration and true idle-timeout tracking remain separate improvements.
 
 The test suite is Chromium-only and does not establish all CRUD/approval/export journeys, external OIDC, payroll, AI, storage or notification-provider success. A green GitHub build is not proof of Cloudflare rollout or production health. The earlier Cloudflare deployment failure needs provider build logs before assigning a root cause.
 
