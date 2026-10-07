@@ -31,6 +31,7 @@ COPY scripts/onprem-maintenance-state.mjs ./scripts/onprem-maintenance-state.mjs
 COPY scripts/onprem-maintenance-scheduler.mjs ./scripts/onprem-maintenance-scheduler.mjs
 COPY scripts/onprem-maintenance-health.mjs ./scripts/onprem-maintenance-health.mjs
 COPY scripts/onprem-maintenance-control.mjs ./scripts/onprem-maintenance-control.mjs
+COPY scripts/onprem-restore-scheduler-state.mjs ./scripts/onprem-restore-scheduler-state.mjs
 COPY lib/maintenance-protocol.mjs ./lib/maintenance-protocol.mjs
 RUN mkdir -p /var/lib/hrbp-scheduler \
     && chown -R node:node /app /var/lib/hrbp-scheduler
