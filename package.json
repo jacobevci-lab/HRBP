@@ -117,11 +117,13 @@
     "@next/eslint-plugin-next": {
       ".": "14.2.35",
       "glob": "10.5.0"
-    }
+    },
+    "sharp": "0.35.5"
   },
   "overridesRationale": {
     "postcss": "Security override for GHSA-qx2v-qp2m-jg93, GHSA-6g55-p6wh-862q, GHSA-fxqj-rqcc-2cmp and GHSA-r28c-9q8g-f849 while remaining on the validated Next.js 15 line.",
     "deepmerge-ts": "Security override for GHSA-ggr8-5vv4-36mx in Prisma config; Prisma config uses the plain deepmerge API and upstream tracks the same >=8.0.0 remediation.",
-    "@next/eslint-plugin-next": "Temporary lint-plugin-only security rollback for GHSA-vfj7-8cjw-p6xm (braces has no patched release as of 2026-10-03). The official 14.2.35 plugin uses glob instead of fast-glob/micromatch/braces; glob is pinned to 10.5.0. Next.js and eslint-config-next remain on 15.x. All 21 rule names and configured severities are checked plus executable ESLint 9 fixtures; this is not a claim of identical rule implementations. Remove after an audited compatible plugin no longer includes vulnerable braces. No audit suppression."
+    "@next/eslint-plugin-next": "Temporary lint-plugin-only security rollback for GHSA-vfj7-8cjw-p6xm (braces has no patched release as of 2026-10-03). The official 14.2.35 plugin uses glob instead of fast-glob/micromatch/braces; glob is pinned to 10.5.0. Next.js and eslint-config-next remain on 15.x. All 21 rule names and configured severities are checked plus executable ESLint 9 fixtures; this is not a claim of identical rule implementations. Remove after an audited compatible plugin no longer includes vulnerable braces. No audit suppression.",
+    "sharp": "Security override for GHSA-wq5f-xc86-pv6w / CVE-2026-96889 in the Miniflare/Wrangler development toolchain. Keep production dependencies unchanged while forcing the patched Sharp line; remove once the pinned Cloudflare toolchain resolves to a patched Sharp transitively."
   }
 }
