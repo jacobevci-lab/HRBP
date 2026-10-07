@@ -199,14 +199,15 @@ npm run onprem:upgrade -- --maintenance-window
 The command requires explicit maintenance-window acknowledgement and performs the following sequence:
 
 1. Runs the upgrade preflight with a clean tracked source-tree requirement.
-2. Builds the target `schema`, `app` and `maintenance-scheduler` images **before downtime** so compile/package failures do not create an outage.
-3. Stops the maintenance scheduler and application mutation surfaces.
-4. Takes a quiesced PostgreSQL + object-store backup and preserves migration/scheduler evidence.
-5. Writes a checksummed `upgrade-intent.json` beside the backup.
-6. Applies only committed Prisma migration history and waits for a verified schema-service exit code.
-7. Starts the target application and scheduler.
-8. Runs bounded postflight checks for runtime, database, authentication, migration state and scheduler health.
-9. Writes a checksummed `upgrade-receipt.json` only after every postflight gate succeeds.
+2. Verifies the **currently running** application, database, authentication and scheduler before changing anything; this pre-upgrade probe deliberately does not compare the target migration history yet.
+3. Builds the target `schema`, `app` and `maintenance-scheduler` images **before downtime** so compile/package failures do not create an outage.
+4. Stops the maintenance scheduler and application mutation surfaces.
+5. Takes a quiesced PostgreSQL + object-store backup and preserves migration/scheduler evidence.
+6. Stores the bounded current-state probe as checksummed `pre-upgrade-health.json` and writes checksummed `upgrade-intent.json`.
+7. Applies only committed Prisma migration history and waits for a verified schema-service exit code.
+8. Starts the target application and scheduler.
+9. Runs bounded postflight checks for runtime, database, authentication, clean migration state and scheduler health.
+10. Writes a checksummed `upgrade-receipt.json` only after every postflight gate succeeds.
 
 An example with explicit paths:
 
@@ -233,7 +234,8 @@ Operators can run the gates independently:
 
 ```bash
 node scripts/onprem-preflight.mjs --env-file .env.onprem --phase upgrade --require-clean-source
-node scripts/onprem-postflight.mjs --env-file .env.onprem --timeout-seconds 600
+node scripts/onprem-postflight.mjs --env-file .env.onprem --mode pre-upgrade --timeout-seconds 120
+node scripts/onprem-postflight.mjs --env-file .env.onprem --mode post-deploy --timeout-seconds 600
 npm run db:migrate:status
 ```
 
