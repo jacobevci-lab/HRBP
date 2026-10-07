@@ -38,6 +38,7 @@ export function SessionRevocationAdmin() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [tenantConfirmation, setTenantConfirmation] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -91,7 +92,7 @@ export function SessionRevocationAdmin() {
   }
 
   async function revokeTenant() {
-    if (!data) return;
+    if (!data || tenantConfirmation !== data.tenant.id) return;
     if (!window.confirm(tr
       ? "Bu tenant içindeki TÜM kullanıcı oturumları iptal edilecek. Devam edilsin mi?"
       : "ALL user sessions in this tenant will be revoked. Continue?")) return;
@@ -133,9 +134,19 @@ export function SessionRevocationAdmin() {
             ? `Son toplu iptal: ${fmt(locale, data?.tenant.sessionsRevokedAt ?? null)}`
             : `Last tenant-wide revocation: ${fmt(locale, data?.tenant.sessionsRevokedAt ?? null)}`}</small>
         </span>
-        <button className="secondary-button compact" type="button" disabled={!data || busy === "tenant"} onClick={() => void revokeTenant()}>
-          <ShieldX size={13}/>{tr ? "Tümünü iptal et" : "Revoke all"}
-        </button>
+        <div className="local-account-reset">
+          <input
+            value={tenantConfirmation}
+            onChange={(event) => setTenantConfirmation(event.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={data?.tenant.id ?? (tr ? "Tenant kimliği" : "Tenant id")}
+            aria-label={tr ? "Tenant kimliğini yazarak doğrula" : "Confirm by typing tenant id"}
+          />
+          <button className="secondary-button compact" type="button" disabled={!data || busy === "tenant" || tenantConfirmation !== data.tenant.id} onClick={() => void revokeTenant()}>
+            <ShieldX size={13}/>{tr ? "Tümünü iptal et" : "Revoke all"}
+          </button>
+        </div>
       </div>
     </div>
 
