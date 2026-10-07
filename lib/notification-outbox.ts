@@ -1,5 +1,5 @@
 import { DataClassification, Prisma } from "@prisma/client";
-import { shouldMirrorNotificationToEmail } from "@/lib/notification-email-config";
+import { notificationEmailPolicyAllows, shouldMirrorNotificationToEmail } from "@/lib/notification-email-config";
 
 export type NotificationOutboxEvent = {
   tenantId: string;
@@ -23,6 +23,11 @@ export type NotificationOutboxEvent = {
  * commit without its notification intent, and vice versa.
  */
 export async function enqueueNotificationOutbox(tx: Prisma.TransactionClient, event: NotificationOutboxEvent) {
+  const classification = event.classification ?? DataClassification.CONFIDENTIAL;
+  if (event.channel === "EMAIL" && !notificationEmailPolicyAllows(event.eventType, classification)) {
+    throw new Error("EMAIL_NOTIFICATION_POLICY_BLOCKED");
+  }
+
   const primary = await tx.notificationOutbox.upsert({
     where: {
       tenantId_dedupeKey: {
@@ -41,7 +46,7 @@ export async function enqueueNotificationOutbox(tx: Prisma.TransactionClient, ev
       resourceType: event.resourceType,
       resourceId: event.resourceId,
       dedupeKey: event.dedupeKey,
-      classification: event.classification ?? DataClassification.CONFIDENTIAL,
+      classification,
       ...(event.payload === undefined ? {} : { payload: event.payload })
     },
     select: {
@@ -51,7 +56,6 @@ export async function enqueueNotificationOutbox(tx: Prisma.TransactionClient, ev
     }
   });
 
-  const classification = event.classification ?? DataClassification.CONFIDENTIAL;
   if (shouldMirrorNotificationToEmail({
     eventType: event.eventType,
     classification,
