@@ -31,8 +31,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const clientId = asOptionalText(body.clientId, 256);
   const directoryTenantId = asOptionalText(body.directoryTenantId, 191);
   const secretRef = asOptionalText(body.secretRef, 512);
-  if (issuer === null) return Response.json({ error: type === IdentityProviderType.LDAP ? "issuer must be a valid LDAP(S) endpoint." : "issuer must be a valid HTTP(S) URL." }, { status: 400 });
-  if (metadataUrl === null) return Response.json({ error: "metadataUrl must be a valid HTTP(S) URL." }, { status: 400 });
+  if (issuer === null) return Response.json({ error: type === IdentityProviderType.LDAP ? "issuer must be a valid LDAPS endpoint." : "issuer must be a valid HTTPS URL." }, { status: 400 });
+  if (metadataUrl === null) return Response.json({ error: "metadataUrl must be a valid HTTPS URL." }, { status: 400 });
   if (clientId === null || directoryTenantId === null || secretRef === null) return Response.json({ error: "One or more identity provider fields are invalid." }, { status: 400 });
 
   try {
