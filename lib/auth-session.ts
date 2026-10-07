@@ -11,6 +11,7 @@ export type SessionClaims = {
   v: 1;
   authMethod?: "local" | "oidc";
   credentialVersion?: string | null;
+  sessionVersion: number;
   tenantId: string;
   actorId: string;
   role: PlatformRole;
@@ -96,6 +97,7 @@ export function validSessionClaims(claims: SessionClaims | null): claims is Sess
   if (required.some((value) => typeof value !== "string" || !value || value.length > 512)) return false;
   if (claims.employmentId !== undefined && (typeof claims.employmentId !== "string" || !claims.employmentId || claims.employmentId.length > 191)) return false;
   if (claims.email !== undefined && (typeof claims.email !== "string" || claims.email.length > 512)) return false;
+  if (!Number.isSafeInteger(claims.sessionVersion) || claims.sessionVersion < 1) return false;
   const now = Math.floor(Date.now() / 1000);
   return Number.isSafeInteger(claims.issuedAt) && Number.isSafeInteger(claims.exp) &&
     claims.issuedAt <= now + 60 && claims.exp > now && claims.exp > claims.issuedAt && claims.exp - claims.issuedAt <= 86400;
@@ -114,12 +116,14 @@ function cookieBase(name: string, value: string, maxAge: number) {
   return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.max(0, Math.floor(maxAge))}`;
 }
 
-export function createSessionCookie(claims: Omit<SessionClaims, "v" | "issuedAt" | "exp">) {
+export function createSessionCookie(claims: Omit<SessionClaims, "v" | "issuedAt" | "exp">, maxMinutes?: number) {
   const secret = sessionSecret();
   if (!secret) throw new Error("HRBP_SESSION_SECRET must contain at least 32 characters.");
   const issuedAt = Math.floor(Date.now() / 1000);
-  const ttlHours = Math.min(Math.max(runtimeNumber("HRBP_SESSION_TTL_HOURS", 8), 1), 24);
-  const exp = issuedAt + Math.floor(ttlHours * 60 * 60);
+  const runtimeMinutes = Math.min(Math.max(runtimeNumber("HRBP_SESSION_TTL_HOURS", 8) * 60, 60), 24 * 60);
+  const policyMinutes = Number.isFinite(maxMinutes) ? Math.min(Math.max(Math.floor(maxMinutes!), 15), 1440) : runtimeMinutes;
+  const ttlMinutes = Math.min(runtimeMinutes, policyMinutes);
+  const exp = issuedAt + ttlMinutes * 60;
   const token = encodeSignedPayload({ ...claims, authMethod: claims.authMethod ?? "oidc", v: 1, issuedAt, exp } satisfies SessionClaims, secret);
   return cookieBase(SESSION_COOKIE, token, exp - issuedAt);
 }
