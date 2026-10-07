@@ -3,6 +3,7 @@ import { appendAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { asEnumValue, asIdentifier, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
 import { internalBearerAuthorized } from "@/lib/internal-auth";
+import { fetchPrivateObject } from "@/lib/object-storage";
 import { runtimeNumber } from "@/lib/runtime-env";
 import type { RequestContext } from "@/lib/request-context";
 
@@ -64,7 +65,6 @@ async function claimScanJob() {
       select: {
         id: true,
         tenantId: true,
-        objectKey: true,
         contentType: true,
         contentHash: true,
         sizeBytes: true,
@@ -96,7 +96,6 @@ async function claimScanJob() {
 
     return {
       versionId: candidate.id,
-      objectKey: candidate.objectKey,
       contentType: candidate.contentType,
       contentHash: candidate.contentHash,
       sizeBytes: candidate.sizeBytes?.toString() ?? null,
@@ -250,6 +249,41 @@ export async function POST(request: Request) {
 
   const versionId = asIdentifier(body.versionId);
   if (!versionId) return Response.json({ error: "A valid versionId is required." }, { status: 400 });
+
+  if (body.action === "download") {
+    const current = await db.documentVersion.findUnique({
+      where: { id: versionId },
+      select: {
+        id: true,
+        objectKey: true,
+        contentType: true,
+        contentHash: true,
+        sizeBytes: true,
+        uploadedAt: true,
+        scanStatus: true,
+        scanLockedAt: true
+      }
+    });
+    if (!current) return Response.json({ error: "Document version not found." }, { status: 404 });
+    if (!current.uploadedAt || current.scanStatus !== VaultScanStatus.SCANNING || !current.scanLockedAt) {
+      return Response.json({ error: "Document version is not actively claimed for scanning." }, { status: 409 });
+    }
+
+    const storage = await fetchPrivateObject(current.objectKey);
+    if (!storage.configured) return Response.json({ error: "Private object storage is not configured." }, { status: 503 });
+    if (!storage.response?.ok || !storage.response.body) {
+      return Response.json({ error: "Private object storage could not provide the claimed object." }, { status: 502 });
+    }
+
+    const headers = new Headers({
+      "content-type": current.contentType || "application/octet-stream",
+      "cache-control": "private, no-store, max-age=0",
+      "x-content-type-options": "nosniff",
+      "x-content-sha256": current.contentHash
+    });
+    if (current.sizeBytes !== null) headers.set("content-length", current.sizeBytes.toString());
+    return new Response(storage.response.body, { status: 200, headers });
+  }
 
   if (body.action === "release") {
     const result = await releaseScanJob(versionId, transientReason(body.reason));
