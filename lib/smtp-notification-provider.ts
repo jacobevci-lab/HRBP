@@ -131,9 +131,10 @@ export async function sendSmtpNotification(
 
   const rendered = renderNotificationEmail(notification, options.locale ?? "en");
   const stableMessageId = "<hrbp-" + notification.outboxId + "@" + messageIdDomain(from) + ">";
-  const transport = (options.createTransport ?? nodemailer.createTransport)(smtpTransportOptions());
+  let transport: ReturnType<typeof nodemailer.createTransport> | undefined;
 
   try {
+    transport = (options.createTransport ?? nodemailer.createTransport)(smtpTransportOptions());
     const result = await transport.sendMail({
       from,
       to: recipient,
@@ -160,6 +161,6 @@ export async function sendSmtpNotification(
     }
     throw new Error("SMTP_DELIVERY_FAILED");
   } finally {
-    if (typeof transport.close === "function") transport.close();
+    if (transport && typeof transport.close === "function") transport.close();
   }
 }
