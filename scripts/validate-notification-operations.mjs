@@ -36,9 +36,51 @@ const settingsPath = "components/settings-live-page.tsx";
 const settings = await source(settingsPath);
 expect(settingsPath, settings, /NotificationOperationsConsole canWrite=\{canWrite\}/, "tenant settings must mount notification operations console with write authority state");
 
+
+const emailConfigPath = "lib/notification-email-config.ts";
+const emailConfig = await source(emailConfigPath);
+expect(emailConfigPath, emailConfig, /HRBP_SMTP_ENABLED/, "email mirroring must be explicitly feature-gated");
+expect(emailConfigPath, emailConfig, /HIGHLY_RESTRICTED[\s\S]*return false/, "highly restricted events must never be mirrored to SMTP");
+expect(emailConfigPath, emailConfig, /HRBP_NOTIFICATION_EMAIL_ALLOW_RESTRICTED/, "restricted email mirroring must require an explicit separate gate");
+expect(emailConfigPath, emailConfig, /Math\.min\(50,[\s\S]*HRBP_NOTIFICATION_EMAIL_BATCH_SIZE/, "email delivery batch size must remain independently bounded");
+
+const smtpPath = "lib/smtp-notification-provider.ts";
+const smtp = await source(smtpPath);
+expect(smtpPath, smtp, /from "nodemailer"/, "SMTP provider must use the pinned transport implementation");
+expect(smtpPath, smtp, /requireTLS:\s*!secure/, "STARTTLS SMTP must require TLS");
+expect(smtpPath, smtp, /rejectUnauthorized:\s*true/, "SMTP TLS certificate verification must remain mandatory");
+expect(smtpPath, smtp, /minVersion:\s*"TLSv1\.2"/, "SMTP TLS must require TLS 1.2 or newer");
+expect(smtpPath, smtp, /disableFileAccess:\s*true/, "SMTP messages must not read attachments from local files");
+expect(smtpPath, smtp, /disableUrlAccess:\s*true/, "SMTP messages must not fetch remote attachment/content URLs");
+expect(smtpPath, smtp, /hrbp-\$\{notification\.outboxId\}/, "SMTP messages must use a stable outbox-derived Message-ID");
+expect(smtpPath, smtp, /SMTP_DELIVERY_FAILED/, "SMTP provider errors must be reduced to bounded machine diagnostics");
+reject(smtpPath, smtp, /rejectUnauthorized:\s*false/, "SMTP TLS verification must never be disabled");
+
+const outboxPath = "lib/notification-outbox.ts";
+const outbox = await source(outboxPath);
+expect(outboxPath, outbox, /shouldMirrorNotificationToEmail/, "transactional outbox must apply centralized email routing policy");
+expect(outboxPath, outbox, /channel:\s*"EMAIL"/, "email delivery must use independent EMAIL outbox records");
+expect(outboxPath, outbox, /:channel:email/, "email mirroring must have a channel-specific dedupe key");
+
+const dispatcherPath = "lib/notification-dispatcher.ts";
+const dispatcher = await source(dispatcherPath);
+expect(dispatcherPath, dispatcher, /notificationEmailBatchSize/, "SMTP work must use an independent bounded batch");
+expect(dispatcherPath, dispatcher, /channel:\s*"EMAIL"/, "dispatcher must select EMAIL work separately");
+expect(dispatcherPath, dispatcher, /fanOutEmailRole/, "role email delivery must fan out into user-scoped outbox records");
+expect(dispatcherPath, dispatcher, /sendSmtpNotification/, "dispatcher must invoke the governed SMTP provider");
+expect(dispatcherPath, dispatcher, /NOTIFICATION_CHANNEL_UNSUPPORTED/, "unsupported channels must fail visibly instead of being ignored");
+
+const preflightPath = "scripts/onprem-preflight-lib.mjs";
+const preflight = await source(preflightPath);
+expect(preflightPath, preflight, /HRBP_SMTP_ENABLED/, "on-prem preflight must understand SMTP enablement");
+expect(preflightPath, preflight, /HRBP_SMTP_PASSWORD must not reuse another application secret/, "SMTP password must not reuse application secrets");
+expect(preflightPath, preflight, /HRBP_NOTIFICATION_EMAIL_EVENTS must contain at least one event/, "enabled SMTP must require explicit event routing");
+
+
 const packagePath = "package.json";
 const pkg = await source(packagePath);
 expect(packagePath, pkg, /notification-operations:validate/, "notification operations validator must be registered");
+expect(packagePath, pkg, /"nodemailer":\s*"10\.0\.15"/, "SMTP transport must be pinned exactly");
 expect(packagePath, pkg, /prebuild[\s\S]*notification-operations:validate/, "notification operations validation must run before production builds");
 
 if (failures.length) {
