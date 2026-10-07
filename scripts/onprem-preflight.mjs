@@ -133,13 +133,17 @@ if (value(env, "OBJECT_STORAGE_ENDPOINT") && !/^https:\/\//i.test(value(env, "OB
   warning("External OBJECT_STORAGE_ENDPOINT is not HTTPS. This is acceptable only for the bundled private Compose service.");
 }
 
-const compose = spawnSync("docker", ["compose", "--env-file", envFile, "-f", composeFile, "config", "--quiet"], {
-  encoding: "utf8", maxBuffer: 4 * 1024 * 1024
-});
-if (compose.error?.code === "ENOENT") {
-  error("Docker with the Compose plugin is required.");
-} else if (compose.status !== 0) {
-  error("docker compose configuration validation failed.");
+if (process.env.HRBP_PREFLIGHT_SKIP_DOCKER === "true") {
+  warning("Docker Compose validation was explicitly skipped; this mode is for isolated unit tests only.");
+} else {
+  const compose = spawnSync("docker", ["compose", "--env-file", envFile, "-f", composeFile, "config", "--quiet"], {
+    encoding: "utf8", maxBuffer: 4 * 1024 * 1024
+  });
+  if (compose.error?.code === "ENOENT") {
+    error("Docker with the Compose plugin is required.");
+  } else if (compose.status !== 0) {
+    error("docker compose configuration validation failed.");
+  }
 }
 
 const report = {
