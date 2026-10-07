@@ -109,18 +109,20 @@ const notifications = await waitFor(
   "Notification provider health"
 );
 
-let operationalMetrics = "unavailable";
-try {
-  const { response, text } = await boundedMetrics();
-  if (!response.ok ||
-      !/^hrbp_operational_metrics_up 1$/m.test(text) ||
-      !/^hrbp_notification_outbox_records\{channel="IN_APP",status="PENDING"\} [0-9]+$/m.test(text) ||
-      !/^hrbp_document_scan_records\{status="PENDING"\} [0-9]+$/m.test(text)) {
+let operationalMetrics = "not-required-pre-upgrade";
+if (mode === "post-deploy") {
+  try {
+    const { response, text } = await boundedMetrics();
+    if (!response.ok ||
+        !/^hrbp_operational_metrics_up 1$/m.test(text) ||
+        !/^hrbp_notification_outbox_records\{channel="IN_APP",status="PENDING"\} [0-9]+$/m.test(text) ||
+        !/^hrbp_document_scan_records\{status="PENDING"\} [0-9]+$/m.test(text)) {
+      fail("Operational metrics endpoint is not healthy.");
+    }
+    operationalMetrics = "healthy";
+  } catch {
     fail("Operational metrics endpoint is not healthy.");
   }
-  operationalMetrics = "healthy";
-} catch {
-  fail("Operational metrics endpoint is not healthy.");
 }
 
 function compose(args, { discardStdout = false } = {}) {
