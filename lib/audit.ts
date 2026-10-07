@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { DataClassification, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { lockAuditLedger } from "@/lib/audit-ledger-lock.mjs";
 import type { RequestContext } from "@/lib/request-context";
 
 export type AuditInput = {
@@ -46,15 +47,38 @@ type AuditActorContext = {
 };
 
 async function appendAuditActor(tx: Prisma.TransactionClient, ctx: AuditActorContext, input: AuditInput) {
-  const occurredAt = new Date();
-  const previous = await tx.auditEvent.findFirst({
+  // Every writer for one tenant must serialize before reading or advancing the
+  // ledger tail. This prevents two committed events from sharing one predecessor.
+  await lockAuditLedger(tx, ctx.tenantId);
+
+  let state = await tx.auditLedgerState.findUnique({
     where: { tenantId: ctx.tenantId },
-    orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-    select: { hash: true }
+    select: { tailHash: true, eventCount: true }
   });
+
+  if (!state) {
+    const existing = await tx.auditEvent.findFirst({
+      where: { tenantId: ctx.tenantId },
+      select: { id: true }
+    });
+    if (existing) {
+      throw new Error("Audit ledger state is missing for a non-empty tenant ledger.");
+    }
+    state = await tx.auditLedgerState.create({
+      data: {
+        tenantId: ctx.tenantId,
+        tailHash: null,
+        eventCount: 0n
+      },
+      select: { tailHash: true, eventCount: true }
+    });
+  }
+
+  const occurredAt = new Date();
   const classification = input.classification ?? DataClassification.CONFIDENTIAL;
   const purpose = input.purpose ?? ctx.purpose ?? null;
   const ipAddress = ctx.ipAddress ?? null;
+  const ledgerSequence = state.eventCount + 1n;
   const hash = computeAuditHash({
     tenantId: ctx.tenantId,
     actorId: ctx.actorId,
@@ -65,11 +89,12 @@ async function appendAuditActor(tx: Prisma.TransactionClient, ctx: AuditActorCon
     classification,
     ipAddress,
     occurredAt
-  }, previous?.hash ?? null);
+  }, state.tailHash);
 
-  return tx.auditEvent.create({
+  const event = await tx.auditEvent.create({
     data: {
       tenantId: ctx.tenantId,
+      ledgerSequence,
       actorId: ctx.actorId,
       action: input.action,
       resourceType: input.resourceType,
@@ -79,9 +104,26 @@ async function appendAuditActor(tx: Prisma.TransactionClient, ctx: AuditActorCon
       ipAddress,
       occurredAt,
       hash,
-      previousHash: previous?.hash
+      previousHash: state.tailHash
     }
   });
+
+  const advanced = await tx.auditLedgerState.updateMany({
+    where: {
+      tenantId: ctx.tenantId,
+      tailHash: state.tailHash,
+      eventCount: state.eventCount
+    },
+    data: {
+      tailHash: hash,
+      eventCount: { increment: 1 }
+    }
+  });
+  if (advanced.count !== 1) {
+    throw new Error("Audit ledger tail changed while appending an event.");
+  }
+
+  return event;
 }
 
 export async function appendAudit(tx: Prisma.TransactionClient, ctx: RequestContext, input: AuditInput) {
