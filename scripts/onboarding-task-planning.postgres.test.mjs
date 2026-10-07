@@ -24,10 +24,14 @@ test("PostgreSQL task planning transaction integration (synthetic identity/scope
   assert.ok(["127.0.0.1", "localhost"].includes(url.hostname));
   assert.equal(url.pathname, "/hrbp");
   const prisma = require("@prisma/client");
+  const ledger = await import("../lib/audit-ledger-lock.mjs");
   const db = new prisma.PrismaClient();
   const tenantId = `ci-planning-${randomUUID()}`;
   const ctx = { tenantId, actorId: `actor-${randomUUID()}`, role: "HR_OPERATIONS" };
-  const audit = load("lib/audit.ts", { "@/lib/db": { db } });
+  const audit = load("lib/audit.ts", {
+    "@/lib/db": { db },
+    "@/lib/audit-ledger-lock.mjs": ledger
+  });
   let scopeAllowed = true;
   let failAudit = false;
   const helper = load("lib/onboarding-task-planning.ts", {
