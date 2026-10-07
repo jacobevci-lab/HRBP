@@ -82,14 +82,16 @@
     "action-center-history:validate": "node scripts/validate-action-center-history.mjs",
     "remediation:validate": "node --test scripts/platform-remediation.test.mjs",
     "lint-compat:validate": "node scripts/validate-lint-compat.mjs",
-    "onprem:validate": "node scripts/validate-onprem-package.mjs && node scripts/validate-prisma-migration-files.mjs && node --test scripts/onprem-maintenance-scheduler.test.mjs",
+    "onprem:validate": "node scripts/validate-onprem-package.mjs && node scripts/validate-prisma-migration-files.mjs && node --test scripts/onprem-maintenance-scheduler.test.mjs && node scripts/onprem-preflight.test.mjs",
     "onprem:recovery:rehearsal": "HRBP_DISPOSABLE_RECOVERY_REHEARSAL=true bash scripts/onprem-recovery-rehearsal.sh",
     "db:migrate:deploy": "prisma migrate deploy --schema=prisma",
     "db:migrate:status": "prisma migrate status --schema=prisma",
     "db:migrate:diff": "prisma migrate diff --from-schema-datasource prisma --to-schema-datamodel prisma --exit-code",
     "db:migrate:upgrade": "node scripts/deploy-prisma-migrations.mjs",
     "db:migrate:verify": "node scripts/verify-prisma-migrations.mjs",
-    "db:migrate:files:validate": "node scripts/validate-prisma-migration-files.mjs"
+    "db:migrate:files:validate": "node scripts/validate-prisma-migration-files.mjs",
+    "onprem:preflight": "node scripts/onprem-preflight.mjs",
+    "onprem:preflight:test": "node scripts/onprem-preflight.test.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "6.19.3",
