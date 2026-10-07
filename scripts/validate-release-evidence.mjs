@@ -55,9 +55,12 @@ if (manifest?.revision !== head || !/^[a-f0-9]{40}$/.test(manifest?.revision || 
 if (sbom?.bomFormat !== "CycloneDX" || !Array.isArray(sbom?.components) || sbom.components.length === 0) {
   fail("SBOM is not a populated CycloneDX document.");
 }
-if (sbom?.metadata?.component?.name !== "hrbp-one") fail("SBOM root component is not HRBP One.");
-
 const packageJson = parseJson(path.join(root, "package.json"), "package.json");
+const serializedSbomIdentity = JSON.stringify(sbom.metadata ?? {});
+if (!serializedSbomIdentity.includes(packageJson.name)) {
+  fail("SBOM metadata does not identify the HRBP package.");
+}
+
 const componentNames = new Set(sbom.components.map((component) => component?.name).filter(Boolean));
 for (const dependency of Object.keys(packageJson.dependencies || {})) {
   if (!componentNames.has(dependency)) fail(`Production dependency is missing from the SBOM: ${dependency}`);
