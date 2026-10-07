@@ -112,6 +112,30 @@ DOCUMENT_SCANNER_IMAGE=clamav/clamav:1.5.4-debian
 
 A scanner outage is fail-closed: documents remain unavailable until a clean verdict is recorded. Do not bypass `PENDING`, `SCANNING`, `FAILED` or `QUARANTINED` states to restore document availability.
 
+## Private operational metrics
+
+The application exposes a Prometheus-compatible operational snapshot at `/api/internal/metrics`. The endpoint is intentionally separate from public health checks and requires the dedicated `HRBP_METRICS_TOKEN` bearer credential.
+
+The metrics surface is aggregation-only. It does not publish tenant IDs, user IDs, employee data, resource IDs, notification event names, document names, object keys or scanner references. Notification channels are collapsed to `IN_APP`, `EMAIL` and `OTHER`; document scanning is exposed only as queue/status counts and bounded age gauges.
+
+Example local scrape:
+
+```bash
+curl --fail --silent --show-error \
+  -H "Authorization: Bearer $HRBP_METRICS_TOKEN" \
+  http://127.0.0.1:${HRBP_HTTP_PORT:-3000}/api/internal/metrics
+```
+
+The current snapshot includes:
+
+- notification outbox counts by bounded channel/status plus oldest actionable age,
+- document malware-scan counts by state, due-job count, oldest pending age and oldest scanner-lock age,
+- scrape health and collection duration.
+
+Keep the endpoint on the private management path. Do not publish it through the customer-facing reverse proxy. A remote Prometheus/monitoring collector should reach it only through the customer's approved private management network or an authenticated monitoring proxy. `HRBP_METRICS_TOKEN` must not be reused as the maintenance, scanner, session, object-storage, database, OIDC or SMTP secret; install/upgrade preflight enforces this separation.
+
+Postflight performs an authenticated scrape and fails deployment verification when the metrics endpoint is unavailable or does not expose the expected bounded metric families. Container health remains the liveness source for the maintenance scheduler and document-scanner sidecars; the application metrics endpoint complements rather than replaces those checks.
+
 ## Optional SMTP email delivery
 
 The on-prem Node runtime can deliver selected outbox events through an authenticated SMTP relay. SMTP is disabled by default and must pass the normal install/upgrade preflight before production use.
