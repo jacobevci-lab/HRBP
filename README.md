@@ -35,7 +35,7 @@ Scheduled maintenance also applies configurable notification retention so operat
 Copy `.env.example` to `.env.local`, configure PostgreSQL and authentication, then run:
 
 ```bash
-npm install
+npm ci
 npm run db:push
 npm run dev
 ```
@@ -47,3 +47,16 @@ For the private document vault configure `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STOR
 The GitHub Actions CI validates route structure, UI localization/theme rules, Prisma schema, TypeScript, Next.js production build, OpenNext/Cloudflare packaging and a local Worker runtime smoke test. The build gate also validates the connected Growth contract so talent signals, succession plans, skill targets, learning provenance and human reassessment boundaries cannot silently drift apart. The Worker smoke test exercises scheduled maintenance and the durable notification dispatcher against PostgreSQL.
 
 Staging schema synchronization is intentionally a manually dispatched workflow. It applies Prisma schema changes, seeds each vertical slice—including connected succession-development assignments—and verifies minimum domain counts before granting the runtime database role.
+
+
+## Customer-controlled on-prem deployment
+
+The supported single-host customer profile is documented in `docs/ONPREM-DEPLOYMENT.md`. It includes PostgreSQL, private S3-compatible object storage, versioned Prisma migrations, guarded backup/restore recovery, and the fail-closed operational maintenance scheduler.
+
+Before first production start or an upgrade, copy/configure `.env.onprem` and run:
+
+```bash
+npm run onprem:preflight
+```
+
+The preflight is a deployment safety gate, not a substitute for customer infrastructure controls. TLS termination, secrets management, centralized monitoring/logging, immutable/off-site backups and high availability remain part of the customer deployment architecture.
