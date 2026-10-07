@@ -144,7 +144,7 @@ for (const token of [
 for (const token of [
   'privateHttpHost = "app"',
   'blocked.json',
-  'OUTCOME_UNKNOWN_CHECK_BEFORE_RETRY',
+  'ambiguousStop(report)',
   'maintenance-cycle',
   'sleepWithHeartbeat'
 ]) assert.ok(maintenanceScheduler.includes(token), `On-prem maintenance scheduler contract missing: ${token}`);
