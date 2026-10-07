@@ -24,6 +24,21 @@ RUN npm run build
 FROM builder AS schema
 CMD ["node", "scripts/deploy-prisma-migrations.mjs"]
 
+FROM base AS scheduler
+ENV NODE_ENV=production
+COPY scripts/run-operational-maintenance.mjs ./scripts/run-operational-maintenance.mjs
+COPY scripts/onprem-maintenance-state.mjs ./scripts/onprem-maintenance-state.mjs
+COPY scripts/onprem-maintenance-scheduler.mjs ./scripts/onprem-maintenance-scheduler.mjs
+COPY scripts/onprem-maintenance-health.mjs ./scripts/onprem-maintenance-health.mjs
+COPY scripts/onprem-maintenance-control.mjs ./scripts/onprem-maintenance-control.mjs
+COPY lib/maintenance-protocol.mjs ./lib/maintenance-protocol.mjs
+RUN mkdir -p /var/lib/hrbp-scheduler \
+    && chown -R node:node /app /var/lib/hrbp-scheduler
+USER node
+HEALTHCHECK --interval=60s --timeout=5s --start-period=90s --retries=3 \
+  CMD node scripts/onprem-maintenance-health.mjs
+CMD ["node", "scripts/onprem-maintenance-scheduler.mjs"]
+
 FROM base AS runtime
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
