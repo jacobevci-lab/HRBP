@@ -65,11 +65,9 @@ async function claimScanJob() {
       orderBy: [{ scanNextAttemptAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
       select: {
         id: true,
-        tenantId: true,
         contentType: true,
         contentHash: true,
         sizeBytes: true,
-        classification: true,
         scanAttempts: true
       }
     });
@@ -100,7 +98,6 @@ async function claimScanJob() {
       contentType: candidate.contentType,
       contentHash: candidate.contentHash,
       sizeBytes: candidate.sizeBytes?.toString() ?? null,
-      classification: candidate.classification,
       attempt: candidate.scanAttempts + 1
     };
   }
