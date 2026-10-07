@@ -22,7 +22,9 @@ if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 30 || timeoutSeconds >
 const env = parseEnvText(readFileSync(envFile, "utf8"));
 const port = env.HRBP_HTTP_PORT || "3000";
 if (!/^[0-9]{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) fail("HRBP_HTTP_PORT is invalid.");
-const origin = `http://127.0.0.1:${port}`;
+const bind = env.HRBP_HTTP_BIND || "127.0.0.1";
+const localHost = bind === "::1" ? "[::1]" : "127.0.0.1";
+const origin = `http://${localHost}:${port}`;
 const deadline = Date.now() + timeoutSeconds * 1000;
 
 async function boundedJson(pathname) {
