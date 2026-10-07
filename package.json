@@ -83,7 +83,10 @@
     "remediation:validate": "node --test scripts/platform-remediation.test.mjs",
     "lint-compat:validate": "node scripts/validate-lint-compat.mjs",
     "onprem:validate": "node scripts/validate-onprem-package.mjs",
-    "onprem:recovery:rehearsal": "HRBP_DISPOSABLE_RECOVERY_REHEARSAL=true bash scripts/onprem-recovery-rehearsal.sh"
+    "onprem:recovery:rehearsal": "HRBP_DISPOSABLE_RECOVERY_REHEARSAL=true bash scripts/onprem-recovery-rehearsal.sh",
+    "db:migrate:deploy": "prisma migrate deploy --schema=prisma",
+    "db:migrate:status": "prisma migrate status --schema=prisma",
+    "db:migrate:diff": "prisma migrate diff --from-url \"$DATABASE_URL\" --to-schema prisma --exit-code"
   },
   "dependencies": {
     "@prisma/adapter-pg": "6.19.3",
