@@ -73,7 +73,8 @@ export async function GET(request: Request) {
       tenantId: session.tenantId,
       tenantName,
       employmentId: session.employmentId ?? null,
-      expiresAt: new Date(session.exp * 1000).toISOString()
+      expiresAt: new Date(session.exp * 1000).toISOString(),
+      sessionVersion: session.sessionVersion
     }
   }, { headers: { "cache-control": "no-store" } });
 }
