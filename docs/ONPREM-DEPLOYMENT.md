@@ -100,6 +100,8 @@ The in-app notification and the email copy remain separate outbox records. A fai
 
 Customer monitoring should alert on EMAIL records in `FAILED` or `DEAD_LETTER`. The Settings & Operations notification console exposes channel/status diagnostics without projecting employee payload content or SMTP credentials.
 
+After deployment, a tenant settings administrator can use **Send test email** to exercise the real SMTP path to their own account email. The endpoint cannot be used as an arbitrary mail relay, records requested/succeeded/failed audit evidence, and permits at most one verification request per actor per minute.
+
 ## On-prem operational maintenance scheduler
 
 The Compose profile includes a dedicated `maintenance-scheduler` sidecar. It is built from a minimal Node stage, runs as the unprivileged Node user, has a read-only root filesystem, drops Linux capabilities, publishes no host port, and can reach the maintenance API only through the private Compose service name `app:3000`.
