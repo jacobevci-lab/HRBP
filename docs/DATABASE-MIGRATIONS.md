@@ -8,7 +8,7 @@ The immutable baseline migration is:
 
 `20261007000000_baseline_current_schema`
 
-It represents the complete schema that existed when versioned migrations were introduced. The same immutable datamodel is frozen under `prisma/baseline-20261007000000/`.
+It represents the complete schema that existed when versioned migrations were introduced. The same immutable datamodel is frozen under `baseline-schema/20261007000000/`.
 
 Existing installations without Prisma migration history are eligible for baseline adoption only when the live database schema is an exact match for **that frozen baseline datamodel**, not the current evolving application datamodel. This distinction is required so a legacy installation can first adopt the baseline and then safely receive every later committed migration.
 
@@ -85,7 +85,7 @@ The same upgrade command performs guarded baseline adoption:
 npm run db:migrate:upgrade
 ```
 
-It first compares the live schema to `prisma/baseline-20261007000000/`.
+It first compares the live schema to `baseline-schema/20261007000000/`.
 
 - exact baseline-era match: the immutable baseline is marked applied and normal migration deployment continues through every later committed migration;
 - any difference from the frozen baseline: the operation stops and no migration marker is written.
