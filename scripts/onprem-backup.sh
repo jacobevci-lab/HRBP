@@ -61,22 +61,20 @@ if ! "${COMPOSE[@]}" images --format json > "$TARGET/images.json" 2>/dev/null; t
 fi
 
 printf 'Capturing database migration history...\n' >&2
-if "${COMPOSE[@]}" exec -T postgres sh -ec '
-  psql -Atq -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
-    SELECT json_build_object(
-      '''available''', true,
-      '''migrations''', COALESCE(
-        json_agg(row_to_json(history) ORDER BY history.started_at),
-        '''[]'''::json
-      )
-    )
-    FROM (
-      SELECT migration_name, checksum, started_at, finished_at, rolled_back_at, applied_steps_count
-      FROM \"_prisma_migrations\"
-      ORDER BY started_at
-    ) AS history;
-  "
-' > "$TARGET/migration-history.json" 2>/dev/null; then
+if cat <<'SQL' | "${COMPOSE[@]}" exec -T postgres sh -ec 'psql -Atq -U "$POSTGRES_USER" -d "$POSTGRES_DB"' > "$TARGET/migration-history.json" 2>/dev/null; then
+SELECT json_build_object(
+  'available', true,
+  'migrations', COALESCE(
+    json_agg(row_to_json(history) ORDER BY history.started_at),
+    '[]'::json
+  )
+)
+FROM (
+  SELECT migration_name, checksum, started_at, finished_at, rolled_back_at, applied_steps_count
+  FROM "_prisma_migrations"
+  ORDER BY started_at
+) AS history;
+SQL
   :
 else
   printf '{"available":false,"reason":"migration-history-not-present"}\n' > "$TARGET/migration-history.json"
