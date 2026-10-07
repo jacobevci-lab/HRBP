@@ -1,4 +1,5 @@
 import { DataClassification, Prisma } from "@prisma/client";
+import { shouldMirrorNotificationToEmail } from "@/lib/notification-email-config";
 
 export type NotificationOutboxEvent = {
   tenantId: string;
@@ -22,7 +23,7 @@ export type NotificationOutboxEvent = {
  * commit without its notification intent, and vice versa.
  */
 export async function enqueueNotificationOutbox(tx: Prisma.TransactionClient, event: NotificationOutboxEvent) {
-  return tx.notificationOutbox.upsert({
+  const primary = await tx.notificationOutbox.upsert({
     where: {
       tenantId_dedupeKey: {
         tenantId: event.tenantId,
@@ -49,4 +50,37 @@ export async function enqueueNotificationOutbox(tx: Prisma.TransactionClient, ev
       dedupeKey: true
     }
   });
+
+  const classification = event.classification ?? DataClassification.CONFIDENTIAL;
+  if (shouldMirrorNotificationToEmail({
+    eventType: event.eventType,
+    classification,
+    explicitChannel: event.channel ?? null
+  })) {
+    const emailDedupeKey = `${event.dedupeKey}:channel:email`;
+    await tx.notificationOutbox.upsert({
+      where: {
+        tenantId_dedupeKey: {
+          tenantId: event.tenantId,
+          dedupeKey: emailDedupeKey
+        }
+      },
+      update: {},
+      create: {
+        tenantId: event.tenantId,
+        eventType: event.eventType,
+        channel: "EMAIL",
+        recipientUserId: event.recipientUserId ?? null,
+        recipientRole: event.recipientRole ?? null,
+        templateKey: event.templateKey ?? null,
+        resourceType: event.resourceType,
+        resourceId: event.resourceId,
+        dedupeKey: emailDedupeKey,
+        classification,
+        ...(event.payload === undefined ? {} : { payload: event.payload })
+      }
+    });
+  }
+
+  return primary;
 }
