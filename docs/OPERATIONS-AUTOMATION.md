@@ -72,7 +72,7 @@ Required controls:
 - A stable outbox-derived Message-ID is reused across retries to reduce duplicate delivery risk when a transport outcome is ambiguous. SMTP remains an at-least-once channel; downstream mail infrastructure must tolerate duplicate Message-ID delivery.
 - Email delivery has an independent bounded batch via `HRBP_NOTIFICATION_EMAIL_BATCH_SIZE` so SMTP latency cannot consume the entire in-app notification batch.
 
-On-prem installation/upgrade preflight validates SMTP host, port, credentials, event allowlist, TLS-related names, timeout bounds and secret reuse whenever SMTP is enabled. The Settings & Operations page surfaces SMTP readiness without exposing provider credentials.
+On-prem installation/upgrade preflight validates SMTP host, port, credentials, event allowlist, TLS-related names, timeout bounds and secret reuse whenever SMTP is enabled. The Settings & Operations page surfaces SMTP readiness without exposing provider credentials. A settings administrator can send a self-addressed verification email through the real SMTP provider; the target address is always the authenticated administrator's tenant-scoped account, the action/outcome is audited, and the verification endpoint is rate-limited to one request per minute per actor.
 
 Cloudflare-hosted deployments must not assume raw SMTP socket delivery is available merely because the code can be bundled. Keep `HRBP_SMTP_ENABLED=false` there unless the runtime/provider path has been separately validated; a future HTTPS mail provider can implement the same `EMAIL` outbox contract without changing domain notification producers.
 
