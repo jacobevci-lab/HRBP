@@ -70,7 +70,7 @@ assert.match(dockerfile, /HEALTHCHECK[\s\S]*api\/health\/runtime/);
 assert.match(dockerfile, /FROM builder AS schema/);
 assert.ok(compose.includes("no-new-privileges:true") && compose.includes("cap_drop:"), "Application container must drop ambient Linux privileges.");
 assert.ok(!dockerfile.includes("--accept-data-loss"));
-assert.ok(dockerfile.includes('CMD ["node", "scripts/onprem-migrate.mjs"]'), "On-prem schema stage must use the guarded versioned migration runner.");
+assert.ok(dockerfile.includes('CMD ["node", "scripts/deploy-prisma-migrations.mjs"]'), "On-prem schema stage must use the guarded versioned migration runner.");
 assert.ok(!dockerfile.includes('"db:push"'), "Production schema image must not run prisma db push.");
 
 assert.match(migrationLock, /provider\s*=\s*"postgresql"/);
