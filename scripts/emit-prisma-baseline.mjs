@@ -3,7 +3,7 @@ import { gzipSync } from "node:zlib";
 
 const result = spawnSync(
   process.platform === "win32" ? "npx.cmd" : "npx",
-  ["prisma", "migrate", "diff", "--from-empty", "--to-schema", "prisma", "--script"],
+  ["prisma", "migrate", "diff", "--from-empty", "--to-schema-datamodel", "prisma", "--script"],
   { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
 );
 
