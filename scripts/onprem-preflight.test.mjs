@@ -184,3 +184,48 @@ test("requires implicit TLS on the standard SMTPS port", () => {
   assert.equal(result.ok, false);
   assert.ok(result.errors.some((entry) => entry.includes("must be true when HRBP_SMTP_PORT=465")));
 });
+
+
+test("accepts bounded document scanner configuration", () => {
+  const result = validateOnpremEnv({
+    ...base,
+    DOCUMENT_SCANNER_IMAGE: "clamav/clamav:1.5.4-debian",
+    DOCUMENT_UPLOAD_MAX_BYTES: "26214400",
+    HRBP_DOCUMENT_SCAN_POLL_SECONDS: "10",
+    HRBP_DOCUMENT_SCAN_MAX_ATTEMPTS: "5",
+    HRBP_DOCUMENT_SCAN_RETRY_BASE_SECONDS: "30",
+    HRBP_DOCUMENT_SCAN_RETRY_MAX_SECONDS: "600",
+    HRBP_DOCUMENT_SCAN_LOCK_MINUTES: "15",
+    HRBP_DOCUMENT_SCAN_REQUEST_TIMEOUT_MS: "30000",
+    HRBP_DOCUMENT_SCAN_MAX_BYTES: "26214400",
+    HRBP_CLAMD_TIMEOUT_MS: "30000"
+  });
+  assert.equal(result.ok, true, result.errors.join("\n"));
+});
+
+test("rejects mutable scanner image and unsafe scan queue bounds", () => {
+  const result = validateOnpremEnv({
+    ...base,
+    DOCUMENT_SCANNER_IMAGE: "clamav/clamav:latest",
+    DOCUMENT_UPLOAD_MAX_BYTES: "26214400",
+    HRBP_DOCUMENT_SCAN_POLL_SECONDS: "1",
+    HRBP_DOCUMENT_SCAN_MAX_ATTEMPTS: "25",
+    HRBP_DOCUMENT_SCAN_RETRY_BASE_SECONDS: "600",
+    HRBP_DOCUMENT_SCAN_RETRY_MAX_SECONDS: "30",
+    HRBP_DOCUMENT_SCAN_LOCK_MINUTES: "1",
+    HRBP_DOCUMENT_SCAN_REQUEST_TIMEOUT_MS: "1000",
+    HRBP_DOCUMENT_SCAN_MAX_BYTES: "1024",
+    HRBP_CLAMD_TIMEOUT_MS: "1000"
+  });
+  assert.equal(result.ok, false);
+  for (const fragment of [
+    "DOCUMENT_SCANNER_IMAGE",
+    "HRBP_DOCUMENT_SCAN_POLL_SECONDS",
+    "HRBP_DOCUMENT_SCAN_MAX_ATTEMPTS",
+    "RETRY_MAX_SECONDS",
+    "LOCK_MINUTES",
+    "REQUEST_TIMEOUT_MS",
+    "SCAN_MAX_BYTES",
+    "HRBP_CLAMD_TIMEOUT_MS"
+  ]) assert.ok(result.errors.some((entry) => entry.includes(fragment)), fragment);
+});
