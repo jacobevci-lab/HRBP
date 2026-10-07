@@ -77,6 +77,8 @@ The embedded credential currently controls the private application bucket and re
 
 The on-prem profile includes a private, asynchronous document scanner. Uploaded document versions remain `PENDING` and unavailable for download until the scanner records a `CLEAN` verdict. Malware detections move the version to `QUARANTINED`; scanner failures remain blocked as `FAILED`.
 
+Neither the scanner worker nor the maintenance scheduler inherits the full application secret file. Compose passes only the small set of runtime variables each sidecar needs; database, object-storage, OIDC and unrelated application secrets remain outside those containers.
+
 The scanner is split into two private services:
 
 - `document-scanner-engine` runs the pinned official `clamav/clamav:1.5.4-debian` image and persists signature databases in the `clamav_db` volume.
