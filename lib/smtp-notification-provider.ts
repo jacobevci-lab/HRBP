@@ -24,8 +24,7 @@ export type EmailNotification = {
 };
 
 function safeHeader(value: string, max = MAX_SUBJECT) {
-  const normalized = value.replace(/[
-]+/g, " ").replace(/s+/g, " ").trim();
+  const normalized = value.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
   if (!normalized || normalized.length > max) throw new Error("SMTP_MESSAGE_INVALID");
   return normalized;
 }
@@ -33,9 +32,8 @@ function safeHeader(value: string, max = MAX_SUBJECT) {
 export function validEmailAddress(value: string) {
   const email = value.trim().toLowerCase();
   return email.length <= 254 &&
-    !/[
-]/.test(email) &&
-    /^[^s@<>(),;:\"]+@[^s@<>(),;:\"]+.[^s@<>(),;:\"]+$/.test(email)
+    !/[\r\n]/.test(email) &&
+    /^[^\s@<>(),;:\\"]+@[^\s@<>(),;:\\"]+\.[^\s@<>(),;:\\"]+$/.test(email)
       ? email
       : null;
 }
@@ -82,16 +80,15 @@ export function renderNotificationEmail(notification: EmailNotification, locale:
     : notificationDisplaySummary(notification.payload, locale);
 
   const boundedSummary = String(summary || (locale === "tr" ? "HRBP bildirimi" : "HRBP notification"))
-    .replace(/s+/g, " ")
+    .replace(/\s+/g, " ")
     .trim()
     .slice(0, 4000);
-  const text = [title, "", boundedSummary, ...(absoluteHref ? ["", absoluteHref] : [])].join("
-").slice(0, MAX_TEXT);
+  const text = [title, "", boundedSummary, ...(absoluteHref ? ["", absoluteHref] : [])].join("\n").slice(0, MAX_TEXT);
   const html = [
     "<!doctype html><html><body>",
-    `<h2>${escapeHtml(title)}</h2>`,
-    `<p>${escapeHtml(boundedSummary)}</p>`,
-    ...(absoluteHref ? [`<p><a href="${escapeHtml(absoluteHref)}">${locale === "tr" ? "HRBP içinde görüntüle" : "View in HRBP"}</a></p>`] : []),
+    "<h2>" + escapeHtml(title) + "</h2>",
+    "<p>" + escapeHtml(boundedSummary) + "</p>",
+    ...(absoluteHref ? ["<p><a href=\"" + escapeHtml(absoluteHref) + "\">" + (locale === "tr" ? "HRBP içinde görüntüle" : "View in HRBP") + "</a></p>"] : []),
     "</body></html>"
   ].join("").slice(0, MAX_HTML);
 
@@ -130,11 +127,10 @@ export async function sendSmtpNotification(
   if (!recipient) throw new Error("SMTP_RECIPIENT_INVALID");
 
   const from = runtimeString("HRBP_SMTP_FROM");
-  if (!from || /[
-]/.test(from) || from.length > 320) throw new Error("SMTP_FROM_INVALID");
+  if (!from || /[\r\n]/.test(from) || from.length > 320) throw new Error("SMTP_FROM_INVALID");
 
   const rendered = renderNotificationEmail(notification, options.locale ?? "en");
-  const stableMessageId = `<hrbp-${notification.outboxId}@${messageIdDomain(from)}>`;
+  const stableMessageId = "<hrbp-" + notification.outboxId + "@" + messageIdDomain(from) + ">";
   const transport = (options.createTransport ?? nodemailer.createTransport)(smtpTransportOptions());
 
   try {
@@ -162,7 +158,6 @@ export async function sendSmtpNotification(
     if (error instanceof Error && ["SMTP_RECIPIENT_REJECTED", "SMTP_RECIPIENT_INVALID", "SMTP_CONFIGURATION_REQUIRED", "SMTP_FROM_INVALID"].includes(error.message)) {
       throw error;
     }
-    // Provider response text can include infrastructure details. Persist only a bounded machine code.
     throw new Error("SMTP_DELIVERY_FAILED");
   } finally {
     if (typeof transport.close === "function") transport.close();
