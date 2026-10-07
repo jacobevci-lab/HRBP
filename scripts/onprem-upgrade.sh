@@ -4,6 +4,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 ENV_FILE="${HRBP_ENV_FILE:-$ROOT_DIR/.env.onprem}"
 COMPOSE_FILE="${HRBP_COMPOSE_FILE:-$ROOT_DIR/docker-compose.onprem.yml}"
+export HRBP_ENV_FILE="$ENV_FILE"
 BACKUP_ROOT="${HRBP_BACKUP_ROOT:-$ROOT_DIR/backups}"
 ACKNOWLEDGED=false
 
