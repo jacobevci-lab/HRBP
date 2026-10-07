@@ -106,13 +106,18 @@ async function claimScanJob() {
   return null;
 }
 
+function claimAttempt(value: unknown) {
+  const attempt = typeof value === "number" ? value : Number(value);
+  return Number.isSafeInteger(attempt) && attempt >= 1 && attempt <= 20 ? attempt : null;
+}
+
 function transientReason(value: unknown) {
   const reason = asOptionalText(value, 100);
   if (!reason) return "SCANNER_TRANSIENT_FAILURE";
   return /^[A-Z0-9_:-]{3,100}$/.test(reason) ? reason : "SCANNER_TRANSIENT_FAILURE";
 }
 
-async function releaseScanJob(versionId: string, reason: string) {
+async function releaseScanJob(versionId: string, expectedAttempt: number, reason: string) {
   const current = await db.documentVersion.findUnique({
     where: { id: versionId },
     select: {
@@ -124,7 +129,9 @@ async function releaseScanJob(versionId: string, reason: string) {
     }
   });
   if (!current) return { kind: "not-found" as const };
-  if (current.scanStatus !== VaultScanStatus.SCANNING) return { kind: "conflict" as const, status: current.scanStatus };
+  if (current.scanStatus !== VaultScanStatus.SCANNING || current.scanAttempts !== expectedAttempt) {
+    return { kind: "conflict" as const, status: current.scanStatus };
+  }
 
   const now = new Date();
   const exhausted = current.scanAttempts >= maxAttempts();
@@ -135,7 +142,7 @@ async function releaseScanJob(versionId: string, reason: string) {
         where: {
           id: current.id,
           scanStatus: VaultScanStatus.SCANNING,
-          scanAttempts: current.scanAttempts
+          scanAttempts: expectedAttempt
         },
         data: {
           scanStatus: VaultScanStatus.FAILED,
@@ -166,7 +173,7 @@ async function releaseScanJob(versionId: string, reason: string) {
     where: {
       id: current.id,
       scanStatus: VaultScanStatus.SCANNING,
-      scanAttempts: current.scanAttempts
+      scanAttempts: expectedAttempt
     },
     data: {
       scanStatus: VaultScanStatus.PENDING,
@@ -188,6 +195,7 @@ async function completeScanJob(input: {
   engine: string;
   reference: string | null;
   message: string | null;
+  attempt: number | null;
 }) {
   return db.$transaction(async (tx) => {
     const current = await tx.documentVersion.findUnique({ where: { id: input.versionId } });
@@ -199,6 +207,13 @@ async function completeScanJob(input: {
       return { kind: "conflict" as const, status: current.scanStatus };
     }
     if (!activeScanStatuses.includes(current.scanStatus as typeof activeScanStatuses[number])) {
+      return { kind: "conflict" as const, status: current.scanStatus };
+    }
+    if (current.scanStatus === VaultScanStatus.SCANNING &&
+        (!input.attempt || current.scanAttempts !== input.attempt)) {
+      return { kind: "conflict" as const, status: current.scanStatus };
+    }
+    if (current.scanStatus === VaultScanStatus.PENDING && input.attempt !== null) {
       return { kind: "conflict" as const, status: current.scanStatus };
     }
 
@@ -251,6 +266,8 @@ export async function POST(request: Request) {
   if (!versionId) return Response.json({ error: "A valid versionId is required." }, { status: 400 });
 
   if (body.action === "download") {
+    const attempt = claimAttempt(body.attempt);
+    if (!attempt) return Response.json({ error: "A valid claim attempt is required." }, { status: 400 });
     const current = await db.documentVersion.findUnique({
       where: { id: versionId },
       select: {
@@ -265,8 +282,9 @@ export async function POST(request: Request) {
       }
     });
     if (!current) return Response.json({ error: "Document version not found." }, { status: 404 });
-    if (!current.uploadedAt || current.scanStatus !== VaultScanStatus.SCANNING || !current.scanLockedAt) {
-      return Response.json({ error: "Document version is not actively claimed for scanning." }, { status: 409 });
+    if (!current.uploadedAt || current.scanStatus !== VaultScanStatus.SCANNING ||
+        current.scanAttempts !== attempt || !current.scanLockedAt) {
+      return Response.json({ error: "Document version is not actively claimed by this scan attempt." }, { status: 409 });
     }
 
     const storage = await fetchPrivateObject(current.objectKey);
@@ -286,7 +304,9 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "release") {
-    const result = await releaseScanJob(versionId, transientReason(body.reason));
+    const attempt = claimAttempt(body.attempt);
+    if (!attempt) return Response.json({ error: "A valid claim attempt is required." }, { status: 400 });
+    const result = await releaseScanJob(versionId, attempt, transientReason(body.reason));
     if (result.kind === "not-found") return Response.json({ error: "Document version not found." }, { status: 404 });
     if (result.kind === "conflict") return Response.json({ error: "Document scan state changed concurrently.", status: result.status }, { status: 409 });
     if (result.kind === "failed") return Response.json({ data: { status: result.data.scanStatus, exhausted: true } });
@@ -294,6 +314,10 @@ export async function POST(request: Request) {
   }
 
   const status = asEnumValue(body.status, finalScanStatuses);
+  const attempt = body.action === "complete" ? claimAttempt(body.attempt) : null;
+  if (body.action === "complete" && !attempt) {
+    return Response.json({ error: "A valid claim attempt is required." }, { status: 400 });
+  }
   const engine = asText(body.engine, 100);
   const reference = asOptionalText(body.reference, 200);
   const message = asOptionalText(body.message, 500);
@@ -308,7 +332,8 @@ export async function POST(request: Request) {
     status,
     engine,
     reference: reference || null,
-    message: message || null
+    message: message || null,
+    attempt
   });
   if (result.kind === "not-found") return Response.json({ error: "Document version not found." }, { status: 404 });
   if (result.kind === "not-uploaded") return Response.json({ error: "Document object must be uploaded before scan completion can be recorded." }, { status: 409 });
