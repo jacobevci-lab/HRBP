@@ -46,7 +46,7 @@ async function run(values) {
   await writeFile(envPath, serialize(values), { mode: 0o600 });
   const result = spawnSync(process.execPath, ["scripts/onprem-preflight.mjs"], {
     cwd: process.cwd(),
-    env: { ...process.env, HRBP_ENV_FILE: envPath, HRBP_COMPOSE_FILE: "docker-compose.onprem.yml" },
+    env: { ...process.env, HRBP_ENV_FILE: envPath, HRBP_COMPOSE_FILE: "docker-compose.onprem.yml", HRBP_PREFLIGHT_SKIP_DOCKER: "true" },
     encoding: "utf8"
   });
   let report = null;
@@ -56,18 +56,9 @@ async function run(values) {
 
 try {
   const good = await run(valid);
-  // Docker may be unavailable in a developer unit-test environment. The preflight
-  // must still prove that all configuration checks before the Docker boundary pass.
-  if (good.status !== 0) {
-    assert.ok(good.report, good.stdout + good.stderr);
-    assert.deepEqual(
-      good.report.errors.filter((message) => !message.includes("Docker")),
-      [],
-      good.stdout + good.stderr
-    );
-  } else {
-    assert.equal(good.report?.ok, true);
-  }
+  assert.equal(good.status, 0, good.stdout + good.stderr);
+  assert.equal(good.report?.ok, true);
+  assert.ok(good.report?.warnings.some((message) => /Docker Compose validation was explicitly skipped/.test(message)));
 
   for (const [name, mutate, expected] of [
     ["placeholder secret", (env) => { env.POSTGRES_PASSWORD = "CHANGE_ME_32_PLUS_RANDOM_CHARS"; }, /POSTGRES_PASSWORD/],
