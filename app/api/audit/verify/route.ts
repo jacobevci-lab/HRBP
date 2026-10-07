@@ -45,7 +45,7 @@ export async function GET(request: Request) {
     ]);
 
     if (!events.length) {
-      if (state && (state.eventCount !== 0n || state.tailHash !== null)) {
+      if (state && (state.eventCount !== BigInt(0) || state.tailHash !== null)) {
         return Response.json({
           status: "invalid",
           verified: 0,
