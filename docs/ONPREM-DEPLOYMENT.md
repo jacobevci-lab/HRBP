@@ -67,6 +67,52 @@ The storage service is intentionally not exposed on a host port. Customer deploy
 
 The embedded credential currently controls the private application bucket and recovery tooling. It must be treated as a high-value service secret. A future external-storage profile should use the customer's native bucket/IAM policy to reduce privileges to the exact HRBP object operations.
 
+## On-prem operational maintenance scheduler
+
+The Compose profile includes a dedicated `maintenance-scheduler` sidecar. It is built from a minimal Node stage, runs as the unprivileged Node user, has a read-only root filesystem, drops Linux capabilities, publishes no host port, and can reach the maintenance API only through the private Compose service name `app:3000`.
+
+The default cadence is 15 minutes:
+
+```dotenv
+HRBP_MAINTENANCE_INTERVAL_SECONDS=900
+```
+
+The value is bounded to 300–86400 seconds. Each cycle performs an authenticated protocol preflight and then invokes the eleven maintenance domains one at a time. Jobs are never run concurrently and maintenance POST requests are never automatically retried inside a cycle.
+
+The scheduler stores only bounded operational evidence in the `scheduler_state` volume:
+
+- `heartbeat.json` — process/cadence liveness,
+- `last-run.json` — job/status/HTTP/duration diagnostic fields only,
+- `blocked.json` — a durable safety latch when a POST outcome is ambiguous.
+
+Arbitrary upstream response bodies, employee data, SQL text and the maintenance token are not written to scheduler state.
+
+### Ambiguous outcome latch
+
+If a write times out or returns an unverifiable response after the maintenance POST may have committed, the scheduler **stops automatic maintenance**. The block survives container restarts. This prevents a restart loop or the next scheduled cycle from blindly replaying a potentially committed job.
+
+Inspect the scheduler state:
+
+```bash
+docker compose --env-file .env.onprem -f docker-compose.onprem.yml \
+  run --rm --no-deps maintenance-scheduler \
+  node scripts/onprem-maintenance-control.mjs status
+```
+
+After the affected domain has been independently checked, explicitly remove the latch:
+
+```bash
+docker compose --env-file .env.onprem -f docker-compose.onprem.yml \
+  run --rm --no-deps maintenance-scheduler \
+  node scripts/onprem-maintenance-control.mjs resume --acknowledge-unknown
+```
+
+The running scheduler rechecks the latch within one minute. Do not acknowledge an unknown outcome merely to make the container healthy.
+
+Known domain failures do not create the ambiguous-outcome latch because the endpoint has verified the failed result. They still make the scheduler health check fail and are retried only by the next normal scheduled cycle. A later fully successful cycle returns the scheduler to healthy state.
+
+`docker compose ... ps` should show both `app` and `maintenance-scheduler` healthy during normal operation. Central monitoring should alert on an unhealthy scheduler and on repeated maintenance job failures.
+
 ## Backup
 
 Use the product backup command instead of ad-hoc volume copying:
@@ -87,11 +133,12 @@ Each backup contains:
 - an exact local mirror of the configured S3 bucket,
 - runtime health/revision evidence when the application is reachable,
 - the recorded Prisma migration history (or an explicit legacy/no-history marker),
+- bounded maintenance scheduler status/latch evidence,
 - Docker image metadata,
 - a small format manifest,
 - SHA-256 checksums for the database, metadata, and every mirrored object.
 
-The command creates `.incomplete` before any data is copied and removes it only after checksums are written. `migration-history.json` is included in the checksum set so restore/release investigations can correlate a backup with the database migration state that existed when it was taken. The restore path refuses a backup carrying that marker. Backup directories are created with restrictive permissions and the default local `backups/` path is Git-ignored.
+The command creates `.incomplete` before any data is copied and removes it only after checksums are written. `migration-history.json` and `scheduler-status.json` are included in the checksum set so restore/release investigations can correlate a backup with both database migration state and maintenance scheduler state at capture time. The restore path refuses a backup carrying that marker. Backup directories are created with restrictive permissions and the default local `backups/` path is Git-ignored.
 
 Backups must still be copied to customer-approved protected storage with retention, encryption, access control, monitoring, and off-host/off-site policy appropriate to the deployment.
 
@@ -107,13 +154,14 @@ The restore flow:
 
 1. verifies `SHA256SUMS` before changing live state,
 2. rejects incomplete backups and object symlinks,
-3. stops the application/schema mutation surfaces,
+3. stops the maintenance scheduler plus application/schema mutation surfaces,
 4. starts only the database and private object-store recovery dependencies,
 5. recreates the configured non-system PostgreSQL database and restores the logical dump,
 6. synchronizes the backed-up S3 object set back to the bucket and deletes objects created after the backup,
-7. leaves the application stopped.
+7. restores any backed-up ambiguous-outcome maintenance latch into the durable scheduler state volume,
+8. leaves the application and maintenance scheduler stopped.
 
-The application remains stopped after restore by design. Before reopening service, check out the application release corresponding to `runtime-health.json` / `images.json`, review schema compatibility, start the stack, then verify runtime health, OIDC sign-in, Action Center, document access, and customer-critical HR workflows. Do not use restore as a substitute for a reviewed database migration.
+The application and maintenance scheduler remain stopped after restore by design. If the backup recorded an ambiguous maintenance outcome, the restored scheduler latch remains blocked even on a new recovery host; inspect the affected domain before explicitly acknowledging/resuming it. Restore is monotonic for this safety state: an older backup that was unblocked never clears a newer existing unknown-outcome latch, because external side effects may not be reversed by database/object restore. Before reopening service, check out the application release corresponding to `runtime-health.json` / `images.json`, review schema compatibility, start the stack, then verify runtime health, OIDC sign-in, Action Center, document access, and customer-critical HR workflows. Do not use restore as a substitute for a reviewed database migration.
 
 ## Automated recovery rehearsal
 
@@ -154,6 +202,6 @@ Versioned migrations are now the production schema contract. The guarded baselin
 - It is a single-host Compose profile, not a high-availability cluster.
 - TLS termination, enterprise secrets management, KMS/BYOK, centralized logging and external monitoring belong to the customer deployment architecture.
 - The bundled SeaweedFS profile is intentionally single-node. Customers requiring storage HA, erasure coding, managed support or a mandated S3 platform should use a separately validated storage architecture rather than interpreting this profile as an HA object-storage design.
-- Scheduled maintenance endpoints/jobs still need an operations runbook or external scheduler appropriate to the target environment.
+- The bundled maintenance scheduler is single-host. Customers replacing it with an enterprise scheduler must preserve the authenticated single-job protocol, serialization and no-blind-retry rules.
 - Backup RPO/RTO, retention, immutable/off-site copies and restore cadence must be agreed with each customer; the product rehearsal proves mechanics, not the customer's full disaster-recovery program.
 - Cloudflare remains a separate hosted deployment path; successful on-prem packaging does not imply the existing Cloudflare production deployment path is healthy.

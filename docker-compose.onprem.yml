@@ -104,9 +104,37 @@ services:
       retries: 5
     networks: [hrbp_internal]
 
+  maintenance-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.onprem
+      target: scheduler
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    env_file: [.env.onprem]
+    environment:
+      HRBP_MAINTENANCE_URL: http://app:3000/api/internal/maintenance
+      HRBP_MAINTENANCE_TOKEN: ${HRBP_MAINTENANCE_TOKEN:?set HRBP_MAINTENANCE_TOKEN in .env.onprem}
+      HRBP_MAINTENANCE_INTERVAL_SECONDS: ${HRBP_MAINTENANCE_INTERVAL_SECONDS:-900}
+      HRBP_MAINTENANCE_STATE_DIR: /var/lib/hrbp-scheduler
+    volumes:
+      - scheduler_state:/var/lib/hrbp-scheduler
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [hrbp_internal]
+
 volumes:
   postgres_data:
   object_storage_data:
+  scheduler_state:
 
 networks:
   hrbp_internal:

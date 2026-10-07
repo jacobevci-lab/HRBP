@@ -218,6 +218,10 @@ test("invalid configuration prevents requests and local smoke is limited to expl
   assert.throws(() => validateConfiguration({ ...config, url: "http://10.0.0.1/api/internal/maintenance", localSmoke: true }));
   assert.throws(() => validateConfiguration({ ...config, url: "http://127.0.0.1:8787/api/internal/maintenance" }));
   assert.equal(validateConfiguration({ ...config, url: "http://127.0.0.1:8787/api/internal/maintenance", localSmoke: true }).selected.length, 11);
+  assert.throws(() => validateConfiguration({ ...config, url: "http://app:3000/api/internal/maintenance" }));
+  assert.throws(() => validateConfiguration({ ...config, url: "http://other:3000/api/internal/maintenance", privateHttpHost: "app" }));
+  assert.throws(() => validateConfiguration({ ...config, url: "http://app:3001/api/internal/maintenance", privateHttpHost: "app" }));
+  assert.equal(validateConfiguration({ ...config, url: "http://app:3000/api/internal/maintenance", privateHttpHost: "app" }).selected.length, 11);
 });
 
 test("CI summary is built only from bounded job diagnostics", async () => {
