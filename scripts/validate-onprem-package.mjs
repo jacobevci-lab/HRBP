@@ -189,12 +189,16 @@ for (const token of [
   "/api/health/auth",
   "db:migrate:status",
   "onprem-maintenance-health.mjs",
-  "timeoutSeconds"
+  "timeoutSeconds",
+  '"pre-upgrade", "post-deploy"',
+  "not-running-pre-upgrade"
 ]) assert.ok(postflight.includes(token), `On-prem postflight contract missing: ${token}`);
 for (const token of [
   "--maintenance-window",
   "Building target release before downtime",
   'stop maintenance-scheduler app',
+  "Verifying current deployment health before upgrade",
+  "pre-upgrade-health.json",
   "Taking quiesced pre-upgrade backup",
   "--abort-on-container-exit",
   "--exit-code-from schema",
