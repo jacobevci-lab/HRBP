@@ -165,3 +165,22 @@ test("warns when email events are configured but SMTP is disabled", () => {
   assert.equal(result.ok, true, result.errors.join("\n"));
   assert.ok(result.warnings.some((entry) => entry.includes("email mirroring is disabled")));
 });
+
+
+test("requires implicit TLS on the standard SMTPS port", () => {
+  const result = validateOnpremEnv({
+    ...base,
+    HRBP_SMTP_ENABLED: "true",
+    HRBP_NOTIFICATION_EMAIL_EVENTS: "HR_SERVICE_ESCALATED",
+    HRBP_NOTIFICATION_EMAIL_ALLOW_RESTRICTED: "false",
+    HRBP_NOTIFICATION_EMAIL_BATCH_SIZE: "5",
+    HRBP_SMTP_HOST: "smtp.acme.internal",
+    HRBP_SMTP_PORT: "465",
+    HRBP_SMTP_SECURE: "false",
+    HRBP_SMTP_USERNAME: "hrbp-smtp",
+    HRBP_SMTP_PASSWORD: "smtp-password-abcdefghijklmnop",
+    HRBP_SMTP_FROM: "HRBP <hrbp@acme.internal>"
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((entry) => entry.includes("must be true when HRBP_SMTP_PORT=465")));
+});
