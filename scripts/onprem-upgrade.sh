@@ -65,6 +65,10 @@ cd "$ROOT_DIR"
 printf 'Running upgrade preflight...\n' >&2
 node scripts/onprem-preflight.mjs --env-file "$ENV_FILE" --phase upgrade --require-clean-source
 
+stage="current-health"
+printf 'Verifying current deployment health before upgrade...\n' >&2
+pre_upgrade_health="$(node scripts/onprem-postflight.mjs --env-file "$ENV_FILE" --mode pre-upgrade --timeout-seconds 120)"
+
 stage="build"
 printf 'Building target release before downtime...\n' >&2
 "${COMPOSE[@]}" build schema app maintenance-scheduler
@@ -78,6 +82,8 @@ printf 'Taking quiesced pre-upgrade backup...\n' >&2
 backup_dir="$(HRBP_ENV_FILE="$ENV_FILE" HRBP_COMPOSE_FILE="$COMPOSE_FILE" bash scripts/onprem-backup.sh "$BACKUP_ROOT" | tail -n 1)"
 [[ -d "$backup_dir" ]] || { printf 'ERROR: backup command did not return a completed backup directory.\n' >&2; false; }
 
+printf '%s\n' "$pre_upgrade_health" > "$backup_dir/pre-upgrade-health.json"
+
 cat > "$backup_dir/upgrade-intent.json" <<EOF
 {
   "startedAtUtc": "$STARTED_AT",
@@ -87,7 +93,7 @@ cat > "$backup_dir/upgrade-intent.json" <<EOF
 EOF
 (
   cd "$backup_dir"
-  sha256sum upgrade-intent.json >> SHA256SUMS
+  sha256sum pre-upgrade-health.json upgrade-intent.json >> SHA256SUMS
 )
 
 stage="migration"
@@ -103,7 +109,7 @@ printf 'Starting target application and maintenance scheduler...\n' >&2
 
 stage="postflight"
 printf 'Running deployment postflight...\n' >&2
-postflight="$(node scripts/onprem-postflight.mjs --env-file "$ENV_FILE" --timeout-seconds 600)"
+postflight="$(node scripts/onprem-postflight.mjs --env-file "$ENV_FILE" --mode post-deploy --timeout-seconds 600)"
 printf '%s\n' "$postflight"
 
 COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
