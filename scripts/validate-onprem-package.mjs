@@ -96,6 +96,11 @@ assert.ok(compose.includes("RCLONE_CONFIG_HRBP_PROVIDER: Other"));
 assert.ok(compose.includes('RCLONE_CONFIG_HRBP_FORCE_PATH_STYLE: "true"'));
 assert.ok(compose.includes("OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://object-storage:8333}"));
 assert.ok(compose.includes("APP_URL:?set APP_URL"));
+assert.equal(
+  (compose.match(/env_file: \["\$\{HRBP_ENV_FILE:-\.env\.onprem\}"\]/g) ?? []).length,
+  3,
+  "Schema, app and scheduler must all honor the selected on-prem env file path."
+);
 
 assert.match(dockerfile, /COPY package\.json package-lock\.json/);
 assert.match(dockerfile, /RUN npm ci/);
@@ -183,6 +188,7 @@ for (const token of [
   "Tracked release files are modified",
   "Less than 1 GiB"
 ]) assert.ok(preflightCli.includes(token), `On-prem preflight execution contract missing: ${token}`);
+assert.ok(preflightCli.includes("HRBP_ENV_FILE: envFile"), "Preflight Compose validation must propagate the selected env path.");
 for (const token of [
   "/api/health/runtime",
   "/api/health/db",
@@ -198,6 +204,7 @@ for (const token of [
   '"object-storage-tool"',
   '"lsd"'
 ]) assert.ok(postflight.includes(token), `On-prem postflight contract missing: ${token}`);
+assert.ok(postflight.includes("HRBP_ENV_FILE: envFile"), "Postflight Compose calls must propagate the selected env path.");
 for (const token of [
   "--maintenance-window",
   "Building target release before downtime",
@@ -213,6 +220,7 @@ for (const token of [
   "fail-closed-no-automatic-schema-rollback",
   "Do not force migrations"
 ]) assert.ok(upgrade.includes(token), `On-prem upgrade safety contract missing: ${token}`);
+assert.ok(upgrade.includes('export HRBP_ENV_FILE="$ENV_FILE"'), "Upgrade must propagate a custom env path into Compose services.");
 assert.ok(!/\bgit\s+(?:pull|fetch|checkout)\b/.test(upgrade), "Upgrade orchestration must never change the approved source revision automatically.");
 assert.ok(!upgrade.includes("onprem-restore.sh") || upgrade.includes("If restore is required"), "Upgrade must not automatically execute destructive restore.");
 
@@ -252,6 +260,7 @@ for (const token of [
   "sha256sum postgres.dump",
   "migration-history.json scheduler-status.json > SHA256SUMS"
 ]) assert.ok(backup.includes(token), `Backup safety contract missing: ${token}`);
+assert.ok(backup.includes('export HRBP_ENV_FILE="$ENV_FILE"'), "Backup must propagate a custom env path into Compose services.");
 assert.ok(!backup.includes("--accept-data-loss"), "Backup path must never force schema changes.");
 assert.ok(!backup.includes("mc "), "Backup must not depend on retired MinIO-only tooling.");
 assert.ok(backup.includes('--user "$(id -u):$(id -g)"'), "Backup recovery tooling must preserve host ownership for bind-mounted artifacts.");
@@ -271,6 +280,7 @@ for (const token of [
   "scheduler-status.json:/restore/scheduler-status.json:ro",
   "application and maintenance scheduler remain stopped"
 ]) assert.ok(restore.includes(token), `Restore safety contract missing: ${token}`);
+assert.ok(restore.includes('export HRBP_ENV_FILE="$ENV_FILE"'), "Restore must propagate a custom env path into Compose services.");
 assert.ok(!restore.includes("db push"), "Restore must not run implicit schema mutation.");
 assert.ok(!restore.includes("--accept-data-loss"), "Restore must not bypass destructive-schema protection.");
 assert.ok(!restore.includes("mc "), "Restore must be S3-provider neutral.");
