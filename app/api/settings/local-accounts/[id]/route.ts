@@ -6,10 +6,10 @@ import { asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { hashLocalPassword, validLocalPassword } from "@/lib/local-auth";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
-type LocalAccountAction = "enable" | "disable" | "unlock" | "reset-password";
+type LocalAccountAction = "enable" | "disable" | "unlock" | "reset-password" | "revoke-sessions";
 
 function actionValue(value: unknown): LocalAccountAction | null {
-  return value === "enable" || value === "disable" || value === "unlock" || value === "reset-password"
+  return value === "enable" || value === "disable" || value === "unlock" || value === "reset-password" || value === "revoke-sessions"
     ? value
     : null;
 }
@@ -25,7 +25,9 @@ const projection = {
   localPasswordUpdatedAt: true,
   localFailedAttempts: true,
   localLockedUntil: true,
-  lastLocalLoginAt: true
+  lastLocalLoginAt: true,
+  sessionVersion: true,
+  sessionsRevokedAt: true
 } as const;
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -39,7 +41,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
   const action = actionValue(body.action);
-  if (!action) return Response.json({ error: "action must be enable, disable, unlock or reset-password." }, { status: 400 });
+  if (!action) return Response.json({ error: "action must be enable, disable, unlock, reset-password or revoke-sessions." }, { status: 400 });
 
   const current = await db.userAccount.findFirst({
     where: { id, tenantId: ctx.tenantId },
@@ -62,6 +64,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         data: {
           localPasswordHash: hashLocalPassword(password),
           localPasswordUpdatedAt: new Date(),
+          sessionVersion: { increment: 1 },
+          sessionsRevokedAt: new Date(),
           localAuthEnabled: true,
           localFailedAttempts: 0,
           localLockedUntil: null
@@ -78,6 +82,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return updated;
     });
     return Response.json({ data });
+  }
+
+  if (action === "revoke-sessions") {
+    const data = await db.$transaction(async (tx) => {
+      const updated = await tx.userAccount.update({
+        where: { id },
+        data: {
+          sessionVersion: { increment: 1 },
+          sessionsRevokedAt: new Date()
+        },
+        select: projection
+      });
+      await appendAudit(tx, ctx, {
+        action: "settings.account-sessions-revoked",
+        resourceType: "UserAccount",
+        resourceId: id,
+        classification: DataClassification.RESTRICTED,
+        purpose: "Tenant administrator revoked all active application sessions for an account"
+      });
+      return updated;
+    });
+    return Response.json({ data, currentSessionRevoked: id === ctx.actorId });
   }
 
   if (action === "unlock") {
