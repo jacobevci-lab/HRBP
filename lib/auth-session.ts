@@ -8,9 +8,11 @@ export const SESSION_COOKIE = "hrbp_session";
 export const OIDC_TRANSACTION_COOKIE = "hrbp_oidc_txn";
 
 export type SessionClaims = {
-  v: 1;
+  v: 2;
   authMethod?: "local" | "oidc";
   credentialVersion?: string | null;
+  accountSessionVersion: number;
+  tenantSessionVersion: number;
   tenantId: string;
   actorId: string;
   role: PlatformRole;
@@ -91,11 +93,13 @@ export function parseCookies(header: string | null): Record<string, string> {
 }
 
 export function validSessionClaims(claims: SessionClaims | null): claims is SessionClaims {
-  if (!claims || claims.v !== 1 || !validRoles.has(claims.role)) return false;
+  if (!claims || claims.v !== 2 || !validRoles.has(claims.role)) return false;
   const required = [claims.tenantId, claims.actorId, claims.subject, claims.displayName];
   if (required.some((value) => typeof value !== "string" || !value || value.length > 512)) return false;
   if (claims.employmentId !== undefined && (typeof claims.employmentId !== "string" || !claims.employmentId || claims.employmentId.length > 191)) return false;
   if (claims.email !== undefined && (typeof claims.email !== "string" || claims.email.length > 512)) return false;
+  if (!Number.isSafeInteger(claims.accountSessionVersion) || claims.accountSessionVersion < 1 ||
+      !Number.isSafeInteger(claims.tenantSessionVersion) || claims.tenantSessionVersion < 1) return false;
   const now = Math.floor(Date.now() / 1000);
   return Number.isSafeInteger(claims.issuedAt) && Number.isSafeInteger(claims.exp) &&
     claims.issuedAt <= now + 60 && claims.exp > now && claims.exp > claims.issuedAt && claims.exp - claims.issuedAt <= 86400;
@@ -114,13 +118,24 @@ function cookieBase(name: string, value: string, maxAge: number) {
   return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${Math.max(0, Math.floor(maxAge))}`;
 }
 
-export function createSessionCookie(claims: Omit<SessionClaims, "v" | "issuedAt" | "exp">) {
+export function effectiveSessionMaxMinutes(tenantMinutes: number | null | undefined) {
+  const platformMinutes = Math.floor(Math.min(Math.max(runtimeNumber("HRBP_SESSION_TTL_HOURS", 8), 1), 24) * 60);
+  const boundedTenant = Number.isInteger(tenantMinutes) && (tenantMinutes as number) >= 15 && (tenantMinutes as number) <= 1440
+    ? tenantMinutes as number
+    : 480;
+  return Math.min(platformMinutes, boundedTenant);
+}
+
+export function createSessionCookie(
+  claims: Omit<SessionClaims, "v" | "issuedAt" | "exp">,
+  tenantSessionMaxMinutes?: number | null
+) {
   const secret = sessionSecret();
   if (!secret) throw new Error("HRBP_SESSION_SECRET must contain at least 32 characters.");
   const issuedAt = Math.floor(Date.now() / 1000);
-  const ttlHours = Math.min(Math.max(runtimeNumber("HRBP_SESSION_TTL_HOURS", 8), 1), 24);
-  const exp = issuedAt + Math.floor(ttlHours * 60 * 60);
-  const token = encodeSignedPayload({ ...claims, authMethod: claims.authMethod ?? "oidc", v: 1, issuedAt, exp } satisfies SessionClaims, secret);
+  const ttlMinutes = effectiveSessionMaxMinutes(tenantSessionMaxMinutes);
+  const exp = issuedAt + ttlMinutes * 60;
+  const token = encodeSignedPayload({ ...claims, authMethod: claims.authMethod ?? "oidc", v: 2, issuedAt, exp } satisfies SessionClaims, secret);
   return cookieBase(SESSION_COOKIE, token, exp - issuedAt);
 }
 

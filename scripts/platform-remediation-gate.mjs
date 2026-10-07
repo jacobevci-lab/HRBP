@@ -27,7 +27,8 @@ for(const path of ['/module/engagement','/module/workforce-planning','/module/ai
 check('Employee lifecycle heading is localized in both directions',browser.ui.some(x=>x.path==='/module/employee-360/lifecycle'&&x.turkishSelected&&x.englishSelected&&x.turkishHeading==='Yaşam döngüsü yönetimi'));
 const db=new PrismaClient();const pass=process.env.HRBP_TEST_ADMIN_PASSWORD;
 async function http(path,method='GET',cookie,body,headers={}){return fetch(origin+path,{method,redirect:'manual',headers:{origin,'content-type':'application/json',...(cookie?{cookie}:{}),...headers},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});}
-async function login(){const r=await http('/api/auth/local','POST',undefined,{identifier:'audit.employee',password:pass});assert.equal(r.status,200);return r.headers.get('set-cookie').split(';')[0];}
+async function loginAs(identifier){const r=await http('/api/auth/local','POST',undefined,{identifier,password:pass});assert.equal(r.status,200);return r.headers.get('set-cookie').split(';')[0];}
+async function login(){return loginAs('audit.employee');}
 try{
  await db.userAccount.update({where:{id:'qa-audit-employee'},data:{active:true,localAuthEnabled:true}});
  const cookie=await login();const row=await db.userAccount.findUnique({where:{id:'qa-audit-employee'}});
@@ -53,6 +54,20 @@ try{
  check('Upgraded session valid', (await http('/api/people','GET',upgraded)).status===200);
  check('Pre-upgrade cookie revoked', (await http('/api/people','GET',cookie)).status===401);
  const noOrigin=await fetch(origin+'/api/auth/logout',{method:'POST',redirect:'manual',headers:{cookie:upgraded},signal:AbortSignal.timeout(10000)});check('Missing-origin logout rejected',noOrigin.status===403);
+ const adminCookie=await loginAs('audit.admin');
+ const employeeBeforeAccountRevoke=await login();
+ const accountRevoke=await http('/api/settings/session-revocation','POST',adminCookie,{action:'revoke-account',accountId:row.id});
+ check('Administrator can revoke one account session set',accountRevoke.status===200,accountRevoke.status);
+ check('Account revocation invalidates existing employee cookie',(await http('/api/people','GET',employeeBeforeAccountRevoke)).status===401);
+ const employeeBeforeTenantRevoke=await login();
+ const badTenantRevoke=await http('/api/settings/session-revocation','POST',adminCookie,{action:'revoke-tenant',confirmation:'wrong-tenant'});
+ check('Tenant-wide revocation rejects incorrect confirmation',badTenantRevoke.status===409,badTenantRevoke.status);
+ check('Rejected tenant-wide revocation preserves employee session',(await http('/api/people','GET',employeeBeforeTenantRevoke)).status===200);
+ const tenantRevoke=await http('/api/settings/session-revocation','POST',adminCookie,{action:'revoke-tenant',confirmation:'tenant-acme-global'});
+ check('Administrator can revoke all tenant sessions',tenantRevoke.status===200,tenantRevoke.status);
+ check('Tenant revocation invalidates employee cookie',(await http('/api/people','GET',employeeBeforeTenantRevoke)).status===401);
+ const revokedAdminSession=await http('/api/auth/session','GET',adminCookie);const revokedAdminBody=await revokedAdminSession.json();
+ check('Tenant revocation invalidates administrator cookie',revokedAdminSession.status===200&&revokedAdminBody.authenticated===false);
 }finally{await db.$disconnect();}
 await writeFile('.audit/remediation-gate.json',JSON.stringify({checks,failures},null,2));
 console.log('REMEDIATION_GATE '+JSON.stringify({checks:checks.length,failures}));

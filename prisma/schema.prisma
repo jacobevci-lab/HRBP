@@ -194,6 +194,8 @@ model Tenant {
   name                String
   region              String
   createdAt           DateTime @default(now())
+  sessionVersion      Int @default(1)
+  sessionsRevokedAt   DateTime?
   users               UserAccount[]
   people              Person[]
   employments         Employment[]
@@ -237,6 +239,8 @@ model UserAccount {
   localFailedAttempts    Int @default(0)
   localLockedUntil       DateTime?
   lastLocalLoginAt       DateTime?
+  sessionVersion         Int @default(1)
+  sessionsRevokedAt      DateTime?
   tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assignments CaseAssignment[]
 

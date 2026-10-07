@@ -151,6 +151,20 @@ try {
     throw new Error("Legacy baseline adoption did not record exactly one successful baseline.");
   }
 
+  console.log("Verifying adopted legacy database advances through all post-baseline migrations...");
+  prisma([
+    "migrate",
+    "diff",
+    "--from-schema-datasource",
+    PRISMA_SCHEMA_PATH,
+    "--to-schema-datamodel",
+    PRISMA_SCHEMA_PATH,
+    "--exit-code"
+  ], {
+    env: { ...process.env, DATABASE_URL: urlFor(dbNames.legacy) },
+    quiet: true
+  });
+
   console.log("Verifying schema drift blocks legacy baseline adoption...");
   prisma(["db", "push", "--skip-generate", "--schema", PRISMA_BASELINE_SCHEMA_PATH], {
     env: { ...process.env, DATABASE_URL: urlFor(dbNames.drift) },
@@ -173,7 +187,7 @@ try {
     throw new Error("Drifted legacy database was incorrectly marked with migration history.");
   }
 
-  console.log("Prisma migration verification passed: fresh deploy, history parity, idempotency, exact legacy adoption and drift refusal.");
+  console.log("Prisma migration verification passed: fresh deploy, history parity, idempotency, legacy baseline adoption plus forward migration, and drift refusal.");
 } finally {
   for (const name of Object.values(dbNames)) {
     try {

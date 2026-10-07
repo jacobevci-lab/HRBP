@@ -133,8 +133,9 @@ export async function POST(request: Request) {
     const updated = await tx.userAccount.findFirst({ where: { id: user.id, tenantId, active: true, localAuthEnabled: true } });
     if (!updated) return null;
 
-    const person = updated.email
-      ? await tx.person.findFirst({
+    const [person, tenant, securityPolicy] = await Promise.all([
+      updated.email
+        ? tx.person.findFirst({
           where: { tenantId: updated.tenantId, workEmail: { equals: updated.email, mode: "insensitive" } },
           select: {
             employments: {
@@ -144,8 +145,12 @@ export async function POST(request: Request) {
               select: { id: true }
             }
           }
-        })
-      : null;
+          })
+        : Promise.resolve(null),
+      tx.tenant.findUnique({ where: { id: updated.tenantId }, select: { sessionVersion: true } }),
+      tx.tenantSecurityPolicy.findUnique({ where: { tenantId: updated.tenantId }, select: { sessionMaxMinutes: true } })
+    ]);
+    if (!tenant) return null;
 
     await appendSystemAudit(tx, updated.tenantId, updated.id, {
       action: "auth.local-succeeded",
@@ -155,7 +160,12 @@ export async function POST(request: Request) {
       purpose: "Local application sign-in"
     });
 
-    return { user: updated, employmentId: person?.employments[0]?.id };
+    return {
+      user: updated,
+      employmentId: person?.employments[0]?.id,
+      tenantSessionVersion: tenant.sessionVersion,
+      sessionMaxMinutes: securityPolicy?.sessionMaxMinutes ?? 480
+    };
   });
 
   if (!identity) return Response.json({ error: "Invalid credentials." }, { status: 401 });
@@ -164,6 +174,8 @@ export async function POST(request: Request) {
   headers.append("set-cookie", createSessionCookie({
     authMethod: "local",
     credentialVersion: identity.user.localPasswordUpdatedAt?.toISOString() ?? null,
+    accountSessionVersion: identity.user.sessionVersion,
+    tenantSessionVersion: identity.tenantSessionVersion,
     tenantId: identity.user.tenantId,
     actorId: identity.user.id,
     role: identity.user.role,
@@ -171,7 +183,7 @@ export async function POST(request: Request) {
     displayName: identity.user.displayName,
     email: identity.user.email ?? undefined,
     subject: identity.user.subject
-  }));
+  }, identity.sessionMaxMinutes));
 
   return new Response(JSON.stringify({ data: { authenticated: true, returnTo } }), { status: 200, headers });
 }
