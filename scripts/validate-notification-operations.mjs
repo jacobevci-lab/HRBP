@@ -52,7 +52,7 @@ expect(smtpPath, smtp, /rejectUnauthorized:\s*true/, "SMTP TLS certificate verif
 expect(smtpPath, smtp, /minVersion:\s*"TLSv1\.2"/, "SMTP TLS must require TLS 1.2 or newer");
 expect(smtpPath, smtp, /disableFileAccess:\s*true/, "SMTP messages must not read attachments from local files");
 expect(smtpPath, smtp, /disableUrlAccess:\s*true/, "SMTP messages must not fetch remote attachment/content URLs");
-expect(smtpPath, smtp, /hrbp-\$\{notification\.outboxId\}/, "SMTP messages must use a stable outbox-derived Message-ID");
+expect(smtpPath, smtp, /stableMessageId\s*=\s*[\s\S]{0,160}notification\.outboxId[\s\S]{0,160}messageIdDomain\(from\)/, "SMTP messages must use a stable outbox-derived Message-ID");
 expect(smtpPath, smtp, /HRBP secure notification/, "restricted SMTP messages must use a generic subject");
 expect(smtpPath, smtp, /const href = restricted \? "\/" : notificationDisplayResourceHref/, "restricted SMTP messages must not expose resource-specific paths");
 expect(smtpPath, smtp, /SMTP_DELIVERY_FAILED/, "SMTP provider errors must be reduced to bounded machine diagnostics");
