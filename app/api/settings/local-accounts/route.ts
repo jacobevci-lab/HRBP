@@ -30,7 +30,9 @@ const projection = {
   localPasswordUpdatedAt: true,
   localFailedAttempts: true,
   localLockedUntil: true,
-  lastLocalLoginAt: true
+  lastLocalLoginAt: true,
+  sessionVersion: true,
+  sessionsRevokedAt: true
 } as const;
 
 export async function GET(request: Request) {
