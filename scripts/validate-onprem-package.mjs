@@ -20,6 +20,8 @@ const [
   maintenanceRunner,
   maintenanceScheduler,
   maintenanceState,
+  preflight,
+  preflightTest,
   baselineSql,
   migrationLock
 ] = await Promise.all([
@@ -41,6 +43,8 @@ const [
   readFile("scripts/run-operational-maintenance.mjs", "utf8"),
   readFile("scripts/onprem-maintenance-scheduler.mjs", "utf8"),
   readFile("scripts/onprem-maintenance-state.mjs", "utf8"),
+  readFile("scripts/onprem-preflight.mjs", "utf8"),
+  readFile("scripts/onprem-preflight.test.mjs", "utf8"),
   readFile("prisma/migrations/20261007000000_baseline_current_schema/migration.sql", "utf8"),
   readFile("prisma/migrations/migration_lock.toml", "utf8")
 ]);
@@ -156,6 +160,28 @@ for (const token of [
   'LAST_RUN_FAILED'
 ]) assert.ok(maintenanceState.includes(token), `Scheduler state safety contract missing: ${token}`);
 
+for (const token of [
+  "APP_URL must be a clean HTTPS origin",
+  "must not reuse the same secret",
+  "HRBP_OIDC_REDIRECT_URI",
+  "HRBP_AUTH_TENANT_ID",
+  "HRBP_MAINTENANCE_INTERVAL_SECONDS",
+  "docker",
+  "compose",
+  "config",
+  "--quiet"
+]) assert.ok(preflight.includes(token), `On-prem deployment preflight contract missing: ${token}`);
+for (const token of [
+  "placeholder secret",
+  "secret reuse",
+  "non-https app url",
+  "bad callback origin",
+  "placeholder tenant",
+  "admin outside allowlist",
+  "too-fast scheduler",
+  "mutable image"
+]) assert.ok(preflightTest.includes(token), `On-prem preflight test coverage missing: ${token}`);
+
 for (const key of [
   "POSTGRES_PASSWORD", "OBJECT_STORAGE_SECRET_KEY", "HRBP_SESSION_SECRET",
   "HRBP_ENGAGEMENT_RESPONSE_SECRET", "HRBP_DOCUMENT_SCAN_TOKEN",
@@ -243,6 +269,8 @@ assert.equal(pkg.scripts?.["db:migrate:deploy"], "prisma migrate deploy --schema
 assert.equal(pkg.scripts?.["db:migrate:upgrade"], "node scripts/deploy-prisma-migrations.mjs");
 assert.equal(pkg.scripts?.["db:migrate:verify"], "node scripts/verify-prisma-migrations.mjs");
 assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-maintenance-scheduler.test.mjs"), "On-prem validation must execute scheduler safety tests.");
+assert.equal(pkg.scripts?.["onprem:preflight"], "node scripts/onprem-preflight.mjs");
+assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-preflight.test.mjs"), "On-prem validation must execute deployment preflight tests.");
 
 for (const token of [
   "scripts/onprem-backup.sh",
@@ -256,7 +284,8 @@ for (const token of [
   "baseline adoption",
   "maintenance-scheduler",
   "blocked.json",
-  "--acknowledge-unknown"
+  "--acknowledge-unknown",
+  "npm run onprem:preflight"
 ]) assert.ok(docs.includes(token), `On-prem runbook missing recovery guidance: ${token}`);
 
 console.log("On-prem package, recovery and versioned migration safety validation passed.");
