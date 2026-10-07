@@ -43,3 +43,14 @@ SMTP credentials are runtime secrets. TLS certificate verification cannot be dis
 Uploaded document versions are fail-closed until a malware-scanning verdict is recorded. The on-prem scanner worker authenticates to the internal scan endpoint with a dedicated scanner token and does not receive object-storage credentials. A claimed object is proxied by the application only while its database state is actively `SCANNING`.
 
 Before invoking ClamAV, the worker independently verifies the immutable content hash and size. Integrity mismatch is quarantined rather than retried or treated as clean. ClamD listens only on the private Compose network; its TCP port is never published to the host. Scanner claims use bounded attempts, stale-lock recovery and conditional finalization so worker crashes, retries and replayed callbacks cannot silently overwrite a different final verdict.
+
+
+## Identity-provider validation boundary
+
+Identity-provider registry records are not treated as trustworthy merely because required fields are populated. Entra ID, Okta and generic OIDC drafts must pass a live HTTPS discovery check before activation: the configured issuer must match discovery metadata, authorization/token/JWKS endpoints must remain HTTPS, redirects are not followed, response size/time are bounded and JWKS must contain at least one usable key.
+
+SAML drafts must fetch metadata over HTTPS, reject DTD/entity declarations and expose an HTTPS SingleSignOnService before validation evidence is recorded. Loopback, link-local and common cloud-instance metadata targets are rejected before outbound validation.
+
+Validation evidence is bound to the exact metadata revision with optimistic concurrency and expires for activation after the configured `HRBP_IDENTITY_VALIDATION_MAX_AGE_MINUTES` window (default 24 hours). Any draft metadata change clears prior validation evidence.
+
+LDAP records require `ldaps://` metadata. They are deliberately **not** marked live-validated by the web runtime yet; activation validation returns `LDAPS_LIVE_VALIDATION_AGENT_REQUIRED` until the on-prem LDAPS validation agent is implemented. This prevents configuration-only checks from being represented as proof of a working directory connection.
