@@ -118,7 +118,7 @@ async function download(job) {
       "content-type": "application/json",
       accept: "application/octet-stream"
     },
-    body: JSON.stringify({ action: "download", versionId: job.versionId }),
+    body: JSON.stringify({ action: "download", versionId: job.versionId, attempt: job.attempt }),
     signal: AbortSignal.timeout(Math.max(requestTimeoutMs, 60000))
   });
   if (!response.ok) throw new Error("SCAN_OBJECT_FETCH_FAILED");
@@ -133,6 +133,7 @@ async function complete(job, status, engine, reference, message) {
   const { response } = await postJson({
     action: "complete",
     versionId: job.versionId,
+    attempt: job.attempt,
     status,
     engine,
     reference,
@@ -146,6 +147,7 @@ async function release(job, reason) {
     const { response } = await postJson({
       action: "release",
       versionId: job.versionId,
+      attempt: job.attempt,
       reason
     });
     return response.status === 200 || response.status === 409;
