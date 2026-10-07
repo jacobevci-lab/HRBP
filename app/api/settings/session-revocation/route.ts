@@ -18,13 +18,27 @@ export async function GET(request: Request) {
   if (!ctx) return unauthorized();
   if (!can(ctx, "settings:read")) return forbidden();
 
+  const query = new URL(request.url).searchParams.get("q")?.trim() ?? "";
+  if (query.length > 160) return Response.json({ error: "q must be at most 160 characters." }, { status: 400 });
+  const accountWhere = {
+    tenantId: ctx.tenantId,
+    active: true,
+    ...(query ? {
+      OR: [
+        { displayName: { contains: query, mode: "insensitive" as const } },
+        { subject: { contains: query, mode: "insensitive" as const } },
+        { email: { contains: query, mode: "insensitive" as const } }
+      ]
+    } : {})
+  };
+
   const [tenant, accounts, totalAccounts] = await Promise.all([
     db.tenant.findUnique({
       where: { id: ctx.tenantId },
       select: { id: true, sessionVersion: true, sessionsRevokedAt: true }
     }),
     db.userAccount.findMany({
-      where: { tenantId: ctx.tenantId, active: true },
+      where: accountWhere,
       orderBy: [{ displayName: "asc" }, { id: "asc" }],
       take: MAX_VISIBLE_ACCOUNTS,
       select: {
@@ -37,7 +51,7 @@ export async function GET(request: Request) {
         sessionsRevokedAt: true
       }
     }),
-    db.userAccount.count({ where: { tenantId: ctx.tenantId, active: true } })
+    db.userAccount.count({ where: accountWhere })
   ]);
 
   if (!tenant) return Response.json({ error: "Tenant was not found." }, { status: 404 });
@@ -48,6 +62,7 @@ export async function GET(request: Request) {
       accounts,
       totalAccounts,
       truncated: totalAccounts > accounts.length,
+      query,
       currentActorId: ctx.actorId
     },
     permissions: { write: can(ctx, "settings:write") }
