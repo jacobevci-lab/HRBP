@@ -6,6 +6,7 @@ umask 077
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 ENV_FILE="${HRBP_ENV_FILE:-$ROOT_DIR/.env.onprem}"
 COMPOSE_FILE="${HRBP_COMPOSE_FILE:-$ROOT_DIR/docker-compose.onprem.yml}"
+export HRBP_ENV_FILE="$ENV_FILE"
 
 fail() {
   printf 'ERROR: %s\n' "$*" >&2

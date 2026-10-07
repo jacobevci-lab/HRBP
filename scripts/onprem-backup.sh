@@ -6,6 +6,7 @@ umask 077
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 ENV_FILE="${HRBP_ENV_FILE:-$ROOT_DIR/.env.onprem}"
 COMPOSE_FILE="${HRBP_COMPOSE_FILE:-$ROOT_DIR/docker-compose.onprem.yml}"
+export HRBP_ENV_FILE="$ENV_FILE"
 BACKUP_ROOT="${1:-${HRBP_BACKUP_ROOT:-$ROOT_DIR/backups}}"
 
 fail() {
@@ -84,8 +85,12 @@ printf 'Capturing maintenance scheduler state...\n' >&2
 if "${COMPOSE[@]}" exec -T maintenance-scheduler node scripts/onprem-maintenance-control.mjs status \
   > "$TARGET/scheduler-status.json" 2>/dev/null; then
   :
+elif "${COMPOSE[@]}" run --rm --no-deps -T maintenance-scheduler \
+  node scripts/onprem-maintenance-control.mjs status \
+  > "$TARGET/scheduler-status.json" 2>/dev/null; then
+  :
 else
-  printf '{"available":false,"reason":"maintenance-scheduler-not-running"}\n' > "$TARGET/scheduler-status.json"
+  printf '{"available":false,"reason":"maintenance-scheduler-state-unavailable"}\n' > "$TARGET/scheduler-status.json"
 fi
 
 cat > "$TARGET/manifest.json" <<EOF
