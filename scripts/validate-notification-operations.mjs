@@ -101,8 +101,15 @@ expect(smtpTestUiPath, smtpTestUi, /Send test email|Test e-postası gönder/, "s
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);
+const lockPath = "package-lock.json";
+const lock = JSON.parse(await source(lockPath));
 expect(packagePath, pkg, /notification-operations:validate/, "notification operations validator must be registered");
 expect(packagePath, pkg, /"nodemailer":\s*"10\.0\.15"/, "SMTP transport must be pinned exactly");
+if (lock.packages?.[""]?.dependencies?.nodemailer !== "10.0.15") failures.push(lockPath + ": root SMTP dependency must match package.json pin");
+const lockedMailer = lock.packages?.["node_modules/nodemailer"];
+if (lockedMailer?.version !== "10.0.15" || lockedMailer?.integrity !== "sha512-EUqp5PhtcsYXs9Fq/lS7s/8zlTrnBqmzZWzFFROrNikMiz+om/YRKMwqN907t+0A1KKyT8jd39CBUbFZmaZmcA==") {
+  failures.push(lockPath + ": pinned Nodemailer artifact metadata changed unexpectedly");
+}
 expect(packagePath, pkg, /prebuild[\s\S]*notification-operations:validate/, "notification operations validation must run before production builds");
 
 if (failures.length) {
