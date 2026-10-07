@@ -193,7 +193,10 @@ for (const token of [
   '"pre-upgrade", "post-deploy"',
   "not-running-pre-upgrade",
   "--expected-revision",
-  "Runtime/release identity"
+  "Runtime/release identity",
+  "Private object storage/bucket access is not healthy",
+  '"object-storage-tool"',
+  '"lsf"'
 ]) assert.ok(postflight.includes(token), `On-prem postflight contract missing: ${token}`);
 for (const token of [
   "--maintenance-window",
