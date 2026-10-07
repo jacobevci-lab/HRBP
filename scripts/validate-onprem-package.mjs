@@ -132,8 +132,11 @@ for (const token of [
   'rclone sync "hrbp:$OBJECT_STORAGE_BUCKET" /backup',
   "runtime-health.json",
   "images.json",
+  "migration-history.json",
+  "_prisma_migrations",
   '"objectFormat": "s3-rclone-mirror"',
-  "sha256sum postgres.dump"
+  "sha256sum postgres.dump",
+  "migration-history.json > SHA256SUMS"
 ]) assert.ok(backup.includes(token), `Backup safety contract missing: ${token}`);
 assert.ok(!backup.includes("--accept-data-loss"), "Backup path must never force schema changes.");
 assert.ok(!backup.includes("mc "), "Backup must not depend on retired MinIO-only tooling.");
