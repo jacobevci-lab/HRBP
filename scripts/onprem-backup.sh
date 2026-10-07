@@ -80,6 +80,14 @@ else
   printf '{"available":false,"reason":"migration-history-not-present"}\n' > "$TARGET/migration-history.json"
 fi
 
+printf 'Capturing maintenance scheduler state...\n' >&2
+if "${COMPOSE[@]}" exec -T maintenance-scheduler node scripts/onprem-maintenance-control.mjs status \
+  > "$TARGET/scheduler-status.json" 2>/dev/null; then
+  :
+else
+  printf '{"available":false,"reason":"maintenance-scheduler-not-running"}\n' > "$TARGET/scheduler-status.json"
+fi
+
 cat > "$TARGET/manifest.json" <<EOF
 {
   "formatVersion": 1,
@@ -92,7 +100,7 @@ EOF
 
 (
   cd "$TARGET"
-  sha256sum postgres.dump manifest.json runtime-health.json images.json migration-history.json > SHA256SUMS
+  sha256sum postgres.dump manifest.json runtime-health.json images.json migration-history.json scheduler-status.json > SHA256SUMS
   while IFS= read -r -d '' file; do
     sha256sum "$file"
   done < <(find objects -type f -print0 | sort -z) >> SHA256SUMS
