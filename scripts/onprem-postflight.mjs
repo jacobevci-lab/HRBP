@@ -139,6 +139,22 @@ if (mode === "pre-upgrade" && !running.has("maintenance-scheduler")) {
   if (!schedulerHealthy) fail("Maintenance scheduler did not become healthy after deployment.");
 }
 
+let documentScannerStatus = "healthy";
+if (mode === "pre-upgrade" && !running.has("document-scanner")) {
+  documentScannerStatus = "not-running-pre-upgrade";
+} else {
+  let scannerHealthy = false;
+  while (Date.now() < deadline) {
+    const scanner = compose(["exec", "-T", "document-scanner", "node", "scripts/document-scan-health.mjs"]);
+    if (!scanner.error && scanner.status === 0) {
+      scannerHealthy = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+  if (!scannerHealthy) fail("Document scanner did not become healthy after deployment.");
+}
+
 console.log(JSON.stringify({
   ok: true,
   verifiedAt: new Date().toISOString(),
@@ -161,5 +177,6 @@ console.log(JSON.stringify({
   objectStorage: "healthy",
   mode,
   migrations: migrationStatus,
-  scheduler: schedulerStatus
+  scheduler: schedulerStatus,
+  documentScanner: documentScannerStatus
 }));
