@@ -16,20 +16,25 @@ export function notificationEmailEvents() {
 export function smtpConfigurationStatus() {
   const enabled = runtimeBoolean("HRBP_SMTP_ENABLED", false);
   const missing: string[] = [];
-  if (!enabled) return { enabled, configured: false, missing, events: notificationEmailEvents() };
-
-  for (const name of ["HRBP_SMTP_HOST", "HRBP_SMTP_USERNAME", "HRBP_SMTP_PASSWORD", "HRBP_SMTP_FROM"] as const) {
-    if (!runtimeString(name)) missing.push(name);
-  }
-  const port = Math.floor(runtimeNumber("HRBP_SMTP_PORT", 587));
-  if (!Number.isInteger(port) || port < 1 || port > 65535) missing.push("HRBP_SMTP_PORT");
-
   const events = notificationEmailEvents();
-  if (!events.length) missing.push("HRBP_NOTIFICATION_EMAIL_EVENTS");
+  if (!enabled) return { enabled, configured: false, missing, events };
 
+  const host = runtimeString("HRBP_SMTP_HOST");
+  const username = runtimeString("HRBP_SMTP_USERNAME");
+  const password = runtimeString("HRBP_SMTP_PASSWORD");
   const from = runtimeString("HRBP_SMTP_FROM");
-  if (from && (from.length > 320 || /[
-]/.test(from))) missing.push("HRBP_SMTP_FROM");
+  const portRaw = runtimeString("HRBP_SMTP_PORT") ?? "587";
+  const port = Number(portRaw);
+
+  if (!host || !/^[A-Za-z0-9.-]{1,253}$/.test(host) || host.includes("..")) missing.push("HRBP_SMTP_HOST");
+  if (!username) missing.push("HRBP_SMTP_USERNAME");
+  if (!password || password.length < 16) missing.push("HRBP_SMTP_PASSWORD");
+  if (!from || from.length > 320 || /[\r\n]/.test(from) ||
+      !/[A-Za-z0-9.!#$%&'*+/=?^_\`{|}~-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/.test(from)) {
+    missing.push("HRBP_SMTP_FROM");
+  }
+  if (!/^\d+$/.test(portRaw) || !Number.isInteger(port) || port < 1 || port > 65535) missing.push("HRBP_SMTP_PORT");
+  if (!events.length) missing.push("HRBP_NOTIFICATION_EMAIL_EVENTS");
 
   return { enabled, configured: missing.length === 0, missing: [...new Set(missing)], events };
 }
