@@ -234,6 +234,8 @@ model UserAccount {
   localAuthEnabled       Boolean @default(false)
   localPasswordHash      String?
   localPasswordUpdatedAt DateTime?
+  sessionVersion         Int @default(1)
+  sessionsRevokedAt      DateTime?
   localFailedAttempts    Int @default(0)
   localLockedUntil       DateTime?
   lastLocalLoginAt       DateTime?
