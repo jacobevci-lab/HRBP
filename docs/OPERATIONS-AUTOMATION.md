@@ -48,14 +48,14 @@ The endpoint remains scheduler-agnostic. A Cloudflare scheduled worker or enterp
 
 ### Transactional notification outbox
 
-`NotificationOutbox` stores delivery intent independently from a future email, in-app, Teams/Slack, webhook or other channel adapter. Current maintenance events include:
+`NotificationOutbox` stores delivery intent independently for in-app, SMTP email and future Teams/Slack, webhook or other channel adapters. Current maintenance events include:
 
 - `HR_SERVICE_ESCALATED` → current or newly auto-routed assignee when available;
 - `POLICY_EXCEPTION_EXPIRED` → exception requestor;
 - `POLICY_EXCEPTION_CLOSED_ON_RETIREMENT` → exception requestor;
 - `POLICY_RETIRED` → policy owner.
 
-Outbox records start in `PENDING` and include channel, optional recipient, template key, resource reference, classification, retry metadata and a JSON payload. Delivery workers should claim eligible `PENDING` records, move them through `PROCESSING`, and finish them as `DELIVERED`, `FAILED` or `DEAD_LETTER` with retry/backoff controls. The current bulk intentionally separates durable event creation from provider-specific delivery so SMTP/webhook failures cannot roll back HR or policy state.
+Outbox records start in `PENDING` and include channel, optional recipient, template key, resource reference, classification, retry metadata and a JSON payload. Delivery workers should claim eligible `PENDING` records, move them through `PROCESSING`, and finish them as `DELIVERED`, `FAILED` or `DEAD_LETTER` with retry/backoff controls. Durable event creation remains separate from provider-specific delivery so SMTP failures cannot roll back HR or policy state; SMTP is the first external adapter using that contract.
 
 ### SMTP email delivery
 
