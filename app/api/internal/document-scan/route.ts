@@ -278,6 +278,7 @@ export async function POST(request: Request) {
         sizeBytes: true,
         uploadedAt: true,
         scanStatus: true,
+        scanAttempts: true,
         scanLockedAt: true
       }
     });
