@@ -40,7 +40,7 @@ The bundled single-node object-store implementation is SeaweedFS. SeaweedFS is A
    npm run onprem:postflight
    docker compose --env-file .env.onprem -f docker-compose.onprem.yml ps
    ```
-   Postflight waits for application runtime, PostgreSQL connectivity, configured authentication, notification-provider readiness, private object storage, clean Prisma migration status, a healthy document scanner and a healthy maintenance scheduler.
+   Postflight waits for application runtime, PostgreSQL connectivity, configured authentication, notification-provider readiness, the authenticated operational-metrics surface, private object storage, clean Prisma migration status, a healthy document scanner and a healthy maintenance scheduler.
 7. Place the service behind the customer's HTTPS reverse proxy and restrict direct access to port 3000.
 
 The `schema` one-shot service runs the guarded versioned migration runner only after PostgreSQL is healthy. Fresh databases are created with committed `prisma migrate deploy` history. Existing installations from the pre-migration releases are never marked automatically unless their live PostgreSQL schema exactly matches the committed Prisma datamodel. The application starts only after the schema job and object-store health check succeed.
