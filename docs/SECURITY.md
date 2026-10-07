@@ -26,3 +26,14 @@ AI context is authorization-filtered before model access. No tenant data is used
 
 ## Secure SDLC target
 SAST, SCA, secret scanning, IaC scanning, container scanning, SBOM, protected branches, signed releases, dependency review, DAST/API tests in staging and recurring penetration tests.
+
+
+## Session revocation and tenant lifetime policy
+
+Application sessions are signed, short-lived bearer cookies and are revalidated against the active tenant-scoped `UserAccount` on every authenticated request.
+
+Each account has a monotonically increasing `sessionVersion`. The version is embedded in newly issued local and OIDC sessions. An administrator can revoke all application sessions for an account by advancing that epoch; copied cookies carrying an older epoch fail on their next request. Password reset also advances the epoch.
+
+`TenantSecurityPolicy.sessionMaxMinutes` is enforced at session issuance. The effective lifetime is the stricter of the tenant policy and the deployment-wide `HRBP_SESSION_TTL_HOURS` ceiling. Tightening the tenant maximum immediately advances the epoch for all active tenant accounts so previously issued longer sessions cannot outlive the new policy.
+
+Revocation changes are tenant-scoped and audited. The design deliberately avoids storing bearer session tokens in the database.
