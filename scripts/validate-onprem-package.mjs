@@ -219,6 +219,8 @@ for (const token of [
   "/api/health/auth",
   "db:migrate:status",
   "onprem-maintenance-health.mjs",
+  "document-scan-health.mjs",
+  "Document scanner did not become healthy after deployment",
   "timeoutSeconds",
   '"pre-upgrade", "post-deploy"',
   "not-running-pre-upgrade",
@@ -232,7 +234,8 @@ assert.ok(postflight.includes("HRBP_ENV_FILE: envFile"), "Postflight Compose cal
 for (const token of [
   "--maintenance-window",
   "Building target release before downtime",
-  'stop maintenance-scheduler app',
+  'stop document-scanner maintenance-scheduler app',
+  'pull document-scanner-engine',
   "Verifying current deployment health before upgrade",
   "pre-upgrade-health.json",
   "Taking quiesced pre-upgrade backup",
@@ -293,7 +296,7 @@ assert.ok(backup.includes('--user "$(id -u):$(id -g)"'), "Backup recovery toolin
 for (const token of [
   "--confirm-erase",
   "sha256sum -c SHA256SUMS",
-  "stop maintenance-scheduler app schema",
+  "stop document-scanner maintenance-scheduler app schema",
   "up -d --wait postgres object-storage",
   "dropdb --if-exists --force",
   "createdb -U",
@@ -303,7 +306,7 @@ for (const token of [
   "reserved database",
   "onprem-restore-scheduler-state.mjs",
   "scheduler-status.json:/restore/scheduler-status.json:ro",
-  "application and maintenance scheduler remain stopped"
+  "application, document scanner and maintenance scheduler remain stopped"
 ]) assert.ok(restore.includes(token), `Restore safety contract missing: ${token}`);
 assert.ok(restore.includes('export HRBP_ENV_FILE="$ENV_FILE"'), "Restore must propagate a custom env path into Compose services.");
 assert.ok(!restore.includes("db push"), "Restore must not run implicit schema mutation.");
@@ -348,7 +351,7 @@ for (const token of [
   "scripts/onprem-backup.sh",
   "scripts/onprem-restore.sh",
   "recovery rehearsal",
-  "application and maintenance scheduler remain stopped",
+  "application, document scanner and maintenance scheduler remain stopped",
   "SeaweedFS",
   "rclone",
   "Versioned migrations",
