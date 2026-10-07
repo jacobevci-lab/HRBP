@@ -101,3 +101,67 @@ test("validation diagnostics never echo secret values", () => {
   assert.ok(result.errors.some((entry) => entry.includes("different secrets")));
   assert.ok(!JSON.stringify(result).includes(secret));
 });
+
+
+test("accepts bounded TLS SMTP delivery configuration", () => {
+  const result = validateOnpremEnv({
+    ...base,
+    HRBP_SMTP_ENABLED: "true",
+    HRBP_NOTIFICATION_EMAIL_EVENTS: "LOCAL_AUTH_ACCOUNT_LOCKED,HR_SERVICE_ESCALATED",
+    HRBP_NOTIFICATION_EMAIL_ALLOW_RESTRICTED: "false",
+    HRBP_NOTIFICATION_EMAIL_BATCH_SIZE: "10",
+    HRBP_SMTP_HOST: "smtp.acme.internal",
+    HRBP_SMTP_PORT: "587",
+    HRBP_SMTP_SECURE: "false",
+    HRBP_SMTP_USERNAME: "hrbp-smtp",
+    HRBP_SMTP_PASSWORD: "smtp-password-abcdefghijklmnop",
+    HRBP_SMTP_FROM: "HRBP <hrbp@acme.internal>",
+    HRBP_SMTP_TLS_SERVERNAME: "smtp.acme.internal",
+    HRBP_SMTP_MESSAGE_ID_DOMAIN: "acme.internal",
+    HRBP_SMTP_CONNECTION_TIMEOUT_MS: "8000",
+    HRBP_SMTP_GREETING_TIMEOUT_MS: "8000",
+    HRBP_SMTP_SOCKET_TIMEOUT_MS: "15000"
+  });
+  assert.equal(result.ok, true, result.errors.join("\n"));
+});
+
+test("rejects unsafe or incomplete SMTP configuration", () => {
+  const result = validateOnpremEnv({
+    ...base,
+    HRBP_SMTP_ENABLED: "true",
+    HRBP_NOTIFICATION_EMAIL_EVENTS: "bad-event,LOCAL_AUTH_ACCOUNT_LOCKED,LOCAL_AUTH_ACCOUNT_LOCKED",
+    HRBP_NOTIFICATION_EMAIL_ALLOW_RESTRICTED: "maybe",
+    HRBP_NOTIFICATION_EMAIL_BATCH_SIZE: "500",
+    HRBP_SMTP_HOST: "https://smtp.acme.internal",
+    HRBP_SMTP_PORT: "70000",
+    HRBP_SMTP_SECURE: "maybe",
+    HRBP_SMTP_USERNAME: "smtp-user",
+    HRBP_SMTP_PASSWORD: base.HRBP_MAINTENANCE_TOKEN,
+    HRBP_SMTP_FROM: "bad\nfrom@example.com",
+    HRBP_SMTP_TLS_SERVERNAME: "bad..name"
+  });
+  assert.equal(result.ok, false);
+  for (const fragment of [
+    "invalid event name",
+    "duplicate events",
+    "ALLOW_RESTRICTED",
+    "EMAIL_BATCH_SIZE",
+    "SMTP_HOST",
+    "SMTP_PORT",
+    "SMTP_SECURE",
+    "must not reuse",
+    "SMTP_FROM",
+    "TLS_SERVERNAME"
+  ]) assert.ok(result.errors.some((entry) => entry.includes(fragment)), fragment);
+  assert.ok(!JSON.stringify(result).includes(base.HRBP_MAINTENANCE_TOKEN));
+});
+
+test("warns when email events are configured but SMTP is disabled", () => {
+  const result = validateOnpremEnv({
+    ...base,
+    HRBP_SMTP_ENABLED: "false",
+    HRBP_NOTIFICATION_EMAIL_EVENTS: "HR_SERVICE_ESCALATED"
+  });
+  assert.equal(result.ok, true, result.errors.join("\n"));
+  assert.ok(result.warnings.some((entry) => entry.includes("email mirroring is disabled")));
+});
