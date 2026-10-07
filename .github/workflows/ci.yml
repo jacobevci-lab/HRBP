@@ -38,7 +38,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install
+      - run: npm ci
       - name: Production dependency audit
         run: npm run security:audit:prod
       - name: Full dependency audit
