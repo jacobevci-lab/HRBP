@@ -11,16 +11,22 @@ const args = process.argv.slice(2);
 let envFile = ".env.onprem";
 let timeoutSeconds = 300;
 let mode = "post-deploy";
+let expectedRevision = null;
 for (let index = 0; index < args.length; index += 1) {
   if (args[index] === "--env-file") envFile = args[++index];
   else if (args[index] === "--timeout-seconds") timeoutSeconds = Number(args[++index]);
   else if (args[index] === "--mode") mode = args[++index];
+  else if (args[index] === "--expected-revision") expectedRevision = args[++index];
   else fail(`Unsupported argument: ${args[index]}`);
 }
 if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 30 || timeoutSeconds > 1800) {
   fail("--timeout-seconds must be between 30 and 1800.");
 }
 if (!["pre-upgrade", "post-deploy"].includes(mode)) fail("--mode must be pre-upgrade or post-deploy.");
+if (expectedRevision !== null && !/^[a-f0-9]{40}$/i.test(expectedRevision)) {
+  fail("--expected-revision must be a full 40-character commit SHA.");
+}
+if (expectedRevision) expectedRevision = expectedRevision.toLowerCase();
 
 const env = parseEnvText(readFileSync(envFile, "utf8"));
 const port = env.HRBP_HTTP_PORT || "3000";
@@ -63,8 +69,9 @@ async function waitFor(pathname, predicate, label) {
 
 const runtime = await waitFor(
   "/api/health/runtime",
-  (body) => body?.ok === true && body?.service === "hrbp",
-  "Runtime health"
+  (body) => body?.ok === true && body?.service === "hrbp" &&
+    (!expectedRevision || body?.release?.revision === expectedRevision),
+  expectedRevision ? "Runtime/release identity" : "Runtime health"
 );
 const database = await waitFor(
   "/api/health/db",
@@ -116,6 +123,7 @@ if (mode === "pre-upgrade" && !running.has("maintenance-scheduler")) {
 
 console.log(JSON.stringify({
   ok: true,
+  verifiedAt: new Date().toISOString(),
   runtime: {
     revision: runtime?.release?.revision ?? null,
     protocolVersion: runtime?.release?.protocolVersion ?? null
