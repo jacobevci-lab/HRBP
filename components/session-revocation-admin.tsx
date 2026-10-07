@@ -122,7 +122,7 @@ export function SessionRevocationAdmin() {
           ? "Çalınmış/kopyalanmış cookie'leri ve mevcut uygulama oturumlarını bir sonraki istekte geçersiz kılar."
           : "Invalidates copied/stolen cookies and existing application sessions on their next request."}</p>
       </div>
-      <button className="secondary-button" type="button" onClick={() => void load()} disabled={loading}>
+      <button className="secondary-button" type="button" onClick={() => void load(search)} disabled={loading}>
         <RefreshCw size={14}/>{tr ? "Yenile" : "Refresh"}
       </button>
     </div>
