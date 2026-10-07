@@ -60,7 +60,7 @@ jobs:
       - name: Prepare disposable database and seed all product domains
         run: |
           npx prisma generate > .audit/schema.log 2>&1
-          npx prisma db push >> .audit/schema.log 2>&1
+          npm run db:migrate:upgrade >> .audit/schema.log 2>&1
           for script in seed-staging seed-work-pay-staging seed-access-staging seed-growth-staging seed-connected-growth-staging seed-services-staging seed-service-governance-staging seed-governance-planning-staging; do
             node "scripts/$script.mjs" >> .audit/seed.log 2>&1 || { tail -40 .audit/seed.log; exit 1; }
           done
