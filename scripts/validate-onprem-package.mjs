@@ -184,10 +184,12 @@ for (const token of [
   "runtime-health.json",
   "images.json",
   "migration-history.json",
+  "scheduler-status.json",
+  "onprem-maintenance-control.mjs status",
   "_prisma_migrations",
   '"objectFormat": "s3-rclone-mirror"',
   "sha256sum postgres.dump",
-  "migration-history.json > SHA256SUMS"
+  "migration-history.json scheduler-status.json > SHA256SUMS"
 ]) assert.ok(backup.includes(token), `Backup safety contract missing: ${token}`);
 assert.ok(!backup.includes("--accept-data-loss"), "Backup path must never force schema changes.");
 assert.ok(!backup.includes("mc "), "Backup must not depend on retired MinIO-only tooling.");
