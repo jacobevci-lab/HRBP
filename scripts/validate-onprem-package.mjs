@@ -119,8 +119,8 @@ assert.ok(compose.includes("OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-
 assert.ok(compose.includes("APP_URL:?set APP_URL"));
 assert.equal(
   (compose.match(/env_file: \["\$\{HRBP_ENV_FILE:-\.env\.onprem\}"\]/g) ?? []).length,
-  3,
-  "Schema, app and scheduler must honor the selected on-prem env file path; the scanner worker uses an explicit least-privilege environment."
+  2,
+  "Schema and app must honor the selected on-prem env file path; scanner and scheduler use explicit least-privilege environments."
 );
 
 assert.match(dockerfile, /COPY package\.json package-lock\.json/);
