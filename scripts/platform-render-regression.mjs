@@ -124,9 +124,15 @@ try {
       await download.saveAs('.audit/downloads/filtered-audit.csv');
       assert.equal(await download.failure(),null);
       const rows=csvRows(await readFile('.audit/downloads/filtered-audit.csv','utf8'));
-      assert.deepEqual(rows[0],['id','occurredAt','actorId','action','resourceType','resourceId','classification','ipAddress','purpose','hash','previousHash']);
+      assert.deepEqual(rows[0],['ledgerSequence','id','occurredAt','actorId','action','resourceType','resourceId','classification','ipAddress','purpose','hash','previousHash']);
       assert.ok(rows.length>1,'The actual sign-in must appear in the filtered export');
-      for(const row of rows.slice(1)){assert.equal(row[2],actorId);assert.equal(row[3],'auth.local-succeeded');assert.equal(row[4],'UserAccount');assert.equal(row[6],'INTERNAL');}
+      for(const row of rows.slice(1)){
+        assert.match(row[0],/^\d+$/,'Exported ledger sequence must be an integer');
+        assert.equal(row[3],actorId);
+        assert.equal(row[4],'auth.local-succeeded');
+        assert.equal(row[5],'UserAccount');
+        assert.equal(row[7],'INTERNAL');
+      }
       const received=await receipts();assertSingleExport(received,target.href);assert.equal(downloads.length,1);
       assert.equal(new URL(page.url()).pathname,'/module/audit');
       await identity(context);assert.deepEqual(errors,[]);
