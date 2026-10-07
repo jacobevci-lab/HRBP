@@ -33,20 +33,77 @@ function retryDelayMs(attempt: number) {
 async function recoverStaleScanLocks(now: Date) {
   const lockMinutes = Math.min(120, Math.max(2, Math.floor(runtimeNumber("HRBP_DOCUMENT_SCAN_LOCK_MINUTES", 15))));
   const staleBefore = new Date(now.getTime() - lockMinutes * 60_000);
-  return db.documentVersion.updateMany({
+  const limit = maxAttempts();
+  const stale = await db.documentVersion.findMany({
     where: {
       scanStatus: VaultScanStatus.SCANNING,
       scanLockedAt: { lte: staleBefore }
     },
-    data: {
-      scanStatus: VaultScanStatus.PENDING,
-      scanLockedAt: null,
-      scanNextAttemptAt: now,
-      scanEngine: null,
-      scanReference: null,
-      scanMessage: "Recovered stale scanner lock"
+    orderBy: [{ scanLockedAt: "asc" }, { id: "asc" }],
+    take: 100,
+    select: {
+      id: true,
+      tenantId: true,
+      scanAttempts: true,
+      classification: true
     }
   });
+
+  let recovered = 0;
+  let exhausted = 0;
+  for (const candidate of stale) {
+    if (candidate.scanAttempts >= limit) {
+      const finalized = await db.$transaction(async (tx) => {
+        const changed = await tx.documentVersion.updateMany({
+          where: {
+            id: candidate.id,
+            scanStatus: VaultScanStatus.SCANNING,
+            scanAttempts: candidate.scanAttempts,
+            scanLockedAt: { lte: staleBefore }
+          },
+          data: {
+            scanStatus: VaultScanStatus.FAILED,
+            scanLockedAt: null,
+            scanCompletedAt: now,
+            scanEngine: "HRBP Scanner Worker",
+            scanReference: "STALE_RETRY_BUDGET_EXHAUSTED",
+            scanMessage: "Scanner worker stopped responding after the final allowed attempt"
+          }
+        });
+        if (changed.count !== 1) return false;
+        await appendAudit(tx, scannerContext(candidate.tenantId), {
+          action: "document.scan-failed",
+          resourceType: "DocumentVersion",
+          resourceId: candidate.id,
+          classification: candidate.classification ?? DataClassification.RESTRICTED,
+          purpose: "Malware scanner stale lock exhausted the retry budget"
+        });
+        return true;
+      });
+      if (finalized) exhausted += 1;
+      continue;
+    }
+
+    const changed = await db.documentVersion.updateMany({
+      where: {
+        id: candidate.id,
+        scanStatus: VaultScanStatus.SCANNING,
+        scanAttempts: candidate.scanAttempts,
+        scanLockedAt: { lte: staleBefore }
+      },
+      data: {
+        scanStatus: VaultScanStatus.PENDING,
+        scanLockedAt: null,
+        scanNextAttemptAt: now,
+        scanEngine: null,
+        scanReference: null,
+        scanMessage: "Recovered stale scanner lock"
+      }
+    });
+    recovered += changed.count;
+  }
+
+  return { recovered, exhausted };
 }
 
 async function claimScanJob() {
