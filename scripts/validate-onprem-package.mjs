@@ -248,7 +248,10 @@ for (const token of [
   "rclone",
   "Versioned migrations",
   "migrate deploy",
-  "baseline adoption"
+  "baseline adoption",
+  "maintenance-scheduler",
+  "blocked.json",
+  "--acknowledge-unknown"
 ]) assert.ok(docs.includes(token), `On-prem runbook missing recovery guidance: ${token}`);
 
 console.log("On-prem package, recovery and versioned migration safety validation passed.");
