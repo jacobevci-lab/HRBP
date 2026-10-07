@@ -65,8 +65,11 @@ for (const token of [
   "finalScanStatuses.includes",
   "current.scanAttempts !== 0",
   "idempotent: true",
-  "Document scan state changed concurrently"
+  "Document scan state changed concurrently",
+  "scanResultProjection",
+  "scanAttempts: value.scanAttempts"
 ]) assert.ok(route.includes(token), "Internal scan protocol missing: " + token);
+assert.ok(!route.includes("Response.json({ data: result.data, idempotent"), "Internal scan callback must never serialize the full Prisma row with BigInt fields.");
 assert.ok(!route.includes("OBJECT_STORAGE_SECRET_KEY"), "Internal scan API must not expose storage credentials.");
 
 for (const token of [
