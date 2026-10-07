@@ -191,7 +191,9 @@ for (const token of [
   "onprem-maintenance-health.mjs",
   "timeoutSeconds",
   '"pre-upgrade", "post-deploy"',
-  "not-running-pre-upgrade"
+  "not-running-pre-upgrade",
+  "--expected-revision",
+  "Runtime/release identity"
 ]) assert.ok(postflight.includes(token), `On-prem postflight contract missing: ${token}`);
 for (const token of [
   "--maintenance-window",
@@ -203,6 +205,8 @@ for (const token of [
   "--abort-on-container-exit",
   "--exit-code-from schema",
   "onprem-postflight.mjs",
+  'export GITHUB_SHA="$TARGET_REVISION"',
+  '--expected-revision "$TARGET_REVISION"',
   "fail-closed-no-automatic-schema-rollback",
   "Do not force migrations"
 ]) assert.ok(upgrade.includes(token), `On-prem upgrade safety contract missing: ${token}`);
