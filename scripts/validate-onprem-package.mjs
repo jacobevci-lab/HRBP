@@ -17,6 +17,9 @@ const [
   migrationRunner,
   migrationVerifier,
   migrationContract,
+  maintenanceRunner,
+  maintenanceScheduler,
+  maintenanceState,
   baselineSql,
   migrationLock
 ] = await Promise.all([
@@ -35,12 +38,15 @@ const [
   readFile("scripts/deploy-prisma-migrations.mjs", "utf8"),
   readFile("scripts/verify-prisma-migrations.mjs", "utf8"),
   readFile("scripts/prisma-migration-contract.mjs", "utf8"),
+  readFile("scripts/run-operational-maintenance.mjs", "utf8"),
+  readFile("scripts/onprem-maintenance-scheduler.mjs", "utf8"),
+  readFile("scripts/onprem-maintenance-state.mjs", "utf8"),
   readFile("prisma/migrations/20261007000000_baseline_current_schema/migration.sql", "utf8"),
   readFile("prisma/migrations/migration_lock.toml", "utf8")
 ]);
 
 const required = [
-  "postgres:", "object-storage:", "object-storage-tool:", "schema:", "app:",
+  "postgres:", "object-storage:", "object-storage-tool:", "schema:", "app:", "maintenance-scheduler:",
   "service_completed_successfully", "service_healthy",
   "HRBP_ALLOW_INSECURE_CONTEXT_HEADERS: \"false\"",
   "/api/health/runtime", "target: runtime", "target: schema"
@@ -53,6 +59,22 @@ assert.ok(postgresBlock, "PostgreSQL service block must be present.");
 assert.ok(objectStorageBlock, "Embedded object-storage service block must be present.");
 assert.ok(!/\n\s+ports:/.test(postgresBlock), "PostgreSQL must not publish a host port.");
 assert.ok(!/\n\s+ports:/.test(objectStorageBlock), "Embedded object storage must not publish a host port.");
+const schedulerBlock = (compose.split("\n  maintenance-scheduler:\n")[1] ?? "").split("\nvolumes:\n")[0];
+assert.ok(schedulerBlock, "Maintenance scheduler service block must be present.");
+assert.ok(!/\n\s+ports:/.test(schedulerBlock), "Maintenance scheduler must not publish a host port.");
+for (const token of [
+  "target: scheduler",
+  "read_only: true",
+  "no-new-privileges:true",
+  "cap_drop:",
+  "HRBP_MAINTENANCE_URL: http://app:3000/api/internal/maintenance",
+  "HRBP_MAINTENANCE_TOKEN:?set HRBP_MAINTENANCE_TOKEN",
+  "HRBP_MAINTENANCE_INTERVAL_SECONDS:-900",
+  "scheduler_state:/var/lib/hrbp-scheduler",
+  "condition: service_healthy"
+]) assert.ok(schedulerBlock.includes(token), `Maintenance scheduler Compose contract missing: ${token}`);
+assert.ok(compose.includes("scheduler_state:"), "Maintenance scheduler latch state must use a durable named volume.");
+
 assert.ok(!compose.includes("--accept-data-loss"), "Schema bootstrap must never accept destructive changes automatically.");
 assert.ok(compose.includes("POSTGRES_PASSWORD:?set POSTGRES_PASSWORD"));
 assert.ok(compose.includes("OBJECT_STORAGE_ACCESS_KEY:?set OBJECT_STORAGE_ACCESS_KEY"));
@@ -74,6 +96,10 @@ assert.ok(dockerfile.includes("COPY --from=builder /app/node_modules/.prisma ./n
 assert.match(dockerfile, /USER node/);
 assert.match(dockerfile, /HEALTHCHECK[\s\S]*api\/health\/runtime/);
 assert.match(dockerfile, /FROM builder AS schema/);
+assert.match(dockerfile, /FROM base AS scheduler/);
+assert.ok(dockerfile.includes('CMD ["node", "scripts/onprem-maintenance-scheduler.mjs"]'), "Scheduler image must start the bounded scheduler.");
+assert.ok(dockerfile.includes("onprem-maintenance-health.mjs"), "Scheduler image must have its own health probe.");
+assert.ok(dockerfile.includes("/var/lib/hrbp-scheduler"), "Scheduler image must prepare durable state ownership.");
 assert.ok(compose.includes("no-new-privileges:true") && compose.includes("cap_drop:"), "Application container must drop ambient Linux privileges.");
 assert.ok(!dockerfile.includes("--accept-data-loss"));
 assert.ok(dockerfile.includes('CMD ["node", "scripts/deploy-prisma-migrations.mjs"]'), "On-prem schema stage must use the guarded versioned migration runner.");
@@ -109,6 +135,26 @@ for (const token of [
   "No baseline marker was written"
 ]) assert.ok(migrationVerifier.includes(token), `Migration verification contract missing: ${token}`);
 
+for (const token of [
+  'privateHttpHost = null',
+  'endpoint.hostname === privateHttpHost',
+  'endpoint.port === "3000"'
+]) assert.ok(maintenanceRunner.includes(token), `Private maintenance transport contract missing: ${token}`);
+for (const token of [
+  'privateHttpHost = "app"',
+  'blocked.json',
+  'OUTCOME_UNKNOWN_CHECK_BEFORE_RETRY',
+  'maintenance-cycle',
+  'sleepWithHeartbeat'
+]) assert.ok(maintenanceScheduler.includes(token), `On-prem maintenance scheduler contract missing: ${token}`);
+for (const token of [
+  'MIN_INTERVAL_SECONDS = 300',
+  'MAX_INTERVAL_SECONDS = 86_400',
+  'UNEXPECTED_RESPONSE_STOPPED',
+  'BLOCKED_UNKNOWN_OUTCOME',
+  'LAST_RUN_FAILED'
+]) assert.ok(maintenanceState.includes(token), `Scheduler state safety contract missing: ${token}`);
+
 for (const key of [
   "POSTGRES_PASSWORD", "OBJECT_STORAGE_SECRET_KEY", "HRBP_SESSION_SECRET",
   "HRBP_ENGAGEMENT_RESPONSE_SECRET", "HRBP_DOCUMENT_SCAN_TOKEN",
@@ -118,6 +164,7 @@ for (const key of [
 }
 assert.match(env, /HRBP_LOCAL_AUTH_ENABLED=false/);
 assert.match(env, /HRBP_HTTP_BIND=127\.0\.0\.1/);
+assert.match(env, /HRBP_MAINTENANCE_INTERVAL_SECONDS=900/);
 assert.match(env, /OBJECT_STORAGE_IMAGE=chrislusf\/seaweedfs:4\.48/);
 assert.match(env, /OBJECT_STORAGE_TOOL_IMAGE=rclone\/rclone:1\.75\.1/);
 assert.ok(!/^(?:POSTGRES|OBJECT_STORAGE|MINIO).*IMAGE=.*:latest$/m.test(env), "On-prem images must not use mutable latest tags.");
@@ -190,6 +237,7 @@ assert.equal(
 assert.equal(pkg.scripts?.["db:migrate:deploy"], "prisma migrate deploy --schema=prisma");
 assert.equal(pkg.scripts?.["db:migrate:upgrade"], "node scripts/deploy-prisma-migrations.mjs");
 assert.equal(pkg.scripts?.["db:migrate:verify"], "node scripts/verify-prisma-migrations.mjs");
+assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-maintenance-scheduler.test.mjs"), "On-prem validation must execute scheduler safety tests.");
 
 for (const token of [
   "scripts/onprem-backup.sh",
