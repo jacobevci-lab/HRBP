@@ -39,8 +39,10 @@ COMPOSE=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 TARGET_REVISION="$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || true)"
 if [[ ! "$TARGET_REVISION" =~ ^[a-f0-9]{40}$ ]]; then
-  TARGET_REVISION=""
+  printf 'ERROR: upgrade requires a full Git target revision.\n' >&2
+  exit 1
 fi
+export GITHUB_SHA="$TARGET_REVISION"
 
 stage="preflight"
 backup_dir=""
@@ -87,7 +89,7 @@ printf '%s\n' "$pre_upgrade_health" > "$backup_dir/pre-upgrade-health.json"
 cat > "$backup_dir/upgrade-intent.json" <<EOF
 {
   "startedAtUtc": "$STARTED_AT",
-  "targetRevision": "${TARGET_REVISION:-unknown}",
+  "targetRevision": "$TARGET_REVISION",
   "policy": "fail-closed-no-automatic-schema-rollback"
 }
 EOF
@@ -109,7 +111,7 @@ printf 'Starting target application and maintenance scheduler...\n' >&2
 
 stage="postflight"
 printf 'Running deployment postflight...\n' >&2
-postflight="$(node scripts/onprem-postflight.mjs --env-file "$ENV_FILE" --mode post-deploy --timeout-seconds 600)"
+postflight="$(node scripts/onprem-postflight.mjs --env-file "$ENV_FILE" --mode post-deploy --timeout-seconds 600 --expected-revision "$TARGET_REVISION")"
 printf '%s\n' "$postflight"
 
 COMPLETED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -117,7 +119,7 @@ cat > "$backup_dir/upgrade-receipt.json" <<EOF
 {
   "startedAtUtc": "$STARTED_AT",
   "completedAtUtc": "$COMPLETED_AT",
-  "targetRevision": "${TARGET_REVISION:-unknown}",
+  "targetRevision": "$TARGET_REVISION",
   "backupDirectory": "$(basename "$backup_dir")",
   "result": "success"
 }
