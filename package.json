@@ -78,7 +78,7 @@
     "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "notification-operations:validate": "node scripts/validate-notification-operations.mjs",
     "connection-metadata:validate": "node scripts/validate-connection-metadata.mjs",
-    "connection-validation:validate": "node scripts/validate-connection-validation-gate.mjs",
+    "connection-validation:validate": "node scripts/validate-connection-validation-gate.mjs && node --test scripts/identity-provider-live-validation.test.mjs",
     "action-center-history:validate": "node scripts/validate-action-center-history.mjs",
     "remediation:validate": "node --test scripts/platform-remediation.test.mjs",
     "lint-compat:validate": "node scripts/validate-lint-compat.mjs",
