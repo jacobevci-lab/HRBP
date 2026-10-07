@@ -45,6 +45,8 @@ jobs:
         run: npm run security:audit:full
       - run: npm run routes:validate
       - run: npm run ui:validate
+      - name: Test on-prem deployment preflight
+        run: npm run onprem:preflight:test
       - run: npx prisma validate
       - name: Verify versioned migration lifecycle
         run: npm run db:migrate:verify
