@@ -161,7 +161,7 @@ The restore flow:
 7. restores any backed-up ambiguous-outcome maintenance latch into the durable scheduler state volume,
 8. leaves the application and maintenance scheduler stopped.
 
-The application and maintenance scheduler remain stopped after restore by design. If the backup recorded an ambiguous maintenance outcome, the restored scheduler latch remains blocked even on a new recovery host; inspect the affected domain before explicitly acknowledging/resuming it. Before reopening service, check out the application release corresponding to `runtime-health.json` / `images.json`, review schema compatibility, start the stack, then verify runtime health, OIDC sign-in, Action Center, document access, and customer-critical HR workflows. Do not use restore as a substitute for a reviewed database migration.
+The application and maintenance scheduler remain stopped after restore by design. If the backup recorded an ambiguous maintenance outcome, the restored scheduler latch remains blocked even on a new recovery host; inspect the affected domain before explicitly acknowledging/resuming it. Restore is monotonic for this safety state: an older backup that was unblocked never clears a newer existing unknown-outcome latch, because external side effects may not be reversed by database/object restore. Before reopening service, check out the application release corresponding to `runtime-health.json` / `images.json`, review schema compatibility, start the stack, then verify runtime health, OIDC sign-in, Action Center, document access, and customer-critical HR workflows. Do not use restore as a substitute for a reviewed database migration.
 
 ## Automated recovery rehearsal
 
