@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import {
   AMBIGUOUS_STOP_CODES,
-  removeStateFile,
   schedulerStateDir,
   writeStateFile
 } from "./onprem-maintenance-state.mjs";
@@ -45,8 +44,10 @@ if (status?.blocked && typeof status.blocked === "object" && !Array.isArray(stat
 }
 
 if (status && Object.prototype.hasOwnProperty.call(status, "blocked") && status.blocked === null) {
-  await removeStateFile(dir, "blocked.json");
-  console.log(JSON.stringify({ schedulerLatch: "restored-unblocked" }));
+  // Restore is deliberately monotonic for safety: an older unblocked backup must
+  // never clear a newer unknown-outcome latch that may represent an external
+  // side effect which database/object restore cannot reverse.
+  console.log(JSON.stringify({ schedulerLatch: "unchanged", reason: "backup-was-unblocked" }));
   process.exit(0);
 }
 
