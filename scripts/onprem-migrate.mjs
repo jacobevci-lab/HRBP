@@ -63,8 +63,8 @@ const diffStatus = prisma(
   [
     "migrate",
     "diff",
-    "--from-url",
-    process.env.DATABASE_URL,
+    "--from-schema-datasource",
+    schemaPath,
     "--to-schema-datamodel",
     schemaPath,
     "--exit-code"
