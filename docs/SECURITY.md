@@ -43,3 +43,12 @@ SMTP credentials are runtime secrets. TLS certificate verification cannot be dis
 Uploaded document versions are fail-closed until a malware-scanning verdict is recorded. The on-prem scanner worker authenticates to the internal scan endpoint with a dedicated scanner token and does not receive object-storage credentials. A claimed object is proxied by the application only while its database state is actively `SCANNING`.
 
 Before invoking ClamAV, the worker independently verifies the immutable content hash and size. Integrity mismatch is quarantined rather than retried or treated as clean. ClamD listens only on the private Compose network; its TCP port is never published to the host. Scanner claims use bounded attempts, stale-lock recovery and conditional finalization so worker crashes, retries and replayed callbacks cannot silently overwrite a different final verdict.
+
+
+## Operational metrics boundary
+
+Operational metrics are exposed only through the authenticated internal metrics endpoint and use a dedicated deployment secret. The exported series are deliberately low-cardinality, aggregate operational state: notification channel/status counts, document malware-scan state/count/age signals, and scrape health/timing.
+
+Tenant identifiers, user identifiers, employee data, resource identifiers, notification event names, object keys, document metadata, scanner references and error bodies are not metric labels or values. Unknown notification channel values are collapsed to a bounded `OTHER` label rather than emitted verbatim. Database failures return only a generic scrape-failure gauge and HTTP 503; SQL or provider exception text is not returned to the collector.
+
+The metrics token is independent from maintenance and malware-scanner credentials, and on-prem preflight rejects privileged-secret reuse.
