@@ -73,6 +73,43 @@ The storage service is intentionally not exposed on a host port. Customer deploy
 
 The embedded credential currently controls the private application bucket and recovery tooling. It must be treated as a high-value service secret. A future external-storage profile should use the customer's native bucket/IAM policy to reduce privileges to the exact HRBP object operations.
 
+## Document malware scanner
+
+The on-prem profile includes a private, asynchronous document scanner. Uploaded document versions remain `PENDING` and unavailable for download until the scanner records a `CLEAN` verdict. Malware detections move the version to `QUARANTINED`; scanner failures remain blocked as `FAILED`.
+
+The scanner is split into two private services:
+
+- `document-scanner-engine` runs the pinned official `clamav/clamav:1.5.4-debian` image and persists signature databases in the `clamav_db` volume.
+- `document-scanner` is an unprivileged, read-only HRBP worker. It has no object-storage credentials. It claims work from the authenticated internal scan endpoint and downloads only the object attached to its active claim through the application proxy.
+
+ClamD TCP port 3310 is available only on the internal Compose network and is never published to the host. The worker submits bytes through ClamD `INSTREAM`; the engine therefore does not need access to the HRBP object-storage volume or credentials.
+
+The queue uses durable database state:
+
+`PENDING → SCANNING → CLEAN | QUARANTINED | FAILED`
+
+Claims increment a bounded attempt counter and carry a database lock timestamp. A worker crash eventually returns a stale `SCANNING` claim to `PENDING`. Transient object/engine failures use exponential retry and become `FAILED` only after the configured attempt budget is exhausted. Final callback processing is conditional and idempotent so an older/replayed result cannot overwrite a different final verdict.
+
+Before bytes reach ClamAV, the worker verifies the downloaded object against the SHA-256 hash and size recorded with the immutable document version. A mismatch is immediately `QUARANTINED` by the HRBP integrity gate rather than retried or treated as clean.
+
+Relevant controls:
+
+```dotenv
+HRBP_DOCUMENT_SCAN_POLL_SECONDS=10
+HRBP_DOCUMENT_SCAN_MAX_ATTEMPTS=5
+HRBP_DOCUMENT_SCAN_RETRY_BASE_SECONDS=30
+HRBP_DOCUMENT_SCAN_RETRY_MAX_SECONDS=600
+HRBP_DOCUMENT_SCAN_LOCK_MINUTES=15
+HRBP_DOCUMENT_SCAN_REQUEST_TIMEOUT_MS=30000
+HRBP_DOCUMENT_SCAN_MAX_BYTES=26214400
+HRBP_CLAMD_TIMEOUT_MS=30000
+DOCUMENT_SCANNER_IMAGE=clamav/clamav:1.5.4-debian
+```
+
+`HRBP_DOCUMENT_SCAN_MAX_BYTES` must be at least `DOCUMENT_UPLOAD_MAX_BYTES`; otherwise the deployment preflight fails. The ClamAV team recommends substantial memory for the standard signature set, so customer sizing must reserve dedicated scanner capacity instead of assuming the engine is a lightweight sidecar. Signature updates require outbound access to the ClamAV update infrastructure unless the customer provides an approved internal mirror.
+
+A scanner outage is fail-closed: documents remain unavailable until a clean verdict is recorded. Do not bypass `PENDING`, `SCANNING`, `FAILED` or `QUARANTINED` states to restore document availability.
+
 ## Optional SMTP email delivery
 
 The on-prem Node runtime can deliver selected outbox events through an authenticated SMTP relay. SMTP is disabled by default and must pass the normal install/upgrade preflight before production use.
