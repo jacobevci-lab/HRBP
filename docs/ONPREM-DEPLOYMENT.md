@@ -86,11 +86,12 @@ Each backup contains:
 - a PostgreSQL custom-format logical dump,
 - an exact local mirror of the configured S3 bucket,
 - runtime health/revision evidence when the application is reachable,
+- the recorded Prisma migration history (or an explicit legacy/no-history marker),
 - Docker image metadata,
 - a small format manifest,
 - SHA-256 checksums for the database, metadata, and every mirrored object.
 
-The command creates `.incomplete` before any data is copied and removes it only after checksums are written. The restore path refuses a backup carrying that marker. Backup directories are created with restrictive permissions and the default local `backups/` path is Git-ignored.
+The command creates `.incomplete` before any data is copied and removes it only after checksums are written. `migration-history.json` is included in the checksum set so restore/release investigations can correlate a backup with the database migration state that existed when it was taken. The restore path refuses a backup carrying that marker. Backup directories are created with restrictive permissions and the default local `backups/` path is Git-ignored.
 
 Backups must still be copied to customer-approved protected storage with retention, encryption, access control, monitoring, and off-host/off-site policy appropriate to the deployment.
 
