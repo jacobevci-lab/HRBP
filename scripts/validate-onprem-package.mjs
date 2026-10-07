@@ -14,6 +14,7 @@ const [
   packageJson,
   migrationRunner,
   migrationVerifier,
+  migrationContract,
   baselineSql,
   migrationLock
 ] = await Promise.all([
@@ -29,6 +30,7 @@ const [
   readFile("package.json", "utf8"),
   readFile("scripts/deploy-prisma-migrations.mjs", "utf8"),
   readFile("scripts/verify-prisma-migrations.mjs", "utf8"),
+  readFile("scripts/prisma-migration-contract.mjs", "utf8"),
   readFile("prisma/migrations/20261007000000_baseline_current_schema/migration.sql", "utf8"),
   readFile("prisma/migrations/migration_lock.toml", "utf8")
 ]);
@@ -75,8 +77,9 @@ assert.match(migrationLock, /provider\s*=\s*"postgresql"/);
 assert.ok(baselineSql.length > 50000, "Committed migration baseline is unexpectedly small.");
 assert.ok(baselineSql.includes('CREATE TABLE "Tenant"'), "Baseline must contain core tenant schema.");
 assert.ok(baselineSql.includes("CREATE TYPE"), "Baseline must contain enum definitions.");
+assert.ok(migrationContract.includes("20261007000000_baseline_current_schema"), "Shared migration contract must pin the committed baseline name.");
+assert.ok(migrationRunner.includes("BASELINE_MIGRATION"), "Migration runner must consume the shared baseline identifier.");
 for (const token of [
-  "20261007000000_baseline_current_schema",
   "public._prisma_migrations",
   "Legacy database without Prisma migration history detected",
   "--from-schema-datasource",
