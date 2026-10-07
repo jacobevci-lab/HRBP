@@ -22,7 +22,7 @@ RUN npm run build
 # Fresh installs use committed migrations; legacy deployments are baselined only
 # after exact schema parity is verified. No destructive schema force is allowed.
 FROM builder AS schema
-CMD ["node", "scripts/onprem-migrate.mjs"]
+CMD ["node", "scripts/deploy-prisma-migrations.mjs"]
 
 FROM base AS runtime
 ENV NODE_ENV=production
