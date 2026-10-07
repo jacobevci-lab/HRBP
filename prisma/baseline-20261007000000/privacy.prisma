@@ -1,0 +1,136 @@
+enum LegalBasis {
+  CONSENT
+  CONTRACT
+  LEGAL_OBLIGATION
+  VITAL_INTEREST
+  PUBLIC_TASK
+  LEGITIMATE_INTEREST
+}
+
+enum DSRType {
+  ACCESS
+  RECTIFICATION
+  ERASURE
+  RESTRICTION
+  PORTABILITY
+  OBJECTION
+}
+
+enum DSRStatus {
+  RECEIVED
+  IDENTITY_VERIFICATION
+  IN_PROGRESS
+  WAITING
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum TransferMechanism {
+  ADEQUACY
+  SCC
+  BCR
+  DEROGATION
+  LOCAL
+}
+
+model ProcessingActivity {
+  id                 String @id @default(cuid())
+  tenantId           String
+  code               String
+  name               String
+  purpose            String
+  legalBasis         LegalBasis
+  legitimateInterest String?
+  dataSubjects       Json
+  dataCategories     Json
+  specialCategories  Json?
+  recipients         Json?
+  systems            Json?
+  countries          Json?
+  retentionRuleId    String?
+  ownerId            String
+  riskRating         String?
+  active             Boolean @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([tenantId, code])
+  @@index([tenantId, legalBasis, active])
+}
+
+model RetentionRule {
+  id             String @id @default(cuid())
+  tenantId       String
+  resourceType   String
+  jurisdiction   String?
+  classification DataClassification
+  retentionDays  Int
+  action         String
+  legalBasis     String?
+  active         Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([tenantId, resourceType, jurisdiction, classification])
+  @@index([tenantId, active, resourceType])
+}
+
+model DataSubjectRequest {
+  id              String @id @default(cuid())
+  tenantId        String
+  requestNumber   String
+  subjectPersonId String
+  type            DSRType
+  status          DSRStatus @default(RECEIVED)
+  channel         String?
+  verifiedAt      DateTime?
+  ownerId         String?
+  dueAt           DateTime
+  completedAt     DateTime?
+  rejectionReason String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([tenantId, requestNumber])
+  @@index([tenantId, status, dueAt])
+  @@index([tenantId, subjectPersonId, createdAt])
+}
+
+model DataTransferRegister {
+  id                  String @id @default(cuid())
+  tenantId            String
+  name                String
+  sourceCountry       String
+  destinationCountry  String
+  recipient           String
+  dataCategories      Json
+  purpose             String
+  mechanism           TransferMechanism
+  safeguardReference  String?
+  transferImpactDueAt DateTime?
+  active              Boolean @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([tenantId, active, destinationCountry])
+}
+
+model PrivacyRiskAssessment {
+  id                   String @id @default(cuid())
+  tenantId             String
+  processingActivityId String?
+  name                 String
+  riskLevel            String
+  requiresDpia         Boolean @default(false)
+  status               String
+  ownerId              String
+  dueAt                DateTime?
+  completedAt          DateTime?
+  findings             Json?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([tenantId, status, dueAt])
+  @@index([tenantId, processingActivityId])
+}
