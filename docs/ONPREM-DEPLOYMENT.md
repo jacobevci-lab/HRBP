@@ -26,16 +26,21 @@ The bundled single-node object-store implementation is SeaweedFS. SeaweedFS is A
    openssl rand -hex 48
    ```
 3. Set `APP_URL`, OIDC issuer/client/redirect values, the customer tenant identifier, bootstrap administrator email and a strong object-storage secret.
-4. Start the stack:
+4. Run the fail-closed deployment preflight:
+   ```bash
+   npm run onprem:preflight
+   ```
+   Do not start a customer production stack while preflight reports errors. It rejects placeholder/reused critical secrets, non-HTTPS public origins, inconsistent OIDC callback/domain settings, placeholder tenant identity, unsafe scheduler cadence, mutable image tags and invalid Compose configuration. Warnings (for example a non-loopback HTTP bind) require an explicit deployment-architecture review rather than being silently treated as a safe default.
+5. Start the stack:
    ```bash
    docker compose --env-file .env.onprem -f docker-compose.onprem.yml up -d --build
    ```
-5. Verify:
+6. Verify:
    ```bash
    docker compose --env-file .env.onprem -f docker-compose.onprem.yml ps
    curl --fail http://127.0.0.1:3000/api/health/runtime
    ```
-6. Place the service behind the customer's HTTPS reverse proxy and restrict direct access to port 3000.
+7. Place the service behind the customer's HTTPS reverse proxy and restrict direct access to port 3000.
 
 The `schema` one-shot service runs the guarded versioned migration runner only after PostgreSQL is healthy. Fresh databases are created with committed `prisma migrate deploy` history. Existing installations from the pre-migration releases are never marked automatically unless their live PostgreSQL schema exactly matches the committed Prisma datamodel. The application starts only after the schema job and object-store health check succeed.
 
@@ -184,14 +189,15 @@ The rehearsal never targets the normal `hrbp-one` Compose project and tears down
 
 Before every upgrade:
 
-1. Run `bash scripts/onprem-backup.sh <approved-backup-root>`.
-2. Copy the completed backup to the customer's protected backup target and verify retention.
-3. Record/retain the running application revision from the backup metadata.
-4. Pull/check out the approved release.
-5. Review the release's committed Prisma migration directories and approved change notes.
-6. Rebuild and start the stack with the same command used for installation. The schema service runs only committed migrations.
-7. If migration deployment or legacy parity verification fails, keep the application closed and use a vendor-reviewed migration/restore plan. Do not force or bypass the migration state.
-8. Verify health, OIDC login, Action Center, document access and the customer's critical HR workflows before reopening access.
+1. Run `npm run onprem:preflight` against the customer environment file and resolve every error.
+2. Run `bash scripts/onprem-backup.sh <approved-backup-root>`.
+3. Copy the completed backup to the customer's protected backup target and verify retention.
+4. Record/retain the running application revision from the backup metadata.
+5. Pull/check out the approved release.
+6. Review the release's committed Prisma migration directories and approved change notes.
+7. Rebuild and start the stack with the same command used for installation. The schema service runs only committed migrations.
+8. If migration deployment or legacy parity verification fails, keep the application closed and use a vendor-reviewed migration/restore plan. Do not force or bypass the migration state.
+9. Verify health, OIDC login, Action Center, document access and the customer's critical HR workflows before reopening access.
 
 If rollback requires a data restore, first check out the release recorded with the backup, then use the guarded restore procedure above. Starting a newer binary against an older restored database is not an approved rollback path.
 
