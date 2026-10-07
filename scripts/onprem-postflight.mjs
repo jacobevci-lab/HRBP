@@ -88,6 +88,7 @@ function compose(args, { discardStdout = false } = {}) {
   return spawnSync("docker", ["compose", "--env-file", envFile, "-f", "docker-compose.onprem.yml", ...args], {
     cwd: process.cwd(),
     encoding: "utf8",
+    env: { ...process.env, HRBP_ENV_FILE: envFile },
     maxBuffer: 8 * 1024 * 1024,
     ...(discardStdout ? { stdio: ["ignore", "ignore", "pipe"] } : {})
   });
