@@ -14,10 +14,10 @@ test("upgrade sequence builds before downtime and backs up before migration", ()
   const preflight = position("onprem-preflight.mjs");
   const currentHealth = position("--mode pre-upgrade");
   const build = position("Building target release before downtime");
-  const stop = position("stop maintenance-scheduler app");
+  const stop = position("stop document-scanner maintenance-scheduler app");
   const backup = position("onprem-backup.sh");
   const migration = position("--exit-code-from schema");
-  const start = position("Starting target application and maintenance scheduler");
+  const start = position("Starting target application, document scanner and maintenance scheduler");
   const postflight = position("--mode post-deploy");
 
   assert.ok(preflight < currentHealth);
@@ -65,4 +65,20 @@ test("target image and postflight are bound to the exact approved revision", () 
   assert.match(source, /export GITHUB_SHA="\$TARGET_REVISION"/);
   assert.match(source, /--expected-revision "\$TARGET_REVISION"/);
   assert.match(source, /upgrade requires a full Git target revision/);
+});
+
+
+test("upgrade pre-pulls scanner engine and keeps it quiesced through backup and migration", () => {
+  const build = position("Building target release before downtime");
+  const pull = position("pull document-scanner-engine");
+  const stop = position("stop document-scanner maintenance-scheduler app");
+  const backup = position("onprem-backup.sh");
+  const migration = position("--exit-code-from schema");
+  const scannerStart = position("document-scanner-engine document-scanner maintenance-scheduler");
+
+  assert.ok(build < pull);
+  assert.ok(pull < stop);
+  assert.ok(stop < backup);
+  assert.ok(backup < migration);
+  assert.ok(migration < scannerStart);
 });
