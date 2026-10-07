@@ -236,6 +236,20 @@ jobs:
           result = await post({
             action: 'complete',
             versionId,
+            attempt: 1,
+            status: 'CLEAN',
+            engine: 'stale CI scanner',
+            reference: 'stale-attempt',
+            message: 'Stale worker must not finalize a newer claim'
+          });
+          if (result.response.status !== 409) {
+            console.error('Stale scan attempt was not rejected.', result.response.status, result.body);
+            process.exit(1);
+          }
+
+          result = await post({
+            action: 'complete',
+            versionId,
             attempt: 2,
             status: 'CLEAN',
             engine: 'CI scanner',
