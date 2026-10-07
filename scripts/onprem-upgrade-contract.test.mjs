@@ -59,3 +59,10 @@ test("upgrade captures pre-upgrade health without checking target migration stat
   assert.match(source, /pre-upgrade-health\.json/);
   assert.match(source, /--mode post-deploy/);
 });
+
+test("target image and postflight are bound to the exact approved revision", () => {
+  assert.match(source, /git -C "\$ROOT_DIR" rev-parse HEAD/);
+  assert.match(source, /export GITHUB_SHA="\$TARGET_REVISION"/);
+  assert.match(source, /--expected-revision "\$TARGET_REVISION"/);
+  assert.match(source, /upgrade requires a full Git target revision/);
+});
