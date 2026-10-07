@@ -40,6 +40,18 @@ HEALTHCHECK --interval=60s --timeout=5s --start-period=90s --retries=3 \
   CMD node scripts/onprem-maintenance-health.mjs
 CMD ["node", "scripts/onprem-maintenance-scheduler.mjs"]
 
+FROM base AS scanner
+ENV NODE_ENV=production
+COPY scripts/clamd-client.mjs ./scripts/clamd-client.mjs
+COPY scripts/document-scan-worker.mjs ./scripts/document-scan-worker.mjs
+COPY scripts/document-scan-health.mjs ./scripts/document-scan-health.mjs
+RUN mkdir -p /var/run/hrbp-scanner \
+    && chown -R node:node /app /var/run/hrbp-scanner
+USER node
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+  CMD node scripts/document-scan-health.mjs
+CMD ["node", "scripts/document-scan-worker.mjs"]
+
 FROM base AS runtime
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./

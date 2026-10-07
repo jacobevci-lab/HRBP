@@ -33,6 +33,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://hrbp:hrbp@localhost:5432/hrbp
       HRBP_MAINTENANCE_TOKEN: ci-maintenance-token-1234567890
+      HRBP_DOCUMENT_SCAN_TOKEN: ci-document-scan-token-1234567890
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -65,6 +66,10 @@ jobs:
           docker build --target scheduler --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:scheduler-ci .
           docker image inspect hrbp-one:scheduler-ci --format '{{json .Config.Healthcheck}}' | grep -q 'onprem-maintenance-health.mjs'
           test "$(docker image inspect hrbp-one:scheduler-ci --format '{{.Config.User}}')" = "node"
+          docker build --target scanner --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:scanner-ci .
+          docker image inspect hrbp-one:scanner-ci --format '{{json .Config.Healthcheck}}' | grep -q 'document-scan-health.mjs'
+          test "$(docker image inspect hrbp-one:scanner-ci --format '{{.Config.User}}')" = "node"
+          docker compose --env-file .env.onprem -f docker-compose.onprem.yml pull document-scanner-engine
       - name: Rehearse on-prem backup and restore
         shell: bash
         run: |
@@ -75,6 +80,9 @@ jobs:
           bash -n scripts/onprem-upgrade.sh
           node --check scripts/onprem-preflight.mjs
           node --check scripts/onprem-postflight.mjs
+          node --check scripts/document-scan-worker.mjs
+          node --check scripts/document-scan-health.mjs
+          node --check scripts/clamd-client.mjs
           npm run onprem:recovery:rehearsal
       - name: Seed notification maintenance smoke records
         shell: bash
@@ -117,6 +125,7 @@ jobs:
           set -euo pipefail
           npx wrangler dev --local --port 8787 \
             --var HRBP_MAINTENANCE_TOKEN:$HRBP_MAINTENANCE_TOKEN \
+            --var HRBP_DOCUMENT_SCAN_TOKEN:$HRBP_DOCUMENT_SCAN_TOKEN \
             > /tmp/hrbp-wrangler.log 2>&1 &
           WRANGLER_PID=$!
           trap 'kill $WRANGLER_PID 2>/dev/null || true' EXIT
@@ -153,6 +162,217 @@ jobs:
               exit 1
             }
           cat /tmp/hrbp-maintenance.json
+
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto';
+          import { PrismaClient } from '@prisma/client';
+          const db = new PrismaClient();
+          const base = 'http://127.0.0.1:8787/api/internal/document-scan';
+          const token = process.env.HRBP_DOCUMENT_SCAN_TOKEN;
+          const versionId = 'ci-document-scan-version';
+          const hash = createHash('sha256').update('ci-scan-payload').digest('hex');
+
+          await db.tenant.upsert({
+            where: { id: 'ci-tenant' },
+            update: {},
+            create: { id: 'ci-tenant', name: 'CI Tenant', region: 'test' }
+          });
+
+          await db.documentVersion.upsert({
+            where: { id: versionId },
+            update: {
+              scanStatus: 'PENDING',
+              scanAttempts: 0,
+              scanLockedAt: null,
+              scanNextAttemptAt: new Date(),
+              scanCompletedAt: null,
+              scanEngine: null,
+              scanReference: null,
+              scanMessage: null,
+              uploadedAt: new Date()
+            },
+            create: {
+              id: versionId,
+              tenantId: 'ci-tenant',
+              documentId: 'ci-document',
+              version: 1,
+              objectKey: 'ci/document/scan/v1',
+              contentType: 'text/plain',
+              sizeBytes: 15n,
+              contentHash: hash,
+              classification: 'RESTRICTED',
+              scanStatus: 'PENDING',
+              uploadedAt: new Date(),
+              createdById: 'ci-user'
+            }
+          });
+
+          async function post(payload) {
+            const response = await fetch(base, {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer ' + token,
+                'content-type': 'application/json',
+                accept: 'application/json'
+              },
+              body: JSON.stringify(payload)
+            });
+            const text = await response.text();
+            let body = null;
+            if (text) {
+              try { body = JSON.parse(text); }
+              catch {
+                console.error('Document scan API returned invalid JSON.', { status: response.status, text: text.slice(0, 1000), payload });
+                process.exit(1);
+              }
+            }
+            if (!text) {
+              console.error('Document scan API returned an empty response.', { status: response.status, payload });
+              process.exit(1);
+            }
+            return { response, body };
+          }
+
+          let result = await post({ action: 'claim' });
+          if (!result.response.ok || result.body?.data?.job?.versionId !== versionId || result.body?.data?.job?.attempt !== 1) {
+            console.error('Document scan claim did not return the expected durable job.', result.body);
+            process.exit(1);
+          }
+
+          result = await post({ action: 'release', versionId, attempt: 1, reason: 'CI_TRANSIENT_FAILURE' });
+          if (!result.response.ok || result.body?.data?.status !== 'PENDING') {
+            console.error('Document scan release did not requeue the claimed job.', result.body);
+            process.exit(1);
+          }
+
+          await db.documentVersion.update({ where: { id: versionId }, data: { scanNextAttemptAt: new Date() } });
+          result = await post({ action: 'claim' });
+          if (!result.response.ok || result.body?.data?.job?.versionId !== versionId || result.body?.data?.job?.attempt !== 2) {
+            console.error('Document scan retry claim did not advance the attempt counter.', result.body);
+            process.exit(1);
+          }
+
+          result = await post({
+            action: 'complete',
+            versionId,
+            attempt: 1,
+            status: 'CLEAN',
+            engine: 'stale CI scanner',
+            reference: 'stale-attempt',
+            message: 'Stale worker must not finalize a newer claim'
+          });
+          if (result.response.status !== 409) {
+            console.error('Stale scan attempt was not rejected.', result.response.status, result.body);
+            process.exit(1);
+          }
+
+          result = await post({
+            action: 'complete',
+            versionId,
+            attempt: 2,
+            status: 'CLEAN',
+            engine: 'CI scanner',
+            reference: 'ci-clean',
+            message: 'Synthetic CI clean verdict'
+          });
+          if (!result.response.ok || result.body?.data?.scanStatus !== 'CLEAN' || result.body?.idempotent !== false) {
+            console.error('Document scan completion was not persisted.', result.body);
+            process.exit(1);
+          }
+
+          result = await post({
+            action: 'complete',
+            versionId,
+            attempt: 2,
+            status: 'CLEAN',
+            engine: 'CI scanner',
+            reference: 'ci-clean',
+            message: 'Synthetic CI clean verdict'
+          });
+          if (!result.response.ok || result.body?.idempotent !== true) {
+            console.error('Same-verdict document scan replay was not idempotent.', result.body);
+            process.exit(1);
+          }
+
+          result = await post({
+            action: 'complete',
+            versionId,
+            attempt: 2,
+            status: 'QUARANTINED',
+            engine: 'CI scanner',
+            reference: 'late-conflict',
+            message: 'Must not overwrite final clean result'
+          });
+          if (result.response.status !== 409) {
+            console.error('Conflicting final scan verdict was not rejected.', result.response.status, result.body);
+            process.exit(1);
+          }
+
+          const final = await db.documentVersion.findUnique({ where: { id: versionId } });
+          if (!final || final.scanStatus !== 'CLEAN' || final.scanAttempts !== 2 || !final.scanCompletedAt) {
+            console.error('Final scan queue state is incorrect.', final);
+            process.exit(1);
+          }
+
+          const staleId = 'ci-document-scan-stale-exhausted';
+          await db.documentVersion.upsert({
+            where: { id: staleId },
+            update: {
+              scanStatus: 'SCANNING',
+              scanAttempts: 5,
+              scanLockedAt: new Date(Date.now() - 20 * 60 * 1000),
+              scanNextAttemptAt: new Date(Date.now() - 20 * 60 * 1000),
+              scanCompletedAt: null,
+              scanEngine: null,
+              scanReference: null,
+              scanMessage: null,
+              uploadedAt: new Date()
+            },
+            create: {
+              id: staleId,
+              tenantId: 'ci-tenant',
+              documentId: 'ci-document-stale',
+              version: 1,
+              objectKey: 'ci/document/scan/stale/v1',
+              contentType: 'text/plain',
+              sizeBytes: 15n,
+              contentHash: hash,
+              classification: 'RESTRICTED',
+              scanStatus: 'SCANNING',
+              scanAttempts: 5,
+              scanLockedAt: new Date(Date.now() - 20 * 60 * 1000),
+              scanNextAttemptAt: new Date(Date.now() - 20 * 60 * 1000),
+              uploadedAt: new Date(),
+              createdById: 'ci-user'
+            }
+          });
+
+          result = await post({ action: 'claim' });
+          if (!result.response.ok || result.body?.data?.job !== null) {
+            console.error('Stale exhausted scan should be finalized rather than re-claimed.', result.body);
+            process.exit(1);
+          }
+
+          const staleFinal = await db.documentVersion.findUnique({ where: { id: staleId } });
+          const staleAudit = await db.auditEvent.findFirst({
+            where: {
+              tenantId: 'ci-tenant',
+              resourceType: 'DocumentVersion',
+              resourceId: staleId,
+              action: 'document.scan-failed'
+            },
+            orderBy: { occurredAt: 'desc' }
+          });
+          if (!staleFinal || staleFinal.scanStatus !== 'FAILED' ||
+              staleFinal.scanReference !== 'STALE_RETRY_BUDGET_EXHAUSTED' ||
+              !staleFinal.scanCompletedAt || !staleAudit) {
+            console.error('Stale exhausted scan was not fail-closed with audit evidence.', { staleFinal, staleAudit });
+            process.exit(1);
+          }
+
+          await db.$disconnect();
+          console.log('Document scan claim/retry/finalization/stale-lock protocol passed.');
+          NODE
 
           node --input-type=module <<'NODE'
           import { PrismaClient } from '@prisma/client';

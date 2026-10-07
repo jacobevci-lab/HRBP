@@ -40,7 +40,7 @@ The bundled single-node object-store implementation is SeaweedFS. SeaweedFS is A
    npm run onprem:postflight
    docker compose --env-file .env.onprem -f docker-compose.onprem.yml ps
    ```
-   Postflight waits for application runtime, PostgreSQL connectivity, configured authentication, clean Prisma migration status and a healthy maintenance scheduler.
+   Postflight waits for application runtime, PostgreSQL connectivity, configured authentication, notification-provider readiness, private object storage, clean Prisma migration status, a healthy document scanner and a healthy maintenance scheduler.
 7. Place the service behind the customer's HTTPS reverse proxy and restrict direct access to port 3000.
 
 The `schema` one-shot service runs the guarded versioned migration runner only after PostgreSQL is healthy. Fresh databases are created with committed `prisma migrate deploy` history. Existing installations from the pre-migration releases are never marked automatically unless their live PostgreSQL schema exactly matches the committed Prisma datamodel. The application starts only after the schema job and object-store health check succeed.
@@ -72,6 +72,45 @@ The bundled profile uses:
 The storage service is intentionally not exposed on a host port. Customer deployments that later use an approved external S3-compatible platform should retain the same application-level storage contract; external-storage lifecycle/HA support is a separate deployment profile and is not silently implied by this single-host bundle.
 
 The embedded credential currently controls the private application bucket and recovery tooling. It must be treated as a high-value service secret. A future external-storage profile should use the customer's native bucket/IAM policy to reduce privileges to the exact HRBP object operations.
+
+## Document malware scanner
+
+The on-prem profile includes a private, asynchronous document scanner. Uploaded document versions remain `PENDING` and unavailable for download until the scanner records a `CLEAN` verdict. Malware detections move the version to `QUARANTINED`; scanner failures remain blocked as `FAILED`.
+
+Neither the scanner worker nor the maintenance scheduler inherits the full application secret file. Compose passes only the small set of runtime variables each sidecar needs; database, object-storage, OIDC and unrelated application secrets remain outside those containers.
+
+The scanner is split into two private services:
+
+- `document-scanner-engine` runs the pinned official `clamav/clamav:1.5.4-debian` image and persists signature databases in the `clamav_db` volume.
+- `document-scanner` is an unprivileged, read-only HRBP worker. It has no object-storage credentials. It claims work from the authenticated internal scan endpoint and downloads only the object attached to its active claim through the application proxy.
+
+ClamD TCP port 3310 is available only on the internal Compose network and is never published to the host. The worker submits bytes through ClamD `INSTREAM`; the engine therefore does not need access to the HRBP object-storage volume or credentials.
+
+The queue uses durable database state:
+
+`PENDING → SCANNING → CLEAN | QUARANTINED | FAILED`
+
+Claims increment a bounded attempt counter and carry a database lock timestamp. Every download, release and worker completion is bound to that exact claim attempt, so a stale worker from an earlier lease cannot finalize or release a newer scanner claim. A worker crash normally returns a stale `SCANNING` claim to `PENDING`; if the stale lease already consumed the final allowed attempt, it is finalized as `FAILED` with audit evidence instead of becoming an unclaimable `PENDING` record. Transient object/engine failures use exponential retry and become `FAILED` only after the configured attempt budget is exhausted. Final callback processing is conditional and idempotent so an older/replayed result cannot overwrite a different final verdict.
+
+Before bytes reach ClamAV, the worker verifies the downloaded object against the SHA-256 hash and size recorded with the immutable document version. A mismatch is immediately `QUARANTINED` by the HRBP integrity gate rather than retried or treated as clean.
+
+Relevant controls:
+
+```dotenv
+HRBP_DOCUMENT_SCAN_POLL_SECONDS=10
+HRBP_DOCUMENT_SCAN_MAX_ATTEMPTS=5
+HRBP_DOCUMENT_SCAN_RETRY_BASE_SECONDS=30
+HRBP_DOCUMENT_SCAN_RETRY_MAX_SECONDS=600
+HRBP_DOCUMENT_SCAN_LOCK_MINUTES=15
+HRBP_DOCUMENT_SCAN_REQUEST_TIMEOUT_MS=30000
+HRBP_DOCUMENT_SCAN_MAX_BYTES=26214400
+HRBP_CLAMD_TIMEOUT_MS=30000
+DOCUMENT_SCANNER_IMAGE=clamav/clamav:1.5.4-debian
+```
+
+`HRBP_DOCUMENT_SCAN_MAX_BYTES` must be at least `DOCUMENT_UPLOAD_MAX_BYTES`; otherwise the deployment preflight fails. The ClamAV team recommends substantial memory for the standard signature set, so customer sizing must reserve dedicated scanner capacity instead of assuming the engine is a lightweight sidecar. Signature updates require outbound access to the ClamAV update infrastructure unless the customer provides an approved internal mirror.
+
+A scanner outage is fail-closed: documents remain unavailable until a clean verdict is recorded. Do not bypass `PENDING`, `SCANNING`, `FAILED` or `QUARANTINED` states to restore document availability.
 
 ## Optional SMTP email delivery
 
@@ -189,14 +228,14 @@ The restore flow:
 
 1. verifies `SHA256SUMS` before changing live state,
 2. rejects incomplete backups and object symlinks,
-3. stops the maintenance scheduler plus application/schema mutation surfaces,
+3. stops the document scanner, maintenance scheduler and application/schema mutation surfaces,
 4. starts only the database and private object-store recovery dependencies,
 5. recreates the configured non-system PostgreSQL database and restores the logical dump,
 6. synchronizes the backed-up S3 object set back to the bucket and deletes objects created after the backup,
 7. restores any backed-up ambiguous-outcome maintenance latch into the durable scheduler state volume,
-8. leaves the application and maintenance scheduler stopped.
+8. leaves the application, document scanner and maintenance scheduler stopped.
 
-The application and maintenance scheduler remain stopped after restore by design. If the backup recorded an ambiguous maintenance outcome, the restored scheduler latch remains blocked even on a new recovery host; inspect the affected domain before explicitly acknowledging/resuming it. Restore is monotonic for this safety state: an older backup that was unblocked never clears a newer existing unknown-outcome latch, because external side effects may not be reversed by database/object restore. Before reopening service, check out the application release corresponding to `runtime-health.json` / `images.json`, review schema compatibility, start the stack, then verify runtime health, OIDC sign-in, Action Center, document access, and customer-critical HR workflows. Do not use restore as a substitute for a reviewed database migration.
+The application, document scanner and maintenance scheduler remain stopped after restore by design. If the backup recorded an ambiguous maintenance outcome, the restored scheduler latch remains blocked even on a new recovery host; inspect the affected domain before explicitly acknowledging/resuming it. Restore is monotonic for this safety state: an older backup that was unblocked never clears a newer existing unknown-outcome latch, because external side effects may not be reversed by database/object restore. Before reopening service, check out the application release corresponding to `runtime-health.json` / `images.json`, review schema compatibility, start the stack, then verify runtime health, OIDC sign-in, Action Center, document access, and customer-critical HR workflows. Do not use restore as a substitute for a reviewed database migration.
 
 ## Automated recovery rehearsal
 

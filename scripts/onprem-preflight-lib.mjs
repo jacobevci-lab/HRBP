@@ -142,7 +142,7 @@ export function validateOnpremEnv(env) {
 
   if ((env.HRBP_ALLOWED_EMAIL_DOMAINS ?? "").includes("*")) errors.push("HRBP_ALLOWED_EMAIL_DOMAINS must not contain wildcard domains.");
 
-  for (const key of ["POSTGRES_IMAGE", "OBJECT_STORAGE_IMAGE", "OBJECT_STORAGE_TOOL_IMAGE"]) {
+  for (const key of ["POSTGRES_IMAGE", "OBJECT_STORAGE_IMAGE", "OBJECT_STORAGE_TOOL_IMAGE", "DOCUMENT_SCANNER_IMAGE"]) {
     if (env[key] && !imagePinned(env[key])) errors.push(`${key} must use an explicit tag or digest and must not use a mutable channel.`);
   }
 
@@ -236,6 +236,36 @@ export function validateOnpremEnv(env) {
     }
   } else if (emailEvents.length) {
     warnings.push("HRBP_NOTIFICATION_EMAIL_EVENTS is configured while HRBP_SMTP_ENABLED=false; email mirroring is disabled.");
+  }
+
+  const scanBounds = [
+    ["HRBP_DOCUMENT_SCAN_POLL_SECONDS", 2, 300],
+    ["HRBP_DOCUMENT_SCAN_MAX_ATTEMPTS", 2, 20],
+    ["HRBP_DOCUMENT_SCAN_RETRY_BASE_SECONDS", 10, 600],
+    ["HRBP_DOCUMENT_SCAN_RETRY_MAX_SECONDS", 10, 3600],
+    ["HRBP_DOCUMENT_SCAN_LOCK_MINUTES", 2, 120],
+    ["HRBP_DOCUMENT_SCAN_REQUEST_TIMEOUT_MS", 3000, 120000],
+    ["HRBP_CLAMD_TIMEOUT_MS", 3000, 120000]
+  ];
+  for (const [key, minimum, maximum] of scanBounds) {
+    const raw = env[key];
+    if (raw !== undefined && (!/^[0-9]+$/.test(raw) || Number(raw) < minimum || Number(raw) > maximum)) {
+      errors.push(`${key} must be between ${minimum} and ${maximum}.`);
+    }
+  }
+
+  const scanRetryBase = Number(env.HRBP_DOCUMENT_SCAN_RETRY_BASE_SECONDS ?? 30);
+  const scanRetryMax = Number(env.HRBP_DOCUMENT_SCAN_RETRY_MAX_SECONDS ?? 600);
+  if (Number.isFinite(scanRetryBase) && Number.isFinite(scanRetryMax) && scanRetryMax < scanRetryBase) {
+    errors.push("HRBP_DOCUMENT_SCAN_RETRY_MAX_SECONDS must be greater than or equal to HRBP_DOCUMENT_SCAN_RETRY_BASE_SECONDS.");
+  }
+
+  const uploadMax = Number(env.DOCUMENT_UPLOAD_MAX_BYTES ?? 26214400);
+  const scanMax = Number(env.HRBP_DOCUMENT_SCAN_MAX_BYTES ?? uploadMax);
+  if (!Number.isInteger(scanMax) || scanMax < 1024 || scanMax > 100 * 1024 * 1024) {
+    errors.push("HRBP_DOCUMENT_SCAN_MAX_BYTES must be between 1024 and 104857600 bytes.");
+  } else if (Number.isFinite(uploadMax) && scanMax < uploadMax) {
+    errors.push("HRBP_DOCUMENT_SCAN_MAX_BYTES must be greater than or equal to DOCUMENT_UPLOAD_MAX_BYTES.");
   }
 
   const cadence = env.HRBP_MAINTENANCE_INTERVAL_SECONDS;

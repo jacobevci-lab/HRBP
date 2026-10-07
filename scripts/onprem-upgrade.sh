@@ -74,11 +74,12 @@ pre_upgrade_health="$(node scripts/onprem-postflight.mjs --env-file "$ENV_FILE" 
 
 stage="build"
 printf 'Building target release before downtime...\n' >&2
-"${COMPOSE[@]}" build schema app maintenance-scheduler
+"${COMPOSE[@]}" build schema app document-scanner maintenance-scheduler
+"${COMPOSE[@]}" pull document-scanner-engine
 
 stage="quiesce"
 printf 'Entering maintenance window: stopping scheduled and user mutation surfaces...\n' >&2
-"${COMPOSE[@]}" stop maintenance-scheduler app >/dev/null
+"${COMPOSE[@]}" stop document-scanner maintenance-scheduler app >/dev/null
 
 stage="backup"
 printf 'Taking quiesced pre-upgrade backup...\n' >&2
@@ -105,10 +106,10 @@ printf 'Applying committed database migration history...\n' >&2
 "${COMPOSE[@]}" up --no-deps --abort-on-container-exit --exit-code-from schema schema
 
 stage="start"
-printf 'Starting target application and maintenance scheduler...\n' >&2
+printf 'Starting target application, document scanner and maintenance scheduler...\n' >&2
 "${COMPOSE[@]}" up -d --no-deps app
-# Scheduler depends on a healthy app; compose enforces that condition here.
-"${COMPOSE[@]}" up -d maintenance-scheduler
+# Scanner and scheduler depend on a healthy app; the scanner also waits for ClamAV health.
+"${COMPOSE[@]}" up -d document-scanner-engine document-scanner maintenance-scheduler
 
 stage="postflight"
 printf 'Running deployment postflight...\n' >&2

@@ -82,7 +82,7 @@
     "action-center-history:validate": "node scripts/validate-action-center-history.mjs",
     "remediation:validate": "node --test scripts/platform-remediation.test.mjs",
     "lint-compat:validate": "node scripts/validate-lint-compat.mjs",
-    "onprem:validate": "node scripts/validate-onprem-package.mjs && node scripts/validate-prisma-migration-files.mjs && node --test scripts/onprem-maintenance-scheduler.test.mjs scripts/onprem-preflight.test.mjs scripts/onprem-upgrade-contract.test.mjs",
+    "onprem:validate": "node scripts/validate-onprem-package.mjs && node scripts/validate-prisma-migration-files.mjs && node --test scripts/onprem-maintenance-scheduler.test.mjs scripts/onprem-preflight.test.mjs scripts/onprem-upgrade-contract.test.mjs && npm run document-scanner:validate",
     "onprem:recovery:rehearsal": "HRBP_DISPOSABLE_RECOVERY_REHEARSAL=true bash scripts/onprem-recovery-rehearsal.sh",
     "db:migrate:deploy": "prisma migrate deploy --schema=prisma",
     "db:migrate:status": "prisma migrate status --schema=prisma",
@@ -92,7 +92,8 @@
     "db:migrate:files:validate": "node scripts/validate-prisma-migration-files.mjs",
     "onprem:preflight": "node scripts/onprem-preflight.mjs --env-file .env.onprem --phase install",
     "onprem:postflight": "node scripts/onprem-postflight.mjs --env-file .env.onprem",
-    "onprem:upgrade": "bash scripts/onprem-upgrade.sh"
+    "onprem:upgrade": "bash scripts/onprem-upgrade.sh",
+    "document-scanner:validate": "node scripts/validate-document-scanner.mjs && node --test scripts/document-scanner.test.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "6.19.3",

@@ -1,5 +1,6 @@
 enum VaultScanStatus {
   PENDING
+  SCANNING
   CLEAN
   QUARANTINED
   FAILED
@@ -48,6 +49,9 @@ model DocumentVersion {
   contentHash        String
   classification     DataClassification @default(RESTRICTED)
   scanStatus         VaultScanStatus @default(PENDING)
+  scanAttempts       Int @default(0)
+  scanLockedAt       DateTime?
+  scanNextAttemptAt  DateTime @default(now())
   uploadedAt         DateTime?
   scanCompletedAt    DateTime?
   scanEngine         String?
@@ -61,6 +65,7 @@ model DocumentVersion {
   @@index([tenantId, documentId, createdAt])
   @@index([tenantId, scanStatus])
   @@index([tenantId, uploadedAt, scanStatus])
+  @@index([scanStatus, scanNextAttemptAt, createdAt])
 }
 
 model DocumentAccessGrant {

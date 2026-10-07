@@ -36,3 +36,10 @@ SAST, SCA, secret scanning, IaC scanning, container scanning, SBOM, protected br
 SMTP delivery is opt-in and event-allowlisted. In-app notification intent remains the primary durable channel. HIGHLY_RESTRICTED records are never mirrored to SMTP. RESTRICTED email requires a separate explicit deployment gate and suppresses event-specific subject text, payload summary and resource-specific URLs; recipients receive only a generic secure-notification message and a link to the authenticated HRBP application.
 
 SMTP credentials are runtime secrets. TLS certificate verification cannot be disabled, STARTTLS is mandatory when implicit TLS is not used, and provider response bodies are not persisted into notification operations telemetry.
+
+
+## Document malware-scanning boundary
+
+Uploaded document versions are fail-closed until a malware-scanning verdict is recorded. The on-prem scanner worker authenticates to the internal scan endpoint with a dedicated scanner token and does not receive object-storage credentials. A claimed object is proxied by the application only while its database state is actively `SCANNING`.
+
+Before invoking ClamAV, the worker independently verifies the immutable content hash and size. Integrity mismatch is quarantined rather than retried or treated as clean. ClamD listens only on the private Compose network; its TCP port is never published to the host. Scanner claims use bounded attempts, stale-lock recovery and conditional finalization so worker crashes, retries and replayed callbacks cannot silently overwrite a different final verdict.
