@@ -128,7 +128,7 @@ curl --fail --silent --show-error \
 
 The current snapshot includes:
 
-- notification outbox counts by bounded channel/status plus oldest actionable age,
+- notification outbox counts by bounded channel/status, due-job count, oldest actionable age and oldest dispatcher-lock age,
 - document malware-scan counts by state, due-job count, oldest pending age and oldest scanner-lock age,
 - scrape health and collection duration.
 
