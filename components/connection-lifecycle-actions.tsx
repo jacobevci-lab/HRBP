@@ -35,8 +35,11 @@ export function ConnectionLifecycleActions({ kind, id, name, status, validated }
         headers: { "content-type": "application/json" },
         body: JSON.stringify(validation ? { action } : activation ? { action, attestation: answer } : { action, reason: answer })
       });
-      const body = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+      const body = await response.json() as { error?: string; code?: string };
+      if (!response.ok) {
+        const detail = body.code ? `${body.error || "Validation failed"} (${body.code})` : (body.error || `HTTP ${response.status}`);
+        throw new Error(detail);
+      }
       router.refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : c("Connection lifecycle update failed.", "Bağlantı yaşam döngüsü güncellenemedi."));
@@ -47,7 +50,9 @@ export function ConnectionLifecycleActions({ kind, id, name, status, validated }
 
   return <div className="connection-lifecycle-actions">
     <div>
-      {status === "DRAFT" ? <button type="button" disabled={Boolean(busy)} onClick={() => void execute("validate")}><BadgeCheck size={13}/>{validated ? c("Revalidate config", "Yapıyı tekrar doğrula") : c("Validate config", "Yapıyı doğrula")}</button> : null}
+      {status === "DRAFT" ? <button type="button" disabled={Boolean(busy)} onClick={() => void execute("validate")}><BadgeCheck size={13}/>{kind === "identity"
+  ? (validated ? c("Revalidate provider", "Sağlayıcıyı tekrar doğrula") : c("Validate provider", "Sağlayıcıyı doğrula"))
+  : (validated ? c("Revalidate config", "Yapıyı tekrar doğrula") : c("Validate config", "Yapıyı doğrula"))}</button> : null}
       {status === "DRAFT" ? <button type="button" disabled={Boolean(busy) || !validated} onClick={() => void execute("activate")}><CirclePlay size={13}/>{c("Activate", "Aktifleştir")}</button> : null}
       {status === "ACTIVE" || status === "DEGRADED" ? <button type="button" className="danger" disabled={Boolean(busy)} onClick={() => void execute("disable")}><ShieldOff size={13}/>{c("Disable", "Devre dışı")}</button> : null}
       {status === "DISABLED" || status === "DEGRADED" ? <button type="button" disabled={Boolean(busy)} onClick={() => void execute("reopen")}><RotateCcw size={13}/>{c("Reopen", "Taslağa aç")}</button> : null}
