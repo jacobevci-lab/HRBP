@@ -11,7 +11,11 @@ const [
   restore,
   rehearsal,
   docs,
-  packageJson
+  packageJson,
+  migrationRunner,
+  migrationVerifier,
+  baselineSql,
+  migrationLock
 ] = await Promise.all([
   readFile("docker-compose.onprem.yml", "utf8"),
   readFile("Dockerfile.onprem", "utf8"),
@@ -22,7 +26,11 @@ const [
   readFile("scripts/onprem-restore.sh", "utf8"),
   readFile("scripts/onprem-recovery-rehearsal.sh", "utf8"),
   readFile("docs/ONPREM-DEPLOYMENT.md", "utf8"),
-  readFile("package.json", "utf8")
+  readFile("package.json", "utf8"),
+  readFile("scripts/onprem-migrate.mjs", "utf8"),
+  readFile("scripts/verify-prisma-migrations.mjs", "utf8"),
+  readFile("prisma/migrations/20261007000000_baseline_current_schema/migration.sql", "utf8"),
+  readFile("prisma/migrations/migration_lock.toml", "utf8")
 ]);
 
 const required = [
@@ -60,6 +68,37 @@ assert.match(dockerfile, /HEALTHCHECK[\s\S]*api\/health\/runtime/);
 assert.match(dockerfile, /FROM builder AS schema/);
 assert.ok(compose.includes("no-new-privileges:true") && compose.includes("cap_drop:"), "Application container must drop ambient Linux privileges.");
 assert.ok(!dockerfile.includes("--accept-data-loss"));
+assert.ok(dockerfile.includes('CMD ["node", "scripts/onprem-migrate.mjs"]'), "On-prem schema stage must use the guarded versioned migration runner.");
+assert.ok(!dockerfile.includes('"db:push"'), "Production schema image must not run prisma db push.");
+
+assert.match(migrationLock, /provider\s*=\s*"postgresql"/);
+assert.ok(baselineSql.length > 50000, "Committed migration baseline is unexpectedly small.");
+assert.ok(baselineSql.includes('CREATE TABLE "Tenant"'), "Baseline must contain core tenant schema.");
+assert.ok(baselineSql.includes("CREATE TYPE"), "Baseline must contain enum definitions.");
+for (const token of [
+  "20261007000000_baseline_current_schema",
+  "public._prisma_migrations",
+  "Legacy database without Prisma migration history detected",
+  "--from-schema-datasource",
+  "--to-schema-datamodel",
+  "migrate",
+  "resolve",
+  "--applied",
+  "migrate",
+  "deploy"
+]) assert.ok(migrationRunner.includes(token), `Migration runner safety contract missing: ${token}`);
+assert.ok(!migrationRunner.includes("--accept-data-loss"), "Migration runner must never force destructive schema changes.");
+assert.ok(!migrationRunner.includes("--from-url"), "Migration runner must not expose DATABASE_URL through CLI argv.");
+
+for (const token of [
+  "hrbp_migration_fresh",
+  "hrbp_migration_legacy",
+  "hrbp_migration_drift",
+  "--from-migrations",
+  "--shadow-database-url",
+  "migration_drift_probe",
+  "No baseline marker was written"
+]) assert.ok(migrationVerifier.includes(token), `Migration verification contract missing: ${token}`);
 
 for (const key of [
   "POSTGRES_PASSWORD", "OBJECT_STORAGE_SECRET_KEY", "HRBP_SESSION_SECRET",
@@ -131,6 +170,8 @@ assert.equal(
   "HRBP_DISPOSABLE_RECOVERY_REHEARSAL=true bash scripts/onprem-recovery-rehearsal.sh",
   "Recovery rehearsal must be available as an explicit operator/CI command."
 );
+assert.equal(pkg.scripts?.["db:migrate:deploy"], "prisma migrate deploy --schema=prisma");
+assert.equal(pkg.scripts?.["db:migrate:verify"], "node scripts/verify-prisma-migrations.mjs");
 
 for (const token of [
   "scripts/onprem-backup.sh",
@@ -139,7 +180,9 @@ for (const token of [
   "application remains stopped",
   "SeaweedFS",
   "rclone",
-  "Versioned migrations"
+  "Versioned migrations",
+  "migrate deploy",
+  "baseline adoption"
 ]) assert.ok(docs.includes(token), `On-prem runbook missing recovery guidance: ${token}`);
 
-console.log("On-prem package and recovery safety validation passed.");
+console.log("On-prem package, recovery and versioned migration safety validation passed.");
