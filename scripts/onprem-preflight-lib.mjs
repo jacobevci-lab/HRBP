@@ -198,6 +198,8 @@ export function validateOnpremEnv(env) {
 
     const secure = (env.HRBP_SMTP_SECURE ?? "false").toLowerCase();
     if (!["true", "false"].includes(secure)) errors.push("HRBP_SMTP_SECURE must be explicitly true or false.");
+    if (port === "465" && secure !== "true") errors.push("HRBP_SMTP_SECURE must be true when HRBP_SMTP_PORT=465.");
+    if (port !== "465" && secure === "true") warnings.push("Implicit SMTP TLS is enabled on a non-standard port; verify the customer relay contract.");
 
     const smtpPassword = env.HRBP_SMTP_PASSWORD ?? "";
     if (smtpPassword.length < 16) errors.push("HRBP_SMTP_PASSWORD must be at least 16 characters.");
