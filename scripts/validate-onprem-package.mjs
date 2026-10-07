@@ -218,6 +218,9 @@ for (const token of [
   "/api/health/runtime",
   "/api/health/db",
   "/api/health/auth",
+  "/api/internal/metrics",
+  "HRBP_METRICS_TOKEN",
+  "Operational metrics endpoint is not healthy",
   "db:migrate:status",
   "onprem-maintenance-health.mjs",
   "document-scan-health.mjs",
@@ -255,7 +258,7 @@ assert.ok(!upgrade.includes("onprem-restore.sh") || upgrade.includes("If restore
 for (const key of [
   "POSTGRES_PASSWORD", "OBJECT_STORAGE_SECRET_KEY", "HRBP_SESSION_SECRET",
   "HRBP_ENGAGEMENT_RESPONSE_SECRET", "HRBP_DOCUMENT_SCAN_TOKEN",
-  "HRBP_MAINTENANCE_TOKEN", "HRBP_OIDC_CLIENT_SECRET"
+  "HRBP_MAINTENANCE_TOKEN", "HRBP_METRICS_TOKEN", "HRBP_OIDC_CLIENT_SECRET"
 ]) {
   assert.ok(env.includes(`${key}=CHANGE_ME`), `Example must force operator replacement for ${key}`);
 }
