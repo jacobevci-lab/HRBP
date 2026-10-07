@@ -212,11 +212,24 @@ jobs:
               method: 'POST',
               headers: {
                 authorization: 'Bearer ' + token,
-                'content-type': 'application/json'
+                'content-type': 'application/json',
+                accept: 'application/json'
               },
               body: JSON.stringify(payload)
             });
-            const body = await response.json();
+            const text = await response.text();
+            let body = null;
+            if (text) {
+              try { body = JSON.parse(text); }
+              catch {
+                console.error('Document scan API returned invalid JSON.', { status: response.status, text: text.slice(0, 1000), payload });
+                process.exit(1);
+              }
+            }
+            if (!text) {
+              console.error('Document scan API returned an empty response.', { status: response.status, payload });
+              process.exit(1);
+            }
             return { response, body };
           }
 
