@@ -59,6 +59,7 @@ export async function POST(request: Request) {
       email: true,
       role: true,
       localPasswordHash: true,
+      sessionVersion: true,
       localFailedAttempts: true,
       localLockedUntil: true
     }
@@ -155,7 +156,11 @@ export async function POST(request: Request) {
       purpose: "Local application sign-in"
     });
 
-    return { user: updated, employmentId: person?.employments[0]?.id };
+    const policy = await tx.tenantSecurityPolicy.findUnique({
+      where: { tenantId: updated.tenantId },
+      select: { sessionMaxMinutes: true }
+    });
+    return { user: updated, employmentId: person?.employments[0]?.id, sessionMaxMinutes: policy?.sessionMaxMinutes ?? 480 };
   });
 
   if (!identity) return Response.json({ error: "Invalid credentials." }, { status: 401 });
@@ -164,6 +169,7 @@ export async function POST(request: Request) {
   headers.append("set-cookie", createSessionCookie({
     authMethod: "local",
     credentialVersion: identity.user.localPasswordUpdatedAt?.toISOString() ?? null,
+    sessionVersion: identity.user.sessionVersion,
     tenantId: identity.user.tenantId,
     actorId: identity.user.id,
     role: identity.user.role,
@@ -171,7 +177,7 @@ export async function POST(request: Request) {
     displayName: identity.user.displayName,
     email: identity.user.email ?? undefined,
     subject: identity.user.subject
-  }));
+  }, identity.sessionMaxMinutes));
 
   return new Response(JSON.stringify({ data: { authenticated: true, returnTo } }), { status: 200, headers });
 }
