@@ -196,11 +196,11 @@ export async function runNotificationDispatcher() {
   const maxAttempts = Math.min(20, Math.max(2, Math.floor(runtimeNumber("HRBP_NOTIFICATION_MAX_ATTEMPTS", 5))));
   const recovered = await recoverStaleLocks(startedAt);
 
-  const baseWhere = {
+  const baseWhere: Prisma.NotificationOutboxWhereInput = {
     status: { in: [NotificationOutboxStatus.PENDING, NotificationOutboxStatus.FAILED] },
     nextAttemptAt: { lte: startedAt },
     attempts: { lt: maxAttempts }
-  } as const;
+  };
 
   const [inAppCandidates, emailCandidates, unsupportedCandidates] = await Promise.all([
     db.notificationOutbox.findMany({
