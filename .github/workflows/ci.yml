@@ -38,7 +38,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm ci
+      - name: Bootstrap nodemailer lock entry
+        run: |
+          npm install --package-lock-only --ignore-scripts
+          node scripts/emit-nodemailer-lock-entry.mjs
+          npm ci
       - name: Production dependency audit
         run: npm run security:audit:prod
       - name: Full dependency audit
