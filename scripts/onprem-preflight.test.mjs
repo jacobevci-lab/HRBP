@@ -89,3 +89,15 @@ test("rejects incomplete OIDC scopes and non-origin APP_URL", () => {
   assert.ok(result.errors.some((entry) => entry.includes("without a path")));
   assert.ok(result.errors.some((entry) => entry.includes("include email")));
 });
+
+test("validation diagnostics never echo secret values", () => {
+  const secret = "super-secret-material-that-must-not-leak-123456789";
+  const result = validateOnpremEnv({
+    ...base,
+    POSTGRES_PASSWORD: secret,
+    HRBP_MAINTENANCE_TOKEN: secret
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.errors.some((entry) => entry.includes("different secrets")));
+  assert.ok(!JSON.stringify(result).includes(secret));
+});
