@@ -19,6 +19,7 @@ type Payload = {
   accounts: Account[];
   totalAccounts: number;
   truncated: boolean;
+  query: string;
   currentActorId: string;
 };
 
@@ -39,12 +40,16 @@ export function SessionRevocationAdmin() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [tenantConfirmation, setTenantConfirmation] = useState("");
+  const [search, setSearch] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (query = "") => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/settings/session-revocation", { cache: "no-store" });
+      const target = query.trim()
+        ? `/api/settings/session-revocation?q=${encodeURIComponent(query.trim())}`
+        : "/api/settings/session-revocation";
+      const response = await fetch(target, { cache: "no-store" });
       const body = await response.json() as { data?: Payload; error?: string };
       if (!response.ok || !body.data) throw new Error(body.error || `HTTP ${response.status}`);
       setData(body.data);
@@ -55,7 +60,7 @@ export function SessionRevocationAdmin() {
     }
   }, [tr]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(""); }, [load]);
 
   async function post(payload: Record<string, unknown>) {
     const response = await fetch("/api/settings/session-revocation", {
@@ -83,7 +88,7 @@ export function SessionRevocationAdmin() {
         return;
       }
       setSuccess(tr ? "Hesabın aktif oturumları iptal edildi." : "Active sessions for the account were revoked.");
-      await load();
+      await load(search);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : (tr ? "Oturumlar iptal edilemedi." : "Sessions could not be revoked."));
     } finally {
@@ -150,6 +155,22 @@ export function SessionRevocationAdmin() {
       </div>
     </div>
 
+    <form className="local-account-create" onSubmit={(event) => { event.preventDefault(); void load(search); }}>
+      <label>
+        <span>{tr ? "Hesap ara" : "Search accounts"}</span>
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          maxLength={160}
+          placeholder={tr ? "Ad, e-posta veya subject" : "Name, email or subject"}
+        />
+      </label>
+      <button className="secondary-button compact" type="submit" disabled={loading}>
+        <RefreshCw size={13}/>{tr ? "Ara" : "Search"}
+      </button>
+      {data?.query ? <button className="secondary-button compact" type="button" onClick={() => { setSearch(""); void load(""); }}>{tr ? "Temizle" : "Clear"}</button> : null}
+    </form>
+
     <div className="settings-live-table-wrap">
       <table className="settings-live-table">
         <thead><tr><th>{tr ? "Hesap" : "Account"}</th><th>{tr ? "Rol" : "Role"}</th><th>{tr ? "Son iptal" : "Last revocation"}</th><th>{tr ? "İşlem" : "Action"}</th></tr></thead>
@@ -165,6 +186,6 @@ export function SessionRevocationAdmin() {
         </tbody>
       </table>
     </div>
-    {data?.truncated ? <p className="settings-live-footnote">{tr ? `İlk ${data.accounts.length} / ${data.totalAccounts} aktif hesap gösteriliyor.` : `Showing the first ${data.accounts.length} of ${data.totalAccounts} active accounts.`}</p> : null}
+    {data?.truncated ? <p className="settings-live-footnote">{tr ? `İlk ${data.accounts.length} / ${data.totalAccounts} eşleşen aktif hesap gösteriliyor; aramayı daraltın.` : `Showing the first ${data.accounts.length} of ${data.totalAccounts} matching active accounts; refine the search.`}</p> : null}
   </section>;
 }
