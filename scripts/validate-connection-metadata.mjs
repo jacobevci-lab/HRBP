@@ -18,6 +18,13 @@ expect(identityPath, identity, /lastValidatedAt:\s*null/, "identity metadata cha
 expect(identityPath, identity, /settings\.identity-provider-metadata-updated/, "identity metadata edits must be audited");
 reject(identityPath, identity, /status:\s*ConnectionStatus\.ACTIVE/, "metadata editing must not activate an identity connection");
 
+
+const endpointPath = "lib/settings-connection-validation.ts";
+const endpoint = await source(endpointPath);
+expect(endpointPath, endpoint, /IdentityProviderType\.LDAP[\s\S]*\["ldaps:"\]/, "LDAP identity endpoints must require LDAPS");
+expect(endpointPath, endpoint, /optionalEndpoint\(value, \["https:"\]\)/, "web identity endpoints must require HTTPS");
+expect(endpointPath, endpoint, /url\.username \|\| url\.password \|\| url\.hash/, "connection endpoint metadata must reject embedded credentials and fragments");
+
 const integrationPath = "app/api/settings/integrations/[id]/metadata/route.ts";
 const integration = await source(integrationPath);
 expect(integrationPath, integration, /settings:write/, "integration metadata editing must require settings write authority");
