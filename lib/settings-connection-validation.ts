@@ -6,6 +6,7 @@ export function optionalEndpoint(value: unknown, protocols: string[], maxLength 
   if (parsed === undefined || parsed === null) return parsed;
   try {
     const url = new URL(parsed);
+    if (url.username || url.password || url.hash) return null;
     return protocols.includes(url.protocol) ? url.toString() : null;
   } catch {
     return null;
@@ -13,13 +14,14 @@ export function optionalEndpoint(value: unknown, protocols: string[], maxLength 
 }
 
 export function identityIssuer(value: unknown, type: IdentityProviderType) {
+  if (type === IdentityProviderType.LOCAL) return asOptionalText(value, 1024);
   return type === IdentityProviderType.LDAP
-    ? optionalEndpoint(value, ["ldap:", "ldaps:"])
-    : optionalEndpoint(value, ["https:", "http:"]);
+    ? optionalEndpoint(value, ["ldaps:"])
+    : optionalEndpoint(value, ["https:"]);
 }
 
 export function identityMetadataUrl(value: unknown) {
-  return optionalEndpoint(value, ["https:", "http:"]);
+  return optionalEndpoint(value, ["https:"]);
 }
 
 type IdentityActivationShape = {
