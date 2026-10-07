@@ -46,4 +46,6 @@ For the private document vault configure `OBJECT_STORAGE_ENDPOINT`, `OBJECT_STOR
 
 The GitHub Actions CI validates route structure, UI localization/theme rules, Prisma schema, TypeScript, Next.js production build, OpenNext/Cloudflare packaging and a local Worker runtime smoke test. The build gate also validates the connected Growth contract so talent signals, succession plans, skill targets, learning provenance and human reassessment boundaries cannot silently drift apart. The Worker smoke test exercises scheduled maintenance and the durable notification dispatcher against PostgreSQL.
 
+A separate Security Assurance gate runs dependency audits, CodeQL JavaScript/TypeScript analysis and release-evidence generation. Every reviewed revision produces a production CycloneDX SBOM, deterministic source archive, migration/deployment input hashes and checksum manifest; successful pushes to main add repository-backed provenance and SBOM attestations. See `docs/RELEASE-SUPPLY-CHAIN.md`.
+
 Staging schema synchronization is intentionally a manually dispatched workflow. It applies Prisma schema changes, seeds each vertical slice—including connected succession-development assignments—and verifies minimum domain counts before granting the runtime database role.
