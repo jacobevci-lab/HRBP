@@ -11,6 +11,8 @@ expect(schemaPath, schema, /localAuthEnabled\s+Boolean\s+@default\(false\)/, "lo
 expect(schemaPath, schema, /localPasswordHash\s+String\?/, "local password hashes must have a dedicated nullable field");
 expect(schemaPath, schema, /localFailedAttempts\s+Int\s+@default\(0\)/, "local login failure count must be persisted");
 expect(schemaPath, schema, /localLockedUntil\s+DateTime\?/, "local login lockout must be persisted");
+expect(schemaPath, schema, /sessionVersion\s+Int\s+@default\(1\)/, "accounts must carry a persisted session revocation epoch");
+expect(schemaPath, schema, /sessionsRevokedAt\s+DateTime\?/, "session revocation timestamp must be persisted");
 
 const helperPath = "lib/local-auth.ts";
 const helper = await source(helperPath);
@@ -27,6 +29,8 @@ expect(routePath, route, /tenantId,\s*active:\s*true,\s*localAuthEnabled:\s*true
 expect(routePath, route, /localLockedUntil/, "local sign-in must enforce persisted lockout");
 expect(routePath, route, /verifyLocalPassword/, "local sign-in must use governed password verification");
 expect(routePath, route, /createSessionCookie/, "local sign-in must issue the same signed application session as SSO");
+expect(routePath, route, /sessionVersion:\s*identity\.user\.sessionVersion/, "local sessions must embed the persisted revocation epoch");
+expect(routePath, route, /sessionMaxMinutes/, "local sessions must honor tenant session lifetime policy");
 expect(routePath, route, /auth\.local-succeeded/, "successful local sign-in must be audited");
 expect(routePath, route, /auth\.local-failed|auth\.local-locked/, "failed local sign-ins must be audited");
 expect(routePath, route, /LOCAL_AUTH_ACCOUNT_LOCKED/, "lockout threshold events must notify tenant administrators");
@@ -73,6 +77,9 @@ expect(adminLifecyclePath, adminLifecycle, /settings:write/, "local account life
 expect(adminLifecyclePath, adminLifecycle, /mutationOriginAllowed\(request\)/, "local account lifecycle operations must enforce origin checks");
 expect(adminLifecyclePath, adminLifecycle, /current\.id === ctx\.actorId/, "administrators must not be able to disable the local account backing their current session");
 expect(adminLifecyclePath, adminLifecycle, /reset-password/, "local account lifecycle must support governed password rotation");
+expect(adminLifecyclePath, adminLifecycle, /revoke-sessions/, "local account lifecycle must support immediate session revocation");
+expect(adminLifecyclePath, adminLifecycle, /sessionVersion:\s*\{\s*increment:\s*1\s*\}/, "session revocation must atomically advance the account epoch");
+expect(adminLifecyclePath, adminLifecycle, /settings\.account-sessions-revoked/, "session revocation must append restricted audit evidence");
 expect(adminLifecyclePath, adminLifecycle, /localFailedAttempts:\s*0[\s\S]*localLockedUntil:\s*null/, "password rotation and unlock must clear lockout state");
 expect(adminLifecyclePath, adminLifecycle, /hashLocalPassword/, "password rotation must use the governed password hasher");
 reject(adminLifecyclePath, adminLifecycle, /localPasswordHash:\s*password\b/, "password rotation must never persist plaintext passwords");
@@ -82,6 +89,7 @@ const adminUi = await source(adminUiPath);
 expect(adminUiPath, adminUi, /type="password"/, "local account administration must use masked password inputs");
 expect(adminUiPath, adminUi, /\/api\/settings\/local-accounts/, "local account administration UI must use the governed tenant API");
 expect(adminUiPath, adminUi, /reset-password/, "local account administration UI must support password rotation");
+expect(adminUiPath, adminUi, /revoke-sessions/, "local account administration UI must expose revoke-all-sessions control");
 
 
 const settingsPagePath = "components/settings-live-page.tsx";
@@ -123,6 +131,23 @@ expect(notificationPresentationPath, notificationPresentation, /accountSubject[\
 const notificationDisplayPath = "lib/notification-display.ts";
 const notificationDisplay = await source(notificationDisplayPath);
 expect(notificationDisplayPath, notificationDisplay, /resourceType === "UserAccount"[\s\S]*\/module\/settings/, "local account alerts must deep-link to tenant settings");
+
+
+const sessionPath = "lib/auth-session.ts";
+const sessionSource = await source(sessionPath);
+expect(sessionPath, sessionSource, /sessionVersion:\s*number/, "signed session claims must carry an account revocation epoch");
+expect(sessionPath, sessionSource, /maxMinutes\?:\s*number/, "session issuance must accept tenant maximum lifetime");
+expect(sessionPath, sessionSource, /Math\.min\(runtimeMinutes, policyMinutes\)/, "session lifetime must use the stricter runtime or tenant ceiling");
+
+const verifiedPath = "lib/verified-session.ts";
+const verifiedSource = await source(verifiedPath);
+expect(verifiedPath, verifiedSource, /user\.sessionVersion !== claims\.sessionVersion/, "every authenticated request must enforce the persisted session epoch");
+expect(verifiedPath, verifiedSource, /sessionsRevokedAt[\s\S]*claims\.issuedAt/, "every authenticated request must reject sessions issued before revocation");
+
+const policyPath = "app/api/settings/security-policy/route.ts";
+const policySource = await source(policyPath);
+expect(policyPath, policySource, /sessionPolicyTightened/, "security policy updates must detect tighter session lifetime");
+expect(policyPath, policySource, /userAccount\.updateMany[\s\S]*sessionVersion:\s*\{\s*increment:\s*1\s*\}/, "tightening tenant session lifetime must revoke existing sessions");
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);
