@@ -9,10 +9,11 @@ export async function verifySessionAccount(claims: SessionClaims | null): Promis
   try {
     const user = await db.userAccount.findFirst({
       where: { id: claims.actorId, tenantId: claims.tenantId, active: true },
-      select: { id: true, subject: true, role: true, email: true, localAuthEnabled: true, localPasswordUpdatedAt: true }
+      select: { id: true, subject: true, role: true, email: true, localAuthEnabled: true, localPasswordUpdatedAt: true, sessionVersion: true, sessionsRevokedAt: true }
     });
     if (!user || user.subject !== claims.subject || user.role !== claims.role ||
-        (user.email ?? undefined) !== claims.email) return null;
+        (user.email ?? undefined) !== claims.email || user.sessionVersion !== claims.sessionVersion) return null;
+    if (user.sessionsRevokedAt && claims.issuedAt * 1000 <= user.sessionsRevokedAt.getTime()) return null;
     if (claims.authMethod === "local" && (!user.localAuthEnabled ||
         claims.credentialVersion !== (user.localPasswordUpdatedAt?.toISOString() ?? null))) return null;
     if (claims.employmentId) {
