@@ -4,13 +4,15 @@ import { MAINTENANCE_JOBS, MAINTENANCE_PROTOCOL_VERSION } from "../lib/maintenan
 
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
-export function validateConfiguration({ url, token, job = "all", localSmoke = false }) {
+export function validateConfiguration({ url, token, job = "all", localSmoke = false, privateHttpHost = null }) {
   let endpoint;
   try { endpoint = new URL(url); } catch { throw new Error("Invalid maintenance endpoint configuration."); }
   const loopback = localSmoke && endpoint.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(endpoint.hostname);
-  if ((!loopback && endpoint.protocol !== "https:") || endpoint.username || endpoint.password ||
+  const privateHttp = typeof privateHttpHost === "string" && /^[a-z0-9][a-z0-9.-]{0,62}$/.test(privateHttpHost) &&
+    endpoint.protocol === "http:" && endpoint.hostname === privateHttpHost && endpoint.port === "3000";
+  if ((!loopback && !privateHttp && endpoint.protocol !== "https:") || endpoint.username || endpoint.password ||
       endpoint.search || endpoint.hash || endpoint.pathname !== "/api/internal/maintenance") {
-    throw new Error("Maintenance requires HTTPS and the exact maintenance path without credentials, query or fragment.");
+    throw new Error("Maintenance requires HTTPS, explicit loopback smoke mode, or the pinned private service host.");
   }
   if (typeof token !== "string" || token.length < 24 || token.length > 4096 || /\s/.test(token)) {
     throw new Error("A valid internal maintenance token is required.");
@@ -75,9 +77,9 @@ function matchesExecution(body, job) {
 }
 
 /** A preflight prevents old deployments from silently running ALL jobs once per selected job. */
-export async function runMaintenance({ url, token, job = "all", localSmoke = false,
+export async function runMaintenance({ url, token, job = "all", localSmoke = false, privateHttpHost = null,
   fetchImpl = globalThis.fetch, timeoutMs = 90_000, log = () => {} }) {
-  const { endpoint, selected } = validateConfiguration({ url, token, job, localSmoke });
+  const { endpoint, selected } = validateConfiguration({ url, token, job, localSmoke, privateHttpHost });
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 90_000) throw new Error("Invalid request timeout.");
   const report = { success: false, stopped: false, requested: selected.length, results: [] };
   let preflight;
