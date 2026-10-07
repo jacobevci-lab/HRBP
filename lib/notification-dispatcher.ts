@@ -1,5 +1,6 @@
 import { DataClassification, NotificationOutboxStatus, PlatformRole, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { sendSmtpNotification } from "@/lib/smtp-notification-provider";
 import { runtimeNumber } from "@/lib/runtime-env";
 
 function retryDelayMs(attempt: number) {
@@ -33,7 +34,7 @@ async function recoverStaleLocks(now: Date) {
   return result.count;
 }
 
-type InAppCandidate = {
+type NotificationCandidate = {
   id: string;
   tenantId: string;
   eventType: string;
@@ -47,7 +48,7 @@ type InAppCandidate = {
   classification: DataClassification;
 };
 
-async function deliverInApp(candidate: InAppCandidate) {
+async function deliverInApp(candidate: NotificationCandidate) {
   if (candidate.recipientUserId) return;
   if (!candidate.recipientRole) throw new Error("IN_APP notification has no user or role recipient");
 
@@ -85,6 +86,74 @@ async function deliverInApp(candidate: InAppCandidate) {
         }
       });
     }
+  });
+}
+
+
+async function fanOutEmailRole(candidate: NotificationCandidate) {
+  if (!candidate.recipientRole) throw new Error("EMAIL_RECIPIENT_REQUIRED");
+  const role = platformRole(candidate.recipientRole);
+  if (!role) throw new Error("EMAIL_ROLE_UNSUPPORTED");
+
+  const recipients = await db.userAccount.findMany({
+    where: {
+      tenantId: candidate.tenantId,
+      role,
+      active: true,
+      email: { not: null }
+    },
+    select: { id: true },
+    take: 1000
+  });
+  if (recipients.length === 0) throw new Error("EMAIL_ROLE_RECIPIENTS_UNAVAILABLE");
+
+  await db.$transaction(async (tx) => {
+    for (const recipient of recipients) {
+      const dedupeKey = `${candidate.dedupeKey}:user:${recipient.id}`;
+      await tx.notificationOutbox.upsert({
+        where: { tenantId_dedupeKey: { tenantId: candidate.tenantId, dedupeKey } },
+        update: {},
+        create: {
+          tenantId: candidate.tenantId,
+          eventType: candidate.eventType,
+          channel: "EMAIL",
+          recipientUserId: recipient.id,
+          templateKey: candidate.templateKey,
+          resourceType: candidate.resourceType,
+          resourceId: candidate.resourceId,
+          dedupeKey,
+          ...(candidate.payload === null ? {} : { payload: candidate.payload as Prisma.InputJsonValue }),
+          classification: candidate.classification
+        }
+      });
+    }
+  });
+}
+
+async function deliverEmail(candidate: NotificationCandidate) {
+  if (!candidate.recipientUserId) {
+    await fanOutEmailRole(candidate);
+    return;
+  }
+
+  const recipient = await db.userAccount.findFirst({
+    where: {
+      id: candidate.recipientUserId,
+      tenantId: candidate.tenantId,
+      active: true
+    },
+    select: { email: true }
+  });
+  if (!recipient?.email) throw new Error("EMAIL_RECIPIENT_UNAVAILABLE");
+
+  await sendSmtpNotification({
+    tenantId: candidate.tenantId,
+    eventType: candidate.eventType,
+    recipient: recipient.email,
+    resourceType: candidate.resourceType,
+    resourceId: candidate.resourceId,
+    classification: candidate.classification,
+    payload: candidate.payload
   });
 }
 
@@ -149,9 +218,11 @@ export async function runNotificationDispatcher() {
     const attempt = candidate.attempts + 1;
     try {
       if (candidate.channel === "IN_APP") {
-        await deliverInApp(candidate);
+        await deliverInApp(candidate as NotificationCandidate);
+      } else if (candidate.channel === "EMAIL") {
+        await deliverEmail(candidate as NotificationCandidate);
       } else {
-        throw new Error(`Unsupported notification channel: ${candidate.channel}`);
+        throw new Error("NOTIFICATION_CHANNEL_UNSUPPORTED");
       }
 
       const completion = await db.notificationOutbox.updateMany({
