@@ -46,7 +46,7 @@ test("upgrade records intent before migration and receipt only after postflight"
   const preHealth = position("pre-upgrade-health.json");
   const intent = position("upgrade-intent.json");
   const migration = position("--exit-code-from schema");
-  const postflight = position("onprem-postflight.mjs");
+  const postflight = position("--mode post-deploy");
   const receipt = position("upgrade-receipt.json");
   assert.ok(preHealth < intent);
   assert.ok(intent < migration);
