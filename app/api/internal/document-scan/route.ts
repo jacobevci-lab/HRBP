@@ -303,6 +303,26 @@ async function completeScanJob(input: {
   });
 }
 
+function scanResultProjection(value: {
+  id: string;
+  scanStatus: VaultScanStatus;
+  scanAttempts: number;
+  scanCompletedAt: Date | null;
+  scanEngine: string | null;
+  scanReference: string | null;
+  scanMessage: string | null;
+}) {
+  return {
+    id: value.id,
+    scanStatus: value.scanStatus,
+    scanAttempts: value.scanAttempts,
+    scanCompletedAt: value.scanCompletedAt,
+    scanEngine: value.scanEngine,
+    scanReference: value.scanReference,
+    scanMessage: value.scanMessage
+  };
+}
+
 export async function POST(request: Request) {
   if (!internalBearerAuthorized(request, "HRBP_DOCUMENT_SCAN_TOKEN")) {
     return Response.json({ error: "Valid document scanner credentials are required." }, { status: 401 });
@@ -397,5 +417,5 @@ export async function POST(request: Request) {
   if (result.kind === "not-found") return Response.json({ error: "Document version not found." }, { status: 404 });
   if (result.kind === "not-uploaded") return Response.json({ error: "Document object must be uploaded before scan completion can be recorded." }, { status: 409 });
   if (result.kind === "conflict") return Response.json({ error: "Document scan state changed concurrently.", status: result.status }, { status: 409 });
-  return Response.json({ data: result.data, idempotent: result.idempotent });
+  return Response.json({ data: scanResultProjection(result.data), idempotent: result.idempotent });
 }
