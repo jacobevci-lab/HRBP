@@ -122,7 +122,7 @@ test("restore helper preserves and clears the durable ambiguous-outcome latch", 
     await writeFile(source, JSON.stringify({ blocked: null }));
     result = run();
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(await readStateFile(dir, "blocked.json"), null);
+    assert.equal((await readStateFile(dir, "blocked.json"))?.code, "OUTCOME_UNKNOWN_CHECK_BEFORE_RETRY");
 
     await writeStateFile(dir, "blocked.json", { at: "2026-10-07T02:00:00.000Z", job: "workflow-reminders", code: "UNEXPECTED_RESPONSE_STOPPED" });
     await writeFile(source, JSON.stringify({ available: false, reason: "maintenance-scheduler-not-running" }));
