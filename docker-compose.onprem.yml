@@ -129,14 +129,16 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    env_file: ["${HRBP_ENV_FILE:-.env.onprem}"]
     environment:
       HRBP_DOCUMENT_SCAN_URL: http://app:3000/api/internal/document-scan
       HRBP_DOCUMENT_SCAN_TOKEN: ${HRBP_DOCUMENT_SCAN_TOKEN:?set HRBP_DOCUMENT_SCAN_TOKEN in .env.onprem}
+      HRBP_DOCUMENT_SCAN_POLL_SECONDS: ${HRBP_DOCUMENT_SCAN_POLL_SECONDS:-10}
+      HRBP_DOCUMENT_SCAN_REQUEST_TIMEOUT_MS: ${HRBP_DOCUMENT_SCAN_REQUEST_TIMEOUT_MS:-30000}
+      HRBP_DOCUMENT_SCAN_MAX_BYTES: ${HRBP_DOCUMENT_SCAN_MAX_BYTES:-26214400}
+      HRBP_DOCUMENT_SCAN_STATE_DIR: /var/run/hrbp-scanner
       HRBP_CLAMD_HOST: document-scanner-engine
       HRBP_CLAMD_PORT: 3310
-      HRBP_DOCUMENT_SCAN_STATE_DIR: /var/run/hrbp-scanner
-      HRBP_DOCUMENT_SCAN_MAX_BYTES: ${HRBP_DOCUMENT_SCAN_MAX_BYTES:-26214400}
+      HRBP_CLAMD_TIMEOUT_MS: ${HRBP_CLAMD_TIMEOUT_MS:-30000}
     tmpfs:
       - /tmp:size=32m,mode=1777
       - /var/run/hrbp-scanner:size=4m,mode=0700,uid=1000,gid=1000
