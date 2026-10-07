@@ -66,13 +66,15 @@ function messageIdDomain(from: string) {
 }
 
 export function renderNotificationEmail(notification: EmailNotification, locale: "en" | "tr" = "en") {
-  const title = safeHeader(notificationDisplayTitle(notification.eventType, locale) || "HRBP notification");
-  const href = notificationDisplayResourceHref(notification.resourceType, notification.resourceId);
+  const restricted = notification.classification === DataClassification.RESTRICTED ||
+    notification.classification === DataClassification.HIGHLY_RESTRICTED;
+  const title = safeHeader(restricted
+    ? (locale === "tr" ? "HRBP güvenli bildirimi" : "HRBP secure notification")
+    : (notificationDisplayTitle(notification.eventType, locale) || "HRBP notification"));
+  const href = restricted ? "/" : notificationDisplayResourceHref(notification.resourceType, notification.resourceId);
   const origin = appOrigin();
   const absoluteHref = origin && href.startsWith("/") ? new URL(href, origin).toString() : null;
 
-  const restricted = notification.classification === DataClassification.RESTRICTED ||
-    notification.classification === DataClassification.HIGHLY_RESTRICTED;
   const summary = restricted
     ? (locale === "tr"
       ? "Kısıtlı bir HRBP kaydı aksiyonunuzu gerektiriyor. Ayrıntıları güvenli uygulama içinde görüntüleyin."
