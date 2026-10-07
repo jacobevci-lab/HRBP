@@ -104,6 +104,49 @@ services:
       retries: 5
     networks: [hrbp_internal]
 
+  document-scanner-engine:
+    image: ${DOCUMENT_SCANNER_IMAGE:-clamav/clamav:1.5.4-debian}
+    restart: unless-stopped
+    volumes:
+      - clamav_db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "5"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 10
+    networks: [hrbp_internal]
+
+  document-scanner:
+    build:
+      context: .
+      dockerfile: Dockerfile.onprem
+      target: scanner
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    env_file: ["${HRBP_ENV_FILE:-.env.onprem}"]
+    environment:
+      HRBP_DOCUMENT_SCAN_URL: http://app:3000/api/internal/document-scan
+      HRBP_DOCUMENT_SCAN_TOKEN: ${HRBP_DOCUMENT_SCAN_TOKEN:?set HRBP_DOCUMENT_SCAN_TOKEN in .env.onprem}
+      HRBP_CLAMD_HOST: document-scanner-engine
+      HRBP_CLAMD_PORT: 3310
+      HRBP_DOCUMENT_SCAN_STATE_DIR: /var/run/hrbp-scanner
+      HRBP_DOCUMENT_SCAN_MAX_BYTES: ${HRBP_DOCUMENT_SCAN_MAX_BYTES:-26214400}
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+      - /var/run/hrbp-scanner:size=4m,mode=0700,uid=1000,gid=1000
+    depends_on:
+      app:
+        condition: service_healthy
+      document-scanner-engine:
+        condition: service_healthy
+    networks: [hrbp_internal]
+
   maintenance-scheduler:
     build:
       context: .
@@ -135,6 +178,7 @@ volumes:
   postgres_data:
   object_storage_data:
   scheduler_state:
+  clamav_db:
 
 networks:
   hrbp_internal:
