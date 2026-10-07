@@ -63,7 +63,8 @@ try{
  const tenantRevoke=await http('/api/settings/session-revocation','POST',adminCookie,{action:'revoke-tenant',confirmation:'tenant-acme-global'});
  check('Administrator can revoke all tenant sessions',tenantRevoke.status===200,tenantRevoke.status);
  check('Tenant revocation invalidates employee cookie',(await http('/api/people','GET',employeeBeforeTenantRevoke)).status===401);
- check('Tenant revocation invalidates administrator cookie',(await http('/api/auth/session','GET',adminCookie)).status===200 && !(await (await http('/api/auth/session','GET',adminCookie)).json()).authenticated);
+ const revokedAdminSession=await http('/api/auth/session','GET',adminCookie);const revokedAdminBody=await revokedAdminSession.json();
+ check('Tenant revocation invalidates administrator cookie',revokedAdminSession.status===200&&revokedAdminBody.authenticated===false);
 }finally{await db.$disconnect();}
 await writeFile('.audit/remediation-gate.json',JSON.stringify({checks,failures},null,2));
 console.log('REMEDIATION_GATE '+JSON.stringify({checks:checks.length,failures}));
