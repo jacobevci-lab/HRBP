@@ -84,8 +84,12 @@ printf 'Capturing maintenance scheduler state...\n' >&2
 if "${COMPOSE[@]}" exec -T maintenance-scheduler node scripts/onprem-maintenance-control.mjs status \
   > "$TARGET/scheduler-status.json" 2>/dev/null; then
   :
+elif "${COMPOSE[@]}" run --rm --no-deps -T maintenance-scheduler \
+  node scripts/onprem-maintenance-control.mjs status \
+  > "$TARGET/scheduler-status.json" 2>/dev/null; then
+  :
 else
-  printf '{"available":false,"reason":"maintenance-scheduler-not-running"}\n' > "$TARGET/scheduler-status.json"
+  printf '{"available":false,"reason":"maintenance-scheduler-state-unavailable"}\n' > "$TARGET/scheduler-status.json"
 fi
 
 cat > "$TARGET/manifest.json" <<EOF
