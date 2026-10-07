@@ -29,3 +29,10 @@ AI context is authorization-filtered before model access. No tenant data is used
 
 ## Secure SDLC target
 SAST, SCA, secret scanning, IaC scanning, container scanning, SBOM, protected branches, signed releases, dependency review, DAST/API tests in staging and recurring penetration tests.
+
+
+## External notification data minimization
+
+SMTP delivery is opt-in and event-allowlisted. In-app notification intent remains the primary durable channel. HIGHLY_RESTRICTED records are never mirrored to SMTP. RESTRICTED email requires a separate explicit deployment gate and suppresses event-specific subject text, payload summary and resource-specific URLs; recipients receive only a generic secure-notification message and a link to the authenticated HRBP application.
+
+SMTP credentials are runtime secrets. TLS certificate verification cannot be disabled, STARTTLS is mandatory when implicit TLS is not used, and provider response bodies are not persisted into notification operations telemetry.
