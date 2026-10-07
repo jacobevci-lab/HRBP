@@ -65,7 +65,7 @@ const diffStatus = prisma(
     "diff",
     "--from-url",
     process.env.DATABASE_URL,
-    "--to-schema",
+    "--to-schema-datamodel",
     schemaPath,
     "--exit-code"
   ],
