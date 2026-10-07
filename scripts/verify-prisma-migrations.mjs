@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { Client } from "pg";
-import { BASELINE_MIGRATION, PRISMA_SCHEMA_PATH } from "./prisma-migration-contract.mjs";
+import { BASELINE_MIGRATION, PRISMA_BASELINE_SCHEMA_PATH, PRISMA_SCHEMA_PATH } from "./prisma-migration-contract.mjs";
 
 const rootUrl = process.env.DATABASE_URL;
 if (!rootUrl) {
@@ -132,8 +132,8 @@ try {
     throw new Error("Idempotent migration deploy changed baseline history unexpectedly.");
   }
 
-  console.log("Verifying exact legacy schema can be adopted without replaying baseline SQL...");
-  prisma(["db", "push", "--skip-generate", "--schema", PRISMA_SCHEMA_PATH], {
+  console.log("Verifying immutable baseline-era schema can be adopted and then advanced through pending migrations...");
+  prisma(["db", "push", "--skip-generate", "--schema", PRISMA_BASELINE_SCHEMA_PATH], {
     env: { ...process.env, DATABASE_URL: urlFor(dbNames.legacy) },
     quiet: true
   });
@@ -152,7 +152,7 @@ try {
   }
 
   console.log("Verifying schema drift blocks legacy baseline adoption...");
-  prisma(["db", "push", "--skip-generate", "--schema", PRISMA_SCHEMA_PATH], {
+  prisma(["db", "push", "--skip-generate", "--schema", PRISMA_BASELINE_SCHEMA_PATH], {
     env: { ...process.env, DATABASE_URL: urlFor(dbNames.drift) },
     quiet: true
   });

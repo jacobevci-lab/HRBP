@@ -8,9 +8,11 @@ The immutable baseline migration is:
 
 `20261007000000_baseline_current_schema`
 
-It represents the complete schema that existed when versioned migrations were introduced. Existing installations without Prisma migration history are eligible for baseline adoption only when the live database schema is an exact match for the committed Prisma datamodel.
+It represents the complete schema that existed when versioned migrations were introduced. The same immutable datamodel is frozen under `baseline-schema/20261007000000/`.
 
-Never edit the baseline after adoption. Add a new migration.
+Existing installations without Prisma migration history are eligible for baseline adoption only when the live database schema is an exact match for **that frozen baseline datamodel**, not the current evolving application datamodel. This distinction is required so a legacy installation can first adopt the baseline and then safely receive every later committed migration.
+
+Never edit either the baseline migration SQL or the frozen baseline datamodel snapshot after adoption. Add a new migration.
 
 ## Creating a schema change
 
@@ -83,10 +85,12 @@ The same upgrade command performs guarded baseline adoption:
 npm run db:migrate:upgrade
 ```
 
-It first compares the live schema to the current committed Prisma datamodel.
+It first compares the live schema to `baseline-schema/20261007000000/`.
 
-- exact match: the immutable baseline is marked applied and normal migration deployment continues;
-- any difference: the operation stops and no migration marker is written.
+- exact baseline-era match: the immutable baseline is marked applied and normal migration deployment continues through every later committed migration;
+- any difference from the frozen baseline: the operation stops and no migration marker is written.
+
+The current application datamodel is deliberately **not** used for this legacy eligibility decision. Otherwise the first post-baseline schema change would incorrectly make every legitimate pre-migration installation look drifted.
 
 Never work around a failed parity check with `migrate resolve` or `db push` on a customer database. Reconcile the database with a reviewed migration/recovery plan.
 

@@ -2,7 +2,39 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { BASELINE_MIGRATION } from "./prisma-migration-contract.mjs";
+import { BASELINE_MIGRATION, PRISMA_BASELINE_SCHEMA_PATH } from "./prisma-migration-contract.mjs";
+
+
+const expectedBaselineSchemaBlobs = Object.freeze({
+  "access.prisma": "2ffcb095a6ddf4c7be265eb110b882977e2cc715",
+  "employee-relations-lifecycle.prisma": "c50243cae11e99191edbcfb4bc29618fa0cf83a8",
+  "growth.prisma": "cb138930fec72a37fa587ba8d21023a2653f67b1",
+  "hr-service-lifecycle.prisma": "8da7d608b346bc9e111a238d0b70d354cb769846",
+  "notifications.prisma": "84f3d04a4cde671c232e804719a1728e464c91c6",
+  "offboarding.prisma": "0fb809813ea60c104fde35bbf20e2257c1e82686",
+  "planning.prisma": "a42c57795ac75e0e0c23e5f570a26f04fc7c6435",
+  "platform.prisma": "323ed9c3e07071466a085ce691a58c0ac688855d",
+  "privacy.prisma": "f7710edcb80a09322d26afb0191e5ccdaf9982fd",
+  "schema.prisma": "29e2fc7c7cc21dde80267ed2525fcaf92f94fc2d",
+  "services.prisma": "6a9c6ab7d65feb0d2cb123f62fc9d33bd2ce37a8"
+});
+
+const baselineSchemaRoot = path.resolve(PRISMA_BASELINE_SCHEMA_PATH);
+const baselineSchemaFiles = (await readdir(baselineSchemaRoot)).sort();
+assert.deepEqual(
+  baselineSchemaFiles,
+  Object.keys(expectedBaselineSchemaBlobs).sort(),
+  "Immutable baseline datamodel snapshot file set changed. Add a new migration instead of editing the baseline snapshot."
+);
+for (const [name, expectedSha] of Object.entries(expectedBaselineSchemaBlobs)) {
+  const bytes = await readFile(path.join(baselineSchemaRoot, name));
+  const sha = createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex");
+  assert.equal(
+    sha,
+    expectedSha,
+    `Immutable baseline datamodel snapshot changed: ${name}. Legacy adoption must remain tied to the original baseline state.`
+  );
+}
 
 const migrationsRoot = path.resolve("prisma/migrations");
 const entries = (await readdir(migrationsRoot)).sort();
@@ -64,4 +96,4 @@ assert.equal(
 const lock = await readFile(path.join(migrationsRoot, "migration_lock.toml"), "utf8");
 assert.match(lock, /^provider\s*=\s*"postgresql"\s*$/m, "Migration lock must pin PostgreSQL.");
 
-console.log(`Validated ${directories.length} Prisma migration(s); baseline is immutable and destructive DDL requires explicit review metadata.`);
+console.log(`Validated ${directories.length} Prisma migration(s); baseline SQL/datamodel snapshots are immutable and destructive DDL requires explicit review metadata.`);
