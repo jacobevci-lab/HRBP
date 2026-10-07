@@ -12,6 +12,7 @@ function position(token) {
 
 test("upgrade sequence builds before downtime and backs up before migration", () => {
   const preflight = position("onprem-preflight.mjs");
+  const currentHealth = position("Verifying current deployment health before upgrade");
   const build = position("Building target release before downtime");
   const stop = position("stop maintenance-scheduler app");
   const backup = position("onprem-backup.sh");
@@ -19,7 +20,8 @@ test("upgrade sequence builds before downtime and backs up before migration", ()
   const start = position("Starting target application and maintenance scheduler");
   const postflight = position("onprem-postflight.mjs");
 
-  assert.ok(preflight < build);
+  assert.ok(preflight < currentHealth);
+  assert.ok(currentHealth < build);
   assert.ok(build < stop);
   assert.ok(stop < backup);
   assert.ok(backup < migration);
@@ -41,11 +43,19 @@ test("upgrade requires an explicit maintenance window acknowledgement", () => {
 });
 
 test("upgrade records intent before migration and receipt only after postflight", () => {
+  const preHealth = position("pre-upgrade-health.json");
   const intent = position("upgrade-intent.json");
   const migration = position("--exit-code-from schema");
   const postflight = position("onprem-postflight.mjs");
   const receipt = position("upgrade-receipt.json");
+  assert.ok(preHealth < intent);
   assert.ok(intent < migration);
   assert.ok(migration < postflight);
   assert.ok(postflight < receipt);
+});
+
+test("upgrade captures pre-upgrade health without checking target migration status", () => {
+  assert.match(source, /--mode pre-upgrade/);
+  assert.match(source, /pre-upgrade-health\.json/);
+  assert.match(source, /--mode post-deploy/);
 });
