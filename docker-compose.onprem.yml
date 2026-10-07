@@ -161,7 +161,6 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    env_file: ["${HRBP_ENV_FILE:-.env.onprem}"]
     environment:
       HRBP_MAINTENANCE_URL: http://app:3000/api/internal/maintenance
       HRBP_MAINTENANCE_TOKEN: ${HRBP_MAINTENANCE_TOKEN:?set HRBP_MAINTENANCE_TOKEN in .env.onprem}
