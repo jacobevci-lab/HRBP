@@ -12,6 +12,7 @@ const [
   rehearsal,
   docs,
   packageJson,
+  packageLock,
   migrationRunner,
   migrationVerifier,
   migrationContract,
@@ -28,6 +29,7 @@ const [
   readFile("scripts/onprem-recovery-rehearsal.sh", "utf8"),
   readFile("docs/ONPREM-DEPLOYMENT.md", "utf8"),
   readFile("package.json", "utf8"),
+  readFile("package-lock.json", "utf8"),
   readFile("scripts/deploy-prisma-migrations.mjs", "utf8"),
   readFile("scripts/verify-prisma-migrations.mjs", "utf8"),
   readFile("scripts/prisma-migration-contract.mjs", "utf8"),
@@ -63,6 +65,8 @@ assert.ok(compose.includes('RCLONE_CONFIG_HRBP_FORCE_PATH_STYLE: "true"'));
 assert.ok(compose.includes("OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:-http://object-storage:8333}"));
 assert.ok(compose.includes("APP_URL:?set APP_URL"));
 
+assert.match(dockerfile, /COPY package\.json package-lock\.json/);
+assert.match(dockerfile, /RUN npm ci/);
 assert.match(dockerfile, /npm prune --omit=dev/);
 assert.ok(dockerfile.includes("COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma"), "Generated Prisma client must be restored after production pruning.");
 assert.match(dockerfile, /USER node/);
@@ -168,6 +172,9 @@ for (const token of [
 ]) assert.ok(rehearsal.includes(token), `Recovery rehearsal contract missing: ${token}`);
 
 const pkg = JSON.parse(packageJson);
+const lock = JSON.parse(packageLock);
+assert.equal(lock.lockfileVersion, 3, "Committed npm lockfile must use lockfileVersion 3.");
+assert.equal(lock.packages?.[""]?.name, pkg.name, "Lockfile root package must match package.json.");
 assert.equal(
   pkg.scripts?.["onprem:recovery:rehearsal"],
   "HRBP_DISPOSABLE_RECOVERY_REHEARSAL=true bash scripts/onprem-recovery-rehearsal.sh",
