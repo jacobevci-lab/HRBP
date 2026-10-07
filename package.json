@@ -88,7 +88,7 @@
     "db:migrate:status": "prisma migrate status --schema=prisma",
     "db:migrate:diff": "prisma migrate diff --from-schema-datasource prisma --to-schema-datamodel prisma --exit-code",
     "db:migrate:upgrade": "node scripts/deploy-prisma-migrations.mjs",
-    "db:migrate:verify": "node scripts/verify-prisma-migration-lifecycle.mjs"
+    "db:migrate:verify": "node scripts/verify-prisma-migrations.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "6.19.3",
