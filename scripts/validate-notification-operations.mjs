@@ -99,6 +99,20 @@ expect(smtpTestUiPath, smtpTestUi, /\/api\/settings\/notifications\/smtp-test/, 
 expect(smtpTestUiPath, smtpTestUi, /Send test email|Test e-postası gönder/, "settings UI must expose an explicit SMTP verification action");
 
 
+
+const healthPath = "app/api/health/notifications/route.ts";
+const health = await source(healthPath);
+expect(healthPath, health, /smtpConfigurationStatus/, "notification health must use the shared SMTP readiness contract");
+expect(healthPath, health, /status:\s*healthy \? "ok" : "error"/, "notification health must fail closed when SMTP is enabled but incomplete");
+expect(healthPath, health, /eventCount:\s*smtp\.events\.length/, "notification health must expose only bounded event-count metadata");
+reject(healthPath, health, /HRBP_SMTP_PASSWORD|HRBP_SMTP_USERNAME|missing:/, "notification health must not expose SMTP credential names or missing-secret details");
+
+const postflightPath = "scripts/onprem-postflight.mjs";
+const postflight = await source(postflightPath);
+expect(postflightPath, postflight, /\/api\/health\/notifications/, "on-prem postflight must verify notification provider readiness");
+expect(postflightPath, postflight, /smtpEnabled[\s\S]*smtpConfigured[\s\S]*emailEventCount/, "postflight evidence must record secret-free SMTP readiness");
+
+
 const packagePath = "package.json";
 const pkg = await source(packagePath);
 const lockPath = "package-lock.json";
