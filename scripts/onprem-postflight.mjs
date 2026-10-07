@@ -10,14 +10,17 @@ function fail(message) {
 const args = process.argv.slice(2);
 let envFile = ".env.onprem";
 let timeoutSeconds = 300;
+let mode = "post-deploy";
 for (let index = 0; index < args.length; index += 1) {
   if (args[index] === "--env-file") envFile = args[++index];
   else if (args[index] === "--timeout-seconds") timeoutSeconds = Number(args[++index]);
+  else if (args[index] === "--mode") mode = args[++index];
   else fail(`Unsupported argument: ${args[index]}`);
 }
 if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 30 || timeoutSeconds > 1800) {
   fail("--timeout-seconds must be between 30 and 1800.");
 }
+if (!["pre-upgrade", "post-deploy"].includes(mode)) fail("--mode must be pre-upgrade or post-deploy.");
 
 const env = parseEnvText(readFileSync(envFile, "utf8"));
 const port = env.HRBP_HTTP_PORT || "3000";
@@ -82,8 +85,12 @@ function compose(args) {
   });
 }
 
-const migration = compose(["run", "--rm", "--no-deps", "-T", "schema", "npm", "run", "db:migrate:status"]);
-if (migration.error || migration.status !== 0) fail("Prisma migration status is not clean after deployment.");
+let migrationStatus = "not-checked-pre-upgrade";
+if (mode === "post-deploy") {
+  const migration = compose(["run", "--rm", "--no-deps", "-T", "schema", "npm", "run", "db:migrate:status"]);
+  if (migration.error || migration.status !== 0) fail("Prisma migration status is not clean after deployment.");
+  migrationStatus = "clean";
+}
 
 let schedulerHealthy = false;
 while (Date.now() < deadline) {
@@ -109,6 +116,7 @@ console.log(JSON.stringify({
   authentication: {
     mode: auth?.authentication ?? null
   },
-  migrations: "clean",
+  mode,
+  migrations: migrationStatus,
   scheduler: "healthy"
 }));
