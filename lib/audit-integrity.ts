@@ -42,7 +42,7 @@ export async function verifyAuditIntegrity(tenantId: string, requestedLimit = 10
   ]);
 
   if (!rows.length) {
-    const emptyStateValid = !state || (state.eventCount === 0n && state.tailHash === null);
+    const emptyStateValid = !state || (state.eventCount === BigInt(0) && state.tailHash === null);
     return {
       checked: 0,
       valid: emptyStateValid,
@@ -73,7 +73,7 @@ export async function verifyAuditIntegrity(tenantId: string, requestedLimit = 10
   const anchor = hasPredecessorAnchor ? chronological[0] : null;
   const verificationRows = hasPredecessorAnchor ? chronological.slice(1) : chronological;
   let previousHash = anchor?.hash ?? null;
-  let expectedSequence = anchor ? anchor.ledgerSequence + 1n : 1n;
+  let expectedSequence = anchor ? anchor.ledgerSequence + BigInt(1) : BigInt(1);
   let brokenEventId: string | null = null;
   let reason: string | null = null;
   let checked = 0;
@@ -108,7 +108,7 @@ export async function verifyAuditIntegrity(tenantId: string, requestedLimit = 10
 
     checked += 1;
     previousHash = row.hash;
-    expectedSequence += 1n;
+    expectedSequence += BigInt(1);
   }
 
   if (!brokenEventId) {
