@@ -15,6 +15,9 @@ Tenant administrators configure the platform but do not automatically gain conte
 ## Cryptography
 TLS in transit; encrypted storage at rest; KMS-backed envelope encryption for sensitive data; tenant encryption context; optional dedicated keys / BYOK for enterprise tiers. Secrets must use a secrets manager and are never committed to source control.
 
+## Session security
+Application sessions are HMAC-signed but are not treated as irrevocable bearer cookies. Every authenticated request revalidates the tenant-scoped account plus tenant/account session versions. Administrators can revoke one account or the entire tenant; copied cookies fail on the next verified request. The tenant security policy can also shorten the maximum session lifetime immediately, while the platform runtime TTL remains an upper bound. Password-reset/local-auth controls continue to invalidate local sessions independently.
+
 ## Audit
 Security-relevant reads and all mutations produce append-only audit events. Audit entries include actor, action, resource, purpose, timestamp and network context. The target ledger supports chained hashes and external immutable retention.
 
