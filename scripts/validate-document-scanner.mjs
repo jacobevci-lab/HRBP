@@ -119,6 +119,7 @@ assert.ok(engineBlock, "Document scanner engine service must be present.");
 assert.ok(workerBlock, "Document scanner worker service must be present.");
 assert.ok(engineBlock.includes("clamav/clamav:1.5.4-debian"), "ClamAV image must be pinned to the reviewed patch release.");
 assert.ok(engineBlock.includes("clamav_db:/var/lib/clamav"), "ClamAV signatures must persist across restarts.");
+assert.ok(engineBlock.includes('["CMD", "clamdscan", "--ping=5"]'), "ClamAV engine health must use the bounded clamdscan ping probe.");
 assert.ok(!/\n\s+ports:/.test(engineBlock), "ClamAV TCP socket must never be published to the host.");
 assert.ok(!/\n\s+ports:/.test(workerBlock), "Scanner worker must never publish a host port.");
 for (const token of [
