@@ -57,6 +57,7 @@ expect(policyPath, policy, /assurancePolicyIssues[\s\S]*status:\s*409/, "tenant 
 expect(policyPath, policy, /enablingMfa[\s\S]*ctx\.mfaSatisfied !== true[\s\S]*status:\s*409/, "MFA policy enablement must require a currently assured OIDC session");
 expect(policyPath, policy, /enablingDeviceTrust[\s\S]*ctx\.deviceTrustSatisfied !== true[\s\S]*status:\s*409/, "device-trust policy enablement must require a currently trusted-device session");
 expect(policyPath, policy, /mfaConfigured[\s\S]*deviceTrustConfigured/, "security policy read must expose secret-free assurance readiness");
+expect(policyPath, policy, /mfaRequired:\s*false/, "MFA must remain explicitly opt-in until an assured administrator enables it");
 
 const healthPath = "app/api/health/auth/route.ts";
 const health = await source(healthPath);
@@ -68,6 +69,14 @@ expect(editorPath, editor, /assuranceMissing/, "settings UX must surface missing
 expect(editorPath, editor, /currentMfaSatisfied[\s\S]*currentDeviceTrustSatisfied/, "settings UX must prevent enabling a control from an unassured current session");
 expect(editorPath, editor, /OIDC MFA claim\/value mapping is not configured/, "MFA settings copy must distinguish configuration from enforcement");
 expect(editorPath, editor, /OIDC device-trust claim\/value mapping is not configured/, "device-trust settings copy must distinguish configuration from enforcement");
+
+const loaderPath = "components/security-policy-editor-loader.tsx";
+const loader = await source(loaderPath);
+expect(loaderPath, loader, /mfaRequired:\s*policy\?\.mfaRequired \?\? false/, "settings must display effective persisted MFA policy, not a non-enforced default");
+
+const livePath = "components/settings-live-page.tsx";
+const live = await source(livePath);
+expect(livePath, live, /security\?\.mfaRequired === true/, "settings overview must call MFA required only when the persisted policy explicitly requires it");
 
 const envPath = ".env.onprem.example";
 const env = await source(envPath);
