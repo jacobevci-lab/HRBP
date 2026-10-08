@@ -80,15 +80,32 @@ export async function POST(request: Request) {
       const tenant = await tx.tenant.findUnique({ where: { id: config.tenantId }, select: { id: true } });
       if (!tenant) throw new Error("SCIM_TENANT_NOT_FOUND");
 
-      const existing = await tx.userAccount.findFirst({
-        where: {
-          tenantId: config.tenantId,
-          OR: [
-            ...(input.externalId ? [{ provisioningSource: "SCIM", provisioningExternalId: input.externalId }] : []),
-            { email: { equals: input.userName, mode: "insensitive" } }
-          ]
-        }
-      });
+      const [externalMatch, emailMatches] = await Promise.all([
+        input.externalId
+          ? tx.userAccount.findFirst({
+            where: {
+              tenantId: config.tenantId,
+              provisioningSource: "SCIM",
+              provisioningExternalId: input.externalId
+            }
+          })
+          : Promise.resolve(null),
+        tx.userAccount.findMany({
+          where: {
+            tenantId: config.tenantId,
+            email: { equals: input.userName, mode: "insensitive" }
+          },
+          orderBy: { id: "asc" },
+          take: 2
+        })
+      ]);
+
+      if (emailMatches.length > 1) throw new Error("SCIM_IDENTITY_CONFLICT");
+      const emailMatch = emailMatches[0] ?? null;
+      if (externalMatch && emailMatch && externalMatch.id !== emailMatch.id) {
+        throw new Error("SCIM_IDENTITY_CONFLICT");
+      }
+      const existing = externalMatch ?? emailMatch;
 
       if (existing?.provisioningSource && existing.provisioningSource !== "SCIM") {
         throw new Error("SCIM_OWNERSHIP_CONFLICT");
@@ -171,7 +188,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "SCIM_TENANT_NOT_FOUND") {
       return scimError(503, "The configured SCIM tenant does not exist.");
     }
-    if (error instanceof Error && ["SCIM_OWNERSHIP_CONFLICT", "SCIM_EXTERNAL_ID_CONFLICT"].includes(error.message)) {
+    if (error instanceof Error && ["SCIM_OWNERSHIP_CONFLICT", "SCIM_EXTERNAL_ID_CONFLICT", "SCIM_IDENTITY_CONFLICT"].includes(error.message)) {
       return scimError(409, "The requested user identity conflicts with an existing provisioning owner.", "uniqueness");
     }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
