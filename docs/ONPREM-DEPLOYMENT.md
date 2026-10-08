@@ -145,10 +145,12 @@ Enable it only after creating a dedicated random bearer credential:
 ```dotenv
 HRBP_SCIM_ENABLED=true
 HRBP_SCIM_TOKEN=<32-plus-character-random-secret>
+# Optional temporary overlap during credential rotation:
+HRBP_SCIM_TOKEN_PREVIOUS=
 HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION=false
 ```
 
-The SCIM bearer token is a privileged service credential. It must not be reused as the session, maintenance, metrics, malware-scanner, database, object-storage, OIDC or SMTP secret. The install/upgrade preflight enforces minimum length, whitespace rejection and privileged-secret separation.
+The SCIM bearer token is a privileged service credential. It must not be reused as the session, maintenance, metrics, malware-scanner, database, object-storage, OIDC or SMTP secret. The install/upgrade preflight enforces minimum length, whitespace rejection and privileged-secret separation. For zero-downtime rotation, place the retiring credential temporarily in `HRBP_SCIM_TOKEN_PREVIOUS`, move the identity provider to `HRBP_SCIM_TOKEN`, verify provisioning, then remove the previous token. The two values must be distinct; postflight and the secret-free health endpoint expose only whether an overlap window is active.
 
 The current release supports the SCIM `User` resource with bounded `userName`, `displayName`, `externalId` and `active` attributes, plus `GET/POST /Users`, `GET/PUT/PATCH/DELETE /Users/{id}`, ServiceProviderConfig, Schemas and ResourceTypes discovery. Group provisioning and bulk operations are explicitly unsupported. SCIM cannot assign HRBP roles: newly provisioned accounts are always created as `EMPLOYEE`.
 
