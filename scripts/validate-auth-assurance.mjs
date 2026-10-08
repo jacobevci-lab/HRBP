@@ -30,6 +30,15 @@ const sessionApiPath = "app/api/auth/session/route.ts";
 const sessionApi = await source(sessionApiPath);
 expect(sessionApiPath, sessionApi, /assurance:[\s\S]*mfaSatisfied:[\s\S]*deviceTrustSatisfied:/, "session API must expose only bounded assurance booleans");
 
+const contextPath = "lib/request-context.ts";
+const context = await source(contextPath);
+expect(contextPath, context, /mfaSatisfied\?: boolean[\s\S]*deviceTrustSatisfied\?: boolean/, "request context must carry session assurance evidence");
+expect(contextPath, context, /mfaSatisfied:\s*session\.mfaSatisfied === true[\s\S]*deviceTrustSatisfied:\s*session\.deviceTrustSatisfied === true/, "request context must derive assurance only from the verified signed session");
+
+const serverContextPath = "lib/server-session.ts";
+const serverContext = await source(serverContextPath);
+expect(serverContextPath, serverContext, /mfaSatisfied:\s*claims\.mfaSatisfied === true[\s\S]*deviceTrustSatisfied:\s*claims\.deviceTrustSatisfied === true/, "server-component context must preserve verified assurance state");
+
 const verifiedPath = "lib/verified-session.ts";
 const verified = await source(verifiedPath);
 expect(verifiedPath, verified, /mfaRequired:\s*true[\s\S]*deviceTrustRequired:\s*true/, "request verification must load current tenant assurance policy");
@@ -45,6 +54,8 @@ expect(localPath, local, /mfaSatisfied:\s*false[\s\S]*deviceTrustSatisfied:\s*fa
 const policyPath = "app/api/settings/security-policy/route.ts";
 const policy = await source(policyPath);
 expect(policyPath, policy, /assurancePolicyIssues[\s\S]*status:\s*409/, "tenant security policy must reject unenforceable assurance settings");
+expect(policyPath, policy, /enablingMfa[\s\S]*ctx\.mfaSatisfied !== true[\s\S]*status:\s*409/, "MFA policy enablement must require a currently assured OIDC session");
+expect(policyPath, policy, /enablingDeviceTrust[\s\S]*ctx\.deviceTrustSatisfied !== true[\s\S]*status:\s*409/, "device-trust policy enablement must require a currently trusted-device session");
 expect(policyPath, policy, /mfaConfigured[\s\S]*deviceTrustConfigured/, "security policy read must expose secret-free assurance readiness");
 
 const healthPath = "app/api/health/auth/route.ts";
@@ -54,6 +65,7 @@ expect(healthPath, health, /assurance:[\s\S]*mfaConfigured[\s\S]*deviceTrustConf
 const editorPath = "components/security-policy-editor.tsx";
 const editor = await source(editorPath);
 expect(editorPath, editor, /assuranceMissing/, "settings UX must surface missing assurance mapping");
+expect(editorPath, editor, /currentMfaSatisfied[\s\S]*currentDeviceTrustSatisfied/, "settings UX must prevent enabling a control from an unassured current session");
 expect(editorPath, editor, /OIDC MFA claim\/value mapping is not configured/, "MFA settings copy must distinguish configuration from enforcement");
 expect(editorPath, editor, /OIDC device-trust claim\/value mapping is not configured/, "device-trust settings copy must distinguish configuration from enforcement");
 
