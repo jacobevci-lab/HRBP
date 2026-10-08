@@ -63,7 +63,7 @@ const scheduler = await source(schedulerPath);
 expect(schedulerPath, scheduler, /status:\s*ScheduledPositionChangeStatus\.PENDING[\s\S]*effectiveAt:\s*\{\s*lte:\s*now\s*\}/, "maintenance must select only due pending job changes");
 expect(schedulerPath, scheduler, /currentImpactDigest[\s\S]*change\.impactDigest[\s\S]*IMPACT_STATE_CHANGED/, "automation must fail closed when reviewed impact state changes");
 expect(schedulerPath, scheduler, /TARGET_POSITION_OCCUPIED[\s\S]*TARGET_STATE_CONFLICT/, "automation must block target occupancy or claim races");
-expect(schedulerPath, scheduler, /ScheduledPositionChangeStatus\.APPLIED[\s\S]*employeeLifecycleEvent\.create[\s\S]*appendAudit/, "successful scheduled application must persist schedule, lifecycle and audit evidence");
+expect(schedulerPath, scheduler, /employeeLifecycleEvent\.create[\s\S]*ScheduledPositionChangeStatus\.APPLIED[\s\S]*appendAudit/, "successful scheduled application must persist lifecycle, terminal schedule state and audit evidence in the transaction");
 expect(schedulerPath, scheduler, /EMPLOYEE_POSITION_CHANGE_BLOCKED[\s\S]*enqueueNotificationOutbox/, "blocked schedules must notify the requester without silent retries");
 
 const maintenancePath = "lib/operational-maintenance.ts";
