@@ -33,7 +33,9 @@ expect(applyPath, apply, /verifyPositionChangePreviewReceipt/, "apply must crypt
 expect(applyPath, apply, /positionChangeImpactDigest[\s\S]*preview\.employmentId\s*!==\s*employment\.id[\s\S]*preview\.sourcePositionId\s*!==\s*employment\.positionId[\s\S]*preview\.impactDigest\s*!==\s*impactDigest/, "apply must invalidate preview when current employment or reviewed impact state changed");
 expect(applyPath, apply, /TARGET_NOT_OPEN[\s\S]*TARGET_OCCUPIED/, "apply must recheck target vacancy after preview");
 expect(applyPath, apply, /PREVIEW_REQUIRED[\s\S]*PREVIEW_STALE/, "apply must return controlled conflicts for expired or stale preview evidence");
-expect(applyPath, apply, /tx\.employment\.update[\s\S]*tx\.position\.update[\s\S]*employeeLifecycleEvent\.create[\s\S]*appendAudit/, "apply must keep employment, position, lifecycle and audit writes in one transaction");
+expect(applyPath, apply, /tx\.employment\.update[\s\S]*tx\.position\.updateMany[\s\S]*employeeLifecycleEvent\.create[\s\S]*appendAudit/, "apply must keep employment, position, lifecycle and audit writes in one transaction");
+expect(applyPath, apply, /position\.updateMany[\s\S]*status:\s*PositionStatus\.OPEN[\s\S]*targetClaim\.count\s*!==\s*1/, "target position claim must use an optimistic OPEN-state guard");
+expect(applyPath, apply, /TransactionIsolationLevel\.Serializable/, "job-change apply must serialize concurrent target-position claims");
 
 const componentPath = "components/employee-lifecycle-console.tsx";
 const component = await source(componentPath);
