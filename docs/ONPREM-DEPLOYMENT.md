@@ -132,6 +132,7 @@ The current snapshot includes:
 - document malware-scan counts by state, due-job count, oldest pending age and oldest scanner-lock age,
 - SCIM-managed identity counts plus enabled/configured/rotation/adoption posture gauges,
 - system-integration counts by lifecycle/enabled state plus unvalidated draft count,
+- scheduled employee position-change counts, due count and oldest due age,
 - scrape health and collection duration.
 
 Keep the endpoint on the private management path. Do not publish it through the customer-facing reverse proxy. A remote Prometheus/monitoring collector should reach it only through the customer's approved private management network or an authenticated monitoring proxy. `HRBP_METRICS_TOKEN` must not be reused as the maintenance, scanner, session, object-storage, database, OIDC or SMTP secret; install/upgrade preflight enforces this separation.
@@ -218,6 +219,14 @@ HRBP_MAINTENANCE_INTERVAL_SECONDS=900
 ```
 
 The value is bounded to 300–86400 seconds. Each cycle performs an authenticated protocol preflight and then invokes the eleven maintenance domains one at a time. Jobs are never run concurrently and maintenance POST requests are never automatically retried inside a cycle.
+
+Future-dated employee transfers/promotions are processed inside the existing `operational-maintenance` domain after their effective date. The batch is bounded independently:
+
+```dotenv
+HRBP_SCHEDULED_JOB_CHANGE_BATCH_SIZE=100
+```
+
+Supported range is 10–250. Due schedules are revalidated against the signed-review snapshot before mutation; state drift blocks the business decision instead of silently applying changed facts.
 
 The scheduler stores only bounded operational evidence in the `scheduler_state` volume:
 
