@@ -101,6 +101,20 @@ export async function PATCH(request: Request) {
     }, { status: 409, headers: { "cache-control": "no-store" } });
   }
 
+  const enablingMfa = next.mfaRequired && existing?.mfaRequired !== true;
+  if (enablingMfa && ctx.mfaSatisfied !== true) {
+    return Response.json({
+      error: "MFA cannot be enabled because the current OIDC session does not demonstrate MFA assurance. Complete an assured sign-in first."
+    }, { status: 409, headers: { "cache-control": "no-store" } });
+  }
+
+  const enablingDeviceTrust = next.deviceTrustRequired && existing?.deviceTrustRequired !== true;
+  if (enablingDeviceTrust && ctx.deviceTrustSatisfied !== true) {
+    return Response.json({
+      error: "Trusted-device enforcement cannot be enabled because the current OIDC session does not demonstrate device-trust assurance."
+    }, { status: 409, headers: { "cache-control": "no-store" } });
+  }
+
   const data = await db.$transaction(async (tx) => {
     const policy = await tx.tenantSecurityPolicy.upsert({
       where: { tenantId: ctx.tenantId },
