@@ -80,6 +80,7 @@ test("PostgreSQL scheduled employee job-change lifecycle", { skip: process.env.C
     "@/lib/authorization": authorization,
     "@/lib/db": dbMock,
     "@/lib/employee-position-change-preview": previewReceipt,
+    "@/lib/employment-scope": employmentScope,
     "@/lib/input-validation": inputValidation,
     "@/lib/request-context": requestContext
   });
