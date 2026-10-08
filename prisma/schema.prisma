@@ -227,6 +227,7 @@ model Tenant {
   leaveRequests       LeaveRequest[]
   compensationChanges CompensationChange[]
   scheduledPositionChanges ScheduledPositionChange[]
+  emergencyAccessGrants EmergencyAccessGrant[]
   payrollCountryPacks PayrollCountryPack[]
   payrollPeriods      PayrollPeriod[]
   payrollRuns         PayrollRun[]
@@ -256,6 +257,9 @@ model UserAccount {
   provisioningUpdatedAt  DateTime?
   tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assignments CaseAssignment[]
+  emergencyAccessRequests EmergencyAccessGrant[] @relation("EmergencyAccessRequester")
+  emergencyAccessDecisions EmergencyAccessGrant[] @relation("EmergencyAccessDecider")
+  emergencyAccessRevocations EmergencyAccessGrant[] @relation("EmergencyAccessRevoker")
 
   @@unique([tenantId, subject])
   @@unique([tenantId, provisioningSource, provisioningExternalId])

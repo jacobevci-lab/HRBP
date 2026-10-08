@@ -3,6 +3,7 @@ import { verifySessionAccount } from "@/lib/verified-session";
 import { cookies } from "next/headers";
 import { decodeSignedPayload, SESSION_COOKIE, sessionSecret, type SessionClaims } from "@/lib/auth-session";
 import type { RequestContext } from "@/lib/request-context";
+import { resolveEmergencyAccess } from "@/lib/emergency-access";
 
 
 
@@ -29,6 +30,11 @@ export async function getServerSessionClaims(): Promise<SessionClaims | null> {
 export async function getServerRequestContext(): Promise<RequestContext | null> {
   const claims = await getServerSessionClaims();
   if (!claims) return null;
+  const emergency = await resolveEmergencyAccess({
+    tenantId: claims.tenantId,
+    actorId: claims.actorId,
+    role: claims.role
+  });
   return {
     tenantId: claims.tenantId,
     actorId: claims.actorId,
@@ -36,6 +42,7 @@ export async function getServerRequestContext(): Promise<RequestContext | null> 
     employmentId: claims.employmentId,
     mfaSatisfied: claims.mfaSatisfied === true,
     deviceTrustSatisfied: claims.deviceTrustSatisfied === true,
-    assuranceVersion: claims.assuranceVersion ?? null
+    assuranceVersion: claims.assuranceVersion ?? null,
+    ...emergency
   };
 }

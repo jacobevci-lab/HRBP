@@ -176,6 +176,14 @@ model IntegrationConnection {
   @@index([tenantId, enabled, status])
 }
 
+enum EmergencyAccessStatus {
+  REQUESTED
+  ACTIVE
+  REJECTED
+  REVOKED
+  EXPIRED
+}
+
 model TenantSecurityPolicy {
   id                    String @id @default(cuid())
   tenantId              String @unique
@@ -191,6 +199,34 @@ model TenantSecurityPolicy {
   assuranceEnforcedAt   DateTime?
   updatedById           String
   updatedAt             DateTime @updatedAt
+}
+
+model EmergencyAccessGrant {
+  id             String @id @default(cuid())
+  tenantId       String
+  requesterId    String
+  reason         String
+  requestedMinutes Int
+  status         EmergencyAccessStatus @default(REQUESTED)
+  requestedAt    DateTime @default(now())
+  decidedById    String?
+  decidedAt      DateTime?
+  validFrom      DateTime?
+  validTo        DateTime?
+  revokedById    String?
+  revokedAt      DateTime?
+  expiredAt      DateTime?
+  decisionNote   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  requester      UserAccount @relation("EmergencyAccessRequester", fields: [requesterId], references: [id], onDelete: Restrict)
+  decidedBy      UserAccount? @relation("EmergencyAccessDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+  revokedBy      UserAccount? @relation("EmergencyAccessRevoker", fields: [revokedById], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, validTo])
+  @@index([tenantId, requesterId, status])
+  @@index([tenantId, decidedById, decidedAt])
 }
 
 model NotificationTemplate {

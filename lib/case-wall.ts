@@ -1,30 +1,36 @@
-import { Prisma, PrismaClient } from "@prisma/client";
+import { PlatformRole, Prisma, PrismaClient } from "@prisma/client";
 import { db } from "@/lib/db";
 import type { RequestContext } from "@/lib/request-context";
 
 type CaseWallClient = PrismaClient | Prisma.TransactionClient;
 
 export async function getCaseWallCase(ctx: RequestContext, caseId: string, client: CaseWallClient = db) {
+  const emergencyRead = ctx.breakGlassActive === true && ctx.role === PlatformRole.TENANT_ADMIN;
   return client.employeeCase.findFirst({
     where: {
       id: caseId,
       tenantId: ctx.tenantId,
-      OR: [
-        { ownerUserId: ctx.actorId },
-        { assignments: { some: { user: { is: { id: ctx.actorId, tenantId: ctx.tenantId, active: true } } } } }
-      ]
+      ...(emergencyRead ? {} : {
+        OR: [
+          { ownerUserId: ctx.actorId },
+          { assignments: { some: { user: { is: { id: ctx.actorId, tenantId: ctx.tenantId, active: true } } } } }
+        ]
+      })
     }
   });
 }
 
 export async function listCaseWallCases(ctx: RequestContext, client: CaseWallClient = db) {
+  const emergencyRead = ctx.breakGlassActive === true && ctx.role === PlatformRole.TENANT_ADMIN;
   return client.employeeCase.findMany({
     where: {
       tenantId: ctx.tenantId,
-      OR: [
-        { ownerUserId: ctx.actorId },
-        { assignments: { some: { user: { is: { id: ctx.actorId, tenantId: ctx.tenantId, active: true } } } } }
-      ]
+      ...(emergencyRead ? {} : {
+        OR: [
+          { ownerUserId: ctx.actorId },
+          { assignments: { some: { user: { is: { id: ctx.actorId, tenantId: ctx.tenantId, active: true } } } } }
+        ]
+      })
     },
     orderBy: { openedAt: "desc" },
     take: 200,

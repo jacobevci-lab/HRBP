@@ -1,4 +1,4 @@
-import { DataClassification, PlatformRole, PolicyExceptionStatus, PolicyStatus, ServiceQueueRole, ServiceRequestStatus } from "@prisma/client";
+import { DataClassification, EmergencyAccessStatus, PlatformRole, PolicyExceptionStatus, PolicyStatus, ServiceQueueRole, ServiceRequestStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { db } from "@/lib/db";
 import { runNotificationDispatcher } from "@/lib/notification-dispatcher";
@@ -120,6 +120,61 @@ async function escalateServiceRequests(now: Date) {
     if (changed.notified) notificationsQueued += 1;
   }
   return { escalated, autoAssigned, notificationsQueued };
+}
+
+async function expireEmergencyAccess(now: Date) {
+  const rows = await db.emergencyAccessGrant.findMany({
+    where: {
+      status: EmergencyAccessStatus.ACTIVE,
+      validTo: { lte: now }
+    },
+    orderBy: [{ validTo: "asc" }, { id: "asc" }],
+    take: 250,
+    select: { id: true, tenantId: true, requesterId: true }
+  });
+
+  let expired = 0;
+  for (const row of rows) {
+    const changed = await db.$transaction(async (tx) => {
+      const updated = await tx.emergencyAccessGrant.updateMany({
+        where: {
+          id: row.id,
+          tenantId: row.tenantId,
+          status: EmergencyAccessStatus.ACTIVE,
+          validTo: { lte: now }
+        },
+        data: {
+          status: EmergencyAccessStatus.EXPIRED,
+          expiredAt: now
+        }
+      });
+      if (updated.count !== 1) return false;
+
+      await appendAudit(tx, systemContext(row.tenantId), {
+        action: "security.emergency-access-expired",
+        resourceType: "EmergencyAccessGrant",
+        resourceId: row.id,
+        classification: DataClassification.RESTRICTED,
+        purpose: "Time-bound emergency access expired automatically"
+      });
+
+      await enqueueNotificationOutbox(tx, {
+        tenantId: row.tenantId,
+        eventType: "EMERGENCY_ACCESS_EXPIRED",
+        recipientUserId: row.requesterId,
+        templateKey: "security.emergency-access-expired",
+        resourceType: "EmergencyAccessGrant",
+        resourceId: row.id,
+        dedupeKey: `emergency-access:${row.id}:expired`,
+        classification: DataClassification.RESTRICTED,
+        payload: { expiredAt: now.toISOString() }
+      });
+      return true;
+    });
+    if (changed) expired += 1;
+  }
+
+  return { expired };
 }
 
 async function expirePolicyExceptions(now: Date) {
@@ -265,6 +320,7 @@ async function retirePolicies(now: Date) {
 export async function runOperationalMaintenance() {
   const startedAt = new Date();
   const service = await escalateServiceRequests(startedAt);
+  const emergencyAccess = await expireEmergencyAccess(startedAt);
   const expiredExceptions = await expirePolicyExceptions(startedAt);
   const retiredPolicies = await retirePolicies(startedAt);
   const scheduledPositionChanges = await runScheduledPositionChanges(startedAt);
