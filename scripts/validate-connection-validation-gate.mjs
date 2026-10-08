@@ -79,6 +79,11 @@ expect(actionsPath, actions, /JSON\.stringify\(validation \? \{ action \}/, "val
 const packagePath = "package.json";
 const pkg = await source(packagePath);
 expect(packagePath, pkg, /connection-validation:validate/, "connection validation gate validator must be registered");
+const settingsLivePath = "components/settings-live-page.tsx";
+const settingsLive = await source(settingsLivePath);
+expect(settingsLivePath, settingsLive, /managedOidc \? managedOidc\.jitEnabled : Boolean\(oidc\?\.jitProvisioning\)/, "settings must display effective managed-versus-legacy JIT state");
+expect(settingsLivePath, settingsLive, /identityRuntimeActivationIssues\(managedOidc\)/, "settings runtime readiness must surface governed identity policy drift");
+
 expect(packagePath, pkg, /identity-provider-auth-policy\.test\.mjs/, "managed identity-provider auth policy behavioral tests must run in the connection validation gate");
 expect(packagePath, pkg, /integration-live-validation:validate/, "live validation policy tests must be registered");
 expect(packagePath, pkg, /prebuild[\s\S]*connection-validation:validate/, "connection validation gate must run before production builds");
