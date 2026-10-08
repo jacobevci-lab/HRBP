@@ -5,6 +5,7 @@ import { authenticationAssuranceVersion, evaluateOidcAssurance } from "@/lib/aut
 import { clearOidcTransactionCookie, createSessionCookie, readOidcTransaction } from "@/lib/auth-session";
 import { withDb } from "@/lib/db";
 import { discoverOidc, exchangeAuthorizationCode, verifyIdToken } from "@/lib/oidc";
+import { enforceOidcRuntimeBinding } from "@/lib/runtime-identity-provider";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export async function GET(request: Request) {
   if (!code || !state || state !== transaction.state) return Response.redirect(redirectWithError(origin, "state"), 302);
 
   try {
+    await withDb((db) => enforceOidcRuntimeBinding(db, config));
     const metadata = await discoverOidc(config.issuer);
     const redirectUri = config.redirectUri || `${origin}/api/auth/callback`;
     const tokenSet = await exchangeAuthorizationCode({ config, metadata, code, verifier: transaction.verifier, redirectUri });
@@ -146,7 +148,9 @@ export async function GET(request: Request) {
     return new Response(null, { status: 302, headers });
   } catch (error) {
     console.error("OIDC callback failed", error);
-    const code = error instanceof Error && error.message === "IDENTITY_NOT_PROVISIONED"
+    const code = error instanceof Error && (error.message === "IDENTITY_PROVIDER_AMBIGUOUS" || error.message === "IDENTITY_PROVIDER_DRIFT")
+      ? "configuration"
+      : error instanceof Error && error.message === "IDENTITY_NOT_PROVISIONED"
       ? "not-provisioned"
       : error instanceof Error && error.message === "IDENTITY_DISABLED"
         ? "disabled"

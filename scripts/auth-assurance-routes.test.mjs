@@ -70,6 +70,7 @@ function fixture({ policy, assurance }) {
       clearOidcTransactionCookie: () => "hrbp_oidc_txn=; Max-Age=0"
     },
     "@/lib/db": { withDb: (operation) => operation(db) },
+    "@/lib/runtime-identity-provider": { enforceOidcRuntimeBinding: async () => ({ managed: false }) },
     "@/lib/oidc": {
       discoverOidc: async () => ({
         issuer: "https://idp.example.test",

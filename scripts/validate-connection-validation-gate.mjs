@@ -17,6 +17,24 @@ expect(identityPath, identity, /settings\.identity-provider-config-validated/, "
 expect(identityPath, identity, /!current\.lastValidatedAt[\s\S]*Validate the identity-provider configuration before activation/, "identity activation must require recorded validation evidence");
 expect(identityPath, identity, /status: ConnectionStatus\.DRAFT, lastValidatedAt: null/, "reopening identity configuration must invalidate prior validation");
 expect(identityPath, identity, /action === "validate"[\s\S]*data:\s*\{\s*lastValidatedAt:\s*new Date\(\)\s*\}[\s\S]*settings\.identity-provider-config-validated/, "identity validation must record validation evidence without changing lifecycle state");
+expect(identityPath, identity, /identityRuntimeActivationIssues\(current\)[\s\S]*current login runtime/, "identity activation must distinguish metadata validity from runtime support");
+expect(identityPath, identity, /isOidcRuntimeProvider\(current\.type\)[\s\S]*Only one runtime OIDC-family identity provider can be active/, "runtime-backed OIDC activation must prevent ambiguous active providers");
+
+const runtimeBindingPath = "lib/runtime-identity-provider.ts";
+const runtimeBinding = await source(runtimeBindingPath);
+expect(runtimeBindingPath, runtimeBinding, /status:\s*ConnectionStatus\.ACTIVE[\s\S]*type:\s*\{ in:\s*\[\.\.\.oidcRuntimeProviderTypes\] \}/, "runtime binding must read only active OIDC-family providers");
+expect(runtimeBindingPath, runtimeBinding, /active\.length !== 1[\s\S]*IDENTITY_PROVIDER_AMBIGUOUS/, "multiple active runtime providers must fail closed");
+expect(runtimeBindingPath, runtimeBinding, /IDENTITY_PROVIDER_DRIFT/, "managed provider/runtime metadata drift must fail closed");
+expect(runtimeBindingPath, runtimeBinding, /SAML login runtime adapter[\s\S]*LDAP login runtime adapter/, "unsupported identity protocols must not be falsely activatable");
+
+const loginPath = "app/api/auth/login/route.ts";
+const login = await source(loginPath);
+expect(loginPath, login, /enforceOidcRuntimeBinding\(db, config\)[\s\S]*discoverOidc\(config\.issuer\)/, "OIDC login must verify governed runtime binding before provider discovery");
+
+const callbackPath = "app/api/auth/callback/route.ts";
+const callback = await source(callbackPath);
+expect(callbackPath, callback, /enforceOidcRuntimeBinding\(db, config\)[\s\S]*discoverOidc\(config\.issuer\)/, "OIDC callback must revalidate governed runtime binding before token exchange");
+expect(callbackPath, callback, /IDENTITY_PROVIDER_AMBIGUOUS[\s\S]*IDENTITY_PROVIDER_DRIFT[\s\S]*configuration/, "runtime binding failures must surface only as bounded configuration errors");
 
 const integrationPath = "app/api/settings/integrations/[id]/route.ts";
 const integration = await source(integrationPath);

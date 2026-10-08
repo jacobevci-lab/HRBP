@@ -1,6 +1,8 @@
 import { getOidcConfig } from "@/lib/auth-config";
 import { createOidcTransactionCookie, pkceChallenge, randomToken, sanitizeReturnTo } from "@/lib/auth-session";
+import { withDb } from "@/lib/db";
 import { discoverOidc } from "@/lib/oidc";
+import { enforceOidcRuntimeBinding } from "@/lib/runtime-identity-provider";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,7 @@ export async function GET(request: Request) {
   if (!config) return Response.redirect(`${origin}/auth/sign-in?error=configuration`, 302);
 
   try {
+    await withDb((db) => enforceOidcRuntimeBinding(db, config));
     const metadata = await discoverOidc(config.issuer);
     const requestUrl = new URL(request.url);
     const returnTo = sanitizeReturnTo(requestUrl.searchParams.get("returnTo"));
@@ -36,6 +39,10 @@ export async function GET(request: Request) {
     return new Response(null, { status: 302, headers });
   } catch (error) {
     console.error("OIDC login initialization failed", error);
-    return Response.redirect(`${origin}/auth/sign-in?error=provider`, 302);
+    const code = error instanceof Error && (
+      error.message === "IDENTITY_PROVIDER_AMBIGUOUS" ||
+      error.message === "IDENTITY_PROVIDER_DRIFT"
+    ) ? "configuration" : "provider";
+    return Response.redirect(`${origin}/auth/sign-in?error=${code}`, 302);
   }
 }
