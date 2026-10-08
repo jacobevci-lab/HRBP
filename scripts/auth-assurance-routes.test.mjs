@@ -92,7 +92,7 @@ async function invoke(route) {
 
 test("OIDC callback rejects missing MFA assurance before account provisioning", async () => {
   const { route, calls } = fixture({
-    policy: { sessionMaxMinutes: 480, mfaRequired: true, deviceTrustRequired: false },
+    policy: { sessionMaxMinutes: 480, mfaRequired: true, deviceTrustRequired: false, assuranceEnforcedAt: new Date("2026-10-08T12:00:00Z") },
     assurance: { mfaSatisfied: false, deviceTrustSatisfied: false }
   });
   const response = await invoke(route);
@@ -104,7 +104,7 @@ test("OIDC callback rejects missing MFA assurance before account provisioning", 
 
 test("OIDC callback rejects missing device trust assurance before account provisioning", async () => {
   const { route, calls } = fixture({
-    policy: { sessionMaxMinutes: 480, mfaRequired: false, deviceTrustRequired: true },
+    policy: { sessionMaxMinutes: 480, mfaRequired: false, deviceTrustRequired: true, assuranceEnforcedAt: new Date("2026-10-08T12:00:00Z") },
     assurance: { mfaSatisfied: true, deviceTrustSatisfied: false }
   });
   const response = await invoke(route);
@@ -113,9 +113,23 @@ test("OIDC callback rejects missing device trust assurance before account provis
   assert.equal(calls.userLookup, 0);
 });
 
+test("legacy pre-enforcement policy flags do not lock out OIDC sign-in", async () => {
+  const { route, calls } = fixture({
+    policy: { sessionMaxMinutes: 480, mfaRequired: true, deviceTrustRequired: true, assuranceEnforcedAt: null },
+    assurance: { mfaSatisfied: false, deviceTrustSatisfied: false }
+  });
+  const response = await invoke(route);
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("location"), "/");
+  assert.equal(calls.userLookup, 1);
+  assert.ok(calls.sessionClaims);
+  assert.equal(calls.sessionClaims.mfaSatisfied, false);
+  assert.equal(calls.sessionClaims.deviceTrustSatisfied, false);
+});
+
 test("OIDC callback binds successful assurance evidence into the application session", async () => {
   const { route, calls } = fixture({
-    policy: { sessionMaxMinutes: 120, mfaRequired: true, deviceTrustRequired: true },
+    policy: { sessionMaxMinutes: 120, mfaRequired: true, deviceTrustRequired: true, assuranceEnforcedAt: new Date("2026-10-08T12:00:00Z") },
     assurance: { mfaSatisfied: true, deviceTrustSatisfied: true }
   });
   const response = await invoke(route);
