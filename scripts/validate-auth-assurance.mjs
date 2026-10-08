@@ -78,6 +78,11 @@ const livePath = "components/settings-live-page.tsx";
 const live = await source(livePath);
 expect(livePath, live, /security\?\.mfaRequired === true/, "settings overview must call MFA required only when the persisted policy explicitly requires it");
 
+const postflightPath = "scripts/onprem-postflight.mjs";
+const postflight = await source(postflightPath);
+expect(postflightPath, postflight, /mode === "pre-upgrade" \|\| \([\s\S]*assurance\?\.mfaConfigured === true/, "pre-upgrade health must remain compatible with releases that predate assurance telemetry");
+expect(postflightPath, postflight, /mfaAssuranceConfigured:[\s\S]*not-required-pre-upgrade/, "postflight must distinguish old-release pre-upgrade assurance telemetry from target readiness");
+
 const envPath = ".env.onprem.example";
 const env = await source(envPath);
 for (const token of [
