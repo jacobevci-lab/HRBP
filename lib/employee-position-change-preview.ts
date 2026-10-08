@@ -26,14 +26,20 @@ function digestReason(reason: string) {
 
 export function positionChangeImpactDigest(input: {
   sourcePositionId: string | null;
+  sourcePositionCode: string | null;
+  sourceTitle: string | null;
   sourceOrgUnitId: string | null;
+  sourceOrgUnitName: string | null;
   sourceGrade: string | null;
   sourceLocation: string | null;
   sourceCritical: boolean;
   managerEmploymentId: string | null;
   directReportCount: number;
   targetPositionId: string;
+  targetPositionCode: string;
+  targetTitle: string;
   targetOrgUnitId: string;
+  targetOrgUnitName: string;
   targetGrade: string | null;
   targetLocation: string | null;
   targetCritical: boolean;
