@@ -156,12 +156,14 @@ export async function runScheduledPositionChanges(now = new Date()) {
       });
 
       if (!employment) {
-        await blockScheduledChange(tx, change, now, "EMPLOYMENT_NOT_ACTIVE");
-        return "blocked" as const;
+        return await blockScheduledChange(tx, change, now, "EMPLOYMENT_NOT_ACTIVE")
+          ? "blocked" as const
+          : "skipped" as const;
       }
       if (employment.positionId !== change.sourcePositionId) {
-        await blockScheduledChange(tx, change, now, "SOURCE_POSITION_CHANGED");
-        return "blocked" as const;
+        return await blockScheduledChange(tx, change, now, "SOURCE_POSITION_CHANGED")
+          ? "blocked" as const
+          : "skipped" as const;
       }
 
       const target = await tx.position.findFirst({
@@ -182,12 +184,14 @@ export async function runScheduledPositionChanges(now = new Date()) {
         }
       });
       if (!target) {
-        await blockScheduledChange(tx, change, now, "TARGET_POSITION_NOT_FOUND");
-        return "blocked" as const;
+        return await blockScheduledChange(tx, change, now, "TARGET_POSITION_NOT_FOUND")
+          ? "blocked" as const
+          : "skipped" as const;
       }
       if (target.status !== PositionStatus.OPEN) {
-        await blockScheduledChange(tx, change, now, "TARGET_POSITION_NOT_OPEN");
-        return "blocked" as const;
+        return await blockScheduledChange(tx, change, now, "TARGET_POSITION_NOT_OPEN")
+          ? "blocked" as const
+          : "skipped" as const;
       }
 
       const [incumbent, openTargetRequisitionCount] = await Promise.all([
@@ -209,8 +213,9 @@ export async function runScheduledPositionChanges(now = new Date()) {
         })
       ]);
       if (incumbent) {
-        await blockScheduledChange(tx, change, now, "TARGET_POSITION_OCCUPIED");
-        return "blocked" as const;
+        return await blockScheduledChange(tx, change, now, "TARGET_POSITION_OCCUPIED")
+          ? "blocked" as const
+          : "skipped" as const;
       }
 
       const currentImpactDigest = positionChangeImpactDigest({
@@ -235,8 +240,9 @@ export async function runScheduledPositionChanges(now = new Date()) {
         openTargetRequisitionCount
       });
       if (currentImpactDigest !== change.impactDigest) {
-        await blockScheduledChange(tx, change, now, "IMPACT_STATE_CHANGED");
-        return "blocked" as const;
+        return await blockScheduledChange(tx, change, now, "IMPACT_STATE_CHANGED")
+          ? "blocked" as const
+          : "skipped" as const;
       }
 
       const employmentUpdated = await tx.employment.updateMany({
@@ -250,8 +256,9 @@ export async function runScheduledPositionChanges(now = new Date()) {
         data: { positionId: target.id }
       });
       if (employmentUpdated.count !== 1) {
-        await blockScheduledChange(tx, change, now, "EMPLOYMENT_STATE_CONFLICT");
-        return "blocked" as const;
+        return await blockScheduledChange(tx, change, now, "EMPLOYMENT_STATE_CONFLICT")
+          ? "blocked" as const
+          : "skipped" as const;
       }
 
       if (employment.positionId) {
