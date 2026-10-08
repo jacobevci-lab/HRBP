@@ -10,6 +10,8 @@ const helperPath = "lib/employee-position-change-preview.ts";
 const helper = await source(helperPath);
 expect(helperPath, helper, /exp\s*=\s*issuedAt\s*\+\s*10\s*\*\s*60/, "preview receipt must expire after ten minutes");
 expect(helperPath, helper, /reasonDigest:\s*digestReason\(input\.reason\)/, "preview receipt must bind the business reason without storing it");
+expect(helperPath, helper, /positionChangeImpactDigest[\s\S]*createHash\("sha256"\)\.update\(JSON\.stringify\(input\)/, "impact state must be represented by a deterministic digest");
+expect(helperPath, helper, /impactDigest:\s*input\.impactDigest/, "signed preview receipt must carry the reviewed impact digest");
 expect(helperPath, helper, /tenantId:\s*input\.tenantId[\s\S]*actorId:\s*input\.actorId[\s\S]*personId:\s*input\.personId[\s\S]*employmentId:\s*input\.employmentId[\s\S]*sourcePositionId:\s*input\.sourcePositionId[\s\S]*targetPositionId:\s*input\.targetPositionId/, "preview receipt must bind tenant, actor, employee and source/target state");
 expect(helperPath, helper, /claims\.tenantId\s*!==\s*expected\.tenantId[\s\S]*claims\.actorId\s*!==\s*expected\.actorId[\s\S]*claims\.personId\s*!==\s*expected\.personId[\s\S]*claims\.targetPositionId\s*!==\s*expected\.targetPositionId/, "receipt verification must reject identity or target drift");
 expect(helperPath, helper, /claims\.reasonDigest\s*!==\s*digestReason\(expected\.reason\)/, "receipt verification must reject reason drift");
@@ -22,13 +24,13 @@ expect(previewPath, preview, /status:\s*PositionStatus\.OPEN/, "impact preview m
 expect(previewPath, preview, /NOT:\s*\{\s*id:\s*employment\.id\s*\}/, "impact preview must detect another incumbent");
 expect(previewPath, preview, /tx\.requisition\.count[\s\S]*status:\s*\{\s*in:\s*openRequisitionStatuses\s*\}/, "impact preview must surface open recruiting demand on the target position");
 expect(previewPath, preview, /DIRECT_REPORT_RELATIONSHIPS_UNCHANGED[\s\S]*MANAGER_RELATIONSHIP_UNCHANGED[\s\S]*TARGET_REQUISITIONS_REMAIN_OPEN[\s\S]*TARGET_POSITION_IS_CRITICAL/, "impact preview must surface the governed relationship warnings");
-expect(previewPath, preview, /createPositionChangePreviewReceipt/, "impact preview must return a signed short-lived receipt");
+expect(previewPath, preview, /positionChangeImpactDigest[\s\S]*createPositionChangePreviewReceipt[\s\S]*impactDigest/, "impact preview must sign the exact reviewed relationship-impact state");
 
 const applyPath = "app/api/people/[personId]/lifecycle/position/route.ts";
 const apply = await source(applyPath);
 expect(applyPath, apply, /asText\(body\.previewReceipt,\s*8192\)/, "apply must require a bounded preview receipt");
 expect(applyPath, apply, /verifyPositionChangePreviewReceipt/, "apply must cryptographically verify the preview receipt");
-expect(applyPath, apply, /preview\.employmentId\s*!==\s*employment\.id[\s\S]*preview\.sourcePositionId\s*!==\s*employment\.positionId/, "apply must invalidate preview when current employment state changed");
+expect(applyPath, apply, /positionChangeImpactDigest[\s\S]*preview\.employmentId\s*!==\s*employment\.id[\s\S]*preview\.sourcePositionId\s*!==\s*employment\.positionId[\s\S]*preview\.impactDigest\s*!==\s*impactDigest/, "apply must invalidate preview when current employment or reviewed impact state changed");
 expect(applyPath, apply, /TARGET_NOT_OPEN[\s\S]*TARGET_OCCUPIED/, "apply must recheck target vacancy after preview");
 expect(applyPath, apply, /PREVIEW_REQUIRED[\s\S]*PREVIEW_STALE/, "apply must return controlled conflicts for expired or stale preview evidence");
 expect(applyPath, apply, /tx\.employment\.update[\s\S]*tx\.position\.update[\s\S]*employeeLifecycleEvent\.create[\s\S]*appendAudit/, "apply must keep employment, position, lifecycle and audit writes in one transaction");
@@ -44,6 +46,7 @@ expect(componentPath, component, /Confirm and apply promotion|Terfiyi onayla ve 
 const testPath = "scripts/job-change-impact-preview.test.mjs";
 const tests = await source(testPath);
 expect(testPath, tests, /preview receipt rejects field drift and token tampering/, "behavioral test must cover tampering and field drift");
+expect(testPath, tests, /impact digest changes when governed relationship state changes/, "behavioral test must cover impact-state drift");
 expect(testPath, tests, /preview receipt expires after ten minutes/, "behavioral test must cover expiry");
 
 if (failures.length) {
