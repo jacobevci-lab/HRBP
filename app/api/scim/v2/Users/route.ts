@@ -111,7 +111,10 @@ export async function POST(request: Request) {
         throw new Error("SCIM_OWNERSHIP_CONFLICT");
       }
       if (existing && !existing.provisioningSource &&
-          (!config.allowUnmanagedAdoption || existing.role !== PlatformRole.EMPLOYEE || existing.localAuthEnabled)) {
+          (!config.allowUnmanagedAdoption ||
+           existing.role !== PlatformRole.EMPLOYEE ||
+           existing.localAuthEnabled ||
+           Boolean(existing.localPasswordHash))) {
         throw new Error("SCIM_OWNERSHIP_CONFLICT");
       }
       if (existing?.provisioningSource === "SCIM" &&
