@@ -1,4 +1,4 @@
-import { ConnectionStatus, NotificationOutboxStatus, VaultScanStatus } from "@prisma/client";
+import { ConnectionStatus, NotificationOutboxStatus, ScheduledPositionChangeStatus, VaultScanStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { internalBearerAuthorized } from "@/lib/internal-auth";
 import { scimRuntimeConfig } from "@/lib/scim";
@@ -24,6 +24,7 @@ const scanStatuses = [
 
 const notificationChannels = ["IN_APP", "EMAIL", "OTHER"] as const;
 const connectionStatuses = [ConnectionStatus.DRAFT, ConnectionStatus.ACTIVE, ConnectionStatus.DEGRADED, ConnectionStatus.DISABLED] as const;
+const scheduledPositionChangeStatuses = [ScheduledPositionChangeStatus.PENDING, ScheduledPositionChangeStatus.APPLIED, ScheduledPositionChangeStatus.BLOCKED, ScheduledPositionChangeStatus.CANCELLED] as const;
 
 function metricHeaders() {
   return {
@@ -63,7 +64,10 @@ export async function GET(request: Request) {
       dueScanJobs,
       scimUserGroups,
       integrationGroups,
-      unvalidatedIntegrationDrafts
+      unvalidatedIntegrationDrafts,
+      scheduledPositionChangeGroups,
+      dueScheduledPositionChanges,
+      oldestDueScheduledPositionChange
     ] = await Promise.all([
       db.notificationOutbox.groupBy({
         by: ["channel", "status"],
@@ -132,6 +136,24 @@ export async function GET(request: Request) {
       }),
       db.integrationConnection.count({
         where: { status: ConnectionStatus.DRAFT, lastValidatedAt: null }
+      }),
+      db.scheduledPositionChange.groupBy({
+        by: ["status"],
+        _count: { _all: true }
+      }),
+      db.scheduledPositionChange.count({
+        where: {
+          status: ScheduledPositionChangeStatus.PENDING,
+          effectiveAt: { lte: now }
+        }
+      }),
+      db.scheduledPositionChange.findFirst({
+        where: {
+          status: ScheduledPositionChangeStatus.PENDING,
+          effectiveAt: { lte: now }
+        },
+        orderBy: [{ effectiveAt: "asc" }, { id: "asc" }],
+        select: { effectiveAt: true }
       })
     ]);
 
@@ -167,6 +189,12 @@ export async function GET(request: Request) {
     }
     for (const row of integrationGroups) {
       integrationCounts.set(`${row.status}:${row.enabled}`, row._count._all);
+    }
+
+    const scheduledPositionChangeCounts = new Map<ScheduledPositionChangeStatus, number>();
+    for (const status of scheduledPositionChangeStatuses) scheduledPositionChangeCounts.set(status, 0);
+    for (const row of scheduledPositionChangeGroups) {
+      scheduledPositionChangeCounts.set(row.status, row._count._all);
     }
 
     const lines = [
@@ -238,6 +266,17 @@ export async function GET(request: Request) {
       "# HELP hrbp_integration_unvalidated_drafts Draft integrations without current live validation evidence.",
       "# TYPE hrbp_integration_unvalidated_drafts gauge",
       `hrbp_integration_unvalidated_drafts ${unvalidatedIntegrationDrafts}`,
+      "# HELP hrbp_scheduled_position_changes Current scheduled employee position changes by bounded status.",
+      "# TYPE hrbp_scheduled_position_changes gauge",
+      ...scheduledPositionChangeStatuses.map((status) =>
+        `hrbp_scheduled_position_changes{status="${status}"} ${scheduledPositionChangeCounts.get(status) ?? 0}`
+      ),
+      "# HELP hrbp_scheduled_position_changes_due Pending scheduled position changes that reached their effective date.",
+      "# TYPE hrbp_scheduled_position_changes_due gauge",
+      `hrbp_scheduled_position_changes_due ${dueScheduledPositionChanges}`,
+      "# HELP hrbp_scheduled_position_changes_oldest_due_age_seconds Age of the oldest due pending scheduled position change.",
+      "# TYPE hrbp_scheduled_position_changes_oldest_due_age_seconds gauge",
+      `hrbp_scheduled_position_changes_oldest_due_age_seconds ${ageSeconds(oldestDueScheduledPositionChange?.effectiveAt, now)}`,
       "# HELP hrbp_operational_metrics_scrape_duration_seconds Time spent collecting this metrics snapshot.",
       "# TYPE hrbp_operational_metrics_scrape_duration_seconds gauge",
       `hrbp_operational_metrics_scrape_duration_seconds ${((Date.now() - startedAt) / 1000).toFixed(3)}`
