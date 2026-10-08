@@ -17,6 +17,7 @@ const base = {
   HRBP_METRICS_TOKEN: "metrics-token-abcdefghijklmnopqrstuvwxyz",
   HRBP_SCIM_ENABLED: "false",
   HRBP_SCIM_TOKEN: "",
+  HRBP_SCIM_TOKEN_PREVIOUS: "",
   HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "false",
   HRBP_OIDC_ISSUER: "https://login.example.com/tenant/v2.0",
   HRBP_OIDC_CLIENT_ID: "client-id-123",
@@ -125,6 +126,39 @@ test("accepts guarded SCIM provisioning configuration", () => {
     HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "false"
   });
   assert.equal(result.ok, true, result.errors.join("\n"));
+});
+
+test("accepts bounded SCIM token rotation overlap and warns until old token is removed", () => {
+  const result = validateOnpremEnv({
+    ...base,
+    HRBP_SCIM_ENABLED: "true",
+    HRBP_SCIM_TOKEN: "scim-current-abcdefghijklmnopqrstuvwxyz-123456",
+    HRBP_SCIM_TOKEN_PREVIOUS: "scim-previous-abcdefghijklmnopqrstuvwxyz-654321",
+    HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "false"
+  });
+  assert.equal(result.ok, true, result.errors.join("\n"));
+  assert.ok(result.warnings.some((entry) => entry.includes("previous bearer token overlap")));
+});
+
+test("rejects unsafe SCIM previous-token rotation values", () => {
+  const same = validateOnpremEnv({
+    ...base,
+    HRBP_SCIM_ENABLED: "true",
+    HRBP_SCIM_TOKEN: "scim-current-abcdefghijklmnopqrstuvwxyz-123456",
+    HRBP_SCIM_TOKEN_PREVIOUS: "scim-current-abcdefghijklmnopqrstuvwxyz-123456"
+  });
+  assert.equal(same.ok, false);
+  assert.ok(same.errors.some((entry) => entry.includes("must differ")));
+
+  const reused = validateOnpremEnv({
+    ...base,
+    HRBP_SCIM_ENABLED: "true",
+    HRBP_SCIM_TOKEN: "scim-current-abcdefghijklmnopqrstuvwxyz-123456",
+    HRBP_SCIM_TOKEN_PREVIOUS: base.HRBP_MAINTENANCE_TOKEN
+  });
+  assert.equal(reused.ok, false);
+  assert.ok(reused.errors.some((entry) => entry.includes("HRBP_SCIM_TOKEN_PREVIOUS must not reuse")));
+  assert.ok(!JSON.stringify(reused).includes(base.HRBP_MAINTENANCE_TOKEN));
 });
 
 test("rejects invalid SCIM tenant email domains", () => {
