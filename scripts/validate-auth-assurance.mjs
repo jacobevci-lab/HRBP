@@ -16,8 +16,8 @@ expect(helperPath, helper, /actual\.some\(\(value\) => accepted\.has\(value\)\)/
 const callbackPath = "app/api/auth/callback/route.ts";
 const callback = await source(callbackPath);
 expect(callbackPath, callback, /evaluateOidcAssurance\(payload/, "OIDC callback must evaluate signed token assurance claims");
-expect(callbackPath, callback, /securityPolicy\?\.mfaRequired[\s\S]*!assurance\.mfaSatisfied[\s\S]*MFA_REQUIRED/, "OIDC callback must fail closed when tenant MFA assurance is missing");
-expect(callbackPath, callback, /securityPolicy\?\.deviceTrustRequired[\s\S]*!assurance\.deviceTrustSatisfied[\s\S]*DEVICE_TRUST_REQUIRED/, "OIDC callback must fail closed when trusted-device evidence is missing");
+expect(callbackPath, callback, /securityPolicy\?\.assuranceEnforcedAt[\s\S]*securityPolicy\.mfaRequired[\s\S]*!assurance\.mfaSatisfied[\s\S]*MFA_REQUIRED/, "OIDC callback must fail closed when an activated tenant MFA policy lacks assurance");
+expect(callbackPath, callback, /securityPolicy\?\.assuranceEnforcedAt[\s\S]*securityPolicy\.deviceTrustRequired[\s\S]*!assurance\.deviceTrustSatisfied[\s\S]*DEVICE_TRUST_REQUIRED/, "OIDC callback must fail closed when an activated trusted-device policy lacks assurance");
 expect(callbackPath, callback, /mfaSatisfied:\s*assurance\.mfaSatisfied[\s\S]*deviceTrustSatisfied:\s*assurance\.deviceTrustSatisfied/, "OIDC sessions must bind evaluated assurance evidence");
 expect(callbackPath, callback, /mfa-required[\s\S]*device-trust-required/, "OIDC assurance denials must use bounded public error codes");
 
@@ -41,13 +41,13 @@ expect(serverContextPath, serverContext, /mfaSatisfied:\s*claims\.mfaSatisfied =
 
 const verifiedPath = "lib/verified-session.ts";
 const verified = await source(verifiedPath);
-expect(verifiedPath, verified, /mfaRequired:\s*true[\s\S]*deviceTrustRequired:\s*true/, "request verification must load current tenant assurance policy");
-expect(verifiedPath, verified, /policy\?\.mfaRequired[\s\S]*claims\.mfaSatisfied !== true/, "existing sessions must fail immediately after MFA policy enforcement");
-expect(verifiedPath, verified, /policy\?\.deviceTrustRequired[\s\S]*claims\.deviceTrustSatisfied !== true/, "existing sessions must fail immediately after device-trust policy enforcement");
+expect(verifiedPath, verified, /mfaRequired:\s*true[\s\S]*deviceTrustRequired:\s*true[\s\S]*assuranceEnforcedAt:\s*true/, "request verification must load current tenant assurance policy and activation state");
+expect(verifiedPath, verified, /policy\?\.assuranceEnforcedAt[\s\S]*policy\.mfaRequired[\s\S]*claims\.mfaSatisfied !== true/, "existing sessions must fail immediately after activated MFA policy enforcement");
+expect(verifiedPath, verified, /policy\?\.assuranceEnforcedAt[\s\S]*policy\.deviceTrustRequired[\s\S]*claims\.deviceTrustSatisfied !== true/, "existing sessions must fail immediately after activated device-trust policy enforcement");
 
 const localPath = "app/api/auth/local/route.ts";
 const local = await source(localPath);
-expect(localPath, local, /assurancePolicy\?\.mfaRequired \|\| assurancePolicy\?\.deviceTrustRequired/, "local password sessions must not bypass tenant assurance policy");
+expect(localPath, local, /assurancePolicy\?\.assuranceEnforcedAt[\s\S]*assurancePolicy\.mfaRequired \|\| assurancePolicy\.deviceTrustRequired/, "local password sessions must not bypass an activated tenant assurance policy");
 expect(localPath, local, /auth\.local-assurance-denied/, "blocked local assurance bypass must be audited");
 expect(localPath, local, /mfaSatisfied:\s*false[\s\S]*deviceTrustSatisfied:\s*false/, "local sessions must not claim assurance they cannot provide");
 
@@ -58,6 +58,16 @@ expect(policyPath, policy, /enablingMfa[\s\S]*ctx\.mfaSatisfied !== true[\s\S]*s
 expect(policyPath, policy, /enablingDeviceTrust[\s\S]*ctx\.deviceTrustSatisfied !== true[\s\S]*status:\s*409/, "device-trust policy enablement must require a currently trusted-device session");
 expect(policyPath, policy, /mfaConfigured[\s\S]*deviceTrustConfigured/, "security policy read must expose secret-free assurance readiness");
 expect(policyPath, policy, /mfaRequired:\s*false/, "MFA must remain explicitly opt-in until an assured administrator enables it");
+expect(policyPath, policy, /assuranceEnforcedAt = next\.mfaRequired \|\| next\.deviceTrustRequired[\s\S]*existing\?\.assuranceEnforcedAt \?\? new Date\(\)/, "assurance enforcement must activate only through an explicit assured policy save");
+expect(policyPath, policy, /mfaRequired:\s*Boolean\(policy\.assuranceEnforcedAt && policy\.mfaRequired\)/, "security policy GET must project effective activated MFA state");
+
+const schemaPath = "prisma/platform.prisma";
+const schema = await source(schemaPath);
+expect(schemaPath, schema, /assuranceEnforcedAt\s+DateTime\?/, "tenant security policy must persist assurance activation state");
+
+const migrationPath = "prisma/migrations/20261008123000_auth_assurance_activation/migration.sql";
+const migration = await source(migrationPath);
+expect(migrationPath, migration, /ADD COLUMN "assuranceEnforcedAt" TIMESTAMP\(3\)/, "versioned migration must add nullable assurance activation without auto-enabling legacy policy rows");
 
 const healthPath = "app/api/health/auth/route.ts";
 const health = await source(healthPath);
@@ -72,11 +82,11 @@ expect(editorPath, editor, /OIDC device-trust claim\/value mapping is not config
 
 const loaderPath = "components/security-policy-editor-loader.tsx";
 const loader = await source(loaderPath);
-expect(loaderPath, loader, /mfaRequired:\s*policy\?\.mfaRequired \?\? false/, "settings must display effective persisted MFA policy, not a non-enforced default");
+expect(loaderPath, loader, /mfaRequired:\s*Boolean\(policy\?\.assuranceEnforcedAt && policy\.mfaRequired\)/, "settings must display only activated MFA policy");
 
 const livePath = "components/settings-live-page.tsx";
 const live = await source(livePath);
-expect(livePath, live, /security\?\.mfaRequired === true/, "settings overview must call MFA required only when the persisted policy explicitly requires it");
+expect(livePath, live, /security\?\.assuranceEnforcedAt && security\.mfaRequired/, "settings overview must call MFA required only when assurance enforcement is activated");
 
 const postflightPath = "scripts/onprem-postflight.mjs";
 const postflight = await source(postflightPath);
