@@ -47,10 +47,10 @@ export async function GET(request: Request) {
     const identity = await withDb(async (db) => {
       const securityPolicy = await db.tenantSecurityPolicy.findUnique({
         where: { tenantId: config.tenantId },
-        select: { sessionMaxMinutes: true, mfaRequired: true, deviceTrustRequired: true }
+        select: { sessionMaxMinutes: true, mfaRequired: true, deviceTrustRequired: true, assuranceEnforcedAt: true }
       });
-      if (securityPolicy?.mfaRequired && !assurance.mfaSatisfied) throw new Error("MFA_REQUIRED");
-      if (securityPolicy?.deviceTrustRequired && !assurance.deviceTrustSatisfied) throw new Error("DEVICE_TRUST_REQUIRED");
+      if (securityPolicy?.assuranceEnforcedAt && securityPolicy.mfaRequired && !assurance.mfaSatisfied) throw new Error("MFA_REQUIRED");
+      if (securityPolicy?.assuranceEnforcedAt && securityPolicy.deviceTrustRequired && !assurance.deviceTrustSatisfied) throw new Error("DEVICE_TRUST_REQUIRED");
       let user = await db.userAccount.findFirst({
         where: {
           tenantId: config.tenantId,
