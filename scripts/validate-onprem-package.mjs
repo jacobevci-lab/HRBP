@@ -226,7 +226,7 @@ for (const token of [
   'method: "HEAD"',
   "TARGET_NOT_ALLOWED",
   "TRANSPORT_UNAVAILABLE",
-  "169.254",
+  "a === 169 && b === 254",
   "localhost"
 ]) assert.ok(integrationProbe.includes(token), `Integration probe contract missing: ${token}`);
 for (const token of [
