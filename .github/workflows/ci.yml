@@ -62,6 +62,8 @@ jobs:
         env:
           HRBP_DISPOSABLE_AUDIT_LEDGER_TEST: "true"
         run: node --test scripts/audit-ledger-concurrency.test.mjs
+      - name: Verify governed job-change preview on PostgreSQL
+        run: node --test scripts/job-change-impact-preview.postgres.test.mjs
       - run: npm run typecheck
       - run: npm run build
       - run: npm run cf:build

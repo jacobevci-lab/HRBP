@@ -23,6 +23,7 @@ The operating experience is action-oriented: authenticated users see only module
 - Authenticated navigation and global search are capability-aware. Public staging may expose module labels and sample-only previews, but never protected records, secrets or privileged actions.
 - Workflow task completion is restricted to the assigned user, assigned platform role, or an explicitly governed shared task.
 - Cross-domain succession development creation requires both succession and learning write capabilities; completion evidence returns to an authorized human reviewer instead of driving an automated employment decision.
+- Transfer and promotion require a signed, short-lived impact preview; apply revalidates vacancy, relationship state and target-position ownership before a serializable mutation.
 
 ## Workflow and notification operations
 

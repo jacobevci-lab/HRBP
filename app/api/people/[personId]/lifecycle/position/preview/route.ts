@@ -1,10 +1,8 @@
-import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatus, Prisma, RequisitionStatus } from "@prisma/client";
-import { appendAudit } from "@/lib/audit";
+import { EmploymentStatus, LifecycleEventType, PositionStatus, RequisitionStatus } from "@prisma/client";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
-import { positionChangeImpactDigest, verifyPositionChangePreviewReceipt } from "@/lib/employee-position-change-preview";
-import { asEnumValue, asIdentifier, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
-import { isPrismaRecordNotFound } from "@/lib/prisma-safety";
+import { createPositionChangePreviewReceipt, positionChangeImpactDigest } from "@/lib/employee-position-change-preview";
+import { asEnumValue, asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
 const ACTIVE_EMPLOYMENT_STATUSES: EmploymentStatus[] = [
@@ -32,30 +30,29 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
 
   const personId = asIdentifier((await params).personId);
   if (!personId) return Response.json({ error: "A valid person id is required." }, { status: 400 });
+
   const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
 
   const targetPositionId = asIdentifier(body.targetPositionId);
   const eventType = asEnumValue(body.eventType, allowedEvents);
-  const previewReceipt = asText(body.previewReceipt, 8192);
   const reasonValue = asOptionalText(body.reason, 500);
-  if (reasonValue === null) return Response.json({ error: "reason must be a string up to 500 characters." }, { status: 400 });
   const reason = reasonValue ?? "";
   const effectiveAt = body.effectiveAt === undefined ? new Date() : typeof body.effectiveAt === "string" ? new Date(body.effectiveAt) : null;
 
   if (!targetPositionId) return Response.json({ error: "targetPositionId is required and must be a string." }, { status: 400 });
   if (!eventType) return Response.json({ error: "eventType must be TRANSFERRED or PROMOTED." }, { status: 400 });
-  if (!previewReceipt) return Response.json({ error: "A fresh signed impact preview receipt is required before applying a position change." }, { status: 409 });
+  if (reasonValue === null) return Response.json({ error: "reason must be a string up to 500 characters." }, { status: 400 });
   if (!effectiveAt || Number.isNaN(effectiveAt.getTime())) return Response.json({ error: "effectiveAt must be a valid date string." }, { status: 400 });
 
   const tomorrow = new Date();
   tomorrow.setHours(23, 59, 59, 999);
   if (effectiveAt > tomorrow) {
-    return Response.json({ error: "Future-dated position changes are not applied immediately. Use a scheduled workflow when that capability is enabled." }, { status: 409 });
+    return Response.json({ error: "Future-dated position changes are not previewed for immediate application. Use a scheduled workflow when that capability is enabled." }, { status: 409 });
   }
 
   try {
-    const result = await withDb((db) => db.$transaction(async (tx) => {
+    const data = await withDb((db) => db.$transaction(async (tx) => {
       const employment = await tx.employment.findFirst({
         where: { tenantId: ctx.tenantId, personId, status: { in: ACTIVE_EMPLOYMENT_STATUSES } },
         orderBy: { startDate: "desc" },
@@ -68,7 +65,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
               id: true,
               positionCode: true,
               title: true,
-              status: true,
               grade: true,
               location: true,
               critical: true,
@@ -83,7 +79,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
 
       const target = await tx.position.findFirst({
         where: { id: targetPositionId, tenantId: ctx.tenantId, validTo: null },
-        select: { id: true, positionCode: true, title: true, status: true, grade: true, location: true, critical: true, orgUnit: { select: { id: true, name: true } } }
+        select: {
+          id: true,
+          positionCode: true,
+          title: true,
+          grade: true,
+          location: true,
+          critical: true,
+          status: true,
+          orgUnit: { select: { id: true, name: true } }
+        }
       });
       if (!target) throw new Error("TARGET_NOT_FOUND");
       if (target.status !== PositionStatus.OPEN) throw new Error("TARGET_NOT_OPEN");
@@ -130,80 +135,67 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
         openTargetRequisitionCount
       });
 
-      const preview = verifyPositionChangePreviewReceipt(previewReceipt, {
+      const receipt = createPositionChangePreviewReceipt({
         tenantId: ctx.tenantId,
         actorId: ctx.actorId,
         personId,
-        targetPositionId,
+        employmentId: employment.id,
+        sourcePositionId: employment.positionId,
+        targetPositionId: target.id,
         eventType,
         effectiveAt,
-        reason
-      });
-      if (!preview) throw new Error("PREVIEW_REQUIRED");
-      if (preview.employmentId !== employment.id || preview.sourcePositionId !== employment.positionId || preview.impactDigest !== impactDigest) {
-        throw new Error("PREVIEW_STALE");
-      }
-
-      try {
-        await tx.employment.update({
-          where: { id: employment.id, tenantId: ctx.tenantId, positionId: employment.positionId },
-          data: { positionId: target.id }
-        });
-      } catch (error) {
-        if (isPrismaRecordNotFound(error)) throw new Error("STATE_CONFLICT");
-        throw error;
-      }
-
-      if (employment.positionId) {
-        await tx.position.update({
-          where: { id: employment.positionId, tenantId: ctx.tenantId },
-          data: { status: PositionStatus.OPEN }
-        });
-      }
-      const targetClaim = await tx.position.updateMany({
-        where: {
-          id: target.id,
-          tenantId: ctx.tenantId,
-          status: PositionStatus.OPEN,
-          validTo: null
-        },
-        data: { status: PositionStatus.FILLED }
-      });
-      if (targetClaim.count !== 1) throw new Error("STATE_CONFLICT");
-
-      const fromLabel = employment.position ? `${employment.position.title} (${employment.position.positionCode})` : "Unassigned";
-      const toLabel = `${target.title} (${target.positionCode})`;
-      const lifecycle = await tx.employeeLifecycleEvent.create({
-        data: {
-          tenantId: ctx.tenantId,
-          personId,
-          employmentId: employment.id,
-          type: eventType,
-          effectiveAt,
-          summary: `${eventType === LifecycleEventType.PROMOTED ? "Promoted" : "Transferred"}: ${fromLabel} → ${toLabel}${reason ? ` · ${reason}` : ""}`,
-          actorId: ctx.actorId
-        }
+        reason,
+        impactDigest
       });
 
-      await appendAudit(tx, ctx, {
-        action: eventType === LifecycleEventType.PROMOTED ? "EMPLOYEE_PROMOTED" : "EMPLOYEE_TRANSFERRED",
-        resourceType: "Employment",
-        resourceId: employment.id,
-        classification: DataClassification.CONFIDENTIAL,
-        purpose: "Employee position lifecycle administration after signed impact preview verification"
-      });
+      const orgUnitChanged = (employment.position?.orgUnit.id ?? null) !== target.orgUnit.id;
+      const gradeChanged = (employment.position?.grade ?? null) !== (target.grade ?? null);
+      const locationChanged = (employment.position?.location ?? null) !== (target.location ?? null);
+      const warnings: string[] = [];
+      if (employment._count.directReports > 0) warnings.push("DIRECT_REPORT_RELATIONSHIPS_UNCHANGED");
+      if (orgUnitChanged && employment.managerEmploymentId) warnings.push("MANAGER_RELATIONSHIP_UNCHANGED");
+      if (openTargetRequisitionCount > 0) warnings.push("TARGET_REQUISITIONS_REMAIN_OPEN");
+      if (gradeChanged) warnings.push("GRADE_CHANGE_REQUIRES_COMPENSATION_REVIEW");
+      if (locationChanged) warnings.push("LOCATION_CHANGE_REQUIRES_POLICY_REVIEW");
+      if (target.critical) warnings.push("TARGET_POSITION_IS_CRITICAL");
 
       return {
+        receipt: receipt.token,
+        expiresAt: receipt.expiresAt,
         employmentId: employment.id,
-        fromPositionId: employment.positionId,
-        targetPositionId: target.id,
-        eventId: lifecycle.id,
         eventType,
-        effectiveAt
+        effectiveAt,
+        sourcePosition: employment.position ? {
+          id: employment.position.id,
+          positionCode: employment.position.positionCode,
+          title: employment.position.title,
+          grade: employment.position.grade,
+          location: employment.position.location,
+          critical: employment.position.critical,
+          orgUnit: employment.position.orgUnit
+        } : null,
+        targetPosition: {
+          id: target.id,
+          positionCode: target.positionCode,
+          title: target.title,
+          grade: target.grade,
+          location: target.location,
+          critical: target.critical,
+          orgUnit: target.orgUnit
+        },
+        impacts: {
+          orgUnitChanged,
+          gradeChanged,
+          locationChanged,
+          directReportCount: employment._count.directReports,
+          managerRelationshipPresent: Boolean(employment.managerEmploymentId),
+          openTargetRequisitionCount
+        },
+        warnings
       };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
+    }));
 
-    return Response.json({ data: result });
+    return Response.json({ data }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
     const errors: Record<string, [string, number]> = {
@@ -211,16 +203,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
       SAME_POSITION: ["The target position is already assigned to this employee.", 409],
       TARGET_NOT_FOUND: ["The target position was not found in this tenant.", 404],
       TARGET_NOT_OPEN: ["The target position is not open for assignment.", 409],
-      TARGET_OCCUPIED: ["The target position already has an active incumbent.", 409],
-      PREVIEW_REQUIRED: ["The signed impact preview is missing, expired or does not match this position change. Generate a new preview.", 409],
-      PREVIEW_STALE: ["The employee or related position-impact state changed after the impact preview was generated. Refresh and generate a new preview.", 409],
-      STATE_CONFLICT: ["The employment changed concurrently. Refresh and try again.", 409]
+      TARGET_OCCUPIED: ["The target position already has an active incumbent.", 409]
     };
     if (errors[code]) return Response.json({ error: errors[code][0] }, { status: errors[code][1] });
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
-      return Response.json({ error: "The employee or target position changed concurrently. Refresh and generate a new preview." }, { status: 409 });
-    }
-    console.error("[HRBP] Employee position lifecycle transition failed.");
-    return Response.json({ error: "Employee position lifecycle change could not be completed." }, { status: 500 });
+    console.error("[HRBP] Employee position-change preview failed.");
+    return Response.json({ error: "Employee position-change impact preview could not be prepared." }, { status: 500 });
   }
 }
