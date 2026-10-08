@@ -129,7 +129,7 @@ Tenant administrators do not gain HIGHLY_RESTRICTED visibility merely because th
 - a second TENANT_ADMIN must independently approve or reject the request;
 - the requester can never decide their own request;
 - duration is bounded to 15–60 minutes;
-- the grant expands only HIGHLY_RESTRICTED **read** classification checks and does not grant new write capabilities;
+- the grant adds only the narrow `cases:read` and `privacy:read` capabilities plus HIGHLY_RESTRICTED read-classification eligibility; it does not grant case/privacy write, payroll, compensation or other administrative capabilities;
 - disabling the tenant break-glass policy makes active grants ineffective immediately because access is resolved live on every request;
 - revocation is immediate and expiration is enforced both at authorization time and by scheduled maintenance.
 
