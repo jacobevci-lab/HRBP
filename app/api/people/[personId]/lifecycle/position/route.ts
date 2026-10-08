@@ -190,7 +190,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
         resourceType: "Employment",
         resourceId: employment.id,
         classification: DataClassification.CONFIDENTIAL,
-        purpose: "Employee position lifecycle administration"
+        purpose: "Employee position lifecycle administration after signed impact preview verification"
       });
 
       return {
