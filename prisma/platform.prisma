@@ -188,6 +188,7 @@ model TenantSecurityPolicy {
   downloadWatermarking  Boolean @default(true)
   deviceTrustRequired   Boolean @default(false)
   breakGlassEnabled     Boolean @default(true)
+  assuranceEnforcedAt   DateTime?
   updatedById           String
   updatedAt             DateTime @updatedAt
 }
