@@ -123,6 +123,14 @@ export function EmployeeLifecycleConsole({
         "The target position still has an open recruiting requisition that must be reviewed separately.",
         "Hedef pozisyon için ayrıca incelenmesi gereken açık işe alım talebi bulunuyor."
       ],
+      GRADE_CHANGE_REQUIRES_COMPENSATION_REVIEW: [
+        "The position grade changes, but compensation is not changed automatically; review the governed compensation process separately.",
+        "Pozisyon seviyesi değişiyor ancak ücret otomatik değişmez; yönetişim kontrollü ücret süreci ayrıca incelenmelidir."
+      ],
+      LOCATION_CHANGE_REQUIRES_POLICY_REVIEW: [
+        "The work location changes; review schedule, policy, benefits and jurisdiction-dependent obligations separately.",
+        "Çalışma lokasyonu değişiyor; çalışma planı, politika, yan haklar ve lokasyona bağlı yükümlülükler ayrıca incelenmelidir."
+      ],
       TARGET_POSITION_IS_CRITICAL: [
         "The target is marked as a critical position.",
         "Hedef pozisyon kritik pozisyon olarak işaretli."
