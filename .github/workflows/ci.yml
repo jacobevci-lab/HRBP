@@ -152,6 +152,25 @@ jobs:
             exit 1
           fi
 
+          node --input-type=module <<'NODE'
+          const response = await fetch('http://127.0.0.1:8787/api/health/runtime', { redirect: 'error' });
+          const expected = new Map([
+            ['content-security-policy', "base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"],
+            ['strict-transport-security', 'max-age=31536000'],
+            ['referrer-policy', 'strict-origin-when-cross-origin'],
+            ['permissions-policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()'],
+            ['x-content-type-options', 'nosniff'],
+            ['x-frame-options', 'DENY']
+          ]);
+          for (const [name, value] of expected) {
+            if (response.headers.get(name) !== value) {
+              console.error('Worker security header mismatch.', { name, expected: value, actual: response.headers.get(name) });
+              process.exit(1);
+            }
+          }
+          console.log('Cloudflare Worker browser security headers passed.');
+          NODE
+
           node scripts/smoke-maintenance-protocol.mjs || {
             echo 'Single-job maintenance protocol smoke test failed'
             cat /tmp/hrbp-wrangler.log

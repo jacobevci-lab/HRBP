@@ -54,3 +54,17 @@ Operational metrics are exposed only through the authenticated internal metrics 
 Tenant identifiers, user identifiers, employee data, resource identifiers, notification event names, object keys, document metadata, scanner references and error bodies are not metric labels or values. Unknown notification channel values are collapsed to a bounded `OTHER` label rather than emitted verbatim. Database failures return only a generic scrape-failure gauge and HTTP 503; SQL or provider exception text is not returned to the collector.
 
 The metrics token is independent from maintenance and malware-scanner credentials, and on-prem preflight rejects privileged-secret reuse.
+
+
+## Browser response hardening
+
+Every application route receives a small browser security baseline from the Next.js response configuration:
+
+- Content Security Policy restricts base URLs and form submissions to the application origin, forbids framing, and disables plugin/object content without introducing `unsafe-inline`, `unsafe-eval` or wildcard sources.
+- `X-Frame-Options: DENY` provides a legacy clickjacking fallback for browsers that do not enforce CSP `frame-ancestors`.
+- `X-Content-Type-Options: nosniff` disables MIME sniffing.
+- `Referrer-Policy: strict-origin-when-cross-origin` avoids leaking full internal paths cross-origin.
+- `Permissions-Policy` disables camera, microphone, geolocation, payment and USB capabilities that HRBP does not require.
+- HSTS is emitted with a one-year max age. Customer reverse proxies must preserve this header on the external HTTPS origin; browsers ignore it on plain HTTP development/loopback access.
+
+The CSP intentionally does not yet define `default-src` or `script-src`: Next.js runtime scripts are not weakened with broad unsafe directives just to claim a full CSP. Tighter nonce/hash-based script and style policy should be introduced only with end-to-end browser regression coverage.
