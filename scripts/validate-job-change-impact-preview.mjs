@@ -23,7 +23,7 @@ expect(previewPath, preview, /mutationOriginAllowed\(request\)/, "impact preview
 expect(previewPath, preview, /status:\s*PositionStatus\.OPEN/, "impact preview must inspect only the current open target position");
 expect(previewPath, preview, /NOT:\s*\{\s*id:\s*employment\.id\s*\}/, "impact preview must detect another incumbent");
 expect(previewPath, preview, /tx\.requisition\.count[\s\S]*status:\s*\{\s*in:\s*openRequisitionStatuses\s*\}/, "impact preview must surface open recruiting demand on the target position");
-expect(previewPath, preview, /DIRECT_REPORT_RELATIONSHIPS_UNCHANGED[\s\S]*MANAGER_RELATIONSHIP_UNCHANGED[\s\S]*TARGET_REQUISITIONS_REMAIN_OPEN[\s\S]*TARGET_POSITION_IS_CRITICAL/, "impact preview must surface the governed relationship warnings");
+expect(previewPath, preview, /DIRECT_REPORT_RELATIONSHIPS_UNCHANGED[\s\S]*MANAGER_RELATIONSHIP_UNCHANGED[\s\S]*TARGET_REQUISITIONS_REMAIN_OPEN[\s\S]*GRADE_CHANGE_REQUIRES_COMPENSATION_REVIEW[\s\S]*LOCATION_CHANGE_REQUIRES_POLICY_REVIEW[\s\S]*TARGET_POSITION_IS_CRITICAL/, "impact preview must surface the governed relationship warnings");
 expect(previewPath, preview, /positionChangeImpactDigest[\s\S]*createPositionChangePreviewReceipt[\s\S]*impactDigest/, "impact preview must sign the exact reviewed relationship-impact state");
 
 const applyPath = "app/api/people/[personId]/lifecycle/position/route.ts";
