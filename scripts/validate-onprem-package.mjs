@@ -201,6 +201,9 @@ for (const token of [
   "HRBP_OIDC_REDIRECT_URI must use APP_URL origin",
   "must use different secrets",
   "must not contain wildcard domains",
+  "HRBP_SCIM_ENABLED must be explicitly true or false",
+  "HRBP_SCIM_TOKEN must be at least 32 characters",
+  "HRBP_SCIM_TOKEN_PREVIOUS must be at least 32 characters",
   "must use an explicit tag or digest"
 ]) assert.ok(preflightLib.includes(token), `On-prem preflight policy missing: ${token}`);
 for (const token of [
@@ -218,6 +221,8 @@ for (const token of [
   "/api/health/runtime",
   "/api/health/db",
   "/api/health/auth",
+  "/api/health/scim",
+  "SCIM health",
   "/api/internal/metrics",
   "HRBP_METRICS_TOKEN",
   "Operational metrics endpoint is not healthy",
@@ -263,6 +268,10 @@ for (const key of [
   assert.ok(env.includes(`${key}=CHANGE_ME`), `Example must force operator replacement for ${key}`);
 }
 assert.match(env, /HRBP_LOCAL_AUTH_ENABLED=false/);
+assert.match(env, /HRBP_SCIM_ENABLED=false/);
+assert.match(env, /HRBP_SCIM_TOKEN=/);
+assert.match(env, /HRBP_SCIM_TOKEN_PREVIOUS=/);
+assert.match(env, /HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION=false/);
 assert.match(env, /HRBP_HTTP_BIND=127\.0\.0\.1/);
 assert.match(env, /HRBP_MAINTENANCE_INTERVAL_SECONDS=900/);
 assert.match(env, /OBJECT_STORAGE_IMAGE=chrislusf\/seaweedfs:4\.48/);
@@ -347,6 +356,8 @@ assert.equal(pkg.scripts?.["db:migrate:verify"], "node scripts/verify-prisma-mig
 assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-maintenance-scheduler.test.mjs"), "On-prem validation must execute scheduler safety tests.");
 assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-preflight.test.mjs"), "On-prem validation must execute preflight safety tests.");
 assert.ok(pkg.scripts?.["onprem:validate"]?.includes("document-scanner:validate"), "On-prem validation must execute document scanner safety tests.");
+assert.equal(pkg.scripts?.["scim:validate"], "node --test scripts/scim-provisioning.test.mjs", "SCIM protocol validation must remain registered.");
+assert.ok(pkg.scripts?.prebuild?.includes("scim:validate"), "SCIM protocol validation must gate production builds.");
 assert.equal(pkg.scripts?.["onprem:preflight"], "node scripts/onprem-preflight.mjs --env-file .env.onprem --phase install");
 assert.equal(pkg.scripts?.["onprem:postflight"], "node scripts/onprem-postflight.mjs --env-file .env.onprem");
 assert.equal(pkg.scripts?.["onprem:upgrade"], "bash scripts/onprem-upgrade.sh");
@@ -367,7 +378,10 @@ for (const token of [
   "ClamAV",
   "document-scanner",
   "QUARANTINED",
-  "CLEAN"
+  "CLEAN",
+  "SCIM 2.0",
+  "HRBP_SCIM_TOKEN",
+  "unmanaged-account adoption"
 ]) assert.ok(docs.includes(token), `On-prem runbook missing recovery guidance: ${token}`);
 
 console.log("On-prem package, recovery and versioned migration safety validation passed.");

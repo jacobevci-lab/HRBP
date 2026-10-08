@@ -130,11 +130,36 @@ The current snapshot includes:
 
 - notification outbox counts by bounded channel/status, due-job count, oldest actionable age and oldest dispatcher-lock age,
 - document malware-scan counts by state, due-job count, oldest pending age and oldest scanner-lock age,
+- SCIM-managed identity counts plus enabled/configured/rotation/adoption posture gauges,
 - scrape health and collection duration.
 
 Keep the endpoint on the private management path. Do not publish it through the customer-facing reverse proxy. A remote Prometheus/monitoring collector should reach it only through the customer's approved private management network or an authenticated monitoring proxy. `HRBP_METRICS_TOKEN` must not be reused as the maintenance, scanner, session, object-storage, database, OIDC or SMTP secret; install/upgrade preflight enforces this separation.
 
 Postflight performs an authenticated scrape and fails deployment verification when the metrics endpoint is unavailable or does not expose the expected bounded metric families. Container health remains the liveness source for the maintenance scheduler and document-scanner sidecars; the application metrics endpoint complements rather than replaces those checks.
+
+## SCIM 2.0 user provisioning
+
+HRBP can expose a tenant-scoped SCIM 2.0 user provisioning surface for enterprise identity providers. It is disabled by default and is independent from interactive OIDC sign-in.
+
+Enable it only after creating a dedicated random bearer credential:
+
+```dotenv
+HRBP_SCIM_ENABLED=true
+HRBP_SCIM_TOKEN=<32-plus-character-random-secret>
+# Optional temporary overlap during credential rotation:
+HRBP_SCIM_TOKEN_PREVIOUS=
+HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION=false
+```
+
+The SCIM bearer token is a privileged service credential. It must not be reused as the session, maintenance, metrics, malware-scanner, database, object-storage, OIDC or SMTP secret. The install/upgrade preflight enforces minimum length, whitespace rejection and privileged-secret separation. For zero-downtime rotation, place the retiring credential temporarily in `HRBP_SCIM_TOKEN_PREVIOUS`, move the identity provider to `HRBP_SCIM_TOKEN`, verify provisioning, then remove the previous token. The two values must be distinct; postflight and the secret-free health endpoint expose only whether an overlap window is active.
+
+The current release supports the SCIM `User` resource with bounded `userName`, `displayName`, `externalId` and `active` attributes, plus `GET/POST /Users`, `GET/PUT/PATCH/DELETE /Users/{id}`, ServiceProviderConfig, Schemas and ResourceTypes discovery. Group provisioning and bulk operations are explicitly unsupported. SCIM cannot assign HRBP roles: newly provisioned accounts are always created as `EMPLOYEE`.
+
+All SCIM resources are scoped to `HRBP_AUTH_TENANT_ID` and to the configured allowed email domains. Mutating operations are serialized per tenant so concurrent identity-provider retries converge instead of creating a provisioning fork. Deactivation and DELETE are soft deprovisioning operations: the account is disabled and its application session version is advanced so previously issued HRBP sessions stop working on their next verified request.
+
+By default SCIM will not take ownership of an existing unmanaged account. This prevents a provisioning connector from silently adopting a local or privileged administrator identity. A reviewed migration may set `HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION=true`, but even then only non-local `EMPLOYEE` accounts can be adopted; privileged and local-auth accounts remain protected. Treat unmanaged-account adoption as a temporary migration control and disable it after convergence.
+
+SCIM lifecycle changes produce append-only audit evidence using the system actor `system:scim-provisioner`. The health endpoint `/api/health/scim` exposes only enabled/configured/readiness state and never the bearer token. Post-deploy verification checks this endpoint; pre-upgrade verification remains compatible with releases that predate SCIM health.
 
 ## Optional SMTP email delivery
 

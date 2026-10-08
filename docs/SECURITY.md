@@ -49,7 +49,7 @@ Before invoking ClamAV, the worker independently verifies the immutable content 
 
 ## Operational metrics boundary
 
-Operational metrics are exposed only through the authenticated internal metrics endpoint and use a dedicated deployment secret. The exported series are deliberately low-cardinality, aggregate operational state: notification channel/status counts, document malware-scan state/count/age signals, and scrape health/timing.
+Operational metrics are exposed only through the authenticated internal metrics endpoint and use a dedicated deployment secret. The exported series are deliberately low-cardinality, aggregate operational state: notification channel/status counts, document malware-scan state/count/age signals, SCIM-managed identity counts/configuration posture, and scrape health/timing.
 
 Tenant identifiers, user identifiers, employee data, resource identifiers, notification event names, object keys, document metadata, scanner references and error bodies are not metric labels or values. Unknown notification channel values are collapsed to a bounded `OTHER` label rather than emitted verbatim. Database failures return only a generic scrape-failure gauge and HTTP 503; SQL or provider exception text is not returned to the collector.
 
@@ -68,3 +68,16 @@ Every application route receives a small browser security baseline from the Next
 - HSTS is emitted with a one-year max age. Customer reverse proxies must preserve this header on the external HTTPS origin; browsers ignore it on plain HTTP development/loopback access.
 
 The CSP intentionally does not yet define `default-src` or `script-src`: Next.js runtime scripts are not weakened with broad unsafe directives just to claim a full CSP. Tighter nonce/hash-based script and style policy should be introduced only with end-to-end browser regression coverage.
+
+
+## SCIM provisioning boundary
+
+SCIM is an optional service-to-service identity provisioning interface and is disabled by default. It uses a dedicated tenant-scoped bearer credential and never reuses browser-session, maintenance, metrics, scanner, database, storage, OIDC or SMTP secrets. Credential rotation can temporarily accept one separately configured previous bearer; the previous and current tokens must be distinct and the health surface reveals only whether that overlap is active. The retiring token should be removed immediately after the identity provider has switched.
+
+Provisioning can create and synchronize only application user identity state. SCIM cannot assign privileged HRBP roles; newly created accounts are fixed to `EMPLOYEE`. User mutations are restricted to `userName`, `displayName`, `externalId` and `active`, and request bodies, filters, pagination and resource identifiers are bounded before database use.
+
+SCIM operations are serialized per tenant with a PostgreSQL transaction advisory lock. This makes concurrent identity-provider retries converge on one account state and keeps deprovision/session-revocation updates ordered. Deactivation increments the account session version exactly once on the active-to-disabled transition; stale copied HRBP sessions therefore fail on subsequent verified requests.
+
+Unmanaged-account adoption is disabled by default. When explicitly enabled for a reviewed migration, only non-local `EMPLOYEE` accounts are eligible; SCIM cannot silently take ownership of local-auth or privileged administrator accounts. All lifecycle mutations write restricted append-only audit evidence under the system SCIM actor.
+
+The SCIM health endpoint is secret-free. Authentication failures return the SCIM error shape with a Bearer challenge but never echo the token, database error text or employee payloads.

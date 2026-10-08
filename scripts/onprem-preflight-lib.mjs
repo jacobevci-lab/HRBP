@@ -127,6 +127,40 @@ export function validateOnpremEnv(env) {
     warnings.push("Local authentication is enabled; production on-prem deployments should normally use enterprise OIDC only.");
   }
 
+  const scimEnabledRaw = (env.HRBP_SCIM_ENABLED ?? "false").toLowerCase();
+  if (!["true", "false"].includes(scimEnabledRaw)) {
+    errors.push("HRBP_SCIM_ENABLED must be explicitly true or false.");
+  }
+  const scimEnabled = scimEnabledRaw === "true";
+  const scimAdoptionRaw = (env.HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION ?? "false").toLowerCase();
+  if (!["true", "false"].includes(scimAdoptionRaw)) {
+    errors.push("HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION must be explicitly true or false.");
+  }
+  if (scimEnabled) {
+    const scimToken = env.HRBP_SCIM_TOKEN ?? "";
+    const scimPreviousToken = env.HRBP_SCIM_TOKEN_PREVIOUS ?? "";
+    if (!scimToken || isPlaceholder(scimToken)) errors.push("HRBP_SCIM_TOKEN is required when HRBP_SCIM_ENABLED=true.");
+    if (scimToken.length < 32) errors.push("HRBP_SCIM_TOKEN must be at least 32 characters.");
+    if (/\s/.test(scimToken)) errors.push("HRBP_SCIM_TOKEN must not contain whitespace.");
+    if (secretValues.some(([, value]) => value === scimToken) || (env.HRBP_SMTP_PASSWORD && env.HRBP_SMTP_PASSWORD === scimToken)) {
+      errors.push("HRBP_SCIM_TOKEN must not reuse another application secret.");
+    }
+    if (scimPreviousToken) {
+      if (isPlaceholder(scimPreviousToken)) errors.push("HRBP_SCIM_TOKEN_PREVIOUS must not contain an example placeholder.");
+      if (scimPreviousToken.length < 32) errors.push("HRBP_SCIM_TOKEN_PREVIOUS must be at least 32 characters when configured.");
+      if (/\s/.test(scimPreviousToken)) errors.push("HRBP_SCIM_TOKEN_PREVIOUS must not contain whitespace.");
+      if (scimPreviousToken === scimToken) errors.push("HRBP_SCIM_TOKEN_PREVIOUS must differ from HRBP_SCIM_TOKEN.");
+      if (secretValues.some(([, value]) => value === scimPreviousToken) ||
+          (env.HRBP_SMTP_PASSWORD && env.HRBP_SMTP_PASSWORD === scimPreviousToken)) {
+        errors.push("HRBP_SCIM_TOKEN_PREVIOUS must not reuse another application secret.");
+      }
+      warnings.push("SCIM previous bearer token overlap is active; remove HRBP_SCIM_TOKEN_PREVIOUS after the IdP has moved to the current token.");
+    }
+    if (scimAdoptionRaw === "true") {
+      warnings.push("SCIM unmanaged-account adoption is enabled; review existing EMPLOYEE identities before provisioning.");
+    }
+  }
+
   const scopes = new Set((env.HRBP_OIDC_SCOPES ?? "").split(/\s+/).filter(Boolean));
   for (const scope of ["openid", "profile", "email"]) {
     if (!scopes.has(scope)) errors.push(`HRBP_OIDC_SCOPES must include ${scope}.`);
@@ -142,7 +176,31 @@ export function validateOnpremEnv(env) {
   const adminEmail = env.HRBP_BOOTSTRAP_ADMIN_EMAIL ?? "";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) errors.push("HRBP_BOOTSTRAP_ADMIN_EMAIL must be a valid email address.");
 
-  if ((env.HRBP_ALLOWED_EMAIL_DOMAINS ?? "").includes("*")) errors.push("HRBP_ALLOWED_EMAIL_DOMAINS must not contain wildcard domains.");
+  const allowedEmailDomains = (env.HRBP_ALLOWED_EMAIL_DOMAINS ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  if ((env.HRBP_ALLOWED_EMAIL_DOMAINS ?? "").includes("*")) {
+    errors.push("HRBP_ALLOWED_EMAIL_DOMAINS must not contain wildcard domains.");
+  }
+  if (new Set(allowedEmailDomains).size !== allowedEmailDomains.length) {
+    errors.push("HRBP_ALLOWED_EMAIL_DOMAINS must not contain duplicate domains.");
+  }
+  if (allowedEmailDomains.some((value) => {
+    if (value.length > 253 || value.includes("..")) return true;
+    const labels = value.split(".");
+    if (labels.length < 2 || !/^[a-z]{2,63}$/i.test(labels.at(-1) ?? "")) return true;
+    return labels.some((label) =>
+      label.length < 1 ||
+      label.length > 63 ||
+      !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label)
+    );
+  })) {
+    errors.push("HRBP_ALLOWED_EMAIL_DOMAINS contains an invalid domain.");
+  }
+  if (scimEnabled && allowedEmailDomains.length === 0) {
+    errors.push("HRBP_ALLOWED_EMAIL_DOMAINS must contain at least one domain when SCIM is enabled.");
+  }
 
   for (const key of ["POSTGRES_IMAGE", "OBJECT_STORAGE_IMAGE", "OBJECT_STORAGE_TOOL_IMAGE", "DOCUMENT_SCANNER_IMAGE"]) {
     if (env[key] && !imagePinned(env[key])) errors.push(`${key} must use an explicit tag or digest and must not use a mutable channel.`);

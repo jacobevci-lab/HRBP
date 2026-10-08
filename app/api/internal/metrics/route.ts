@@ -1,6 +1,7 @@
 import { NotificationOutboxStatus, VaultScanStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { internalBearerAuthorized } from "@/lib/internal-auth";
+import { scimRuntimeConfig } from "@/lib/scim";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -47,6 +48,7 @@ export async function GET(request: Request) {
 
   const startedAt = Date.now();
   const now = new Date();
+  const scim = scimRuntimeConfig();
 
   try {
     const [
@@ -57,7 +59,8 @@ export async function GET(request: Request) {
       scanGroups,
       oldestPendingScan,
       oldestScanningLock,
-      dueScanJobs
+      dueScanJobs,
+      scimUserGroups
     ] = await Promise.all([
       db.notificationOutbox.groupBy({
         by: ["channel", "status"],
@@ -114,6 +117,11 @@ export async function GET(request: Request) {
           scanStatus: VaultScanStatus.PENDING,
           scanNextAttemptAt: { lte: now }
         }
+      }),
+      db.userAccount.groupBy({
+        by: ["active"],
+        where: { provisioningSource: "SCIM" },
+        _count: { _all: true }
       })
     ]);
 
@@ -133,6 +141,13 @@ export async function GET(request: Request) {
     for (const status of scanStatuses) scanCounts.set(status, 0);
     for (const row of scanGroups) {
       scanCounts.set(row.scanStatus, row._count._all);
+    }
+
+    let scimActiveUsers = 0;
+    let scimInactiveUsers = 0;
+    for (const row of scimUserGroups) {
+      if (row.active) scimActiveUsers += row._count._all;
+      else scimInactiveUsers += row._count._all;
     }
 
     const lines = [
@@ -179,6 +194,22 @@ export async function GET(request: Request) {
       "# HELP hrbp_document_scan_oldest_scanning_lock_age_seconds Age of the oldest active scanner lease.",
       "# TYPE hrbp_document_scan_oldest_scanning_lock_age_seconds gauge",
       `hrbp_document_scan_oldest_scanning_lock_age_seconds ${ageSeconds(oldestScanningLock?.scanLockedAt, now)}`,
+      "# HELP hrbp_scim_managed_users Current SCIM-managed application identities by active state.",
+      "# TYPE hrbp_scim_managed_users gauge",
+      `hrbp_scim_managed_users{active="true"} ${scimActiveUsers}`,
+      `hrbp_scim_managed_users{active="false"} ${scimInactiveUsers}`,
+      "# HELP hrbp_scim_enabled Whether SCIM provisioning is enabled.",
+      "# TYPE hrbp_scim_enabled gauge",
+      `hrbp_scim_enabled ${scim.enabled ? 1 : 0}`,
+      "# HELP hrbp_scim_configured Whether enabled SCIM provisioning has a valid bounded runtime configuration.",
+      "# TYPE hrbp_scim_configured gauge",
+      `hrbp_scim_configured ${scim.configured ? 1 : 0}`,
+      "# HELP hrbp_scim_rotation_overlap_active Whether the previous SCIM bearer token is temporarily accepted.",
+      "# TYPE hrbp_scim_rotation_overlap_active gauge",
+      `hrbp_scim_rotation_overlap_active ${scim.rotationOverlapActive ? 1 : 0}`,
+      "# HELP hrbp_scim_unmanaged_adoption_enabled Whether reviewed unmanaged EMPLOYEE adoption is enabled.",
+      "# TYPE hrbp_scim_unmanaged_adoption_enabled gauge",
+      `hrbp_scim_unmanaged_adoption_enabled ${scim.allowUnmanagedAdoption ? 1 : 0}`,
       "# HELP hrbp_operational_metrics_scrape_duration_seconds Time spent collecting this metrics snapshot.",
       "# TYPE hrbp_operational_metrics_scrape_duration_seconds gauge",
       `hrbp_operational_metrics_scrape_duration_seconds ${((Date.now() - startedAt) / 1000).toFixed(3)}`
