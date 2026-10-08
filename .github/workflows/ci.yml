@@ -497,6 +497,32 @@ jobs:
           }
           const id = pair[0].json.id;
 
+          await db.userAccount.create({
+            data: {
+              id: 'ci-scim-collision-user',
+              tenantId: 'ci-tenant',
+              subject: 'ci-scim-collision-user',
+              displayName: 'Collision User',
+              email: 'collision@example.test',
+              role: 'EMPLOYEE',
+              active: true
+            }
+          });
+          const collision = await call('/Users', {
+            method: 'POST',
+            body: {
+              schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
+              userName: 'collision@example.test',
+              displayName: 'Collision Attempt',
+              externalId,
+              active: true
+            }
+          });
+          if (collision.response.status !== 409) {
+            console.error('SCIM cross-identity collision was not rejected.', collision.response.status, collision.json);
+            process.exit(1);
+          }
+
           const filtered = await call('/Users?filter=' + encodeURIComponent('externalId eq "' + externalId + '"'));
           if (!filtered.response.ok || filtered.json?.totalResults !== 1 || filtered.json?.Resources?.[0]?.id !== id) {
             console.error('SCIM filter did not return the provisioned resource.', filtered.json);
