@@ -2,6 +2,7 @@ import { DataClassification, EmergencyAccessStatus, PlatformRole } from "@prisma
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { asIdentifier } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -47,6 +48,21 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       purpose: grant.requesterId === ctx.actorId
         ? "Emergency access self-revoked"
         : "Emergency access revoked by another tenant administrator"
+    });
+
+    await enqueueNotificationOutbox(tx, {
+      tenantId: ctx.tenantId,
+      eventType: "EMERGENCY_ACCESS_REVOKED",
+      recipientUserId: grant.requesterId,
+      templateKey: "security.emergency-access-revoked",
+      resourceType: "EmergencyAccessGrant",
+      resourceId: grant.id,
+      dedupeKey: `emergency-access:${grant.id}:revoked`,
+      classification: DataClassification.RESTRICTED,
+      payload: {
+        revokedAt: now.toISOString(),
+        revokedBySelf: grant.requesterId === ctx.actorId
+      }
     });
 
     return { id: grant.id, revokedAt: now };
