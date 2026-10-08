@@ -44,6 +44,19 @@ type PositionChangePreview = {
   warnings: string[];
 };
 
+type ScheduledPositionChangeItem = {
+  id: string;
+  eventType: "TRANSFERRED" | "PROMOTED";
+  effectiveAt: string;
+  status: "PENDING" | "APPLIED" | "BLOCKED" | "CANCELLED";
+  blockedCode: string | null;
+  attempts: number;
+  appliedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  targetPosition: { id: string; positionCode: string; title: string };
+};
+
 type Notice = { kind: "ok" | "error"; message: string } | null;
 
 export function EmployeeLifecycleConsole({
@@ -69,6 +82,8 @@ export function EmployeeLifecycleConsole({
   const [positions, setPositions] = useState<PositionOption[]>([]);
   const [loadingPositions, setLoadingPositions] = useState(canMove);
   const [previewBusy, setPreviewBusy] = useState(false);
+  const [scheduleBusyId, setScheduleBusyId] = useState<string | null>(null);
+  const [scheduledChanges, setScheduledChanges] = useState<ScheduledPositionChangeItem[]>([]);
   const [applyBusy, setApplyBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [preview, setPreview] = useState<PositionChangePreview | null>(null);
@@ -76,6 +91,18 @@ export function EmployeeLifecycleConsole({
   const [targetPositionId, setTargetPositionId] = useState("");
   const [effectiveAt, setEffectiveAt] = useState(() => new Date().toISOString().slice(0, 10));
   const [reason, setReason] = useState("");
+
+  const loadScheduledChanges = useCallback(async () => {
+    if (!canMove) return;
+    try {
+      const response = await fetch("/api/people/" + encodeURIComponent(personId) + "/lifecycle/position/schedule", { cache: "no-store" });
+      const payload = await response.json() as { data?: ScheduledPositionChangeItem[]; error?: string };
+      if (!response.ok) throw new Error(payload.error || "Scheduled changes could not be loaded.");
+      setScheduledChanges(payload.data ?? []);
+    } catch {
+      setScheduledChanges([]);
+    }
+  }, [canMove, personId]);
 
   useEffect(() => {
     if (!canMove) return;
@@ -104,10 +131,23 @@ export function EmployeeLifecycleConsole({
     setPreview(null);
   }, [targetPositionId, eventType, effectiveAt, reason]);
 
+  useEffect(() => {
+    void loadScheduledChanges();
+  }, [loadScheduledChanges]);
+
   const selected = useMemo(
     () => positions.find((position) => position.id === targetPositionId),
     [positions, targetPositionId]
   );
+
+  const scheduleMode = useMemo(() => {
+    if (!effectiveAt) return false;
+    const selectedDate = new Date(effectiveAt + "T00:00:00");
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(23, 59, 59, 999);
+    return selectedDate > tomorrow;
+  }, [effectiveAt]);
 
   const warningText = useCallback((warning: string) => {
     const messages: Record<string, [string, string]> = {
@@ -183,7 +223,7 @@ export function EmployeeLifecycleConsole({
     setApplyBusy(true);
     setNotice(null);
     try {
-      const response = await fetch("/api/people/" + encodeURIComponent(personId) + "/lifecycle/position", {
+      const response = await fetch("/api/people/" + encodeURIComponent(personId) + "/lifecycle/position" + (scheduleMode ? "/schedule" : ""), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -199,13 +239,18 @@ export function EmployeeLifecycleConsole({
 
       setNotice({
         kind: "ok",
-        message: eventType === "PROMOTED"
-          ? c("Promotion completed and written to the lifecycle ledger.", "Terfi tamamlandı ve yaşam döngüsü kaydına işlendi.")
-          : c("Transfer completed and written to the lifecycle ledger.", "Transfer tamamlandı ve yaşam döngüsü kaydına işlendi.")
+        message: scheduleMode
+          ? eventType === "PROMOTED"
+            ? c("Promotion scheduled. It will be revalidated before automatic application.", "Terfi planlandı. Otomatik uygulanmadan önce durum yeniden doğrulanacak.")
+            : c("Transfer scheduled. It will be revalidated before automatic application.", "Transfer planlandı. Otomatik uygulanmadan önce durum yeniden doğrulanacak.")
+          : eventType === "PROMOTED"
+            ? c("Promotion completed and written to the lifecycle ledger.", "Terfi tamamlandı ve yaşam döngüsü kaydına işlendi.")
+            : c("Transfer completed and written to the lifecycle ledger.", "Transfer tamamlandı ve yaşam döngüsü kaydına işlendi.")
       });
       setPreview(null);
       setTargetPositionId("");
       setReason("");
+      await loadScheduledChanges();
       router.refresh();
     } catch (error) {
       setPreview(null);
@@ -215,6 +260,26 @@ export function EmployeeLifecycleConsole({
       });
     } finally {
       setApplyBusy(false);
+    }
+  }
+
+  async function cancelScheduledChange(id: string) {
+    if (scheduleBusyId) return;
+    setScheduleBusyId(id);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/people/" + encodeURIComponent(personId) + "/lifecycle/position/schedule/" + encodeURIComponent(id), {
+        method: "DELETE"
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || c("Scheduled change could not be cancelled.", "Planlı değişiklik iptal edilemedi."));
+      setNotice({ kind: "ok", message: c("Scheduled position change cancelled.", "Planlı pozisyon değişikliği iptal edildi.") });
+      await loadScheduledChanges();
+      router.refresh();
+    } catch (error) {
+      setNotice({ kind: "error", message: error instanceof Error ? error.message : c("Scheduled change could not be cancelled.", "Planlı değişiklik iptal edilemedi.") });
+    } finally {
+      setScheduleBusyId(null);
     }
   }
 
@@ -305,11 +370,36 @@ export function EmployeeLifecycleConsole({
               {applyBusy
                 ? c("Applying governed change…", "Yönetişim kontrollü değişiklik uygulanıyor…")
                 : eventType === "PROMOTED"
-                  ? c("Confirm and apply promotion", "Terfiyi onayla ve uygula")
+                  ? scheduleMode
+                  ? c("Confirm and schedule promotion", "Terfiyi onayla ve planla")
+                  : c("Confirm and apply promotion", "Terfiyi onayla ve uygula")
+                : scheduleMode
+                  ? c("Confirm and schedule transfer", "Transferi onayla ve planla")
                   : c("Confirm and apply transfer", "Transferi onayla ve uygula")}
             </button> : null}
           </>}
         </form>
+
+        <div className="lifecycle-action-panel">
+          <div className="lifecycle-action-title">
+            <BadgeCheck size={18}/>
+            <div>
+              <strong>{c("Scheduled job changes", "Planlı iş değişiklikleri")}</strong>
+              <small>{c("Future-dated transfers/promotions are revalidated at execution time and block safely if the reviewed impact changes.", "İleri tarihli transfer/terfiler uygulama anında yeniden doğrulanır; incelenen etki değişmişse güvenli şekilde bloklanır.")}</small>
+            </div>
+          </div>
+          <div className="lifecycle-rule-list">
+            {scheduledChanges.length ? scheduledChanges.slice(0, 8).map((item, index) => <div key={item.id}>
+              <span>{index + 1}</span>
+              <p>
+                <strong>{item.eventType === "PROMOTED" ? c("Promotion", "Terfi") : c("Transfer", "Transfer")} · {item.targetPosition.positionCode} · {item.targetPosition.title}</strong><br/>
+                {new Date(item.effectiveAt).toLocaleDateString(tr ? "tr-TR" : "en-US")} · {item.status}
+                {item.blockedCode ? " · " + item.blockedCode.replaceAll("_", " ") : ""}
+                {item.status === "PENDING" ? <><br/><button type="button" className="secondary-button" disabled={Boolean(scheduleBusyId)} onClick={() => void cancelScheduledChange(item.id)}>{scheduleBusyId === item.id ? c("Cancelling…", "İptal ediliyor…") : c("Cancel schedule", "Planı iptal et")}</button></> : null}
+              </p>
+            </div>) : <div><span>—</span><p>{c("No scheduled position changes.", "Planlanmış pozisyon değişikliği yok.")}</p></div>}
+          </div>
+        </div>
 
         <div className="lifecycle-action-panel">
           <div className="lifecycle-action-title">

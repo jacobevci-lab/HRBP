@@ -208,6 +208,7 @@ for (const token of [
   "HRBP_SCIM_TOKEN_PREVIOUS must be at least 32 characters",
   "HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS contains an invalid",
   "HRBP_INTEGRATION_PROBE_TIMEOUT_MS must be between 1000 and 10000",
+  "HRBP_SCHEDULED_JOB_CHANGE_BATCH_SIZE must be between 10 and 250",
   "must use an explicit tag or digest"
 ]) assert.ok(preflightLib.includes(token), `On-prem preflight policy missing: ${token}`);
 for (const token of [
@@ -289,6 +290,7 @@ assert.match(env, /HRBP_INTEGRATION_PROBE_ALLOW_HTTP=false/);
 assert.match(env, /HRBP_INTEGRATION_PROBE_TIMEOUT_MS=5000/);
 assert.match(env, /HRBP_HTTP_BIND=127\.0\.0\.1/);
 assert.match(env, /HRBP_MAINTENANCE_INTERVAL_SECONDS=900/);
+assert.match(env, /HRBP_SCHEDULED_JOB_CHANGE_BATCH_SIZE=100/);
 assert.match(env, /OBJECT_STORAGE_IMAGE=chrislusf\/seaweedfs:4\.48/);
 assert.match(env, /OBJECT_STORAGE_TOOL_IMAGE=rclone\/rclone:1\.75\.1/);
 assert.match(env, /DOCUMENT_SCANNER_IMAGE=clamav\/clamav:1\.5\.4-debian/);

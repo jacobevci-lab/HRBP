@@ -93,6 +93,13 @@ enum RequisitionStatus {
   CANCELLED
 }
 
+enum ScheduledPositionChangeStatus {
+  PENDING
+  APPLIED
+  BLOCKED
+  CANCELLED
+}
+
 enum ApplicationStage {
   APPLIED
   SCREENING
@@ -219,6 +226,7 @@ model Tenant {
   leaveBalances       LeaveBalance[]
   leaveRequests       LeaveRequest[]
   compensationChanges CompensationChange[]
+  scheduledPositionChanges ScheduledPositionChange[]
   payrollCountryPacks PayrollCountryPack[]
   payrollPeriods      PayrollPeriod[]
   payrollRuns         PayrollRun[]
@@ -326,6 +334,8 @@ model Position {
   orgUnit      OrganizationUnit @relation(fields: [orgUnitId], references: [id], onDelete: Restrict)
   employments  Employment[]
   requisitions Requisition[]
+  scheduledChangeSources ScheduledPositionChange[] @relation("ScheduledPositionChangeSource")
+  scheduledChangeTargets ScheduledPositionChange[] @relation("ScheduledPositionChangeTarget")
 
   @@unique([tenantId, positionCode, validFrom])
   @@index([tenantId, status, validTo])
@@ -352,10 +362,43 @@ model Employment {
   leaveBalances           LeaveBalance[]
   leaveRequests           LeaveRequest[]
   compensationChanges     CompensationChange[]
+  scheduledPositionChanges ScheduledPositionChange[]
   payrollResults          PayrollResult[]
 
   @@index([tenantId, personId, status])
   @@index([tenantId, managerEmploymentId])
+}
+
+model ScheduledPositionChange {
+  id               String @id @default(cuid())
+  tenantId         String
+  personId         String
+  employmentId     String
+  sourcePositionId String?
+  targetPositionId String
+  eventType        LifecycleEventType
+  effectiveAt      DateTime
+  reason           String?
+  impactDigest     String
+  requestedById    String
+  status           ScheduledPositionChangeStatus @default(PENDING)
+  blockedCode      String?
+  attempts         Int @default(0)
+  lastAttemptAt    DateTime?
+  appliedAt        DateTime?
+  cancelledAt      DateTime?
+  cancelledById    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  tenant           Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employment       Employment @relation(fields: [employmentId], references: [id], onDelete: Restrict)
+  sourcePosition   Position? @relation("ScheduledPositionChangeSource", fields: [sourcePositionId], references: [id], onDelete: Restrict)
+  targetPosition   Position @relation("ScheduledPositionChangeTarget", fields: [targetPositionId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, status, effectiveAt])
+  @@index([tenantId, employmentId, status])
+  @@index([tenantId, targetPositionId, status])
+  @@index([tenantId, requestedById, createdAt])
 }
 
 model CompensationHistory {

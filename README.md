@@ -4,7 +4,7 @@ Enterprise HRBP platform reference implementation built with Next.js, PostgreSQL
 
 ## Product direction
 
-HRBP One models the workforce as a governed relationship graph instead of a collection of disconnected forms. Core HR, work/pay, growth, employee services, governance/planning and administration share the same tenant, authorization, audit and effective-dated data plane.
+HRBP One models the workforce as a governed relationship graph instead of a collection of disconnected forms. Core HR, work/pay, growth, employee services, governance/planning and administration share the same tenant, authorization, audit and effective-dated data plane. Future-dated transfers and promotions use signed impact review, durable scheduling and fail-closed effective-date revalidation rather than early mutation.
 
 The Growth graph connects human-owned talent assessments to succession candidates, structured skill gaps and governed learning assignments. Learning completion becomes auditable development evidence and routes a reassessment action back to the succession owner; it never automatically changes assessed proficiency, talent classification or successor readiness.
 

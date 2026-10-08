@@ -33,6 +33,7 @@ const base = {
   HRBP_LOCAL_AUTH_ENABLED: "false",
   HRBP_HTTP_BIND: "127.0.0.1",
   HRBP_MAINTENANCE_INTERVAL_SECONDS: "900",
+  HRBP_SCHEDULED_JOB_CHANGE_BATCH_SIZE: "100",
   POSTGRES_IMAGE: "postgres:17-alpine",
   OBJECT_STORAGE_IMAGE: "chrislusf/seaweedfs:4.48",
   OBJECT_STORAGE_TOOL_IMAGE: "rclone/rclone:1.75.1"
@@ -75,6 +76,19 @@ test("rejects mutable images, wildcard domains and unsafe maintenance cadence", 
   assert.ok(result.errors.some((entry) => entry.includes("POSTGRES_IMAGE")));
   assert.ok(result.errors.some((entry) => entry.includes("wildcard")));
   assert.ok(result.errors.some((entry) => entry.includes("300 and 86400")));
+});
+
+test("rejects unsafe scheduled job-change batch size", () => {
+  const low = validateOnpremEnv({ ...base, HRBP_SCHEDULED_JOB_CHANGE_BATCH_SIZE: "9" });
+  assert.equal(low.ok, false);
+  assert.ok(low.errors.some((entry) => entry.includes("SCHEDULED_JOB_CHANGE_BATCH_SIZE")));
+
+  const high = validateOnpremEnv({ ...base, HRBP_SCHEDULED_JOB_CHANGE_BATCH_SIZE: "251" });
+  assert.equal(high.ok, false);
+  assert.ok(high.errors.some((entry) => entry.includes("SCHEDULED_JOB_CHANGE_BATCH_SIZE")));
+
+  const valid = validateOnpremEnv({ ...base, HRBP_SCHEDULED_JOB_CHANGE_BATCH_SIZE: "250" });
+  assert.equal(valid.ok, true, valid.errors.join("\n"));
 });
 
 test("warns when local auth or non-loopback app exposure is enabled", () => {
