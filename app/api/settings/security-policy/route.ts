@@ -1,6 +1,6 @@
 import { DataClassification } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
-import { assurancePolicyIssues, authenticationAssuranceConfiguration } from "@/lib/auth-assurance";
+import { assurancePolicyIssues, authenticationAssuranceConfiguration, authenticationAssuranceVersion } from "@/lib/auth-assurance";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { asFiniteNumber, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
@@ -108,6 +108,15 @@ export async function PATCH(request: Request) {
   if (assuranceIssues.length) {
     return Response.json({
       error: `Authentication assurance is not configured for: ${assuranceIssues.join(", ")}.`
+    }, { status: 409, headers: { "cache-control": "no-store" } });
+  }
+
+  const activatingAssurance = (next.mfaRequired || next.deviceTrustRequired) && !existing?.assuranceEnforcedAt;
+  const assuranceMappingCurrent = ctx.assuranceVersion === authenticationAssuranceVersion();
+  if ((activatingAssurance || (next.mfaRequired && !effectiveExistingMfa) || (next.deviceTrustRequired && !effectiveExistingDeviceTrust)) &&
+      !assuranceMappingCurrent) {
+    return Response.json({
+      error: "Authentication assurance cannot be enabled because the current OIDC session was evaluated under a different assurance mapping. Sign in again and retry."
     }, { status: 409, headers: { "cache-control": "no-store" } });
   }
 
