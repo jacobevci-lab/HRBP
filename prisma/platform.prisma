@@ -215,6 +215,7 @@ model EmergencyAccessGrant {
   validTo        DateTime?
   revokedById    String?
   revokedAt      DateTime?
+  expiredAt      DateTime?
   decisionNote   String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
