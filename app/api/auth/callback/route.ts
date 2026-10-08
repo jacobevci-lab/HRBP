@@ -1,7 +1,7 @@
 import { sanitizeReturnTo } from "@/lib/safe-redirect";
 import { PlatformRole } from "@prisma/client";
 import { getOidcConfig } from "@/lib/auth-config";
-import { evaluateOidcAssurance } from "@/lib/auth-assurance";
+import { authenticationAssuranceVersion, evaluateOidcAssurance } from "@/lib/auth-assurance";
 import { clearOidcTransactionCookie, createSessionCookie, readOidcTransaction } from "@/lib/auth-session";
 import { withDb } from "@/lib/db";
 import { discoverOidc, exchangeAuthorizationCode, verifyIdToken } from "@/lib/oidc";
@@ -43,6 +43,7 @@ export async function GET(request: Request) {
     const email = identityEmail(payload as Record<string, unknown>);
     const displayName = identityName(payload as Record<string, unknown>, email, subject);
     const assurance = evaluateOidcAssurance(payload as Record<string, unknown>);
+    const assuranceVersion = authenticationAssuranceVersion();
 
     const identity = await withDb(async (db) => {
       const securityPolicy = await db.tenantSecurityPolicy.findUnique({
@@ -132,6 +133,7 @@ export async function GET(request: Request) {
       tenantSessionVersion: identity.tenantSessionVersion,
       mfaSatisfied: assurance.mfaSatisfied,
       deviceTrustSatisfied: assurance.deviceTrustSatisfied,
+      assuranceVersion,
       tenantId: identity.user.tenantId,
       actorId: identity.user.id,
       role: identity.user.role,
