@@ -1,4 +1,4 @@
-import { DataClassification, EmergencyAccessStatus, PlatformRole } from "@prisma/client";
+import { DataClassification, EmergencyAccessStatus, PlatformRole, Prisma } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { authenticationAssuranceVersion } from "@/lib/auth-assurance";
 import { can, forbidden } from "@/lib/authorization";
@@ -103,11 +103,15 @@ export async function POST(request: Request) {
     });
     if (policy?.breakGlassEnabled !== true) throw new Error("BREAK_GLASS_DISABLED");
 
+    const now = new Date();
     const existing = await tx.emergencyAccessGrant.findFirst({
       where: {
         tenantId: ctx.tenantId,
         requesterId: ctx.actorId,
-        status: { in: [EmergencyAccessStatus.REQUESTED, EmergencyAccessStatus.ACTIVE] }
+        OR: [
+          { status: EmergencyAccessStatus.REQUESTED },
+          { status: EmergencyAccessStatus.ACTIVE, validTo: { gt: now } }
+        ]
       },
       select: { id: true }
     });
@@ -131,16 +135,20 @@ export async function POST(request: Request) {
       purpose: "Time-bound read-only break-glass request for highly restricted data"
     });
     return grant;
-  }).catch((error) => error instanceof Error &&
-    ["BREAK_GLASS_DISABLED", "OPEN_REQUEST_EXISTS"].includes(error.message)
-      ? error.message
-      : Promise.reject(error));
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }).catch((error) => {
+    if (error instanceof Error && ["BREAK_GLASS_DISABLED", "OPEN_REQUEST_EXISTS"].includes(error.message)) return error.message;
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") return "STATE_CONFLICT";
+    return Promise.reject(error);
+  });
 
   if (result === "BREAK_GLASS_DISABLED") {
     return Response.json({ error: "Tenant break-glass access is disabled." }, { status: 409 });
   }
   if (result === "OPEN_REQUEST_EXISTS") {
     return Response.json({ error: "An open emergency-access request or grant already exists for this administrator." }, { status: 409 });
+  }
+  if (result === "STATE_CONFLICT") {
+    return Response.json({ error: "Emergency access state changed concurrently. Refresh and retry." }, { status: 409 });
   }
   return Response.json({ data: result }, { status: 201 });
 }
