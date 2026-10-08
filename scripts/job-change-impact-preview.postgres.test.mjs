@@ -60,12 +60,17 @@ test("PostgreSQL governed job-change preview/apply integration", { skip: process
     mutationOriginAllowed: () => true,
     unauthorized: () => Response.json({ error: "Unauthorized." }, { status: 401 })
   };
+  const employmentScope = {
+    resolveEmploymentScope: async () => ({ mode: "ALL" }),
+    canActOnEmployment: () => true
+  };
   const dbMock = { withDb: (operation) => operation(db) };
 
   const previewRoute = load("app/api/people/[personId]/lifecycle/position/preview/route.ts", {
     "@/lib/authorization": authorization,
     "@/lib/db": dbMock,
     "@/lib/employee-position-change-preview": previewReceipt,
+    "@/lib/employment-scope": employmentScope,
     "@/lib/input-validation": inputValidation,
     "@/lib/request-context": requestContext
   });
@@ -74,6 +79,7 @@ test("PostgreSQL governed job-change preview/apply integration", { skip: process
     "@/lib/authorization": authorization,
     "@/lib/db": dbMock,
     "@/lib/employee-position-change-preview": previewReceipt,
+    "@/lib/employment-scope": employmentScope,
     "@/lib/input-validation": inputValidation,
     "@/lib/prisma-safety": { isPrismaRecordNotFound: (error) => error?.code === "P2025" },
     "@/lib/request-context": requestContext
