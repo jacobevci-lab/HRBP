@@ -56,7 +56,6 @@ export function createPositionChangePreviewReceipt(input: {
   eventType: PositionChangeEventType;
   effectiveAt: Date;
   reason: string;
-  impactDigest: string;
 }) {
   const secret = sessionSecret();
   if (!secret) throw new Error("HRBP_SESSION_SECRET is not configured.");
@@ -113,7 +112,7 @@ export function verifyPositionChangePreviewReceipt(token: string, expected: {
       claims.targetPositionId !== expected.targetPositionId ||
       claims.eventType !== expected.eventType ||
       claims.effectiveAt !== expected.effectiveAt.toISOString() ||
-      claims.reasonDigest !== digestReason(expected.reason) ||
-      claims.impactDigest !== expected.impactDigest) return null;
+      claims.reasonDigest !== digestReason(expected.reason)) return null;
+  if (!/^[a-f0-9]{64}$/.test(claims.impactDigest)) return null;
   return claims;
 }
