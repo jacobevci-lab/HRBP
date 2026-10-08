@@ -29,11 +29,11 @@ export async function SecurityPolicyEditorLoader() {
         dataRegion: policy?.dataRegion ?? tenant.region,
         kmsKeyRef: policy?.kmsKeyRef ?? null,
         customerManagedKey: policy?.customerManagedKey ?? false,
-        mfaRequired: policy?.mfaRequired ?? false,
+        mfaRequired: Boolean(policy?.assuranceEnforcedAt && policy.mfaRequired),
         sessionMaxMinutes: policy?.sessionMaxMinutes ?? 480,
         exportRestrictedData: policy?.exportRestrictedData ?? false,
         downloadWatermarking: policy?.downloadWatermarking ?? true,
-        deviceTrustRequired: policy?.deviceTrustRequired ?? false,
+        deviceTrustRequired: Boolean(policy?.assuranceEnforcedAt && policy.deviceTrustRequired),
         breakGlassEnabled: policy?.breakGlassEnabled ?? true
       }}
     />
