@@ -45,6 +45,41 @@ expect(componentPath, component, /setPreview\(null\)[\s\S]*targetPositionId,\s*e
 expect(componentPath, component, /Review impact|Etkiyi incele/, "UI must expose an explicit impact review step");
 expect(componentPath, component, /Confirm and apply promotion|Terfiyi onayla ve uygula/, "UI must separate preview from final confirmation");
 
+const schedulePath = "app/api/people/[personId]/lifecycle/position/schedule/route.ts";
+const schedule = await source(schedulePath);
+expect(schedulePath, schedule, /verifyPositionChangePreviewReceipt/, "scheduled job changes must require the same signed reviewed preview evidence");
+expect(schedulePath, schedule, /ScheduledPositionChangeStatus\.PENDING[\s\S]*employmentId[\s\S]*targetPositionId/, "scheduling must reject pending employment or target reservations");
+expect(schedulePath, schedule, /positionChangeImpactDigest[\s\S]*preview\.impactDigest/, "scheduling must bind the persisted request to the reviewed impact digest");
+expect(schedulePath, schedule, /TransactionIsolationLevel\.Serializable/, "scheduled job-change creation must serialize conflicting reservations");
+expect(schedulePath, schedule, /at most 365 days|365 \* 24 \* 60 \* 60/, "scheduled job changes must have a bounded future horizon");
+
+const cancelPath = "app/api/people/[personId]/lifecycle/position/schedule/[id]/route.ts";
+const cancel = await source(cancelPath);
+expect(cancelPath, cancel, /status:\s*ScheduledPositionChangeStatus\.PENDING[\s\S]*ScheduledPositionChangeStatus\.CANCELLED/, "only pending scheduled changes may be cancelled");
+expect(cancelPath, cancel, /appendAudit/, "scheduled cancellation must be audited");
+
+const schedulerPath = "lib/scheduled-position-changes.ts";
+const scheduler = await source(schedulerPath);
+expect(schedulerPath, scheduler, /status:\s*ScheduledPositionChangeStatus\.PENDING[\s\S]*effectiveAt:\s*\{\s*lte:\s*now\s*\}/, "maintenance must select only due pending job changes");
+expect(schedulerPath, scheduler, /currentImpactDigest[\s\S]*change\.impactDigest[\s\S]*IMPACT_STATE_CHANGED/, "automation must fail closed when reviewed impact state changes");
+expect(schedulerPath, scheduler, /TARGET_POSITION_OCCUPIED[\s\S]*TARGET_STATE_CONFLICT/, "automation must block target occupancy or claim races");
+expect(schedulerPath, scheduler, /ScheduledPositionChangeStatus\.APPLIED[\s\S]*employeeLifecycleEvent\.create[\s\S]*appendAudit/, "successful scheduled application must persist schedule, lifecycle and audit evidence");
+expect(schedulerPath, scheduler, /EMPLOYEE_POSITION_CHANGE_BLOCKED[\s\S]*enqueueNotificationOutbox/, "blocked schedules must notify the requester without silent retries");
+
+const maintenancePath = "lib/operational-maintenance.ts";
+const maintenance = await source(maintenancePath);
+expect(maintenancePath, maintenance, /runScheduledPositionChanges\(startedAt\)/, "operational maintenance must execute due scheduled job changes");
+
+expect(componentPath, component, /\/lifecycle\/position" \+ \(scheduleMode \? "\/schedule"/, "future reviewed job changes must route to scheduling instead of immediate mutation");
+expect(componentPath, component, /Scheduled job changes|Planlı iş değişiklikleri/, "employee lifecycle UI must surface scheduled job changes");
+expect(componentPath, component, /cancelScheduledChange/, "employee lifecycle UI must allow cancellation of pending schedules");
+
+const scheduledTestPath = "scripts/scheduled-job-changes.postgres.test.mjs";
+const scheduledTests = await source(scheduledTestPath);
+expect(scheduledTestPath, scheduledTests, /future reviewed transfer applies once when due/, "PostgreSQL coverage must prove due scheduled application");
+expect(scheduledTestPath, scheduledTests, /reviewed impact drift blocks automation/, "PostgreSQL coverage must prove stale impact blocking");
+expect(scheduledTestPath, scheduledTests, /cancelled schedule is never applied/, "PostgreSQL coverage must prove cancellation");
+
 const testPath = "scripts/job-change-impact-preview.test.mjs";
 const tests = await source(testPath);
 expect(testPath, tests, /preview receipt rejects field drift and token tampering/, "behavioral test must cover tampering and field drift");
