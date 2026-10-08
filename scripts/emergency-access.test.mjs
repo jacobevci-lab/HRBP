@@ -149,4 +149,11 @@ test("classification helper grants only highly-restricted read while break-glass
     { tenantId: "tenant-1", actorId: "admin-1", role: "TENANT_ADMIN", breakGlassActive: false },
     "RESTRICTED"
   ), true);
+
+  const breakGlassAdmin = { tenantId: "tenant-1", actorId: "admin-1", role: "TENANT_ADMIN", breakGlassActive: true };
+  assert.equal(authorization.can(breakGlassAdmin, "cases:read"), true);
+  assert.equal(authorization.can(breakGlassAdmin, "privacy:read"), true);
+  assert.equal(authorization.can(breakGlassAdmin, "cases:write"), false);
+  assert.equal(authorization.can(breakGlassAdmin, "privacy:write"), false);
+  assert.equal(authorization.can(breakGlassAdmin, "payroll:read"), false);
 });
