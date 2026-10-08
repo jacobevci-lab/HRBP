@@ -29,7 +29,7 @@ export async function SecurityPolicyEditorLoader() {
         dataRegion: policy?.dataRegion ?? tenant.region,
         kmsKeyRef: policy?.kmsKeyRef ?? null,
         customerManagedKey: policy?.customerManagedKey ?? false,
-        mfaRequired: policy?.mfaRequired ?? true,
+        mfaRequired: policy?.mfaRequired ?? false,
         sessionMaxMinutes: policy?.sessionMaxMinutes ?? 480,
         exportRestrictedData: policy?.exportRestrictedData ?? false,
         downloadWatermarking: policy?.downloadWatermarking ?? true,
