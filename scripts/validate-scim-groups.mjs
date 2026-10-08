@@ -43,6 +43,7 @@ expect(resourcePath, resource, /export async function PUT/, "group resource must
 expect(resourcePath, resource, /export async function PATCH/, "group resource must support PATCH");
 expect(resourcePath, resource, /export async function DELETE/, "group resource must support DELETE");
 expect(resourcePath, resource, /provisioningSource:\s*"SCIM"/, "membership replacement must reject unmanaged application users");
+expect(resourcePath, resource, /expectedUpdatedAt[\s\S]*SCIM_GROUP_STATE_CONFLICT/, "group PATCH must reject stale concurrent membership state");
 expect(resourcePath, resource, /identity\.scim-group-patched[\s\S]*identity\.scim-group-deprovisioned/, "group patch/delete must be audited");
 reject(resourcePath, resource, /role\s*:/, "group lifecycle must not directly change application roles");
 
