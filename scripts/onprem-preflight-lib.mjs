@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { parseIntegrationProbeOrigins } from "../lib/integration-live-validation.mjs";
 
 export const REQUIRED_SECRET_MINIMUMS = Object.freeze({
   POSTGRES_PASSWORD: 24,
@@ -159,6 +160,26 @@ export function validateOnpremEnv(env) {
     if (scimAdoptionRaw === "true") {
       warnings.push("SCIM unmanaged-account adoption is enabled; review existing EMPLOYEE identities before provisioning.");
     }
+  }
+
+  const integrationProbeAllowHttpRaw = (env.HRBP_INTEGRATION_PROBE_ALLOW_HTTP ?? "false").toLowerCase();
+  if (!["true", "false"].includes(integrationProbeAllowHttpRaw)) {
+    errors.push("HRBP_INTEGRATION_PROBE_ALLOW_HTTP must be explicitly true or false.");
+  }
+  const integrationProbeAllowHttp = integrationProbeAllowHttpRaw === "true";
+  const integrationProbeOrigins = parseIntegrationProbeOrigins(
+    env.HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS ?? "",
+    integrationProbeAllowHttp
+  );
+  if (integrationProbeOrigins === null) {
+    errors.push("HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS contains an invalid, duplicate, unsafe or non-origin URL.");
+  }
+  const integrationProbeTimeout = Number(env.HRBP_INTEGRATION_PROBE_TIMEOUT_MS ?? "5000");
+  if (!Number.isInteger(integrationProbeTimeout) || integrationProbeTimeout < 1000 || integrationProbeTimeout > 10000) {
+    errors.push("HRBP_INTEGRATION_PROBE_TIMEOUT_MS must be between 1000 and 10000.");
+  }
+  if (integrationProbeAllowHttp) {
+    warnings.push("HTTP integration live validation is enabled; use it only for explicitly approved private endpoints that cannot provide TLS.");
   }
 
   const scopes = new Set((env.HRBP_OIDC_SCOPES ?? "").split(/\s+/).filter(Boolean));

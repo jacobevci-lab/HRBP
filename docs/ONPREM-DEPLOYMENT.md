@@ -131,6 +131,7 @@ The current snapshot includes:
 - notification outbox counts by bounded channel/status, due-job count, oldest actionable age and oldest dispatcher-lock age,
 - document malware-scan counts by state, due-job count, oldest pending age and oldest scanner-lock age,
 - SCIM-managed identity counts plus enabled/configured/rotation/adoption posture gauges,
+- system-integration counts by lifecycle/enabled state plus unvalidated draft count,
 - scrape health and collection duration.
 
 Keep the endpoint on the private management path. Do not publish it through the customer-facing reverse proxy. A remote Prometheus/monitoring collector should reach it only through the customer's approved private management network or an authenticated monitoring proxy. `HRBP_METRICS_TOKEN` must not be reused as the maintenance, scanner, session, object-storage, database, OIDC or SMTP secret; install/upgrade preflight enforces this separation.
@@ -160,6 +161,22 @@ All SCIM resources are scoped to `HRBP_AUTH_TENANT_ID` and to the configured all
 By default SCIM will not take ownership of an existing unmanaged account. This prevents a provisioning connector from silently adopting a local or privileged administrator identity. A reviewed migration may set `HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION=true`, but even then only non-local `EMPLOYEE` accounts can be adopted; privileged and local-auth accounts remain protected. Treat unmanaged-account adoption as a temporary migration control and disable it after convergence.
 
 SCIM lifecycle changes produce append-only audit evidence using the system actor `system:scim-provisioner`. The health endpoint `/api/health/scim` exposes only enabled/configured/readiness state and never the bearer token. Post-deploy verification checks this endpoint; pre-upgrade verification remains compatible with releases that predate SCIM health.
+
+## Governed live integration validation
+
+Registered system integrations remain disabled drafts until their metadata is complete, a live transport validation succeeds, and an administrator provides the existing explicit activation attestation. Live validation is opt-in through an exact origin allowlist:
+
+```dotenv
+HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS=https://api.example.com,https://10.20.30.40
+HRBP_INTEGRATION_PROBE_ALLOW_HTTP=false
+HRBP_INTEGRATION_PROBE_TIMEOUT_MS=5000
+```
+
+Validation sends an unauthenticated bounded `HEAD` request to the registered base URL. It does not resolve or transmit `secretRef` values, does not follow redirects, does not persist response bodies or headers, and records only bounded reachability evidence such as the HTTP status and validation timestamp. A received HTTP response—including an authentication challenge—proves transport reachability only; it is not treated as business/API authentication success.
+
+The target URL must stay on an explicitly approved origin. Literal localhost, loopback, unspecified, link-local, multicast and similar unsafe addresses are rejected even if configured. RFC1918/private enterprise addresses can be used only by listing their exact origin. Plain HTTP is rejected by default and requires the separate `HRBP_INTEGRATION_PROBE_ALLOW_HTTP=true` deployment decision, which preflight surfaces as a warning. Probe timeout is bounded to 1–10 seconds.
+
+A blocked origin or transport failure clears prior validation evidence and is audited with a bounded failure class. Activation stays disabled until a later live validation succeeds. This creates a real connectivity gate without turning the HRBP server into an unrestricted SSRF relay or a generic credential-testing proxy.
 
 ## Optional SMTP email delivery
 

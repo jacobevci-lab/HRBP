@@ -47,7 +47,7 @@ export function ConnectionLifecycleActions({ kind, id, name, status, validated }
 
   return <div className="connection-lifecycle-actions">
     <div>
-      {status === "DRAFT" ? <button type="button" disabled={Boolean(busy)} onClick={() => void execute("validate")}><BadgeCheck size={13}/>{validated ? c("Revalidate config", "Yapıyı tekrar doğrula") : c("Validate config", "Yapıyı doğrula")}</button> : null}
+      {status === "DRAFT" ? <button type="button" disabled={Boolean(busy)} onClick={() => void execute("validate")}><BadgeCheck size={13}/>{kind === "integration" ? (validated ? c("Revalidate endpoint", "Endpointi tekrar doğrula") : c("Validate endpoint", "Endpointi doğrula")) : (validated ? c("Revalidate config", "Yapıyı tekrar doğrula") : c("Validate config", "Yapıyı doğrula"))}</button> : null}
       {status === "DRAFT" ? <button type="button" disabled={Boolean(busy) || !validated} onClick={() => void execute("activate")}><CirclePlay size={13}/>{c("Activate", "Aktifleştir")}</button> : null}
       {status === "ACTIVE" || status === "DEGRADED" ? <button type="button" className="danger" disabled={Boolean(busy)} onClick={() => void execute("disable")}><ShieldOff size={13}/>{c("Disable", "Devre dışı")}</button> : null}
       {status === "DISABLED" || status === "DEGRADED" ? <button type="button" disabled={Boolean(busy)} onClick={() => void execute("reopen")}><RotateCcw size={13}/>{c("Reopen", "Taslağa aç")}</button> : null}

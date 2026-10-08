@@ -3,7 +3,9 @@ import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
+import { integrationValidationCurrent, parseIntegrationProbeOrigins, probeIntegrationEndpoint } from "@/lib/integration-live-validation.mjs";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
+import { runtimeBoolean, runtimeNumber, runtimeString } from "@/lib/runtime-env";
 import { integrationActivationIssues } from "@/lib/settings-connection-validation";
 
 type LifecycleAction = "validate" | "activate" | "disable" | "reopen";
@@ -33,6 +35,46 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (current.status !== ConnectionStatus.DRAFT) return Response.json({ error: "Only DRAFT integrations can be configuration-validated." }, { status: 409 });
     const issues = integrationActivationIssues(current);
     if (issues.length) return Response.json({ error: `Integration configuration is incomplete. Missing: ${issues.join(", ")}.` }, { status: 409 });
+
+    const allowHttp = runtimeBoolean("HRBP_INTEGRATION_PROBE_ALLOW_HTTP", false);
+    const allowedOrigins = parseIntegrationProbeOrigins(
+      runtimeString("HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS") ?? "",
+      allowHttp
+    );
+    if (!allowedOrigins || !allowedOrigins.length) {
+      return Response.json({ error: "Live integration validation is not configured with an approved endpoint origin." }, { status: 409 });
+    }
+
+    const probe = await probeIntegrationEndpoint({
+      baseUrl: current.baseUrl ?? "",
+      allowedOrigins,
+      allowHttp,
+      timeoutMs: runtimeNumber("HRBP_INTEGRATION_PROBE_TIMEOUT_MS", 5000)
+    });
+
+    if (!probe.ok) {
+      const code = probe.reason === "TARGET_NOT_ALLOWED" ? "TARGET_NOT_ALLOWED" : "TRANSPORT_UNAVAILABLE";
+      await db.$transaction(async (tx) => {
+        await tx.integrationConnection.update({
+          where: { id },
+          data: { lastValidatedAt: null, lastError: code }
+        });
+        await appendAudit(tx, ctx, {
+          action: "settings.integration-validation-failed",
+          resourceType: "IntegrationConnection",
+          resourceId: id,
+          classification: DataClassification.RESTRICTED,
+          purpose: `Allowlisted live endpoint validation failed: ${code}`
+        });
+      });
+      return Response.json(
+        { error: probe.reason === "TARGET_NOT_ALLOWED"
+          ? "Integration endpoint is not in the approved live-validation origin allowlist."
+          : "Integration endpoint transport could not be validated." },
+        { status: probe.reason === "TARGET_NOT_ALLOWED" ? 409 : 502 }
+      );
+    }
+
     const data = await db.$transaction(async (tx) => {
       const updated = await tx.integrationConnection.update({
         where: { id },
@@ -43,11 +85,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         resourceType: "IntegrationConnection",
         resourceId: id,
         classification: DataClassification.RESTRICTED,
-        purpose: "Integration configuration metadata validated before governed activation"
+        purpose: `Allowlisted live endpoint transport validated before governed activation (HTTP ${probe.status})`
       });
       return updated;
     });
-    return Response.json({ data });
+    return Response.json({
+      data,
+      validation: { transportReachable: true, httpStatus: probe.status, durationMs: probe.durationMs }
+    });
   }
 
   if (action === "activate") {
@@ -58,7 +103,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
     const issues = integrationActivationIssues(current);
     if (issues.length) return Response.json({ error: `Integration is not activation-ready. Missing: ${issues.join(", ")}.` }, { status: 409 });
-    if (!current.lastValidatedAt) return Response.json({ error: "Validate the integration configuration before activation." }, { status: 409 });
+    if (!integrationValidationCurrent(current.lastValidatedAt)) return Response.json({ error: "Live integration validation is missing or older than 24 hours. Revalidate the endpoint before activation." }, { status: 409 });
 
     const data = await db.$transaction(async (tx) => {
       const updated = await tx.integrationConnection.update({

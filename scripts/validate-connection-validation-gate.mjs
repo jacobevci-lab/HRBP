@@ -23,7 +23,11 @@ const integration = await source(integrationPath);
 expect(integrationPath, integration, /type LifecycleAction = "validate" \| "activate" \| "disable" \| "reopen"/, "integration lifecycle must include configuration validation");
 expect(integrationPath, integration, /action === "validate"[\s\S]*integrationActivationIssues\(current\)/, "integration validation must reuse governed readiness checks");
 expect(integrationPath, integration, /settings\.integration-config-validated/, "integration validation must be audited");
-expect(integrationPath, integration, /!current\.lastValidatedAt[\s\S]*Validate the integration configuration before activation/, "integration activation must require recorded validation evidence");
+expect(integrationPath, integration, /probeIntegrationEndpoint/, "integration live endpoint validation must use the governed allowlist probe");
+expect(integrationPath, integration, /HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS/, "integration live validation must require an explicit approved-origin allowlist");
+expect(integrationPath, integration, /settings\.integration-validation-failed/, "failed integration transport validation must be audited");
+expect(integrationPath, integration, /TARGET_NOT_ALLOWED[\s\S]*TRANSPORT_UNAVAILABLE/, "integration validation must expose only bounded failure classes");
+expect(integrationPath, integration, /integrationValidationCurrent\(current\.lastValidatedAt\)[\s\S]*older than 24 hours/, "integration activation must require fresh live validation evidence");
 expect(integrationPath, integration, /status: ConnectionStatus\.DRAFT, enabled: false, lastValidatedAt: null/, "reopening integration configuration must invalidate prior validation");
 expect(integrationPath, integration, /action === "validate"[\s\S]*lastValidatedAt:\s*new Date\(\)[\s\S]*lastError:\s*null[\s\S]*settings\.integration-config-validated/, "integration validation must record validation evidence without enabling the connection");
 
@@ -38,19 +42,21 @@ expect(listPath, list, /lastValidatedAt:\s*true/, "integration registry must exp
 const panelPath = "components/connection-lifecycle-panel.tsx";
 const panel = await source(panelPath);
 expect(panelPath, panel, /Validation required|Doğrulama gerekli/, "connection lifecycle must expose missing validation evidence");
-expect(panelPath, panel, /validated=\{Boolean\(row\.lastValidatedAt\)\}/, "connection lifecycle actions must receive validation state");
+expect(panelPath, panel, /integrationValidationCurrent\(row\.lastValidatedAt\)[\s\S]*validated=\{validationCurrent\}/, "integration lifecycle actions must receive fresh live-validation state");
 expect(panelPath, panel, /configuration validation is recorded|yapılandırma doğrulaması kaydedildikten/, "activation guidance must document the validation gate");
 
 const actionsPath = "components/connection-lifecycle-actions.tsx";
 const actions = await source(actionsPath);
 expect(actionsPath, actions, /type Action = "validate" \| "activate" \| "disable" \| "reopen"/, "connection actions must support validation");
 expect(actionsPath, actions, /Validate config|Yapıyı doğrula/, "connection actions must expose configuration validation");
+expect(actionsPath, actions, /Validate endpoint|Endpointi doğrula/, "integration actions must distinguish live endpoint validation from identity metadata validation");
 expect(actionsPath, actions, /disabled=\{Boolean\(busy\) \|\| !validated\}/, "activation control must remain disabled until validation succeeds");
 expect(actionsPath, actions, /JSON\.stringify\(validation \? \{ action \}/, "validation action must not ask for or transmit an activation attestation");
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);
 expect(packagePath, pkg, /connection-validation:validate/, "connection validation gate validator must be registered");
+expect(packagePath, pkg, /integration-live-validation:validate/, "live validation policy tests must be registered");
 expect(packagePath, pkg, /prebuild[\s\S]*connection-validation:validate/, "connection validation gate must run before production builds");
 
 if (failures.length) {

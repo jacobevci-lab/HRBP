@@ -1,4 +1,4 @@
-import { NotificationOutboxStatus, VaultScanStatus } from "@prisma/client";
+import { ConnectionStatus, NotificationOutboxStatus, VaultScanStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { internalBearerAuthorized } from "@/lib/internal-auth";
 import { scimRuntimeConfig } from "@/lib/scim";
@@ -23,6 +23,7 @@ const scanStatuses = [
 ] as const;
 
 const notificationChannels = ["IN_APP", "EMAIL", "OTHER"] as const;
+const connectionStatuses = [ConnectionStatus.DRAFT, ConnectionStatus.ACTIVE, ConnectionStatus.DEGRADED, ConnectionStatus.DISABLED] as const;
 
 function metricHeaders() {
   return {
@@ -60,7 +61,9 @@ export async function GET(request: Request) {
       oldestPendingScan,
       oldestScanningLock,
       dueScanJobs,
-      scimUserGroups
+      scimUserGroups,
+      integrationGroups,
+      unvalidatedIntegrationDrafts
     ] = await Promise.all([
       db.notificationOutbox.groupBy({
         by: ["channel", "status"],
@@ -122,6 +125,13 @@ export async function GET(request: Request) {
         by: ["active"],
         where: { provisioningSource: "SCIM" },
         _count: { _all: true }
+      }),
+      db.integrationConnection.groupBy({
+        by: ["status", "enabled"],
+        _count: { _all: true }
+      }),
+      db.integrationConnection.count({
+        where: { status: ConnectionStatus.DRAFT, lastValidatedAt: null }
       })
     ]);
 
@@ -148,6 +158,15 @@ export async function GET(request: Request) {
     for (const row of scimUserGroups) {
       if (row.active) scimActiveUsers += row._count._all;
       else scimInactiveUsers += row._count._all;
+    }
+
+    const integrationCounts = new Map<string, number>();
+    for (const status of connectionStatuses) {
+      integrationCounts.set(`${status}:true`, 0);
+      integrationCounts.set(`${status}:false`, 0);
+    }
+    for (const row of integrationGroups) {
+      integrationCounts.set(`${row.status}:${row.enabled}`, row._count._all);
     }
 
     const lines = [
@@ -210,6 +229,15 @@ export async function GET(request: Request) {
       "# HELP hrbp_scim_unmanaged_adoption_enabled Whether reviewed unmanaged EMPLOYEE adoption is enabled.",
       "# TYPE hrbp_scim_unmanaged_adoption_enabled gauge",
       `hrbp_scim_unmanaged_adoption_enabled ${scim.allowUnmanagedAdoption ? 1 : 0}`,
+      "# HELP hrbp_integration_connections Current registered system integrations by lifecycle status and enabled state.",
+      "# TYPE hrbp_integration_connections gauge",
+      ...connectionStatuses.flatMap((status) => [
+        `hrbp_integration_connections{status="${status}",enabled="true"} ${integrationCounts.get(`${status}:true`) ?? 0}`,
+        `hrbp_integration_connections{status="${status}",enabled="false"} ${integrationCounts.get(`${status}:false`) ?? 0}`
+      ]),
+      "# HELP hrbp_integration_unvalidated_drafts Draft integrations without current live validation evidence.",
+      "# TYPE hrbp_integration_unvalidated_drafts gauge",
+      `hrbp_integration_unvalidated_drafts ${unvalidatedIntegrationDrafts}`,
       "# HELP hrbp_operational_metrics_scrape_duration_seconds Time spent collecting this metrics snapshot.",
       "# TYPE hrbp_operational_metrics_scrape_duration_seconds gauge",
       `hrbp_operational_metrics_scrape_duration_seconds ${((Date.now() - startedAt) / 1000).toFixed(3)}`

@@ -692,7 +692,9 @@ jobs:
               !/^hrbp_scim_managed_users\{active="false"\} [0-9]+$/m.test(text) ||
               !/^hrbp_scim_enabled 1$/m.test(text) ||
               !/^hrbp_scim_configured 1$/m.test(text) ||
-              !/^hrbp_scim_rotation_overlap_active 1$/m.test(text)) {
+              !/^hrbp_scim_rotation_overlap_active 1$/m.test(text) ||
+              !/^hrbp_integration_connections\{status="DRAFT",enabled="false"\} [0-9]+$/m.test(text) ||
+              !/^hrbp_integration_unvalidated_drafts [0-9]+$/m.test(text)) {
             console.error('Operational metrics snapshot is incomplete.', accepted.status, text.slice(0, 2000));
             process.exit(1);
           }

@@ -49,7 +49,7 @@ Before invoking ClamAV, the worker independently verifies the immutable content 
 
 ## Operational metrics boundary
 
-Operational metrics are exposed only through the authenticated internal metrics endpoint and use a dedicated deployment secret. The exported series are deliberately low-cardinality, aggregate operational state: notification channel/status counts, document malware-scan state/count/age signals, SCIM-managed identity counts/configuration posture, and scrape health/timing.
+Operational metrics are exposed only through the authenticated internal metrics endpoint and use a dedicated deployment secret. The exported series are deliberately low-cardinality, aggregate operational state: notification channel/status counts, document malware-scan state/count/age signals, SCIM-managed identity counts/configuration posture, system-integration lifecycle/validation posture, and scrape health/timing.
 
 Tenant identifiers, user identifiers, employee data, resource identifiers, notification event names, object keys, document metadata, scanner references and error bodies are not metric labels or values. Unknown notification channel values are collapsed to a bounded `OTHER` label rather than emitted verbatim. Database failures return only a generic scrape-failure gauge and HTTP 503; SQL or provider exception text is not returned to the collector.
 
@@ -81,3 +81,12 @@ SCIM operations are serialized per tenant with a PostgreSQL transaction advisory
 Unmanaged-account adoption is disabled by default. When explicitly enabled for a reviewed migration, only non-local `EMPLOYEE` accounts are eligible; SCIM cannot silently take ownership of local-auth or privileged administrator accounts. All lifecycle mutations write restricted append-only audit evidence under the system SCIM actor.
 
 The SCIM health endpoint is secret-free. Authentication failures return the SCIM error shape with a Bearer challenge but never echo the token, database error text or employee payloads.
+
+
+## Outbound integration validation boundary
+
+System-integration activation can require a real transport probe, but HRBP does not turn that control into an unrestricted server-side request primitive. The probe is limited to exact administrator-approved origins, uses an unauthenticated `HEAD` request, never follows redirects, never resolves or transmits stored secret references, discards response bodies and persists only bounded reachability state.
+
+Literal localhost, loopback, unspecified, link-local and multicast destinations are rejected. Private enterprise network origins require explicit allowlisting, while plain HTTP additionally requires a separate deployment opt-in and preflight warning. Transport errors are collapsed to bounded failure classes so DNS/TLS/provider exception text is not returned to the browser or stored in connection state.
+
+A successful probe proves endpoint transport reachability only. It does not assert that downstream credentials, scopes or business operations are valid; those remain connector-specific responsibilities.

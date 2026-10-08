@@ -3,6 +3,7 @@ import { ConnectionLifecycleActions } from "@/components/connection-lifecycle-ac
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { getServerLocale } from "@/lib/i18n-server";
+import { integrationValidationCurrent } from "@/lib/integration-live-validation.mjs";
 import { getServerRequestContext } from "@/lib/server-session";
 import { identityActivationIssues, integrationActivationIssues } from "@/lib/settings-connection-validation";
 
@@ -43,11 +44,12 @@ export async function ConnectionLifecyclePanel() {
       </div>
 
       <div className="card connection-lifecycle-card">
-        <div className="connection-lifecycle-title"><Link2 size={17}/><div><strong>{c(locale, "System integrations", "Sistem entegrasyonları")}</strong><small>{c(locale, "Explicit activation, disable and reopen controls.", "Açık aktivasyon, devre dışı bırakma ve yeniden taslağa alma kontrolleri.")}</small></div></div>
+        <div className="connection-lifecycle-title"><Link2 size={17}/><div><strong>{c(locale, "System integrations", "Sistem entegrasyonları")}</strong><small>{c(locale, "Activation requires an allowlisted live transport probe; redirects and credentials are never used by validation.", "Aktivasyon için allowlist kontrollü canlı transport doğrulaması gerekir; doğrulama redirect takip etmez ve kimlik bilgisi göndermez.")}</small></div></div>
         <div className="connection-lifecycle-table-wrap"><table className="connection-lifecycle-table"><thead><tr><th>{c(locale, "Connection", "Bağlantı")}</th><th>{c(locale, "System", "Sistem")}</th><th>{c(locale, "Readiness", "Hazırlık")}</th><th>{c(locale, "Status", "Durum")}</th>{canWrite ? <th>{c(locale, "Action", "Aksiyon")}</th> : null}</tr></thead><tbody>
           {integrations.length ? integrations.map((row) => {
             const issues = integrationActivationIssues(row);
-            return <tr key={row.id}><td><strong>{row.name}</strong><small>{row.baseUrl ?? "—"}</small></td><td>{row.systemType}<small>{row.authType}</small></td><td>{issues.length ? <span className="connection-readiness attention">{c(locale, `Missing ${issues.join(", ")}`, `Eksik: ${issues.join(", ")}`)}</span> : row.lastValidatedAt ? <span className="connection-readiness ready">{c(locale, "Validated", "Doğrulandı")} · {fmt(locale, row.lastValidatedAt)}</span> : <span className="connection-readiness attention">{c(locale, "Validation required", "Doğrulama gerekli")}</span>}</td><td><span className={`connection-status ${statusTone(row.status)}`}>{row.status}</span></td>{canWrite ? <td><ConnectionLifecycleActions kind="integration" id={row.id} name={row.name} status={row.status} validated={Boolean(row.lastValidatedAt)}/></td> : null}</tr>;
+            const validationCurrent = integrationValidationCurrent(row.lastValidatedAt);
+            return <tr key={row.id}><td><strong>{row.name}</strong><small>{row.baseUrl ?? "—"}</small></td><td>{row.systemType}<small>{row.authType}</small></td><td>{issues.length ? <span className="connection-readiness attention">{c(locale, `Missing ${issues.join(", ")}`, `Eksik: ${issues.join(", ")}`)}</span> : validationCurrent ? <span className="connection-readiness ready">{c(locale, "Live validated", "Canlı doğrulandı")} · {fmt(locale, row.lastValidatedAt)}</span> : row.lastValidatedAt ? <span className="connection-readiness attention">{c(locale, "Validation expired", "Doğrulama süresi doldu")} · {fmt(locale, row.lastValidatedAt)}</span> : <span className="connection-readiness attention">{c(locale, "Live validation required", "Canlı doğrulama gerekli")}</span>}</td><td><span className={`connection-status ${statusTone(row.status)}`}>{row.status}</span></td>{canWrite ? <td><ConnectionLifecycleActions kind="integration" id={row.id} name={row.name} status={row.status} validated={validationCurrent}/></td> : null}</tr>;
           }) : <tr><td colSpan={canWrite ? 5 : 4} className="connection-lifecycle-empty">{c(locale, "No integration records.", "Entegrasyon kaydı yok.")}</td></tr>}
         </tbody></table></div>
       </div>

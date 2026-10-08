@@ -17,6 +17,7 @@ const [
   migrationRunner,
   migrationVerifier,
   migrationContract,
+  integrationProbe,
   maintenanceRunner,
   maintenanceScheduler,
   maintenanceState,
@@ -42,6 +43,7 @@ const [
   readFile("scripts/deploy-prisma-migrations.mjs", "utf8"),
   readFile("scripts/verify-prisma-migrations.mjs", "utf8"),
   readFile("scripts/prisma-migration-contract.mjs", "utf8"),
+  readFile("lib/integration-live-validation.mjs", "utf8"),
   readFile("scripts/run-operational-maintenance.mjs", "utf8"),
   readFile("scripts/onprem-maintenance-scheduler.mjs", "utf8"),
   readFile("scripts/onprem-maintenance-state.mjs", "utf8"),
@@ -204,6 +206,8 @@ for (const token of [
   "HRBP_SCIM_ENABLED must be explicitly true or false",
   "HRBP_SCIM_TOKEN must be at least 32 characters",
   "HRBP_SCIM_TOKEN_PREVIOUS must be at least 32 characters",
+  "HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS contains an invalid",
+  "HRBP_INTEGRATION_PROBE_TIMEOUT_MS must be between 1000 and 10000",
   "must use an explicit tag or digest"
 ]) assert.ok(preflightLib.includes(token), `On-prem preflight policy missing: ${token}`);
 for (const token of [
@@ -217,6 +221,14 @@ for (const token of [
   "Less than 1 GiB"
 ]) assert.ok(preflightCli.includes(token), `On-prem preflight execution contract missing: ${token}`);
 assert.ok(preflightCli.includes("HRBP_ENV_FILE: envFile"), "Preflight Compose validation must propagate the selected env path.");
+for (const token of [
+  "redirect: \"manual\"",
+  'method: "HEAD"',
+  "TARGET_NOT_ALLOWED",
+  "TRANSPORT_UNAVAILABLE",
+  "a === 169 && b === 254",
+  "localhost"
+]) assert.ok(integrationProbe.includes(token), `Integration probe contract missing: ${token}`);
 for (const token of [
   "/api/health/runtime",
   "/api/health/db",
@@ -272,6 +284,9 @@ assert.match(env, /HRBP_SCIM_ENABLED=false/);
 assert.match(env, /HRBP_SCIM_TOKEN=/);
 assert.match(env, /HRBP_SCIM_TOKEN_PREVIOUS=/);
 assert.match(env, /HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION=false/);
+assert.match(env, /HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS=/);
+assert.match(env, /HRBP_INTEGRATION_PROBE_ALLOW_HTTP=false/);
+assert.match(env, /HRBP_INTEGRATION_PROBE_TIMEOUT_MS=5000/);
 assert.match(env, /HRBP_HTTP_BIND=127\.0\.0\.1/);
 assert.match(env, /HRBP_MAINTENANCE_INTERVAL_SECONDS=900/);
 assert.match(env, /OBJECT_STORAGE_IMAGE=chrislusf\/seaweedfs:4\.48/);
@@ -357,6 +372,7 @@ assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-maintenance-schedul
 assert.ok(pkg.scripts?.["onprem:validate"]?.includes("onprem-preflight.test.mjs"), "On-prem validation must execute preflight safety tests.");
 assert.ok(pkg.scripts?.["onprem:validate"]?.includes("document-scanner:validate"), "On-prem validation must execute document scanner safety tests.");
 assert.equal(pkg.scripts?.["scim:validate"], "node --test scripts/scim-provisioning.test.mjs", "SCIM protocol validation must remain registered.");
+assert.equal(pkg.scripts?.["integration-live-validation:validate"], "node --test scripts/integration-live-validation.test.mjs", "Integration live-validation tests must remain registered.");
 assert.ok(pkg.scripts?.prebuild?.includes("scim:validate"), "SCIM protocol validation must gate production builds.");
 assert.equal(pkg.scripts?.["onprem:preflight"], "node scripts/onprem-preflight.mjs --env-file .env.onprem --phase install");
 assert.equal(pkg.scripts?.["onprem:postflight"], "node scripts/onprem-postflight.mjs --env-file .env.onprem");

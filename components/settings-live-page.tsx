@@ -10,6 +10,7 @@ import { authConfigurationStatus, getOidcConfig } from "@/lib/auth-config";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { getServerLocale } from "@/lib/i18n-server";
+import { parseIntegrationProbeOrigins } from "@/lib/integration-live-validation.mjs";
 import { runtimeBoolean, runtimeString } from "@/lib/runtime-env";
 import { scimRuntimeConfig } from "@/lib/scim";
 import { smtpConfigurationStatus } from "@/lib/notification-email-config";
@@ -47,6 +48,9 @@ export async function SettingsLivePage() {
   const localAuthRuntimeEnabled = runtimeBoolean("HRBP_LOCAL_AUTH_ENABLED", false);
   const smtp = smtpConfigurationStatus();
   const scim = scimRuntimeConfig();
+  const integrationProbeAllowHttp = runtimeBoolean("HRBP_INTEGRATION_PROBE_ALLOW_HTTP", false);
+  const integrationProbeOrigins = parseIntegrationProbeOrigins(runtimeString("HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS") ?? "", integrationProbeAllowHttp) ?? [];
+  const integrationProbeConfigured = integrationProbeOrigins.length > 0;
   const coreConfigured = auth.configured && storageConfigured && maintenanceConfigured && (!scim.enabled || scim.configured);
 
   const localAuthSince = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -128,6 +132,7 @@ export async function SettingsLivePage() {
           <div><KeyRound size={17}/><span><strong>{c(locale, "Local authentication", "Yerel kimlik doğrulama")}</strong><small>{c(locale, `${localAccountCount} active local accounts with password material; runtime gate is ${localAuthRuntimeEnabled ? "enabled" : "disabled"}.`, `Parolası bulunan ${localAccountCount} etkin yerel hesap var; runtime geçidi ${localAuthRuntimeEnabled ? "etkin" : "kapalı"}.`)}</small></span><State ok={localAuthRuntimeEnabled && localAccountCount > 0} label={localAuthRuntimeEnabled ? c(locale, "Enabled", "Etkin") : c(locale, "Runtime disabled", "Runtime kapalı")}/></div>
           <div><BellRing size={17}/><span><strong>{c(locale, "SMTP email delivery", "SMTP e-posta teslimatı")}</strong><small>{smtp.enabled ? c(locale, `${smtp.events.length} event type(s) configured for email mirroring; provider secrets remain hidden.`, `E-posta yansıtması için ${smtp.events.length} olay türü yapılandırılmış; sağlayıcı secret değerleri gizli kalır.`) : c(locale, "Optional external email delivery is disabled; in-app notifications remain active.", "Opsiyonel harici e-posta teslimatı kapalı; uygulama içi bildirimler aktif kalır.")}</small>{canWrite ? <SmtpTestAction enabled={smtp.enabled && smtp.configured}/> : null}</span><State ok={!smtp.enabled || smtp.configured} label={!smtp.enabled ? c(locale, "Disabled", "Kapalı") : smtp.configured ? c(locale, "Ready", "Hazır") : c(locale, "Attention", "Dikkat")}/></div>
           <div><UsersRound size={17}/><span><strong>{c(locale, "SCIM 2.0 provisioning", "SCIM 2.0 provisioning")}</strong><small>{!scim.enabled ? c(locale, "Enterprise user provisioning is disabled.", "Enterprise kullanıcı provisioning kapalı.") : scim.configured ? c(locale, `${scimActiveCount} active / ${scimManagedCount} SCIM-managed identities · last change ${fmt(locale, scimLastProvisioning?.provisioningUpdatedAt)}`, `${scimActiveCount} aktif / ${scimManagedCount} SCIM yönetimli kimlik · son değişiklik ${fmt(locale, scimLastProvisioning?.provisioningUpdatedAt)}`) : c(locale, "SCIM is enabled but its tenant/domain/token configuration is incomplete.", "SCIM etkin fakat tenant/domain/token yapılandırması eksik.")}{scim.allowUnmanagedAdoption ? c(locale, " · unmanaged adoption is enabled", " · unmanaged adoption etkin") : ""}{scim.rotationOverlapActive ? c(locale, " · previous-token overlap is active", " · eski token geçiş penceresi aktif") : ""}</small></span><State ok={!scim.enabled || (scim.configured && !scim.allowUnmanagedAdoption && !scim.rotationOverlapActive)} label={!scim.enabled ? c(locale, "Disabled", "Kapalı") : !scim.configured ? c(locale, "Attention", "Dikkat") : scim.allowUnmanagedAdoption || scim.rotationOverlapActive ? c(locale, "Review", "Kontrol et") : c(locale, "Ready", "Hazır")}/></div>
+          <div><Link2 size={17}/><span><strong>{c(locale, "Integration live validation", "Entegrasyon canlı doğrulama")}</strong><small>{integrationProbeConfigured ? c(locale, `${integrationProbeOrigins.length} approved origin(s); ${integrationProbeAllowHttp ? "HTTP is explicitly allowed" : "HTTPS only"}; credentials are never sent by the probe.`, `${integrationProbeOrigins.length} onaylı origin; ${integrationProbeAllowHttp ? "HTTP açıkça izinli" : "yalnızca HTTPS"}; probe kimlik bilgisi göndermez.`) : c(locale, "No approved probe origins are configured; draft system integrations cannot complete live validation.", "Onaylı probe origin yapılandırılmamış; taslak sistem entegrasyonları canlı doğrulamayı tamamlayamaz.")}</small></span><State ok={integrationProbeConfigured && !integrationProbeAllowHttp} label={!integrationProbeConfigured ? c(locale, "Not configured", "Yapılandırılmadı") : integrationProbeAllowHttp ? c(locale, "Review HTTP", "HTTP'yi kontrol et") : c(locale, "Ready", "Hazır")}/></div>
         </div>
       </div>
 
