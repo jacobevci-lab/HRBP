@@ -16,3 +16,4 @@ coverage
 cloudflare-env.d.ts
 .env.onprem
 backups/
+.release-evidence/

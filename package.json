@@ -93,7 +93,9 @@
     "onprem:preflight": "node scripts/onprem-preflight.mjs --env-file .env.onprem --phase install",
     "onprem:postflight": "node scripts/onprem-postflight.mjs --env-file .env.onprem",
     "onprem:upgrade": "bash scripts/onprem-upgrade.sh",
-    "document-scanner:validate": "node scripts/validate-document-scanner.mjs && node --test scripts/document-scanner.test.mjs"
+    "document-scanner:validate": "node scripts/validate-document-scanner.mjs && node --test scripts/document-scanner.test.mjs",
+    "release:evidence:generate": "node scripts/generate-release-evidence.mjs",
+    "release:evidence:validate": "node scripts/validate-release-evidence.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "6.19.3",
