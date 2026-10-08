@@ -10,6 +10,7 @@ import {
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { positionChangeImpactDigest, verifyPositionChangePreviewReceipt } from "@/lib/employee-position-change-preview";
 import { asEnumValue, asIdentifier, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
@@ -44,27 +45,41 @@ export async function GET(request: Request, { params }: { params: Promise<{ pers
   const personId = asIdentifier((await params).personId);
   if (!personId) return Response.json({ error: "A valid person id is required." }, { status: 400 });
 
-  const data = await withDb((db) => db.scheduledPositionChange.findMany({
-    where: { tenantId: ctx.tenantId, personId },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: 50,
-    select: {
-      id: true,
-      eventType: true,
-      effectiveAt: true,
-      status: true,
-      blockedCode: true,
-      attempts: true,
-      appliedAt: true,
-      cancelledAt: true,
-      createdAt: true,
-      targetPosition: {
-        select: { id: true, positionCode: true, title: true }
-      }
-    }
-  }));
+  const result = await withDb(async (db) => {
+    const employment = await db.employment.findFirst({
+      where: { tenantId: ctx.tenantId, personId, status: { in: activeEmploymentStatuses } },
+      orderBy: { startDate: "desc" },
+      select: { id: true }
+    });
+    if (!employment) return { kind: "not-found" as const };
+    const scope = await resolveEmploymentScope(db, ctx);
+    if (!canActOnEmployment(scope, employment.id)) return { kind: "forbidden" as const };
 
-  return Response.json({ data }, { headers: { "cache-control": "no-store" } });
+    const data = await db.scheduledPositionChange.findMany({
+      where: { tenantId: ctx.tenantId, personId },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 50,
+      select: {
+        id: true,
+        eventType: true,
+        effectiveAt: true,
+        status: true,
+        blockedCode: true,
+        attempts: true,
+        appliedAt: true,
+        cancelledAt: true,
+        createdAt: true,
+        targetPosition: {
+          select: { id: true, positionCode: true, title: true }
+        }
+      }
+    });
+    return { kind: "ok" as const, data };
+  });
+
+  if (result.kind === "not-found") return Response.json({ error: "Current active employment was not found." }, { status: 404 });
+  if (result.kind === "forbidden") return forbidden("Employment is outside your authorized relationship scope.");
+  return Response.json({ data: result.data }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ personId: string }> }) {
@@ -137,6 +152,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
         }
       });
       if (!employment) throw new Error("EMPLOYMENT_NOT_FOUND");
+      const scope = await resolveEmploymentScope(tx, ctx);
+      if (!canActOnEmployment(scope, employment.id)) throw new Error("OUT_OF_SCOPE");
       if (employment.positionId !== preview.sourcePositionId) throw new Error("PREVIEW_STALE");
 
       const target = await tx.position.findFirst({
@@ -253,6 +270,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
     if (code === "EMPLOYMENT_NOT_FOUND") return Response.json({ error: "Current active employment was not found in this tenant." }, { status: 404 });
+    if (code === "OUT_OF_SCOPE") return forbidden("Employment is outside your authorized relationship scope.");
     if (code === "PREVIEW_STALE") return Response.json({ error: "The employee or related impact state changed after preview. Generate a new preview." }, { status: 409 });
     if (code === "TARGET_NOT_OPEN") return Response.json({ error: "The target position is no longer open." }, { status: 409 });
     if (code === "TARGET_OCCUPIED") return Response.json({ error: "The target position already has an active incumbent." }, { status: 409 });
