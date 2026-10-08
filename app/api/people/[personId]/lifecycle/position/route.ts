@@ -72,7 +72,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
               grade: true,
               location: true,
               critical: true,
-              orgUnitId: true
+              orgUnit: { select: { id: true, name: true } }
             }
           },
           _count: { select: { directReports: true } }
@@ -83,7 +83,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
 
       const target = await tx.position.findFirst({
         where: { id: targetPositionId, tenantId: ctx.tenantId, validTo: null },
-        select: { id: true, positionCode: true, title: true, status: true, grade: true, location: true, critical: true, orgUnitId: true }
+        select: { id: true, positionCode: true, title: true, status: true, grade: true, location: true, critical: true, orgUnit: { select: { id: true, name: true } } }
       });
       if (!target) throw new Error("TARGET_NOT_FOUND");
       if (target.status !== PositionStatus.OPEN) throw new Error("TARGET_NOT_OPEN");
@@ -110,14 +110,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
 
       const impactDigest = positionChangeImpactDigest({
         sourcePositionId: employment.positionId,
-        sourceOrgUnitId: employment.position?.orgUnitId ?? null,
+        sourcePositionCode: employment.position?.positionCode ?? null,
+        sourceTitle: employment.position?.title ?? null,
+        sourceOrgUnitId: employment.position?.orgUnit.id ?? null,
+        sourceOrgUnitName: employment.position?.orgUnit.name ?? null,
         sourceGrade: employment.position?.grade ?? null,
         sourceLocation: employment.position?.location ?? null,
         sourceCritical: employment.position?.critical ?? false,
         managerEmploymentId: employment.managerEmploymentId,
         directReportCount: employment._count.directReports,
         targetPositionId: target.id,
-        targetOrgUnitId: target.orgUnitId,
+        targetPositionCode: target.positionCode,
+        targetTitle: target.title,
+        targetOrgUnitId: target.orgUnit.id,
+        targetOrgUnitName: target.orgUnit.name,
         targetGrade: target.grade,
         targetLocation: target.location,
         targetCritical: target.critical,
