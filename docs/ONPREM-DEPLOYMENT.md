@@ -426,7 +426,7 @@ A tenant administrator requests emergency access from **Settings & Operations** 
 
 Approved access is:
 
-- read-only for HIGHLY_RESTRICTED classification checks,
+- read-only through the narrow case/privacy read capabilities plus HIGHLY_RESTRICTED classification checks,
 - tenant-scoped,
 - bound to the requesting administrator,
 - time-limited,
