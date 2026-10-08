@@ -149,6 +149,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
       if (employment._count.directReports > 0) warnings.push("DIRECT_REPORT_RELATIONSHIPS_UNCHANGED");
       if (orgUnitChanged && employment.managerEmploymentId) warnings.push("MANAGER_RELATIONSHIP_UNCHANGED");
       if (openTargetRequisitionCount > 0) warnings.push("TARGET_REQUISITIONS_REMAIN_OPEN");
+      if (gradeChanged) warnings.push("GRADE_CHANGE_REQUIRES_COMPENSATION_REVIEW");
+      if (locationChanged) warnings.push("LOCATION_CHANGE_REQUIRES_POLICY_REVIEW");
       if (target.critical) warnings.push("TARGET_POSITION_IS_CRITICAL");
 
       return {
