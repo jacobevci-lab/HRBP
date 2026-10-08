@@ -157,6 +157,18 @@ async function expireEmergencyAccess(now: Date) {
         classification: DataClassification.RESTRICTED,
         purpose: "Time-bound emergency access expired automatically"
       });
+
+      await enqueueNotificationOutbox(tx, {
+        tenantId: row.tenantId,
+        eventType: "EMERGENCY_ACCESS_EXPIRED",
+        recipientUserId: row.requesterId,
+        templateKey: "security.emergency-access-expired",
+        resourceType: "EmergencyAccessGrant",
+        resourceId: row.id,
+        dedupeKey: `emergency-access:${row.id}:expired`,
+        classification: DataClassification.RESTRICTED,
+        payload: { expiredAt: now.toISOString() }
+      });
       return true;
     });
     if (changed) expired += 1;
