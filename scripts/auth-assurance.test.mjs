@@ -85,3 +85,30 @@ test("configured values are exact and bounded rather than substring matches", ()
   assert.equal(assurance.evaluateOidcAssurance({ amr: ["not-mfa"] }).mfaSatisfied, false);
   assert.equal(assurance.evaluateOidcAssurance({ amr: ["otp"] }).mfaSatisfied, true);
 });
+
+
+test("assurance mapping version is deterministic and changes with enforcement semantics", () => {
+  const first = loadWithEnv({
+    HRBP_OIDC_MFA_CLAIM: "acr",
+    HRBP_OIDC_MFA_VALUES: "loa3,loa2",
+    HRBP_OIDC_DEVICE_TRUST_CLAIM: "device_trusted",
+    HRBP_OIDC_DEVICE_TRUST_VALUES: "compliant,true"
+  });
+  const reordered = loadWithEnv({
+    HRBP_OIDC_MFA_CLAIM: "acr",
+    HRBP_OIDC_MFA_VALUES: "loa2,loa3",
+    HRBP_OIDC_DEVICE_TRUST_CLAIM: "device_trusted",
+    HRBP_OIDC_DEVICE_TRUST_VALUES: "true,compliant"
+  });
+  const changed = loadWithEnv({
+    HRBP_OIDC_MFA_CLAIM: "acr",
+    HRBP_OIDC_MFA_VALUES: "loa4",
+    HRBP_OIDC_DEVICE_TRUST_CLAIM: "device_trusted",
+    HRBP_OIDC_DEVICE_TRUST_VALUES: "true,compliant"
+  });
+
+  const firstVersion = first.authenticationAssuranceVersion();
+  assert.match(firstVersion, /^[a-f0-9]{64}$/);
+  assert.equal(firstVersion, reordered.authenticationAssuranceVersion());
+  assert.notEqual(firstVersion, changed.authenticationAssuranceVersion());
+});
