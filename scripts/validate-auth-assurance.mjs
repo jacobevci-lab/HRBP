@@ -26,6 +26,10 @@ const session = await source(sessionPath);
 expect(sessionPath, session, /mfaSatisfied\?: boolean[\s\S]*deviceTrustSatisfied\?: boolean/, "session claims must carry bounded assurance booleans");
 expect(sessionPath, session, /typeof claims\.mfaSatisfied !== "boolean"[\s\S]*typeof claims\.deviceTrustSatisfied !== "boolean"/, "session decoding must reject malformed assurance claims");
 
+const sessionApiPath = "app/api/auth/session/route.ts";
+const sessionApi = await source(sessionApiPath);
+expect(sessionApiPath, sessionApi, /assurance:[\s\S]*mfaSatisfied:[\s\S]*deviceTrustSatisfied:/, "session API must expose only bounded assurance booleans");
+
 const verifiedPath = "lib/verified-session.ts";
 const verified = await source(verifiedPath);
 expect(verifiedPath, verified, /mfaRequired:\s*true[\s\S]*deviceTrustRequired:\s*true/, "request verification must load current tenant assurance policy");
