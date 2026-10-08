@@ -17,8 +17,8 @@ expect(helperPath, helper, /actual\.some\(\(value\) => accepted\.has\(value\)\)/
 const callbackPath = "app/api/auth/callback/route.ts";
 const callback = await source(callbackPath);
 expect(callbackPath, callback, /evaluateOidcAssurance\(payload/, "OIDC callback must evaluate signed token assurance claims");
-expect(callbackPath, callback, /securityPolicy\?\.assuranceEnforcedAt[\s\S]*securityPolicy\.mfaRequired[\s\S]*!assurance\.mfaSatisfied[\s\S]*MFA_REQUIRED/, "OIDC callback must fail closed when an activated tenant MFA policy lacks assurance");
-expect(callbackPath, callback, /securityPolicy\?\.assuranceEnforcedAt[\s\S]*securityPolicy\.deviceTrustRequired[\s\S]*!assurance\.deviceTrustSatisfied[\s\S]*DEVICE_TRUST_REQUIRED/, "OIDC callback must fail closed when an activated trusted-device policy lacks assurance");
+expect(callbackPath, callback, /securityPolicy\?\.assuranceEnforcedAt && securityPolicy\.mfaRequired && !assurance\.mfaSatisfied[\s\S]*MFA_REQUIRED/, "OIDC callback must fail closed when an activated tenant MFA policy lacks assurance");
+expect(callbackPath, callback, /securityPolicy\?\.assuranceEnforcedAt && securityPolicy\.deviceTrustRequired && !assurance\.deviceTrustSatisfied[\s\S]*DEVICE_TRUST_REQUIRED/, "OIDC callback must fail closed when an activated trusted-device policy lacks assurance");
 expect(callbackPath, callback, /mfaSatisfied:\s*assurance\.mfaSatisfied[\s\S]*deviceTrustSatisfied:\s*assurance\.deviceTrustSatisfied[\s\S]*assuranceVersion/, "OIDC sessions must bind evaluated assurance evidence and mapping version");
 expect(callbackPath, callback, /mfa-required[\s\S]*device-trust-required/, "OIDC assurance denials must use bounded public error codes");
 
@@ -43,13 +43,13 @@ expect(serverContextPath, serverContext, /mfaSatisfied:\s*claims\.mfaSatisfied =
 const verifiedPath = "lib/verified-session.ts";
 const verified = await source(verifiedPath);
 expect(verifiedPath, verified, /mfaRequired:\s*true[\s\S]*deviceTrustRequired:\s*true[\s\S]*assuranceEnforcedAt:\s*true/, "request verification must load current tenant assurance policy and activation state");
-expect(verifiedPath, verified, /policy\?\.assuranceEnforcedAt[\s\S]*policy\.mfaRequired[\s\S]*claims\.mfaSatisfied !== true/, "existing sessions must fail immediately after activated MFA policy enforcement");
-expect(verifiedPath, verified, /policy\?\.assuranceEnforcedAt[\s\S]*policy\.deviceTrustRequired[\s\S]*claims\.deviceTrustSatisfied !== true/, "existing sessions must fail immediately after activated device-trust policy enforcement");
+expect(verifiedPath, verified, /policy\?\.assuranceEnforcedAt && policy\.mfaRequired && claims\.mfaSatisfied !== true/, "existing sessions must fail immediately after activated MFA policy enforcement");
+expect(verifiedPath, verified, /policy\?\.assuranceEnforcedAt && policy\.deviceTrustRequired && claims\.deviceTrustSatisfied !== true/, "existing sessions must fail immediately after activated device-trust policy enforcement");
 expect(verifiedPath, verified, /claims\.authMethod === "oidc"[\s\S]*claims\.assuranceVersion !== authenticationAssuranceVersion\(\)/, "OIDC sessions must fail after assurance claim mapping changes");
 
 const localPath = "app/api/auth/local/route.ts";
 const local = await source(localPath);
-expect(localPath, local, /assurancePolicy\?\.assuranceEnforcedAt[\s\S]*assurancePolicy\.mfaRequired \|\| assurancePolicy\.deviceTrustRequired/, "local password sessions must not bypass an activated tenant assurance policy");
+expect(localPath, local, /assurancePolicy\?\.assuranceEnforcedAt && \(assurancePolicy\.mfaRequired \|\| assurancePolicy\.deviceTrustRequired\)/, "local password sessions must not bypass an activated tenant assurance policy");
 expect(localPath, local, /assurancePolicy[\s\S]*const body = await readJsonObject/, "local assurance policy must be checked before credential input is evaluated");
 expect(localPath, local, /mfaSatisfied:\s*false[\s\S]*deviceTrustSatisfied:\s*false/, "local sessions must not claim assurance they cannot provide");
 
