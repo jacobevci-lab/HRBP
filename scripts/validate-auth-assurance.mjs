@@ -50,7 +50,7 @@ expect(verifiedPath, verified, /claims\.authMethod === "oidc"[\s\S]*claims\.assu
 const localPath = "app/api/auth/local/route.ts";
 const local = await source(localPath);
 expect(localPath, local, /assurancePolicy\?\.assuranceEnforcedAt[\s\S]*assurancePolicy\.mfaRequired \|\| assurancePolicy\.deviceTrustRequired/, "local password sessions must not bypass an activated tenant assurance policy");
-expect(localPath, local, /auth\.local-assurance-denied/, "blocked local assurance bypass must be audited");
+expect(localPath, local, /assurancePolicy[\s\S]*const body = await readJsonObject/, "local assurance policy must be checked before credential input is evaluated");
 expect(localPath, local, /mfaSatisfied:\s*false[\s\S]*deviceTrustSatisfied:\s*false/, "local sessions must not claim assurance they cannot provide");
 
 const policyPath = "app/api/settings/security-policy/route.ts";
