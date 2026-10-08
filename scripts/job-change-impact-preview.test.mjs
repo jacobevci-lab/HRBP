@@ -34,6 +34,22 @@ const api = load("lib/employee-position-change-preview.ts", {
   "@/lib/auth-session": auth
 });
 
+const impactState = () => ({
+  sourcePositionId: "position-old",
+  sourceOrgUnitId: "org-old",
+  sourceGrade: "G6",
+  sourceLocation: "Istanbul",
+  sourceCritical: false,
+  managerEmploymentId: "manager-employment",
+  directReportCount: 4,
+  targetPositionId: "position-new",
+  targetOrgUnitId: "org-new",
+  targetGrade: "G7",
+  targetLocation: "Istanbul",
+  targetCritical: true,
+  openTargetRequisitionCount: 1
+});
+
 const input = () => ({
   tenantId: "tenant-a",
   actorId: "actor-a",
@@ -43,7 +59,8 @@ const input = () => ({
   targetPositionId: "position-new",
   eventType: "PROMOTED",
   effectiveAt: new Date("2026-10-08T00:00:00.000Z"),
-  reason: "Approved promotion reference HR-2026-77"
+  reason: "Approved promotion reference HR-2026-77",
+  impactDigest: api.positionChangeImpactDigest(impactState())
 });
 
 function expected() {
@@ -65,6 +82,14 @@ test("signed preview receipt is bound to actor, employee and requested change", 
   assert.ok(claims);
   assert.equal(claims.employmentId, "employment-a");
   assert.equal(claims.sourcePositionId, "position-old");
+});
+
+test("impact digest changes when governed relationship state changes", () => {
+  const baseline = api.positionChangeImpactDigest(impactState());
+  assert.notEqual(baseline, api.positionChangeImpactDigest({ ...impactState(), directReportCount: 5 }));
+  assert.notEqual(baseline, api.positionChangeImpactDigest({ ...impactState(), managerEmploymentId: "manager-other" }));
+  assert.notEqual(baseline, api.positionChangeImpactDigest({ ...impactState(), openTargetRequisitionCount: 2 }));
+  assert.notEqual(baseline, api.positionChangeImpactDigest({ ...impactState(), targetCritical: false }));
 });
 
 test("preview receipt rejects field drift and token tampering", () => {
