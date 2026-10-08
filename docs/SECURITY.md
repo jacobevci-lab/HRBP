@@ -68,3 +68,16 @@ Every application route receives a small browser security baseline from the Next
 - HSTS is emitted with a one-year max age. Customer reverse proxies must preserve this header on the external HTTPS origin; browsers ignore it on plain HTTP development/loopback access.
 
 The CSP intentionally does not yet define `default-src` or `script-src`: Next.js runtime scripts are not weakened with broad unsafe directives just to claim a full CSP. Tighter nonce/hash-based script and style policy should be introduced only with end-to-end browser regression coverage.
+
+
+## SCIM provisioning boundary
+
+SCIM is an optional service-to-service identity provisioning interface and is disabled by default. It uses a dedicated tenant-scoped bearer credential and never reuses browser-session, maintenance, metrics, scanner, database, storage, OIDC or SMTP secrets.
+
+Provisioning can create and synchronize only application user identity state. SCIM cannot assign privileged HRBP roles; newly created accounts are fixed to `EMPLOYEE`. User mutations are restricted to `userName`, `displayName`, `externalId` and `active`, and request bodies, filters, pagination and resource identifiers are bounded before database use.
+
+SCIM operations are serialized per tenant with a PostgreSQL transaction advisory lock. This makes concurrent identity-provider retries converge on one account state and keeps deprovision/session-revocation updates ordered. Deactivation increments the account session version exactly once on the active-to-disabled transition; stale copied HRBP sessions therefore fail on subsequent verified requests.
+
+Unmanaged-account adoption is disabled by default. When explicitly enabled for a reviewed migration, only non-local `EMPLOYEE` accounts are eligible; SCIM cannot silently take ownership of local-auth or privileged administrator accounts. All lifecycle mutations write restricted append-only audit evidence under the system SCIM actor.
+
+The SCIM health endpoint is secret-free. Authentication failures return the SCIM error shape with a Bearer challenge but never echo the token, database error text or employee payloads.

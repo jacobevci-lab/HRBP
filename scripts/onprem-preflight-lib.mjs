@@ -127,6 +127,28 @@ export function validateOnpremEnv(env) {
     warnings.push("Local authentication is enabled; production on-prem deployments should normally use enterprise OIDC only.");
   }
 
+  const scimEnabledRaw = (env.HRBP_SCIM_ENABLED ?? "false").toLowerCase();
+  if (!["true", "false"].includes(scimEnabledRaw)) {
+    errors.push("HRBP_SCIM_ENABLED must be explicitly true or false.");
+  }
+  const scimEnabled = scimEnabledRaw === "true";
+  const scimAdoptionRaw = (env.HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION ?? "false").toLowerCase();
+  if (!["true", "false"].includes(scimAdoptionRaw)) {
+    errors.push("HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION must be explicitly true or false.");
+  }
+  if (scimEnabled) {
+    const scimToken = env.HRBP_SCIM_TOKEN ?? "";
+    if (!scimToken || isPlaceholder(scimToken)) errors.push("HRBP_SCIM_TOKEN is required when HRBP_SCIM_ENABLED=true.");
+    if (scimToken.length < 32) errors.push("HRBP_SCIM_TOKEN must be at least 32 characters.");
+    if (/\s/.test(scimToken)) errors.push("HRBP_SCIM_TOKEN must not contain whitespace.");
+    if (secretValues.some(([, value]) => value === scimToken) || (env.HRBP_SMTP_PASSWORD && env.HRBP_SMTP_PASSWORD === scimToken)) {
+      errors.push("HRBP_SCIM_TOKEN must not reuse another application secret.");
+    }
+    if (scimAdoptionRaw === "true") {
+      warnings.push("SCIM unmanaged-account adoption is enabled; review existing EMPLOYEE identities before provisioning.");
+    }
+  }
+
   const scopes = new Set((env.HRBP_OIDC_SCOPES ?? "").split(/\s+/).filter(Boolean));
   for (const scope of ["openid", "profile", "email"]) {
     if (!scopes.has(scope)) errors.push(`HRBP_OIDC_SCOPES must include ${scope}.`);

@@ -15,6 +15,9 @@ const base = {
   HRBP_DOCUMENT_SCAN_TOKEN: "document-token-abcdefghijklmnopqrstuvwxyz",
   HRBP_MAINTENANCE_TOKEN: "maintenance-token-abcdefghijklmnopqrstuvwxyz",
   HRBP_METRICS_TOKEN: "metrics-token-abcdefghijklmnopqrstuvwxyz",
+  HRBP_SCIM_ENABLED: "false",
+  HRBP_SCIM_TOKEN: "",
+  HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "false",
   HRBP_OIDC_ISSUER: "https://login.example.com/tenant/v2.0",
   HRBP_OIDC_CLIENT_ID: "client-id-123",
   HRBP_OIDC_CLIENT_SECRET: "oidc-secret-abcdefghijklmnop",
@@ -113,6 +116,39 @@ test("validation diagnostics never echo secret values", () => {
   assert.ok(!JSON.stringify(result).includes(secret));
 });
 
+
+test("accepts guarded SCIM provisioning configuration", () => {
+  const result = validateOnpremEnv({
+    ...base,
+    HRBP_SCIM_ENABLED: "true",
+    HRBP_SCIM_TOKEN: "scim-token-abcdefghijklmnopqrstuvwxyz-123456",
+    HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "false"
+  });
+  assert.equal(result.ok, true, result.errors.join("\n"));
+});
+
+test("rejects weak/reused SCIM credentials and warns on unmanaged adoption", () => {
+  const weak = validateOnpremEnv({
+    ...base,
+    HRBP_SCIM_ENABLED: "true",
+    HRBP_SCIM_TOKEN: "short",
+    HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "maybe"
+  });
+  assert.equal(weak.ok, false);
+  assert.ok(weak.errors.some((entry) => entry.includes("HRBP_SCIM_TOKEN")));
+  assert.ok(weak.errors.some((entry) => entry.includes("HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION")));
+
+  const reused = validateOnpremEnv({
+    ...base,
+    HRBP_SCIM_ENABLED: "true",
+    HRBP_SCIM_TOKEN: base.HRBP_MAINTENANCE_TOKEN,
+    HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "true"
+  });
+  assert.equal(reused.ok, false);
+  assert.ok(reused.errors.some((entry) => entry.includes("must not reuse")));
+  assert.ok(reused.warnings.some((entry) => entry.includes("unmanaged-account adoption")));
+  assert.ok(!JSON.stringify(reused).includes(base.HRBP_MAINTENANCE_TOKEN));
+});
 
 test("accepts bounded TLS SMTP delivery configuration", () => {
   const result = validateOnpremEnv({

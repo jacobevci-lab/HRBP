@@ -35,6 +35,11 @@ jobs:
       HRBP_MAINTENANCE_TOKEN: ci-maintenance-token-1234567890
       HRBP_DOCUMENT_SCAN_TOKEN: ci-document-scan-token-1234567890
       HRBP_METRICS_TOKEN: ci-metrics-token-12345678901234567890
+      HRBP_SCIM_TOKEN: ci-scim-token-123456789012345678901234
+      HRBP_AUTH_TENANT_ID: ci-tenant
+      HRBP_ALLOWED_EMAIL_DOMAINS: example.test
+      HRBP_SCIM_ENABLED: "true"
+      HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "false"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -132,6 +137,11 @@ jobs:
             --var HRBP_MAINTENANCE_TOKEN:$HRBP_MAINTENANCE_TOKEN \
             --var HRBP_DOCUMENT_SCAN_TOKEN:$HRBP_DOCUMENT_SCAN_TOKEN \
             --var HRBP_METRICS_TOKEN:$HRBP_METRICS_TOKEN \
+            --var HRBP_SCIM_TOKEN:$HRBP_SCIM_TOKEN \
+            --var HRBP_AUTH_TENANT_ID:$HRBP_AUTH_TENANT_ID \
+            --var HRBP_ALLOWED_EMAIL_DOMAINS:$HRBP_ALLOWED_EMAIL_DOMAINS \
+            --var HRBP_SCIM_ENABLED:$HRBP_SCIM_ENABLED \
+            --var HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION:$HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION \
             > /tmp/hrbp-wrangler.log 2>&1 &
           WRANGLER_PID=$!
           trap 'kill $WRANGLER_PID 2>/dev/null || true' EXIT
@@ -397,6 +407,172 @@ jobs:
 
           await db.$disconnect();
           console.log('Document scan claim/retry/finalization/stale-lock protocol passed.');
+          NODE
+
+          node --input-type=module <<'NODE'
+          import { PrismaClient } from '@prisma/client';
+          const db = new PrismaClient();
+          const root = 'http://127.0.0.1:8787/api/scim/v2';
+          const token = process.env.HRBP_SCIM_TOKEN;
+          const userName = 'ci.scim.user@example.test';
+          const externalId = 'ci-scim-external-1';
+
+          async function call(path, { method = 'GET', body, auth = true } = {}) {
+            const response = await fetch(root + path, {
+              method,
+              headers: {
+                accept: 'application/scim+json',
+                ...(auth ? { authorization: 'Bearer ' + token } : {}),
+                ...(body ? { 'content-type': 'application/scim+json' } : {})
+              },
+              ...(body ? { body: JSON.stringify(body) } : {})
+            });
+            const text = await response.text();
+            let json = null;
+            if (text) {
+              try { json = JSON.parse(text); }
+              catch {
+                console.error('SCIM API returned invalid JSON.', { path, status: response.status, text: text.slice(0, 1000) });
+                process.exit(1);
+              }
+            }
+            return { response, json };
+          }
+
+          const unauth = await call('/ServiceProviderConfig', { auth: false });
+          if (unauth.response.status !== 401 || !/^Bearer /i.test(unauth.response.headers.get('www-authenticate') || '')) {
+            console.error('SCIM discovery did not enforce bearer authentication.', unauth.response.status);
+            process.exit(1);
+          }
+
+          await db.userAccount.upsert({
+            where: { tenantId_subject: { tenantId: 'ci-tenant', subject: 'ci-scim-privileged-admin' } },
+            update: { active: true, role: 'TENANT_ADMIN', localAuthEnabled: false, email: 'protected.admin@example.test' },
+            create: {
+              id: 'ci-scim-privileged-admin',
+              tenantId: 'ci-tenant',
+              subject: 'ci-scim-privileged-admin',
+              displayName: 'Protected Admin',
+              email: 'protected.admin@example.test',
+              role: 'TENANT_ADMIN',
+              active: true
+            }
+          });
+
+          const takeover = await call('/Users', {
+            method: 'POST',
+            body: {
+              schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
+              userName: 'protected.admin@example.test',
+              displayName: 'Should Not Adopt',
+              externalId: 'ci-protected-admin',
+              active: true
+            }
+          });
+          if (takeover.response.status !== 409) {
+            console.error('SCIM attempted to adopt an unmanaged privileged account.', takeover.response.status, takeover.json);
+            process.exit(1);
+          }
+
+          const payload = {
+            schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
+            userName,
+            displayName: 'CI SCIM User',
+            externalId,
+            active: true
+          };
+          const pair = await Promise.all([
+            call('/Users', { method: 'POST', body: payload }),
+            call('/Users', { method: 'POST', body: payload })
+          ]);
+          const statuses = pair.map((entry) => entry.response.status).sort((a, b) => a - b);
+          if (statuses[0] !== 200 || statuses[1] !== 201) {
+            console.error('Concurrent SCIM replay did not serialize to one create and one idempotent update.', statuses, pair.map((entry) => entry.json));
+            process.exit(1);
+          }
+          const ids = new Set(pair.map((entry) => entry.json?.id));
+          if (ids.size !== 1 || ids.has(undefined)) {
+            console.error('Concurrent SCIM replay did not converge on one resource.', pair.map((entry) => entry.json));
+            process.exit(1);
+          }
+          const id = pair[0].json.id;
+
+          const filtered = await call('/Users?filter=' + encodeURIComponent('externalId eq "' + externalId + '"'));
+          if (!filtered.response.ok || filtered.json?.totalResults !== 1 || filtered.json?.Resources?.[0]?.id !== id) {
+            console.error('SCIM filter did not return the provisioned resource.', filtered.json);
+            process.exit(1);
+          }
+
+          const before = await db.userAccount.findUnique({ where: { id } });
+          if (!before || before.provisioningSource !== 'SCIM' || before.role !== 'EMPLOYEE' || before.sessionVersion !== 1) {
+            console.error('SCIM account persisted with an unexpected ownership/role/session state.', before);
+            process.exit(1);
+          }
+
+          const disabled = await call('/Users/' + encodeURIComponent(id), {
+            method: 'PATCH',
+            body: {
+              schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
+              Operations: [{ op: 'replace', path: 'active', value: false }]
+            }
+          });
+          if (!disabled.response.ok || disabled.json?.active !== false) {
+            console.error('SCIM deactivation failed.', disabled.response.status, disabled.json);
+            process.exit(1);
+          }
+          const afterDisable = await db.userAccount.findUnique({ where: { id } });
+          if (!afterDisable || afterDisable.active || afterDisable.sessionVersion !== 2 || !afterDisable.sessionsRevokedAt) {
+            console.error('SCIM deactivation did not revoke application sessions exactly once.', afterDisable);
+            process.exit(1);
+          }
+
+          const replay = await call('/Users/' + encodeURIComponent(id), {
+            method: 'PATCH',
+            body: {
+              schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
+              Operations: [{ op: 'replace', path: 'active', value: false }]
+            }
+          });
+          const afterReplay = await db.userAccount.findUnique({ where: { id } });
+          if (!replay.response.ok || !afterReplay || afterReplay.sessionVersion !== 2) {
+            console.error('Idempotent SCIM deactivation replay advanced session state.', replay.response.status, afterReplay);
+            process.exit(1);
+          }
+
+          const privilege = await call('/Users/' + encodeURIComponent(id), {
+            method: 'PATCH',
+            body: {
+              schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
+              Operations: [{ op: 'replace', path: 'role', value: 'TENANT_ADMIN' }]
+            }
+          });
+          if (privilege.response.status !== 400) {
+            console.error('SCIM accepted a privileged-role mutation.', privilege.response.status, privilege.json);
+            process.exit(1);
+          }
+
+          const removed = await call('/Users/' + encodeURIComponent(id), { method: 'DELETE' });
+          const final = await db.userAccount.findUnique({ where: { id } });
+          if (removed.response.status !== 204 || !final || final.active || final.sessionVersion !== 2) {
+            console.error('SCIM DELETE did not remain fail-closed/idempotent.', removed.response.status, final);
+            process.exit(1);
+          }
+
+          const auditCount = await db.auditEvent.count({
+            where: {
+              tenantId: 'ci-tenant',
+              resourceType: 'UserAccount',
+              resourceId: id,
+              action: { in: ['identity.scim-user-provisioned', 'identity.scim-user-updated', 'identity.scim-user-patched', 'identity.scim-user-deprovisioned'] }
+            }
+          });
+          if (auditCount < 4) {
+            console.error('SCIM lifecycle did not produce bounded audit evidence.', auditCount);
+            process.exit(1);
+          }
+
+          await db.$disconnect();
+          console.log('SCIM provisioning concurrency/deactivation protocol passed.');
           NODE
 
           node --input-type=module <<'NODE'

@@ -242,11 +242,17 @@ model UserAccount {
   lastLocalLoginAt       DateTime?
   sessionVersion         Int @default(1)
   sessionsRevokedAt      DateTime?
+  provisioningSource     String?
+  provisioningExternalId String?
+  provisionedAt          DateTime?
+  provisioningUpdatedAt  DateTime?
   tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assignments CaseAssignment[]
 
   @@unique([tenantId, subject])
+  @@unique([tenantId, provisioningSource, provisioningExternalId])
   @@index([tenantId, role])
+  @@index([tenantId, provisioningSource, active])
 }
 
 model Person {

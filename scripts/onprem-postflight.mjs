@@ -109,6 +109,30 @@ const notifications = await waitFor(
   "Notification provider health"
 );
 
+let scim = {
+  status: "not-required-pre-upgrade",
+  enabled: false,
+  configured: false,
+  unmanagedAdoptionEnabled: false
+};
+if (mode === "post-deploy") {
+  const body = await waitFor(
+    "/api/health/scim",
+    (value) => value?.status === "ok" &&
+      typeof value?.enabled === "boolean" &&
+      typeof value?.configured === "boolean" &&
+      Number.isInteger(value?.allowedDomainCount) &&
+      typeof value?.unmanagedAdoptionEnabled === "boolean",
+    "SCIM health"
+  );
+  scim = {
+    status: "healthy",
+    enabled: body.enabled,
+    configured: body.configured,
+    unmanagedAdoptionEnabled: body.unmanagedAdoptionEnabled
+  };
+}
+
 let operationalMetrics = "not-required-pre-upgrade";
 if (mode === "post-deploy") {
   try {
@@ -208,6 +232,12 @@ console.log(JSON.stringify({
     smtpEnabled: notifications?.email?.enabled ?? false,
     smtpConfigured: notifications?.email?.configured ?? false,
     emailEventCount: notifications?.email?.eventCount ?? 0
+  },
+  scim: {
+    status: scim.status,
+    enabled: scim.enabled,
+    configured: scim.configured,
+    unmanagedAdoptionEnabled: scim.unmanagedAdoptionEnabled
   },
   operationalMetrics,
   objectStorage: "healthy",
