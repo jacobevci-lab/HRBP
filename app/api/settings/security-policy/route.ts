@@ -22,7 +22,11 @@ export async function GET(request: Request) {
   if (!tenant) return Response.json({ error: "Tenant was not found." }, { status: 404 });
 
   return Response.json({
-    data: policy ?? {
+    data: policy ? {
+      ...policy,
+      mfaRequired: Boolean(policy.assuranceEnforcedAt && policy.mfaRequired),
+      deviceTrustRequired: Boolean(policy.assuranceEnforcedAt && policy.deviceTrustRequired)
+    } : {
       tenantId: ctx.tenantId,
       dataRegion: tenant.region,
       customerManagedKey: false,
@@ -32,6 +36,7 @@ export async function GET(request: Request) {
       downloadWatermarking: true,
       deviceTrustRequired: false,
       breakGlassEnabled: true,
+      assuranceEnforcedAt: null,
       updatedAt: null
     },
     permissions: { write: can(ctx, "settings:write") },
@@ -78,15 +83,20 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "kmsKeyRef is required when customerManagedKey is enabled." }, { status: 400 });
   }
 
+  const effectiveExistingMfa = Boolean(existing?.assuranceEnforcedAt && existing.mfaRequired);
+  const effectiveExistingDeviceTrust = Boolean(existing?.assuranceEnforcedAt && existing.deviceTrustRequired);
+  const nextMfaRequired = booleanValue(body.mfaRequired, effectiveExistingMfa);
+  const nextDeviceTrustRequired = booleanValue(body.deviceTrustRequired, effectiveExistingDeviceTrust);
+
   const next = {
     dataRegion,
     kmsKeyRef,
     customerManagedKey,
-    mfaRequired: booleanValue(body.mfaRequired, existing?.mfaRequired ?? false),
+    mfaRequired: nextMfaRequired,
     sessionMaxMinutes: sessionValue,
     exportRestrictedData: booleanValue(body.exportRestrictedData, existing?.exportRestrictedData ?? false),
     downloadWatermarking: booleanValue(body.downloadWatermarking, existing?.downloadWatermarking ?? true),
-    deviceTrustRequired: booleanValue(body.deviceTrustRequired, existing?.deviceTrustRequired ?? false),
+    deviceTrustRequired: nextDeviceTrustRequired,
     breakGlassEnabled: booleanValue(body.breakGlassEnabled, existing?.breakGlassEnabled ?? true),
     updatedById: ctx.actorId
   };
@@ -101,32 +111,38 @@ export async function PATCH(request: Request) {
     }, { status: 409, headers: { "cache-control": "no-store" } });
   }
 
-  const enablingMfa = next.mfaRequired && existing?.mfaRequired !== true;
+  const enablingMfa = next.mfaRequired && !effectiveExistingMfa;
   if (enablingMfa && ctx.mfaSatisfied !== true) {
     return Response.json({
       error: "MFA cannot be enabled because the current OIDC session does not demonstrate MFA assurance. Complete an assured sign-in first."
     }, { status: 409, headers: { "cache-control": "no-store" } });
   }
 
-  const enablingDeviceTrust = next.deviceTrustRequired && existing?.deviceTrustRequired !== true;
+  const enablingDeviceTrust = next.deviceTrustRequired && !effectiveExistingDeviceTrust;
   if (enablingDeviceTrust && ctx.deviceTrustSatisfied !== true) {
     return Response.json({
       error: "Trusted-device enforcement cannot be enabled because the current OIDC session does not demonstrate device-trust assurance."
     }, { status: 409, headers: { "cache-control": "no-store" } });
   }
 
+  const assuranceEnforcedAt = next.mfaRequired || next.deviceTrustRequired
+    ? (existing?.assuranceEnforcedAt ?? new Date())
+    : null;
+
   const data = await db.$transaction(async (tx) => {
     const policy = await tx.tenantSecurityPolicy.upsert({
       where: { tenantId: ctx.tenantId },
-      update: next,
-      create: { tenantId: ctx.tenantId, ...next }
+      update: { ...next, assuranceEnforcedAt },
+      create: { tenantId: ctx.tenantId, ...next, assuranceEnforcedAt }
     });
     await appendAudit(tx, ctx, {
       action: "settings.security-policy-updated",
       resourceType: "TenantSecurityPolicy",
       resourceId: policy.id,
       classification: DataClassification.RESTRICTED,
-      purpose: "Tenant security posture configuration update"
+      purpose: assuranceEnforcedAt
+        ? "Tenant security posture configuration update with active OIDC assurance enforcement"
+        : "Tenant security posture configuration update"
     });
     return policy;
   });
