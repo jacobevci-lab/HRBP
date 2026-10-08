@@ -354,6 +354,14 @@ export function validateOnpremEnv(env) {
     errors.push("HRBP_MAINTENANCE_INTERVAL_SECONDS must be between 300 and 86400 seconds.");
   }
 
+  const scheduledJobChangeBatch = env.HRBP_SCHEDULED_JOB_CHANGE_BATCH_SIZE;
+  if (scheduledJobChangeBatch !== undefined &&
+      (!/^[0-9]+$/.test(scheduledJobChangeBatch) ||
+       Number(scheduledJobChangeBatch) < 10 ||
+       Number(scheduledJobChangeBatch) > 250)) {
+    errors.push("HRBP_SCHEDULED_JOB_CHANGE_BATCH_SIZE must be between 10 and 250.");
+  }
+
   return { ok: errors.length === 0, errors, warnings };
 }
 
