@@ -1,7 +1,7 @@
 import { EmploymentStatus, LifecycleEventType, PositionStatus, RequisitionStatus } from "@prisma/client";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
-import { createPositionChangePreviewReceipt } from "@/lib/employee-position-change-preview";
+import { createPositionChangePreviewReceipt, positionChangeImpactDigest } from "@/lib/employee-position-change-preview";
 import { asEnumValue, asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -113,6 +113,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
       ]);
       if (incumbent) throw new Error("TARGET_OCCUPIED");
 
+      const impactDigest = positionChangeImpactDigest({
+        sourcePositionId: employment.positionId,
+        sourceOrgUnitId: employment.position?.orgUnit.id ?? null,
+        sourceGrade: employment.position?.grade ?? null,
+        sourceLocation: employment.position?.location ?? null,
+        sourceCritical: employment.position?.critical ?? false,
+        managerEmploymentId: employment.managerEmploymentId,
+        directReportCount: employment._count.directReports,
+        targetPositionId: target.id,
+        targetOrgUnitId: target.orgUnit.id,
+        targetGrade: target.grade,
+        targetLocation: target.location,
+        targetCritical: target.critical,
+        openTargetRequisitionCount
+      });
+
       const receipt = createPositionChangePreviewReceipt({
         tenantId: ctx.tenantId,
         actorId: ctx.actorId,
@@ -122,7 +138,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
         targetPositionId: target.id,
         eventType,
         effectiveAt,
-        reason
+        reason,
+        impactDigest
       });
 
       const orgUnitChanged = (employment.position?.orgUnit.id ?? null) !== target.orgUnit.id;
