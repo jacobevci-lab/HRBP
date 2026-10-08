@@ -131,11 +131,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
         targetPositionId,
         eventType,
         effectiveAt,
-        reason,
-        impactDigest
+        reason
       });
       if (!preview) throw new Error("PREVIEW_REQUIRED");
-      if (preview.employmentId !== employment.id || preview.sourcePositionId !== employment.positionId) {
+      if (preview.employmentId !== employment.id || preview.sourcePositionId !== employment.positionId || preview.impactDigest !== impactDigest) {
         throw new Error("PREVIEW_STALE");
       }
 
