@@ -687,11 +687,16 @@ jobs:
           if (!accepted.ok ||
               !/^hrbp_operational_metrics_up 1$/m.test(text) ||
               !/^hrbp_notification_outbox_records\{channel="IN_APP",status="DELIVERED"\} [0-9]+$/m.test(text) ||
-              !/^hrbp_document_scan_records\{status="CLEAN"\} [0-9]+$/m.test(text)) {
+              !/^hrbp_document_scan_records\{status="CLEAN"\} [0-9]+$/m.test(text) ||
+              !/^hrbp_scim_managed_users\{active="true"\} [0-9]+$/m.test(text) ||
+              !/^hrbp_scim_managed_users\{active="false"\} [0-9]+$/m.test(text) ||
+              !/^hrbp_scim_enabled 1$/m.test(text) ||
+              !/^hrbp_scim_configured 1$/m.test(text) ||
+              !/^hrbp_scim_rotation_overlap_active 1$/m.test(text)) {
             console.error('Operational metrics snapshot is incomplete.', accepted.status, text.slice(0, 2000));
             process.exit(1);
           }
-          if (/ci-tenant|ci-user|ci-document-scan-version|ci-document-scan-stale-exhausted/.test(text)) {
+          if (/ci-tenant|ci-user|ci-document-scan-version|ci-document-scan-stale-exhausted|ci-scim-external|protected\.admin@example\.test/.test(text)) {
             console.error('Operational metrics leaked tenant, user or resource identifiers.');
             process.exit(1);
           }
