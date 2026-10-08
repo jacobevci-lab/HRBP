@@ -157,3 +157,38 @@ test("classification helper grants only highly-restricted read while break-glass
   assert.equal(authorization.can(breakGlassAdmin, "privacy:write"), false);
   assert.equal(authorization.can(breakGlassAdmin, "payroll:read"), false);
 });
+
+
+test("case wall keeps ordinary assignment scoping but allows active tenant-admin emergency reads", async () => {
+  const calls = [];
+  const client = {
+    employeeCase: {
+      findFirst: async (args) => { calls.push({ kind: "one", args }); return null; },
+      findMany: async (args) => { calls.push({ kind: "many", args }); return []; }
+    }
+  };
+  const caseWall = load("lib/case-wall.ts", {
+    "@prisma/client": {
+      PlatformRole: { TENANT_ADMIN: "TENANT_ADMIN", ER_INVESTIGATOR: "ER_INVESTIGATOR" }
+    },
+    "@/lib/db": { db: client },
+    "@/lib/request-context": {}
+  });
+
+  await caseWall.getCaseWallCase({
+    tenantId: "tenant-1",
+    actorId: "admin-1",
+    role: "TENANT_ADMIN",
+    breakGlassActive: true
+  }, "case-1", client);
+  assert.equal("OR" in calls[0].args.where, false);
+
+  await caseWall.listCaseWallCases({
+    tenantId: "tenant-1",
+    actorId: "investigator-1",
+    role: "ER_INVESTIGATOR",
+    breakGlassActive: false
+  }, client);
+  assert.ok(Array.isArray(calls[1].args.where.OR));
+  assert.equal(calls[1].args.where.tenantId, "tenant-1");
+});
