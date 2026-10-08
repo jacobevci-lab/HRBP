@@ -33,12 +33,12 @@ expect(sessionApiPath, sessionApi, /assurance:[\s\S]*mfaSatisfied:[\s\S]*deviceT
 
 const contextPath = "lib/request-context.ts";
 const context = await source(contextPath);
-expect(contextPath, context, /mfaSatisfied\?: boolean[\s\S]*deviceTrustSatisfied\?: boolean/, "request context must carry session assurance evidence");
-expect(contextPath, context, /mfaSatisfied:\s*session\.mfaSatisfied === true[\s\S]*deviceTrustSatisfied:\s*session\.deviceTrustSatisfied === true/, "request context must derive assurance only from the verified signed session");
+expect(contextPath, context, /mfaSatisfied\?: boolean[\s\S]*deviceTrustSatisfied\?: boolean[\s\S]*assuranceVersion\?: string \| null/, "request context must carry session assurance evidence and mapping version");
+expect(contextPath, context, /mfaSatisfied:\s*session\.mfaSatisfied === true[\s\S]*deviceTrustSatisfied:\s*session\.deviceTrustSatisfied === true[\s\S]*assuranceVersion:\s*session\.assuranceVersion \?\? null/, "request context must derive assurance only from the verified signed session");
 
 const serverContextPath = "lib/server-session.ts";
 const serverContext = await source(serverContextPath);
-expect(serverContextPath, serverContext, /mfaSatisfied:\s*claims\.mfaSatisfied === true[\s\S]*deviceTrustSatisfied:\s*claims\.deviceTrustSatisfied === true/, "server-component context must preserve verified assurance state");
+expect(serverContextPath, serverContext, /mfaSatisfied:\s*claims\.mfaSatisfied === true[\s\S]*deviceTrustSatisfied:\s*claims\.deviceTrustSatisfied === true[\s\S]*assuranceVersion:\s*claims\.assuranceVersion \?\? null/, "server-component context must preserve verified assurance state and mapping version");
 
 const verifiedPath = "lib/verified-session.ts";
 const verified = await source(verifiedPath);
@@ -58,6 +58,7 @@ const policy = await source(policyPath);
 expect(policyPath, policy, /assurancePolicyIssues[\s\S]*status:\s*409/, "tenant security policy must reject unenforceable assurance settings");
 expect(policyPath, policy, /enablingMfa[\s\S]*ctx\.mfaSatisfied !== true[\s\S]*status:\s*409/, "MFA policy enablement must require a currently assured OIDC session");
 expect(policyPath, policy, /enablingDeviceTrust[\s\S]*ctx\.deviceTrustSatisfied !== true[\s\S]*status:\s*409/, "device-trust policy enablement must require a currently trusted-device session");
+expect(policyPath, policy, /ctx\.assuranceVersion === authenticationAssuranceVersion\(\)[\s\S]*different assurance mapping/, "assurance policy activation must reject sessions evaluated under an older claim mapping");
 expect(policyPath, policy, /mfaConfigured[\s\S]*deviceTrustConfigured/, "security policy read must expose secret-free assurance readiness");
 expect(policyPath, policy, /mfaRequired:\s*false/, "MFA must remain explicitly opt-in until an assured administrator enables it");
 expect(policyPath, policy, /assuranceEnforcedAt = next\.mfaRequired \|\| next\.deviceTrustRequired[\s\S]*existing\?\.assuranceEnforcedAt \?\? new Date\(\)/, "assurance enforcement must activate only through an explicit assured policy save");
