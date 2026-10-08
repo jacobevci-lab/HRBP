@@ -1,6 +1,7 @@
 import { EmploymentStatus, LifecycleEventType, PositionStatus, RequisitionStatus } from "@prisma/client";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { createPositionChangePreviewReceipt, positionChangeImpactDigest } from "@/lib/employee-position-change-preview";
 import { asEnumValue, asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
@@ -74,6 +75,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
         }
       });
       if (!employment) throw new Error("EMPLOYMENT_NOT_FOUND");
+      const scope = await resolveEmploymentScope(tx, ctx);
+      if (!canActOnEmployment(scope, employment.id)) throw new Error("OUT_OF_SCOPE");
       if (employment.positionId === targetPositionId) throw new Error("SAME_POSITION");
 
       const target = await tx.position.findFirst({
@@ -197,6 +200,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
     return Response.json({ data }, { headers: { "cache-control": "no-store" } });
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
+    if (code === "OUT_OF_SCOPE") return forbidden("Employment is outside your authorized relationship scope.");
     const errors: Record<string, [string, number]> = {
       EMPLOYMENT_NOT_FOUND: ["Current employment was not found in this tenant.", 404],
       SAME_POSITION: ["The target position is already assigned to this employee.", 409],
