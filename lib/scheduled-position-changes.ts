@@ -4,6 +4,7 @@ import {
   LifecycleEventType,
   PlatformRole,
   PositionStatus,
+  Prisma,
   RequisitionStatus,
   ScheduledPositionChangeStatus
 } from "@prisma/client";
@@ -38,7 +39,7 @@ function systemContext(tenantId: string): RequestContext {
 }
 
 async function blockScheduledChange(
-  tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
+  tx: Prisma.TransactionClient,
   change: {
     id: string;
     tenantId: string;
