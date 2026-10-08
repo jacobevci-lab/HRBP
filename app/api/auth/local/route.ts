@@ -116,9 +116,9 @@ export async function POST(request: Request) {
 
   const assurancePolicy = await db.tenantSecurityPolicy.findUnique({
     where: { tenantId },
-    select: { mfaRequired: true, deviceTrustRequired: true }
+    select: { mfaRequired: true, deviceTrustRequired: true, assuranceEnforcedAt: true }
   });
-  if (assurancePolicy?.mfaRequired || assurancePolicy?.deviceTrustRequired) {
+  if (assurancePolicy?.assuranceEnforcedAt && (assurancePolicy.mfaRequired || assurancePolicy.deviceTrustRequired)) {
     await db.$transaction((tx) => appendSystemAudit(tx, user.tenantId, user.id, {
       action: "auth.local-assurance-denied",
       resourceType: "UserAccount",
