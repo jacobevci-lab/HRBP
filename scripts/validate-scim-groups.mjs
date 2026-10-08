@@ -55,6 +55,11 @@ const schemasPath = "app/api/scim/v2/Schemas/route.ts";
 const schemas = await source(schemasPath);
 expect(schemasPath, schemas, /scimGroupSchemaDefinition/, "SCIM discovery must advertise Group schema");
 
+const settingsPath = "components/settings-live-page.tsx";
+const settings = await source(settingsPath);
+expect(settingsPath, settings, /scimGroup\.count[\s\S]*scimGroupMember\.count/, "settings operations must expose SCIM group and membership health");
+expect(settingsPath, settings, /groups \/ \$\{scimMembershipCount\} memberships|grup \/ \$\{scimMembershipCount\} üyelik/, "settings must distinguish user and group provisioning telemetry");
+
 const packagePath = "package.json";
 const pkg = await source(packagePath);
 expect(packagePath, pkg, /scim:groups:validate/, "SCIM group validator must be registered");
