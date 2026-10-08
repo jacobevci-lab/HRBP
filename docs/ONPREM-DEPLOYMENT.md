@@ -159,7 +159,7 @@ HRBP_OIDC_DEVICE_TRUST_VALUES=true,compliant
 
 Claim names are bounded to simple top-level names and accepted-value lists are bounded. The install/upgrade preflight rejects malformed or half-configured mappings. Raw assurance claims are not stored in the HRBP session or operational metrics; the session records only whether MFA/device trust was satisfied.
 
-If a tenant explicitly requires MFA or device trust, optional local password authentication is rejected because it cannot provide OIDC assurance evidence. Existing signed sessions are also checked against the current tenant policy on every request, so tightening the policy takes effect without waiting for cookie expiry.
+If a tenant explicitly requires MFA or device trust, optional local password authentication is rejected because it cannot provide OIDC assurance evidence. Existing signed sessions are also checked against the current tenant policy on every request, so tightening the policy takes effect without waiting for cookie expiry. Assurance controls are explicit tenant policy choices: before enabling one, the administrator must already be signed in with a session that demonstrates the corresponding evidence. This avoids locking the tenant out with an unproven claim mapping.
 
 ## SCIM 2.0 user provisioning
 
