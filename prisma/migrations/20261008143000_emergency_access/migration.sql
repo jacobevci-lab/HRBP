@@ -14,6 +14,7 @@ CREATE TABLE "EmergencyAccessGrant" (
   "validTo" TIMESTAMP(3),
   "revokedById" TEXT,
   "revokedAt" TIMESTAMP(3),
+  "expiredAt" TIMESTAMP(3),
   "decisionNote" TEXT,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
