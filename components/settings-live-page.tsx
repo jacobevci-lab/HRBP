@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { getServerLocale } from "@/lib/i18n-server";
 import { parseIntegrationProbeOrigins } from "@/lib/integration-live-validation.mjs";
 import { runtimeBoolean, runtimeString } from "@/lib/runtime-env";
+import { identityRuntimeActivationIssues, isOidcRuntimeProvider } from "@/lib/runtime-identity-provider";
 import { scimRuntimeConfig } from "@/lib/scim";
 import { smtpConfigurationStatus } from "@/lib/notification-email-config";
 import { getServerRequestContext } from "@/lib/server-session";
@@ -52,7 +53,7 @@ export async function SettingsLivePage() {
   const integrationProbeAllowHttp = runtimeBoolean("HRBP_INTEGRATION_PROBE_ALLOW_HTTP", false);
   const integrationProbeOrigins = parseIntegrationProbeOrigins(runtimeString("HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS") ?? "", integrationProbeAllowHttp) ?? [];
   const integrationProbeConfigured = integrationProbeOrigins.length > 0;
-  const coreConfigured = auth.configured && storageConfigured && maintenanceConfigured && (!scim.enabled || scim.configured);
+  const baseCoreConfigured = auth.configured && storageConfigured && maintenanceConfigured && (!scim.enabled || scim.configured);
 
   const localAuthSince = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const [tenant, security, idps, integrations, userGroups, notificationGroups, activeQueues, workflowGroups, quarantineCount, localAccountCount, localAuthEvents, localAuthEventGroups, localAuthUsers, scimManagedCount, scimActiveCount, scimLastProvisioning] = await Promise.all([
@@ -91,6 +92,18 @@ export async function SettingsLivePage() {
     })
   ]);
 
+  const activeRuntimeIdps = idps.filter((row) => row.status === "ACTIVE" && isOidcRuntimeProvider(row.type));
+  const managedOidc = activeRuntimeIdps.length === 1 ? activeRuntimeIdps[0] : null;
+  const identityRuntimeIssues = activeRuntimeIdps.length > 1
+    ? [c(locale, "multiple active OIDC-family providers", "birden fazla aktif OIDC ailesi sağlayıcısı")]
+    : managedOidc
+      ? identityRuntimeActivationIssues(managedOidc)
+      : [];
+  const identityRuntimeHealthy = auth.configured && identityRuntimeIssues.length === 0;
+  const effectiveJit = managedOidc ? managedOidc.jitEnabled : Boolean(oidc?.jitProvisioning);
+  const effectiveProviderMfa = Boolean(managedOidc?.mfaRequired);
+  const coreConfigured = baseCoreConfigured && identityRuntimeHealthy;
+
   const activeUsers = userGroups.filter((row) => row.active).reduce((sum, row) => sum + row._count._all, 0);
   const inactiveUsers = userGroups.filter((row) => !row.active).reduce((sum, row) => sum + row._count._all, 0);
   const notificationCounts = Object.fromEntries(notificationGroups.map((row) => [row.status, row._count._all])) as Record<string, number>;
@@ -126,7 +139,7 @@ export async function SettingsLivePage() {
       <div className="card settings-live-panel">
         <div className="settings-live-panel-head"><div><span className="section-kicker">{c(locale, "Runtime readiness", "Çalışma zamanı hazırlığı")}</span><h3>{c(locale, "Security-critical configuration", "Güvenlik kritik yapılandırma")}</h3></div><ShieldCheck size={18}/></div>
         <div className="settings-live-checks">
-          <div><KeyRound size={17}/><span><strong>Enterprise OIDC</strong><small>{auth.configured ? c(locale, "Issuer, client, tenant and session secret configured", "Issuer, client, tenant ve session secret yapılandırılmış") : c(locale, `Missing: ${auth.missing.join(", ")}`, `Eksik: ${auth.missing.join(", ")}`)}</small></span><State ok={auth.configured} label={auth.configured ? c(locale, "Ready", "Hazır") : c(locale, "Attention", "Dikkat")}/></div>
+          <div><KeyRound size={17}/><span><strong>Enterprise OIDC</strong><small>{!auth.configured ? c(locale, `Missing: ${auth.missing.join(", ")}`, `Eksik: ${auth.missing.join(", ")}`) : identityRuntimeIssues.length ? c(locale, `Governed runtime attention: ${identityRuntimeIssues.join(", ")}`, `Yönetişimli runtime aksiyonu: ${identityRuntimeIssues.join(", ")}`) : managedOidc ? c(locale, `${managedOidc.name} is bound to runtime · JIT ${effectiveJit ? "on" : "off"} · provider MFA ${effectiveProviderMfa ? "required" : "optional"}`, `${managedOidc.name} runtime ile bağlı · JIT ${effectiveJit ? "açık" : "kapalı"} · sağlayıcı MFA ${effectiveProviderMfa ? "zorunlu" : "opsiyonel"}`) : c(locale, "Legacy environment binding is active; no governed ACTIVE provider adopted yet.", "Eski ortam değişkeni bağlantısı aktif; henüz yönetişimli ACTIVE sağlayıcı benimsenmedi.")}</small></span><State ok={identityRuntimeHealthy} label={identityRuntimeHealthy ? c(locale, managedOidc ? "Governed" : "Ready", managedOidc ? "Yönetişimli" : "Hazır") : c(locale, "Attention", "Dikkat")}/></div>
           <div><CloudCog size={17}/><span><strong>{c(locale, "Private object storage", "Özel nesne depolama")}</strong><small>{c(locale, "Endpoint, bucket and credentials are checked without exposing their values.", "Endpoint, bucket ve kimlik bilgileri değerleri gösterilmeden kontrol edilir.")}</small></span><State ok={storageConfigured} label={storageConfigured ? c(locale, "Ready", "Hazır") : c(locale, "Missing", "Eksik")}/></div>
           <div><Activity size={17}/><span><strong>{c(locale, "Document malware scan", "Doküman zararlı yazılım taraması")}</strong><small>{c(locale, `${quarantineCount} versions currently require scan/quarantine attention.`, `${quarantineCount} sürüm tarama/karantina aksiyonu gerektiriyor.`)}</small></span><State ok={scanConfigured} label={scanConfigured ? c(locale, "Configured", "Yapılandırıldı") : c(locale, "Missing", "Eksik")}/></div>
           <div><Database size={17}/><span><strong>{c(locale, "Scheduled maintenance", "Zamanlanmış bakım")}</strong><small>{c(locale, "SLA escalation, workflow reminders, notification dispatch and retention.", "SLA eskalasyonu, iş akışı hatırlatmaları, bildirim dağıtımı ve retention.")}</small></span><State ok={maintenanceConfigured} label={maintenanceConfigured ? c(locale, "Protected", "Korumalı") : c(locale, "Token missing", "Token eksik")}/></div>
@@ -157,7 +170,7 @@ export async function SettingsLivePage() {
         <div className="settings-live-table-wrap"><table className="settings-live-table"><thead><tr><th>{c(locale, "Name", "Ad")}</th><th>{c(locale, "Type", "Tür")}</th><th>SCIM</th><th>JIT</th><th>MFA</th><th>{c(locale, "Validated", "Doğrulandı")}</th><th>{c(locale, "Status", "Durum")}</th></tr></thead><tbody>
           {idps.length ? idps.map((row) => <tr key={row.id}><td><strong>{row.name}</strong></td><td>{row.type.replaceAll("_", " ")}</td><td>{row.scimEnabled ? c(locale, "On", "Açık") : c(locale, "Off", "Kapalı")}</td><td>{row.jitEnabled ? c(locale, "On", "Açık") : c(locale, "Off", "Kapalı")}</td><td>{row.mfaRequired ? c(locale, "Required", "Zorunlu") : c(locale, "Optional", "Opsiyonel")}</td><td>{fmt(locale, row.lastValidatedAt)}</td><td><State ok={row.status === "ACTIVE"} label={row.status}/></td></tr>) : <tr><td colSpan={7} className="settings-live-empty">{auth.configured ? c(locale, "Runtime OIDC is configured; no database identity-provider records exist yet.", "Runtime OIDC yapılandırılmış; henüz veritabanı kimlik sağlayıcı kaydı yok.") : c(locale, "No identity provider is configured.", "Kimlik sağlayıcı yapılandırılmamış.")}</td></tr>}
         </tbody></table></div>
-        {oidc ? <p className="settings-live-footnote">{c(locale, "Runtime OIDC", "Runtime OIDC")}: {oidc.issuer} · JIT {oidc.jitProvisioning ? "on" : "off"} · {oidc.allowedEmailDomains.length} {c(locale, "allowed domains", "izinli domain")}</p> : null}
+        {oidc ? <p className="settings-live-footnote">{c(locale, "Runtime OIDC", "Runtime OIDC")}: {oidc.issuer} · {managedOidc ? c(locale, `governed by ${managedOidc.name}`, `${managedOidc.name} tarafından yönetiliyor`) : c(locale, "legacy environment policy", "eski ortam politikası")} · JIT {effectiveJit ? "on" : "off"} · {oidc.allowedEmailDomains.length} {c(locale, "allowed domains", "izinli domain")} · {c(locale, "provider MFA", "sağlayıcı MFA")} {effectiveProviderMfa ? c(locale, "required", "zorunlu") : c(locale, "optional", "opsiyonel")}</p> : null}
       </div>
 
       <div className="card settings-live-panel">
