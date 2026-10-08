@@ -28,9 +28,12 @@ const prisma = {
   }
 };
 
-function runtimeModule({ oidc, localConfigured = false }) {
+function runtimeModule({ oidc, localConfigured = false, mfaConfigured = true }) {
   return load("lib/runtime-identity-provider.ts", {
     "@prisma/client": prisma,
+    "@/lib/auth-assurance": {
+      authenticationAssuranceConfiguration: () => ({ mfaConfigured })
+    },
     "@/lib/auth-config": {
       getOidcConfig: () => oidc,
       localAuthConfigurationStatus: () => ({ enabled: localConfigured, configured: localConfigured, missing: [] })
@@ -43,7 +46,7 @@ const runtimeConfig = {
   clientId: "client-1",
   tenantId: "tenant-1",
   scopes: "openid profile email",
-  allowedEmailDomains: [],
+  allowedEmailDomains: ["example.test"],
   jitProvisioning: false
 };
 
@@ -57,7 +60,7 @@ test("legacy environment-driven OIDC stays usable until an active governed provi
   assert.deepEqual(await runtime.enforceOidcRuntimeBinding(client, runtimeConfig), { managed: false });
 });
 
-test("one active matching OIDC provider binds the runtime", async () => {
+test("one active matching OIDC provider binds runtime JIT and MFA policy", async () => {
   const runtime = runtimeModule({ oidc: runtimeConfig });
   const client = {
     identityProviderConnection: {
@@ -65,14 +68,18 @@ test("one active matching OIDC provider binds the runtime", async () => {
         id: "idp-1",
         type: "OIDC",
         issuer: "https://idp.example.test",
-        clientId: "client-1"
+        clientId: "client-1",
+        jitEnabled: true,
+        mfaRequired: true
       }]
     }
   };
   assert.deepEqual(await runtime.enforceOidcRuntimeBinding(client, runtimeConfig), {
     managed: true,
     connectionId: "idp-1",
-    type: "OIDC"
+    type: "OIDC",
+    jitEnabled: true,
+    mfaRequired: true
   });
 });
 
@@ -84,7 +91,9 @@ test("active provider metadata drift fails closed", async () => {
         id: "idp-1",
         type: "ENTRA_ID",
         issuer: "https://different.example.test",
-        clientId: "client-1"
+        clientId: "client-1",
+        jitEnabled: false,
+        mfaRequired: true
       }]
     }
   };
@@ -99,8 +108,8 @@ test("multiple active OIDC-family providers fail closed", async () => {
   const client = {
     identityProviderConnection: {
       findMany: async () => [
-        { id: "idp-1", type: "OIDC", issuer: "https://idp.example.test", clientId: "client-1" },
-        { id: "idp-2", type: "OKTA", issuer: "https://idp.example.test", clientId: "client-1" }
+        { id: "idp-1", type: "OIDC", issuer: "https://idp.example.test", clientId: "client-1", jitEnabled: false, mfaRequired: true },
+        { id: "idp-2", type: "OKTA", issuer: "https://idp.example.test", clientId: "client-1", jitEnabled: false, mfaRequired: true }
       ]
     }
   };
@@ -110,36 +119,71 @@ test("multiple active OIDC-family providers fail closed", async () => {
   );
 });
 
-test("activation readiness distinguishes metadata validity from runtime support", () => {
-  const runtime = runtimeModule({ oidc: runtimeConfig, localConfigured: false });
+test("activation readiness distinguishes metadata validity from runtime policy support", () => {
+  const runtime = runtimeModule({ oidc: runtimeConfig, localConfigured: false, mfaConfigured: true });
 
   assert.deepEqual(runtime.identityRuntimeActivationIssues({
     type: "OIDC",
     issuer: "https://idp.example.test",
-    clientId: "client-1"
+    clientId: "client-1",
+    jitEnabled: true,
+    mfaRequired: true
   }), []);
 
   assert.deepEqual(runtime.identityRuntimeActivationIssues({
     type: "OIDC",
     issuer: "https://other.example.test",
-    clientId: "client-2"
+    clientId: "client-2",
+    jitEnabled: false,
+    mfaRequired: false
   }), ["runtime issuer match", "runtime clientId match"]);
 
   assert.deepEqual(runtime.identityRuntimeActivationIssues({
     type: "SAML",
     issuer: null,
-    clientId: null
+    clientId: null,
+    jitEnabled: false,
+    mfaRequired: false
   }), ["SAML login runtime adapter"]);
 
   assert.deepEqual(runtime.identityRuntimeActivationIssues({
     type: "LDAP",
     issuer: "ldaps://ldap.example.test",
-    clientId: null
+    clientId: null,
+    jitEnabled: false,
+    mfaRequired: false
   }), ["LDAP login runtime adapter"]);
 
   assert.deepEqual(runtime.identityRuntimeActivationIssues({
     type: "LOCAL",
     issuer: null,
-    clientId: null
+    clientId: null,
+    jitEnabled: false,
+    mfaRequired: false
   }), ["local authentication runtime"]);
+});
+
+test("managed JIT cannot activate without an explicit allowed-domain boundary", () => {
+  const runtime = runtimeModule({
+    oidc: { ...runtimeConfig, allowedEmailDomains: [] },
+    mfaConfigured: true
+  });
+  assert.deepEqual(runtime.identityRuntimeActivationIssues({
+    type: "OIDC",
+    issuer: "https://idp.example.test",
+    clientId: "client-1",
+    jitEnabled: true,
+    mfaRequired: false
+  }), ["JIT allowed email domains"]);
+});
+
+test("managed MFA cannot activate without signed-token assurance mapping", () => {
+  const runtime = runtimeModule({ oidc: runtimeConfig, mfaConfigured: false });
+  assert.deepEqual(runtime.identityRuntimeActivationIssues({
+    type: "OIDC",
+    issuer: "https://idp.example.test",
+    clientId: "client-1",
+    jitEnabled: false,
+    mfaRequired: true
+  }), ["OIDC MFA claim/value mapping"]);
 });

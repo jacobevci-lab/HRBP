@@ -36,7 +36,7 @@ export async function GET(request: Request) {
   if (!code || !state || state !== transaction.state) return Response.redirect(redirectWithError(origin, "state"), 302);
 
   try {
-    await withDb((db) => enforceOidcRuntimeBinding(db, config));
+    const runtimeBinding = await withDb((db) => enforceOidcRuntimeBinding(db, config));
     const metadata = await discoverOidc(config.issuer);
     const redirectUri = config.redirectUri || `${origin}/api/auth/callback`;
     const tokenSet = await exchangeAuthorizationCode({ config, metadata, code, verifier: transaction.verifier, redirectUri });
@@ -46,6 +46,9 @@ export async function GET(request: Request) {
     const displayName = identityName(payload as Record<string, unknown>, email, subject);
     const assurance = evaluateOidcAssurance(payload as Record<string, unknown>);
     const assuranceVersion = authenticationAssuranceVersion();
+    if (runtimeBinding.managed && runtimeBinding.mfaRequired && !assurance.mfaSatisfied) {
+      throw new Error("MFA_REQUIRED");
+    }
 
     const identity = await withDb(async (db) => {
       const securityPolicy = await db.tenantSecurityPolicy.findUnique({
@@ -66,7 +69,8 @@ export async function GET(request: Request) {
 
       const bootstrap = Boolean(email && config.bootstrapAdminEmail && email === config.bootstrapAdminEmail);
       const domain = email?.split("@")[1]?.toLowerCase();
-      const jitAllowed = Boolean(config.jitProvisioning && domain && config.allowedEmailDomains.includes(domain));
+      const jitEnabled = runtimeBinding.managed ? runtimeBinding.jitEnabled : config.jitProvisioning;
+      const jitAllowed = Boolean(jitEnabled && domain && config.allowedEmailDomains.includes(domain));
 
       if (!user && bootstrap) {
         user = await db.userAccount.create({
