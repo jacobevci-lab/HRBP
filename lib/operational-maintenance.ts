@@ -145,7 +145,7 @@ async function expireEmergencyAccess(now: Date) {
         },
         data: {
           status: EmergencyAccessStatus.EXPIRED,
-          revokedAt: now
+          expiredAt: now
         }
       });
       if (updated.count !== 1) return false;
