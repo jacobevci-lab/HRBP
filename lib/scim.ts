@@ -16,11 +16,15 @@ export function scimRuntimeConfig() {
   const allowedDomains = (runtimeString("HRBP_ALLOWED_EMAIL_DOMAINS") ?? "")
     .split(",").map((value)=>normalizeScimDomain(value)).filter((value):value is string=>Boolean(value)).slice(0,50);
   const token = runtimeString("HRBP_SCIM_TOKEN") ?? "";
+  const previousToken = runtimeString("HRBP_SCIM_TOKEN_PREVIOUS") ?? "";
   const allowUnmanagedAdoption = runtimeBoolean("HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION", false);
+  const tokenValid = token.length >= 32 && !/\s/.test(token);
+  const previousTokenValid = !previousToken || (previousToken.length >= 32 && !/\s/.test(previousToken) && previousToken !== token);
   return {
     enabled, tenantId, baseUrl, allowedDomains, allowUnmanagedAdoption,
+    rotationOverlapActive: Boolean(previousToken),
     configured: enabled && /^[A-Za-z0-9._-]{3,64}$/.test(tenantId) && allowedDomains.length > 0 &&
-      token.length >= 32 && !/\s/.test(token)
+      tokenValid && previousTokenValid
   };
 }
 export function scimHeaders(extra?:HeadersInit) {
@@ -38,7 +42,7 @@ export function scimAccess(request:Request){
   const config=scimRuntimeConfig();
   if(!config.enabled) return scimError(404,"SCIM provisioning is disabled.");
   if(!config.configured) return scimError(503,"SCIM provisioning is not ready.");
-  if(!internalBearerAuthorized(request,"HRBP_SCIM_TOKEN")){
+  if(!internalBearerAuthorized(request,"HRBP_SCIM_TOKEN") && !internalBearerAuthorized(request,"HRBP_SCIM_TOKEN_PREVIOUS")){
     return scimError(401,"Valid SCIM bearer credentials are required.",undefined,{"www-authenticate":'Bearer realm="HRBP SCIM"'});
   }
   return null;
