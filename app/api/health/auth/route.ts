@@ -1,4 +1,5 @@
 import { authConfigurationStatus, localAuthConfigurationStatus } from "@/lib/auth-config";
+import { authenticationAssuranceConfiguration } from "@/lib/auth-assurance";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -6,6 +7,7 @@ export const revalidate = 0;
 export async function GET() {
   const oidc = authConfigurationStatus();
   const local = localAuthConfigurationStatus();
+  const assurance = authenticationAssuranceConfiguration();
   const anyReady = oidc.configured || local.configured;
   const authentication = oidc.configured && local.configured
     ? "multi-mode"
@@ -19,6 +21,10 @@ export async function GET() {
     session: "signed-http-only-cookie",
     configured: anyReady,
     missing: anyReady ? [] : [...new Set([...oidc.missing, ...(local.enabled ? local.missing : [])])],
+    assurance: {
+      mfaConfigured: assurance.mfaConfigured,
+      deviceTrustConfigured: assurance.deviceTrustConfigured
+    },
     modes: [
       { mode: "oidc", enabled: true, configured: oidc.configured, missing: oidc.missing },
       { mode: "local", enabled: local.enabled, configured: local.configured, missing: local.enabled ? local.missing : [] }

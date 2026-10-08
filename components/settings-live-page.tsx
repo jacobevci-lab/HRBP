@@ -139,11 +139,11 @@ export async function SettingsLivePage() {
       <aside className="card settings-live-panel settings-security-policy">
         <div className="settings-live-panel-head"><div><span className="section-kicker">{c(locale, "Tenant security", "Tenant güvenliği")}</span><h3>{c(locale, "Enforced posture", "Uygulanan duruş")}</h3></div><LockKeyhole size={18}/></div>
         <dl>
-          <div><dt>MFA</dt><dd>{security?.mfaRequired !== false ? c(locale, "Required", "Zorunlu") : c(locale, "Optional", "Opsiyonel")}</dd></div>
+          <div><dt>MFA</dt><dd>{Boolean(security?.assuranceEnforcedAt && security.mfaRequired) ? c(locale, "Required", "Zorunlu") : c(locale, "Not enforced", "Zorunlu değil")}</dd></div>
           <div><dt>{c(locale, "Session maximum", "Maksimum oturum")}</dt><dd>{security?.sessionMaxMinutes ?? 480} min</dd></div>
           <div><dt>{c(locale, "Restricted export", "Kısıtlı dışa aktarma")}</dt><dd>{security?.exportRestrictedData ? c(locale, "Allowed", "İzinli") : c(locale, "Blocked", "Engelli")}</dd></div>
           <div><dt>{c(locale, "Watermarking", "Filigran")}</dt><dd>{security?.downloadWatermarking !== false ? c(locale, "Enabled", "Etkin") : c(locale, "Disabled", "Devre dışı")}</dd></div>
-          <div><dt>{c(locale, "Device trust", "Cihaz güveni")}</dt><dd>{security?.deviceTrustRequired ? c(locale, "Required", "Zorunlu") : c(locale, "Not required", "Zorunlu değil")}</dd></div>
+          <div><dt>{c(locale, "Device trust", "Cihaz güveni")}</dt><dd>{Boolean(security?.assuranceEnforcedAt && security.deviceTrustRequired) ? c(locale, "Required", "Zorunlu") : c(locale, "Not enforced", "Zorunlu değil")}</dd></div>
           <div><dt>Break glass</dt><dd>{security?.breakGlassEnabled !== false ? c(locale, "Enabled", "Etkin") : c(locale, "Disabled", "Devre dışı")}</dd></div>
           <div><dt>{c(locale, "Data region", "Veri bölgesi")}</dt><dd>{security?.dataRegion ?? tenant?.region ?? "—"}</dd></div>
         </dl>

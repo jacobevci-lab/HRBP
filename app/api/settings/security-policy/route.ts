@@ -1,5 +1,6 @@
 import { DataClassification } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
+import { assurancePolicyIssues, authenticationAssuranceConfiguration, authenticationAssuranceVersion } from "@/lib/auth-assurance";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { asFiniteNumber, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
@@ -21,19 +22,31 @@ export async function GET(request: Request) {
   if (!tenant) return Response.json({ error: "Tenant was not found." }, { status: 404 });
 
   return Response.json({
-    data: policy ?? {
+    data: policy ? {
+      ...policy,
+      mfaRequired: Boolean(policy.assuranceEnforcedAt && policy.mfaRequired),
+      deviceTrustRequired: Boolean(policy.assuranceEnforcedAt && policy.deviceTrustRequired)
+    } : {
       tenantId: ctx.tenantId,
       dataRegion: tenant.region,
       customerManagedKey: false,
-      mfaRequired: true,
+      mfaRequired: false,
       sessionMaxMinutes: 480,
       exportRestrictedData: false,
       downloadWatermarking: true,
       deviceTrustRequired: false,
       breakGlassEnabled: true,
+      assuranceEnforcedAt: null,
       updatedAt: null
     },
-    permissions: { write: can(ctx, "settings:write") }
+    permissions: { write: can(ctx, "settings:write") },
+    assurance: (() => {
+      const config = authenticationAssuranceConfiguration();
+      return {
+        mfaConfigured: config.mfaConfigured,
+        deviceTrustConfigured: config.deviceTrustConfigured
+      };
+    })()
   }, { headers: { "cache-control": "no-store" } });
 }
 
@@ -70,31 +83,85 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "kmsKeyRef is required when customerManagedKey is enabled." }, { status: 400 });
   }
 
+  const effectiveExistingMfa = Boolean(existing?.assuranceEnforcedAt && existing.mfaRequired);
+  const effectiveExistingDeviceTrust = Boolean(existing?.assuranceEnforcedAt && existing.deviceTrustRequired);
+  const nextMfaRequired = booleanValue(body.mfaRequired, effectiveExistingMfa);
+  const nextDeviceTrustRequired = booleanValue(body.deviceTrustRequired, effectiveExistingDeviceTrust);
+
   const next = {
     dataRegion,
     kmsKeyRef,
     customerManagedKey,
-    mfaRequired: booleanValue(body.mfaRequired, existing?.mfaRequired ?? true),
+    mfaRequired: nextMfaRequired,
     sessionMaxMinutes: sessionValue,
     exportRestrictedData: booleanValue(body.exportRestrictedData, existing?.exportRestrictedData ?? false),
     downloadWatermarking: booleanValue(body.downloadWatermarking, existing?.downloadWatermarking ?? true),
-    deviceTrustRequired: booleanValue(body.deviceTrustRequired, existing?.deviceTrustRequired ?? false),
+    deviceTrustRequired: nextDeviceTrustRequired,
     breakGlassEnabled: booleanValue(body.breakGlassEnabled, existing?.breakGlassEnabled ?? true),
     updatedById: ctx.actorId
   };
 
+  const assuranceIssues = assurancePolicyIssues({
+    mfaRequired: next.mfaRequired,
+    deviceTrustRequired: next.deviceTrustRequired
+  });
+  if (assuranceIssues.length) {
+    return Response.json({
+      error: `Authentication assurance is not configured for: ${assuranceIssues.join(", ")}.`
+    }, { status: 409, headers: { "cache-control": "no-store" } });
+  }
+
+  const activatingAssurance = (next.mfaRequired || next.deviceTrustRequired) && !existing?.assuranceEnforcedAt;
+  const assuranceMappingCurrent = ctx.assuranceVersion === authenticationAssuranceVersion();
+  if ((activatingAssurance || (next.mfaRequired && !effectiveExistingMfa) || (next.deviceTrustRequired && !effectiveExistingDeviceTrust)) &&
+      !assuranceMappingCurrent) {
+    return Response.json({
+      error: "Authentication assurance cannot be enabled because the current OIDC session was evaluated under a different assurance mapping. Sign in again and retry."
+    }, { status: 409, headers: { "cache-control": "no-store" } });
+  }
+
+  const enablingMfa = next.mfaRequired && !effectiveExistingMfa;
+  if (enablingMfa && ctx.mfaSatisfied !== true) {
+    return Response.json({
+      error: "MFA cannot be enabled because the current OIDC session does not demonstrate MFA assurance. Complete an assured sign-in first."
+    }, { status: 409, headers: { "cache-control": "no-store" } });
+  }
+
+  const enablingDeviceTrust = next.deviceTrustRequired && !effectiveExistingDeviceTrust;
+  if (enablingDeviceTrust && ctx.deviceTrustSatisfied !== true) {
+    return Response.json({
+      error: "Trusted-device enforcement cannot be enabled because the current OIDC session does not demonstrate device-trust assurance."
+    }, { status: 409, headers: { "cache-control": "no-store" } });
+  }
+
+  const assuranceEnforcedAt = next.mfaRequired || next.deviceTrustRequired
+    ? (existing?.assuranceEnforcedAt ?? new Date())
+    : null;
+
   const data = await db.$transaction(async (tx) => {
     const policy = await tx.tenantSecurityPolicy.upsert({
       where: { tenantId: ctx.tenantId },
-      update: next,
-      create: { tenantId: ctx.tenantId, ...next }
+      update: { ...next, assuranceEnforcedAt },
+      create: { tenantId: ctx.tenantId, ...next, assuranceEnforcedAt }
     });
+    const assuranceActivated = !existing?.assuranceEnforcedAt && Boolean(assuranceEnforcedAt);
+    const assuranceDeactivated = Boolean(existing?.assuranceEnforcedAt) && !assuranceEnforcedAt;
     await appendAudit(tx, ctx, {
-      action: "settings.security-policy-updated",
+      action: assuranceActivated
+        ? "settings.authentication-assurance-activated"
+        : assuranceDeactivated
+          ? "settings.authentication-assurance-deactivated"
+          : "settings.security-policy-updated",
       resourceType: "TenantSecurityPolicy",
       resourceId: policy.id,
       classification: DataClassification.RESTRICTED,
-      purpose: "Tenant security posture configuration update"
+      purpose: assuranceActivated
+        ? "Tenant OIDC authentication assurance enforcement activated after an assured administrator session"
+        : assuranceDeactivated
+          ? "Tenant OIDC authentication assurance enforcement disabled by an authorized administrator"
+          : assuranceEnforcedAt
+            ? "Tenant security posture configuration update with active OIDC assurance enforcement"
+            : "Tenant security posture configuration update"
     });
     return policy;
   });

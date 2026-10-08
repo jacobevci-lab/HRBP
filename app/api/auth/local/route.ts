@@ -29,6 +29,22 @@ export async function POST(request: Request) {
   const tenantId = runtimeString("HRBP_AUTH_TENANT_ID");
   if (!tenantId) return Response.json({ error: "Local authentication tenant is not configured." }, { status: 503 });
 
+  let assurancePolicy;
+  try {
+    assurancePolicy = await db.tenantSecurityPolicy.findUnique({
+      where: { tenantId },
+      select: { mfaRequired: true, deviceTrustRequired: true, assuranceEnforcedAt: true }
+    });
+  } catch {
+    console.error("[HRBP] Local sign-in assurance policy check unavailable.");
+    return Response.json({ error: "Local sign-in policy could not be verified." }, { status: 503, headers: { "cache-control": "no-store" } });
+  }
+  if (assurancePolicy?.assuranceEnforcedAt && (assurancePolicy.mfaRequired || assurancePolicy.deviceTrustRequired)) {
+    return Response.json({
+      error: "Local sign-in is unavailable while the tenant requires OIDC authentication assurance."
+    }, { status: 403, headers: { "cache-control": "no-store" } });
+  }
+
   const body = await readJsonObject(request) as { identifier?: unknown; password?: unknown; returnTo?: unknown };
   if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const identifier = typeof body.identifier === "string" ? body.identifier.trim().toLowerCase() : "";
@@ -176,6 +192,8 @@ export async function POST(request: Request) {
     credentialVersion: identity.user.localPasswordUpdatedAt?.toISOString() ?? null,
     accountSessionVersion: identity.user.sessionVersion,
     tenantSessionVersion: identity.tenantSessionVersion,
+    mfaSatisfied: false,
+    deviceTrustSatisfied: false,
     tenantId: identity.user.tenantId,
     actorId: identity.user.id,
     role: identity.user.role,

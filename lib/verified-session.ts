@@ -1,3 +1,4 @@
+import { authenticationAssuranceVersion } from "@/lib/auth-assurance";
 import { effectiveSessionMaxMinutes, type SessionClaims, validSessionClaims } from "@/lib/auth-session";
 import { db } from "@/lib/db";
 
@@ -18,13 +19,16 @@ export async function verifySessionAccount(claims: SessionClaims | null): Promis
       }),
       db.tenantSecurityPolicy.findUnique({
         where: { tenantId: claims.tenantId },
-        select: { sessionMaxMinutes: true }
+        select: { sessionMaxMinutes: true, mfaRequired: true, deviceTrustRequired: true, assuranceEnforcedAt: true }
       })
     ]);
     if (!user || user.subject !== claims.subject || user.role !== claims.role ||
         (user.email ?? undefined) !== claims.email) return null;
     if (claims.accountSessionVersion !== user.sessionVersion ||
         claims.tenantSessionVersion !== user.tenant.sessionVersion) return null;
+    if (policy?.assuranceEnforcedAt && policy.mfaRequired && claims.mfaSatisfied !== true) return null;
+    if (policy?.assuranceEnforcedAt && policy.deviceTrustRequired && claims.deviceTrustSatisfied !== true) return null;
+    if (policy?.assuranceEnforcedAt && claims.authMethod === "oidc" && claims.assuranceVersion !== authenticationAssuranceVersion()) return null;
     const maxMinutes = effectiveSessionMaxMinutes(policy?.sessionMaxMinutes);
     if (claims.issuedAt + maxMinutes * 60 <= Math.floor(Date.now() / 1000)) return null;
     if (claims.authMethod === "local" && (!user.localAuthEnabled ||

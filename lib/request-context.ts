@@ -7,6 +7,9 @@ export type RequestContext = {
   actorId: string;
   role: PlatformRole;
   employmentId?: string;
+  mfaSatisfied?: boolean;
+  deviceTrustSatisfied?: boolean;
+  assuranceVersion?: string | null;
   purpose?: string;
   ipAddress?: string;
 };
@@ -30,6 +33,9 @@ export async function getRequestContext(request: Request): Promise<RequestContex
       actorId: session.actorId,
       role: session.role,
       employmentId: session.employmentId,
+      mfaSatisfied: session.mfaSatisfied === true,
+      deviceTrustSatisfied: session.deviceTrustSatisfied === true,
+      assuranceVersion: session.assuranceVersion ?? null,
       purpose: request.headers.get("x-purpose")?.trim() || undefined,
       ipAddress: request.headers.get("cf-connecting-ip")?.trim() || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined
     };

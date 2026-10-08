@@ -26,6 +26,10 @@ const base = {
   HRBP_OIDC_CLIENT_ID: "client-id-123",
   HRBP_OIDC_CLIENT_SECRET: "oidc-secret-abcdefghijklmnop",
   HRBP_OIDC_SCOPES: "openid profile email",
+  HRBP_OIDC_MFA_CLAIM: "amr",
+  HRBP_OIDC_MFA_VALUES: "mfa",
+  HRBP_OIDC_DEVICE_TRUST_CLAIM: "",
+  HRBP_OIDC_DEVICE_TRUST_VALUES: "",
   HRBP_OIDC_REDIRECT_URI: "https://hrbp.acme.internal/api/auth/callback",
   HRBP_AUTH_TENANT_ID: "acme-prod",
   HRBP_BOOTSTRAP_ADMIN_EMAIL: "admin@acme.internal",
@@ -99,6 +103,31 @@ test("warns when local auth or non-loopback app exposure is enabled", () => {
   });
   assert.equal(result.ok, true);
   assert.equal(result.warnings.length, 2);
+});
+
+test("rejects invalid OIDC assurance claim mappings", () => {
+  const badMfa = validateOnpremEnv({
+    ...base,
+    HRBP_OIDC_MFA_CLAIM: "bad claim",
+    HRBP_OIDC_MFA_VALUES: "mfa"
+  });
+  assert.equal(badMfa.ok, false);
+  assert.ok(badMfa.errors.some((entry) => entry.includes("MFA_CLAIM")));
+
+  const incompleteDevice = validateOnpremEnv({
+    ...base,
+    HRBP_OIDC_DEVICE_TRUST_CLAIM: "device_trusted",
+    HRBP_OIDC_DEVICE_TRUST_VALUES: ""
+  });
+  assert.equal(incompleteDevice.ok, false);
+  assert.ok(incompleteDevice.errors.some((entry) => entry.includes("configured together")));
+
+  const validDevice = validateOnpremEnv({
+    ...base,
+    HRBP_OIDC_DEVICE_TRUST_CLAIM: "device_trusted",
+    HRBP_OIDC_DEVICE_TRUST_VALUES: "true,compliant"
+  });
+  assert.equal(validDevice.ok, true, validDevice.errors.join("\n"));
 });
 
 test("rejects incomplete OIDC scopes and non-origin APP_URL", () => {

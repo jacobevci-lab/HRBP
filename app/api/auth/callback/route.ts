@@ -1,6 +1,7 @@
 import { sanitizeReturnTo } from "@/lib/safe-redirect";
 import { PlatformRole } from "@prisma/client";
 import { getOidcConfig } from "@/lib/auth-config";
+import { authenticationAssuranceVersion, evaluateOidcAssurance } from "@/lib/auth-assurance";
 import { clearOidcTransactionCookie, createSessionCookie, readOidcTransaction } from "@/lib/auth-session";
 import { withDb } from "@/lib/db";
 import { discoverOidc, exchangeAuthorizationCode, verifyIdToken } from "@/lib/oidc";
@@ -41,8 +42,16 @@ export async function GET(request: Request) {
     const subject = payload.sub!;
     const email = identityEmail(payload as Record<string, unknown>);
     const displayName = identityName(payload as Record<string, unknown>, email, subject);
+    const assurance = evaluateOidcAssurance(payload as Record<string, unknown>);
+    const assuranceVersion = authenticationAssuranceVersion();
 
     const identity = await withDb(async (db) => {
+      const securityPolicy = await db.tenantSecurityPolicy.findUnique({
+        where: { tenantId: config.tenantId },
+        select: { sessionMaxMinutes: true, mfaRequired: true, deviceTrustRequired: true, assuranceEnforcedAt: true }
+      });
+      if (securityPolicy?.assuranceEnforcedAt && securityPolicy.mfaRequired && !assurance.mfaSatisfied) throw new Error("MFA_REQUIRED");
+      if (securityPolicy?.assuranceEnforcedAt && securityPolicy.deviceTrustRequired && !assurance.deviceTrustSatisfied) throw new Error("DEVICE_TRUST_REQUIRED");
       let user = await db.userAccount.findFirst({
         where: {
           tenantId: config.tenantId,
@@ -91,7 +100,7 @@ export async function GET(request: Request) {
         });
       }
 
-      const [person, tenant, securityPolicy] = await Promise.all([
+      const [person, tenant] = await Promise.all([
         email
           ? db.person.findFirst({
             where: { tenantId: config.tenantId, workEmail: { equals: email, mode: "insensitive" } },
@@ -105,8 +114,7 @@ export async function GET(request: Request) {
             }
             })
           : Promise.resolve(null),
-        db.tenant.findUnique({ where: { id: config.tenantId }, select: { sessionVersion: true } }),
-        db.tenantSecurityPolicy.findUnique({ where: { tenantId: config.tenantId }, select: { sessionMaxMinutes: true } })
+        db.tenant.findUnique({ where: { id: config.tenantId }, select: { sessionVersion: true } })
       ]);
       if (!tenant) throw new Error("TENANT_NOT_FOUND");
 
@@ -123,6 +131,9 @@ export async function GET(request: Request) {
       authMethod: "oidc",
       accountSessionVersion: identity.user.sessionVersion,
       tenantSessionVersion: identity.tenantSessionVersion,
+      mfaSatisfied: assurance.mfaSatisfied,
+      deviceTrustSatisfied: assurance.deviceTrustSatisfied,
+      assuranceVersion,
       tenantId: identity.user.tenantId,
       actorId: identity.user.id,
       role: identity.user.role,
@@ -139,7 +150,11 @@ export async function GET(request: Request) {
       ? "not-provisioned"
       : error instanceof Error && error.message === "IDENTITY_DISABLED"
         ? "disabled"
-        : "callback";
+        : error instanceof Error && error.message === "MFA_REQUIRED"
+          ? "mfa-required"
+          : error instanceof Error && error.message === "DEVICE_TRUST_REQUIRED"
+            ? "device-trust-required"
+            : "callback";
     const headers = new Headers({ location: redirectWithError(origin, code), "cache-control": "no-store" });
     headers.append("set-cookie", clearOidcTransactionCookie());
     return new Response(null, { status: 302, headers });

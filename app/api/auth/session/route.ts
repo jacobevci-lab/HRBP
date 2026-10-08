@@ -65,6 +65,10 @@ export async function GET(request: Request) {
     authenticated: true,
     oidcConfigured: configuration.configured,
     navigationCapabilities: uiCapabilities,
+    assurance: {
+      mfaSatisfied: session.mfaSatisfied === true,
+      deviceTrustSatisfied: session.deviceTrustSatisfied === true
+    },
     user: {
       id: session.actorId,
       displayName: session.displayName,

@@ -201,6 +201,9 @@ for (const token of [
   "CHANGE_ME",
   "APP_URL must be a valid HTTPS URL",
   "HRBP_OIDC_REDIRECT_URI must use APP_URL origin",
+  "HRBP_OIDC_MFA_CLAIM must be a valid top-level claim name",
+  "HRBP_OIDC_MFA_VALUES must contain 1 to 50 bounded comma-separated values",
+  "HRBP_OIDC_DEVICE_TRUST_CLAIM and HRBP_OIDC_DEVICE_TRUST_VALUES must be configured together",
   "must use different secrets",
   "must not contain wildcard domains",
   "HRBP_SCIM_ENABLED must be explicitly true or false",
@@ -281,6 +284,10 @@ for (const key of [
   assert.ok(env.includes(`${key}=CHANGE_ME`), `Example must force operator replacement for ${key}`);
 }
 assert.match(env, /HRBP_LOCAL_AUTH_ENABLED=false/);
+assert.match(env, /HRBP_OIDC_MFA_CLAIM=amr/);
+assert.match(env, /HRBP_OIDC_MFA_VALUES=mfa/);
+assert.match(env, /HRBP_OIDC_DEVICE_TRUST_CLAIM=/);
+assert.match(env, /HRBP_OIDC_DEVICE_TRUST_VALUES=/);
 assert.match(env, /HRBP_SCIM_ENABLED=false/);
 assert.match(env, /HRBP_SCIM_TOKEN=/);
 assert.match(env, /HRBP_SCIM_TOKEN_PREVIOUS=/);

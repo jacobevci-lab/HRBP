@@ -76,6 +76,21 @@ function isPlaceholder(value) {
   return !value || /CHANGE_ME|YOUR-DIRECTORY|example\.internal|hrbp\.example\.internal/i.test(value);
 }
 
+function validAssuranceClaim(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_.:-]{1,128}$/.test(value);
+}
+
+function validAssuranceValues(value) {
+  if (typeof value !== "string" || !value.trim()) return false;
+  const entries = value.split(",").map((entry) => entry.trim());
+  if (entries.length < 1 || entries.length > 50) return false;
+  return entries.every((entry) =>
+    entry.length >= 1 &&
+    entry.length <= 256 &&
+    !/[\u0000-\u001f\u007f]/.test(entry)
+  );
+}
+
 function imagePinned(value) {
   if (!value) return false;
   if (/:(?:latest|edge|main|master)$/i.test(value)) return false;
@@ -185,6 +200,28 @@ export function validateOnpremEnv(env) {
   const scopes = new Set((env.HRBP_OIDC_SCOPES ?? "").split(/\s+/).filter(Boolean));
   for (const scope of ["openid", "profile", "email"]) {
     if (!scopes.has(scope)) errors.push(`HRBP_OIDC_SCOPES must include ${scope}.`);
+  }
+
+  const mfaClaim = env.HRBP_OIDC_MFA_CLAIM ?? "amr";
+  const mfaValues = env.HRBP_OIDC_MFA_VALUES ?? "mfa";
+  if (!validAssuranceClaim(mfaClaim)) {
+    errors.push("HRBP_OIDC_MFA_CLAIM must be a valid top-level claim name.");
+  }
+  if (!validAssuranceValues(mfaValues)) {
+    errors.push("HRBP_OIDC_MFA_VALUES must contain 1 to 50 bounded comma-separated values.");
+  }
+
+  const deviceTrustClaim = env.HRBP_OIDC_DEVICE_TRUST_CLAIM ?? "";
+  const deviceTrustValues = env.HRBP_OIDC_DEVICE_TRUST_VALUES ?? "";
+  if (Boolean(deviceTrustClaim) !== Boolean(deviceTrustValues)) {
+    errors.push("HRBP_OIDC_DEVICE_TRUST_CLAIM and HRBP_OIDC_DEVICE_TRUST_VALUES must be configured together.");
+  } else if (deviceTrustClaim) {
+    if (!validAssuranceClaim(deviceTrustClaim)) {
+      errors.push("HRBP_OIDC_DEVICE_TRUST_CLAIM must be a valid top-level claim name.");
+    }
+    if (!validAssuranceValues(deviceTrustValues)) {
+      errors.push("HRBP_OIDC_DEVICE_TRUST_VALUES must contain 1 to 50 bounded comma-separated values.");
+    }
   }
 
   if (!/^[A-Za-z0-9._-]{1,64}$/.test(env.POSTGRES_USER ?? "")) errors.push("POSTGRES_USER contains unsupported characters.");
