@@ -19,7 +19,12 @@ export async function SecurityPolicyEditorLoader() {
   return <section className="card settings-security-editor-card">
     <SecurityPolicyEditor
       canWrite={can(ctx, "settings:write")}
-      assurance={{ mfaConfigured: assurance.mfaConfigured, deviceTrustConfigured: assurance.deviceTrustConfigured }}
+      assurance={{
+        mfaConfigured: assurance.mfaConfigured,
+        deviceTrustConfigured: assurance.deviceTrustConfigured,
+        currentMfaSatisfied: ctx.mfaSatisfied === true,
+        currentDeviceTrustSatisfied: ctx.deviceTrustSatisfied === true
+      }}
       initial={{
         dataRegion: policy?.dataRegion ?? tenant.region,
         kmsKeyRef: policy?.kmsKeyRef ?? null,
