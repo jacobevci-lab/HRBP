@@ -39,14 +39,18 @@ async function replaceManagedGroup(input: {
   externalId: string | null;
   members: string[];
   auditAction: string;
+  expectedUpdatedAt?: Date;
 }) {
   return db.$transaction(async (tx) => {
     await lockScimTenant(tx, input.tenantId);
     const current = await tx.scimGroup.findFirst({
       where: { id: input.id, tenantId: input.tenantId },
-      select: { id: true }
+      select: { id: true, updatedAt: true }
     });
     if (!current) return null;
+    if (input.expectedUpdatedAt && current.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {
+      throw new Error("SCIM_GROUP_STATE_CONFLICT");
+    }
 
     const memberIds = [...new Set(input.members)];
     const users = memberIds.length
@@ -95,6 +99,9 @@ async function replaceManagedGroup(input: {
 function groupError(error: unknown) {
   if (error instanceof Error && error.message === "SCIM_GROUP_MEMBER_NOT_FOUND") {
     return scimError(400, "Every group member must reference a SCIM-managed user in this tenant.", "invalidValue");
+  }
+  if (error instanceof Error && error.message === "SCIM_GROUP_STATE_CONFLICT") {
+    return scimError(409, "The SCIM group changed while this patch was being applied; retry with fresh state.", "mutability");
   }
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
     return scimError(409, "A group with the supplied externalId already exists.", "uniqueness");
@@ -165,7 +172,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       tenantId: config.tenantId,
       id,
       ...input,
-      auditAction: "identity.scim-group-patched"
+      auditAction: "identity.scim-group-patched",
+      expectedUpdatedAt: current.updatedAt
     });
     if (!result) return scimError(404, "SCIM group was not found.");
     return scimJson(scimGroupProjection(result.group, result.users, config.baseUrl));
