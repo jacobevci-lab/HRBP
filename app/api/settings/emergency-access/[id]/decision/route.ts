@@ -3,6 +3,7 @@ import { appendAudit } from "@/lib/audit";
 import { authenticationAssuranceVersion } from "@/lib/auth-assurance";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { asEnumValue, asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -88,6 +89,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       purpose: approved
         ? `Four-eyes approval for ${grant.requestedMinutes}-minute read-only break-glass access`
         : "Emergency access request rejected"
+    });
+
+    await enqueueNotificationOutbox(tx, {
+      tenantId: ctx.tenantId,
+      eventType: approved ? "EMERGENCY_ACCESS_APPROVED" : "EMERGENCY_ACCESS_REJECTED",
+      recipientUserId: grant.requesterId,
+      templateKey: approved ? "security.emergency-access-approved" : "security.emergency-access-rejected",
+      resourceType: "EmergencyAccessGrant",
+      resourceId: grant.id,
+      dedupeKey: `emergency-access:${grant.id}:${approved ? "approved" : "rejected"}`,
+      classification: DataClassification.RESTRICTED,
+      payload: {
+        status: approved ? "ACTIVE" : "REJECTED",
+        requestedMinutes: grant.requestedMinutes,
+        validTo: validTo?.toISOString() ?? null
+      }
     });
 
     return {
