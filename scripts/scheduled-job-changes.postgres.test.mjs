@@ -60,12 +60,17 @@ test("PostgreSQL scheduled employee job-change lifecycle", { skip: process.env.C
     mutationOriginAllowed: () => true,
     unauthorized: () => Response.json({ error: "Unauthorized." }, { status: 401 })
   };
+  const employmentScope = {
+    resolveEmploymentScope: async () => ({ mode: "ALL" }),
+    canActOnEmployment: () => true
+  };
   const dbMock = { withDb: (operation) => operation(db) };
 
   const previewRoute = load("app/api/people/[personId]/lifecycle/position/preview/route.ts", {
     "@/lib/authorization": authorization,
     "@/lib/db": dbMock,
     "@/lib/employee-position-change-preview": previewReceipt,
+    "@/lib/employment-scope": employmentScope,
     "@/lib/input-validation": inputValidation,
     "@/lib/request-context": requestContext
   });
@@ -83,6 +88,7 @@ test("PostgreSQL scheduled employee job-change lifecycle", { skip: process.env.C
     "@/lib/audit": audit,
     "@/lib/authorization": authorization,
     "@/lib/db": dbMock,
+    "@/lib/employment-scope": employmentScope,
     "@/lib/input-validation": inputValidation,
     "@/lib/request-context": requestContext
   });
