@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { runtimeString } from "@/lib/runtime-env";
 
 type AssuranceConfig = {
@@ -90,4 +91,16 @@ export function assurancePolicyIssues(input: { mfaRequired: boolean; deviceTrust
   if (input.mfaRequired && !config.mfaConfigured) issues.push("OIDC MFA claim/value mapping");
   if (input.deviceTrustRequired && !config.deviceTrustConfigured) issues.push("OIDC device-trust claim/value mapping");
   return issues;
+}
+
+
+export function authenticationAssuranceVersion() {
+  const config = authenticationAssuranceConfiguration();
+  const canonical = {
+    mfaClaim: config.mfaClaim,
+    mfaValues: [...config.mfaValues].sort(),
+    deviceTrustClaim: config.deviceTrustClaim,
+    deviceTrustValues: [...config.deviceTrustValues].sort()
+  };
+  return createHash("sha256").update(JSON.stringify(canonical), "utf8").digest("hex");
 }
