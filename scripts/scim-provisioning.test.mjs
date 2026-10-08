@@ -84,6 +84,10 @@ test("SCIM PatchOp is allowlisted and cannot mutate privileged attributes", () =
     Operations: [{ op: "replace", path: "role", value: "TENANT_ADMIN" }]
   }, current), null);
   assert.equal(applyScimPatch({
+    schemas: [SCIM_PATCH_SCHEMA],
+    Operations: [{ op: "replace", value: { role: "TENANT_ADMIN" } }]
+  }, current), null, "pathless privileged attributes must be rejected");
+  assert.equal(applyScimPatch({
     schemas: ["wrong"],
     Operations: [{ op: "replace", path: "active", value: false }]
   }, current), null);
