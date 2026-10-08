@@ -135,14 +135,24 @@ export async function PATCH(request: Request) {
       update: { ...next, assuranceEnforcedAt },
       create: { tenantId: ctx.tenantId, ...next, assuranceEnforcedAt }
     });
+    const assuranceActivated = !existing?.assuranceEnforcedAt && Boolean(assuranceEnforcedAt);
+    const assuranceDeactivated = Boolean(existing?.assuranceEnforcedAt) && !assuranceEnforcedAt;
     await appendAudit(tx, ctx, {
-      action: "settings.security-policy-updated",
+      action: assuranceActivated
+        ? "settings.authentication-assurance-activated"
+        : assuranceDeactivated
+          ? "settings.authentication-assurance-deactivated"
+          : "settings.security-policy-updated",
       resourceType: "TenantSecurityPolicy",
       resourceId: policy.id,
       classification: DataClassification.RESTRICTED,
-      purpose: assuranceEnforcedAt
-        ? "Tenant security posture configuration update with active OIDC assurance enforcement"
-        : "Tenant security posture configuration update"
+      purpose: assuranceActivated
+        ? "Tenant OIDC authentication assurance enforcement activated after an assured administrator session"
+        : assuranceDeactivated
+          ? "Tenant OIDC authentication assurance enforcement disabled by an authorized administrator"
+          : assuranceEnforcedAt
+            ? "Tenant security posture configuration update with active OIDC assurance enforcement"
+            : "Tenant security posture configuration update"
     });
     return policy;
   });
