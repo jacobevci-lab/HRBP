@@ -64,6 +64,8 @@ jobs:
         run: node --test scripts/audit-ledger-concurrency.test.mjs
       - name: Verify governed job-change preview on PostgreSQL
         run: node --test scripts/job-change-impact-preview.postgres.test.mjs
+      - name: Verify scheduled job-change lifecycle on PostgreSQL
+        run: node --test scripts/scheduled-job-changes.postgres.test.mjs
       - run: npm run typecheck
       - run: npm run build
       - run: npm run cf:build
