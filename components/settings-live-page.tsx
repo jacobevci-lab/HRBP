@@ -1,5 +1,6 @@
 import { Activity, BellRing, CloudCog, Database, KeyRound, Link2, LockKeyhole, ShieldCheck, UsersRound, Workflow } from "lucide-react";
 import { AccessScopeAdmin } from "@/components/access-scope-admin";
+import { EmergencyAccessAdmin } from "@/components/emergency-access-admin";
 import { JurisdictionAdmin } from "@/components/jurisdiction-admin";
 import { LocalAccountAdmin } from "@/components/local-account-admin";
 import { NotificationDeadLetterAction } from "@/components/notification-dead-letter-action";
@@ -192,6 +193,7 @@ export async function SettingsLivePage() {
       <p className="settings-live-footnote">{c(locale, "Only the latest 50 tenant-scoped local authentication events are shown here; the full immutable history remains available in Audit.", "Burada yalnızca tenant kapsamındaki son 50 yerel kimlik doğrulama olayı gösterilir; tam değiştirilemez geçmiş Audit alanında kalır.")}</p>
     </section>
 
-    {canWrite ? <><SessionRevocationAdmin/><LocalAccountAdmin/><AccessScopeAdmin/><JurisdictionAdmin/></> : null}
+    {canWrite ? <><SessionRevocationAdmin/><LocalAccountAdmin/><AccessScopeAdmin/>
+      <EmergencyAccessAdmin/><JurisdictionAdmin/></> : null}
   </div>;
 }

@@ -1,4 +1,4 @@
-import { ConnectionStatus, NotificationOutboxStatus, ScheduledPositionChangeStatus, VaultScanStatus } from "@prisma/client";
+import { ConnectionStatus, EmergencyAccessStatus, NotificationOutboxStatus, ScheduledPositionChangeStatus, VaultScanStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { internalBearerAuthorized } from "@/lib/internal-auth";
 import { scimRuntimeConfig } from "@/lib/scim";
@@ -25,6 +25,7 @@ const scanStatuses = [
 const notificationChannels = ["IN_APP", "EMAIL", "OTHER"] as const;
 const connectionStatuses = [ConnectionStatus.DRAFT, ConnectionStatus.ACTIVE, ConnectionStatus.DEGRADED, ConnectionStatus.DISABLED] as const;
 const scheduledPositionChangeStatuses = [ScheduledPositionChangeStatus.PENDING, ScheduledPositionChangeStatus.APPLIED, ScheduledPositionChangeStatus.BLOCKED, ScheduledPositionChangeStatus.CANCELLED] as const;
+const emergencyAccessStatuses = [EmergencyAccessStatus.REQUESTED, EmergencyAccessStatus.ACTIVE, EmergencyAccessStatus.REJECTED, EmergencyAccessStatus.REVOKED, EmergencyAccessStatus.EXPIRED] as const;
 
 function metricHeaders() {
   return {
@@ -67,7 +68,10 @@ export async function GET(request: Request) {
       unvalidatedIntegrationDrafts,
       scheduledPositionChangeGroups,
       dueScheduledPositionChanges,
-      oldestDueScheduledPositionChange
+      oldestDueScheduledPositionChange,
+      emergencyAccessGroups,
+      activeEmergencyAccessCount,
+      oldestActiveEmergencyExpiry
     ] = await Promise.all([
       db.notificationOutbox.groupBy({
         by: ["channel", "status"],
@@ -154,6 +158,26 @@ export async function GET(request: Request) {
         },
         orderBy: [{ effectiveAt: "asc" }, { id: "asc" }],
         select: { effectiveAt: true }
+      }),
+      db.emergencyAccessGrant.groupBy({
+        by: ["status"],
+        _count: { _all: true }
+      }),
+      db.emergencyAccessGrant.count({
+        where: {
+          status: EmergencyAccessStatus.ACTIVE,
+          validFrom: { lte: now },
+          validTo: { gt: now }
+        }
+      }),
+      db.emergencyAccessGrant.findFirst({
+        where: {
+          status: EmergencyAccessStatus.ACTIVE,
+          validFrom: { lte: now },
+          validTo: { gt: now }
+        },
+        orderBy: [{ validTo: "asc" }, { id: "asc" }],
+        select: { validTo: true }
       })
     ]);
 
@@ -195,6 +219,12 @@ export async function GET(request: Request) {
     for (const status of scheduledPositionChangeStatuses) scheduledPositionChangeCounts.set(status, 0);
     for (const row of scheduledPositionChangeGroups) {
       scheduledPositionChangeCounts.set(row.status, row._count._all);
+    }
+
+    const emergencyAccessCounts = new Map<EmergencyAccessStatus, number>();
+    for (const status of emergencyAccessStatuses) emergencyAccessCounts.set(status, 0);
+    for (const row of emergencyAccessGroups) {
+      emergencyAccessCounts.set(row.status, row._count._all);
     }
 
     const lines = [
@@ -277,6 +307,17 @@ export async function GET(request: Request) {
       "# HELP hrbp_scheduled_position_changes_oldest_due_age_seconds Age of the oldest due pending scheduled position change.",
       "# TYPE hrbp_scheduled_position_changes_oldest_due_age_seconds gauge",
       `hrbp_scheduled_position_changes_oldest_due_age_seconds ${ageSeconds(oldestDueScheduledPositionChange?.effectiveAt, now)}`,
+      "# HELP hrbp_emergency_access_grants Current emergency access records by bounded lifecycle status.",
+      "# TYPE hrbp_emergency_access_grants gauge",
+      ...emergencyAccessStatuses.map((status) =>
+        `hrbp_emergency_access_grants{status="${status}"} ${emergencyAccessCounts.get(status) ?? 0}`
+      ),
+      "# HELP hrbp_emergency_access_active Current unexpired active break-glass grants.",
+      "# TYPE hrbp_emergency_access_active gauge",
+      `hrbp_emergency_access_active ${activeEmergencyAccessCount}`,
+      "# HELP hrbp_emergency_access_next_expiry_seconds Seconds until the nearest active break-glass grant expires.",
+      "# TYPE hrbp_emergency_access_next_expiry_seconds gauge",
+      `hrbp_emergency_access_next_expiry_seconds ${oldestActiveEmergencyExpiry?.validTo ? Math.max(0, Math.floor((oldestActiveEmergencyExpiry.validTo.getTime() - now.getTime()) / 1000)) : 0}`,
       "# HELP hrbp_operational_metrics_scrape_duration_seconds Time spent collecting this metrics snapshot.",
       "# TYPE hrbp_operational_metrics_scrape_duration_seconds gauge",
       `hrbp_operational_metrics_scrape_duration_seconds ${((Date.now() - startedAt) / 1000).toFixed(3)}`

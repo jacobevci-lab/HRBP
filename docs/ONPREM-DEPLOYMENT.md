@@ -416,3 +416,23 @@ Versioned migrations remain the production schema contract. The guarded legacy-b
 - The bundled maintenance scheduler is single-host. Customers replacing it with an enterprise scheduler must preserve the authenticated single-job protocol, serialization and no-blind-retry rules.
 - Backup RPO/RTO, retention, immutable/off-site copies and restore cadence must be agreed with each customer; the product rehearsal proves mechanics, not the customer's full disaster-recovery program.
 - Cloudflare remains a separate hosted deployment path; successful on-prem packaging does not imply the existing Cloudflare production deployment path is healthy.
+
+
+## Governed emergency access
+
+The tenant security policy can enable or disable break-glass capability. Enabling the capability does not itself grant access.
+
+A tenant administrator requests emergency access from **Settings & Operations** with a substantive business justification and a duration of 15, 30, 45 or 60 minutes. The requester must already have a current MFA-assured OIDC session. A different tenant administrator must approve the request.
+
+Approved access is:
+
+- read-only for HIGHLY_RESTRICTED classification checks,
+- tenant-scoped,
+- bound to the requesting administrator,
+- time-limited,
+- live-resolved on every request,
+- immediately ineffective when revoked or when break-glass is disabled.
+
+Maintenance marks elapsed ACTIVE grants EXPIRED and records audit evidence. The private metrics endpoint publishes only aggregate emergency-access status counts, active count and nearest-expiry seconds.
+
+Customers should alert on unexpected ACTIVE grants and should review every break-glass request/approval against the corresponding incident, legal or recovery record.

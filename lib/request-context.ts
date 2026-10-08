@@ -1,5 +1,6 @@
 import { PlatformRole } from "@prisma/client";
 import { verifySessionAccount } from "@/lib/verified-session";
+import { resolveEmergencyAccess } from "@/lib/emergency-access";
 import { sessionFromRequest } from "@/lib/auth-session";
 
 export type RequestContext = {
@@ -10,6 +11,9 @@ export type RequestContext = {
   mfaSatisfied?: boolean;
   deviceTrustSatisfied?: boolean;
   assuranceVersion?: string | null;
+  breakGlassActive?: boolean;
+  breakGlassGrantId?: string;
+  breakGlassExpiresAt?: Date;
   purpose?: string;
   ipAddress?: string;
 };
@@ -28,6 +32,11 @@ function insecureHeaderContextAllowed() {
 export async function getRequestContext(request: Request): Promise<RequestContext | null> {
   const session = await verifySessionAccount(sessionFromRequest(request));
   if (session) {
+    const emergency = await resolveEmergencyAccess({
+      tenantId: session.tenantId,
+      actorId: session.actorId,
+      role: session.role
+    });
     return {
       tenantId: session.tenantId,
       actorId: session.actorId,
@@ -36,6 +45,7 @@ export async function getRequestContext(request: Request): Promise<RequestContex
       mfaSatisfied: session.mfaSatisfied === true,
       deviceTrustSatisfied: session.deviceTrustSatisfied === true,
       assuranceVersion: session.assuranceVersion ?? null,
+      ...emergency,
       purpose: request.headers.get("x-purpose")?.trim() || undefined,
       ipAddress: request.headers.get("cf-connecting-ip")?.trim() || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || undefined
     };

@@ -149,6 +149,7 @@ export function can(ctx: RequestContext, capability: Capability) {
 
 export function canReadClassification(ctx: RequestContext, classification: DataClassification) {
   if (classification !== DataClassification.HIGHLY_RESTRICTED) return true;
+  if (ctx.breakGlassActive === true && ctx.role === PlatformRole.TENANT_ADMIN) return true;
   return highlyRestrictedReaders.has(ctx.role);
 }
 

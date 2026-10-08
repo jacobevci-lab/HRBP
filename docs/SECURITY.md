@@ -118,3 +118,21 @@ Future-dated transfers and promotions are persisted as governed schedule records
 The maintenance executor revalidates the exact reviewed source/target and relationship-impact digest after the effective date arrives. If employment, manager/direct-report state, organization/grade/location/criticality, recruiting demand, target vacancy or incumbent state changed, the schedule becomes a terminal `BLOCKED` outcome and requires human review. It is never silently adapted to new facts.
 
 Only `PENDING` schedules can be cancelled. Successful execution writes employment/position state, lifecycle evidence, schedule state and append-only audit evidence transactionally. Aggregate monitoring exposes schedule status/due-age signals only; employee, requester, tenant and position identifiers never become metric labels.
+
+
+## Governed break-glass access
+
+Tenant administrators do not gain HIGHLY_RESTRICTED visibility merely because the tenant security policy exposes a break-glass toggle. Emergency access is a separate four-eyes lifecycle:
+
+- only an active TENANT_ADMIN can request it;
+- the requesting administrator must use a current MFA-assured OIDC session evaluated under the active assurance mapping;
+- a second TENANT_ADMIN must independently approve or reject the request;
+- the requester can never decide their own request;
+- duration is bounded to 15–60 minutes;
+- the grant expands only HIGHLY_RESTRICTED **read** classification checks and does not grant new write capabilities;
+- disabling the tenant break-glass policy makes active grants ineffective immediately because access is resolved live on every request;
+- revocation is immediate and expiration is enforced both at authorization time and by scheduled maintenance.
+
+The application session never embeds emergency access. API and Server Component request contexts resolve the active grant from current database state on every verified request, so approval, expiry, revocation and tenant-policy changes take effect without waiting for cookie renewal.
+
+Request, approval, rejection, revocation and automatic expiry are written to the append-only audit ledger. Operational metrics expose only bounded lifecycle counts, current active count and time until the nearest expiry; requester, tenant, grant and resource identifiers never become metric labels.
