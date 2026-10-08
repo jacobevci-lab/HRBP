@@ -39,7 +39,7 @@ jobs:
       HRBP_AUTH_TENANT_ID: ci-tenant
       HRBP_ALLOWED_EMAIL_DOMAINS: example.test
       HRBP_SCIM_ENABLED: "true"
-      HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "false"
+      HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
