@@ -235,6 +235,34 @@ test("PostgreSQL governed job-change preview/apply integration", { skip: process
       assert.match(applied.body.error, /active incumbent/i);
     });
 
+    await t.test("concurrent employees cannot both claim the same target position", async () => {
+      const first = await fixture("race-a");
+      const second = await fixture("race-b");
+      const firstPayload = payloadFor(first.targetPosition.id);
+      const secondPayload = payloadFor(first.targetPosition.id);
+
+      const [firstPreview, secondPreview] = await Promise.all([
+        invoke(previewRoute, first.person.id, firstPayload),
+        invoke(previewRoute, second.person.id, secondPayload)
+      ]);
+      assert.equal(firstPreview.status, 200);
+      assert.equal(secondPreview.status, 200);
+
+      const outcomes = await Promise.all([
+        invoke(applyRoute, first.person.id, { ...firstPayload, previewReceipt: firstPreview.body.data.receipt }),
+        invoke(applyRoute, second.person.id, { ...secondPayload, previewReceipt: secondPreview.body.data.receipt })
+      ]);
+      assert.deepEqual(outcomes.map((result) => result.status).sort(), [200, 409]);
+      assert.equal(await db.employment.count({
+        where: {
+          tenantId,
+          positionId: first.targetPosition.id,
+          status: { in: ["PREBOARDING", "ACTIVE", "LEAVE", "SUSPENDED"] }
+        }
+      }), 1);
+      assert.equal((await db.position.findUnique({ where: { id: first.targetPosition.id } })).status, "FILLED");
+    });
+
     await t.test("apply without a signed preview never mutates employment", async () => {
       const fx = await fixture("missing");
       const applied = await invoke(applyRoute, fx.person.id, payloadFor(fx.targetPosition.id));
