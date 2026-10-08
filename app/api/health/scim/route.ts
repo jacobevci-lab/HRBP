@@ -11,7 +11,8 @@ export async function GET() {
     enabled: config.enabled,
     configured: config.configured,
     allowedDomainCount: config.allowedDomains.length,
-    unmanagedAdoptionEnabled: config.allowUnmanagedAdoption
+    unmanagedAdoptionEnabled: config.allowUnmanagedAdoption,
+    rotationOverlapActive: config.rotationOverlapActive
   }, {
     status: healthy ? 200 : 503,
     headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
