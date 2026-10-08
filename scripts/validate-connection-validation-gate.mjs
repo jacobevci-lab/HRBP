@@ -26,6 +26,9 @@ expect(runtimeBindingPath, runtimeBinding, /status:\s*ConnectionStatus\.ACTIVE[\
 expect(runtimeBindingPath, runtimeBinding, /active\.length !== 1[\s\S]*IDENTITY_PROVIDER_AMBIGUOUS/, "multiple active runtime providers must fail closed");
 expect(runtimeBindingPath, runtimeBinding, /IDENTITY_PROVIDER_DRIFT/, "managed provider/runtime metadata drift must fail closed");
 expect(runtimeBindingPath, runtimeBinding, /SAML login runtime adapter[\s\S]*LDAP login runtime adapter/, "unsupported identity protocols must not be falsely activatable");
+expect(runtimeBindingPath, runtimeBinding, /jitEnabled:\s*true[\s\S]*mfaRequired:\s*true/, "managed runtime binding must load provider JIT and MFA policy flags");
+expect(runtimeBindingPath, runtimeBinding, /connection\.jitEnabled && runtime\.allowedEmailDomains\.length === 0[\s\S]*JIT allowed email domains/, "managed JIT activation must require an explicit domain boundary");
+expect(runtimeBindingPath, runtimeBinding, /connection\.mfaRequired && !authenticationAssuranceConfiguration\(\)\.mfaConfigured[\s\S]*OIDC MFA claim\/value mapping/, "managed MFA activation must require signed-token assurance mapping");
 
 const loginPath = "app/api/auth/login/route.ts";
 const login = await source(loginPath);
@@ -35,6 +38,8 @@ const callbackPath = "app/api/auth/callback/route.ts";
 const callback = await source(callbackPath);
 expect(callbackPath, callback, /enforceOidcRuntimeBinding\(db, config\)[\s\S]*discoverOidc\(config\.issuer\)/, "OIDC callback must revalidate governed runtime binding before token exchange");
 expect(callbackPath, callback, /IDENTITY_PROVIDER_AMBIGUOUS[\s\S]*IDENTITY_PROVIDER_DRIFT[\s\S]*configuration/, "runtime binding failures must surface only as bounded configuration errors");
+expect(callbackPath, callback, /runtimeBinding\.managed && runtimeBinding\.mfaRequired && !assurance\.mfaSatisfied[\s\S]*MFA_REQUIRED/, "active provider MFA policy must be enforced before account provisioning");
+expect(callbackPath, callback, /jitEnabled = runtimeBinding\.managed \? runtimeBinding\.jitEnabled : config\.jitProvisioning/, "managed provider JIT policy must override the legacy environment toggle while preserving unmanaged compatibility");
 
 const integrationPath = "app/api/settings/integrations/[id]/route.ts";
 const integration = await source(integrationPath);
@@ -74,6 +79,7 @@ expect(actionsPath, actions, /JSON\.stringify\(validation \? \{ action \}/, "val
 const packagePath = "package.json";
 const pkg = await source(packagePath);
 expect(packagePath, pkg, /connection-validation:validate/, "connection validation gate validator must be registered");
+expect(packagePath, pkg, /identity-provider-auth-policy\.test\.mjs/, "managed identity-provider auth policy behavioral tests must run in the connection validation gate");
 expect(packagePath, pkg, /integration-live-validation:validate/, "live validation policy tests must be registered");
 expect(packagePath, pkg, /prebuild[\s\S]*connection-validation:validate/, "connection validation gate must run before production builds");
 
