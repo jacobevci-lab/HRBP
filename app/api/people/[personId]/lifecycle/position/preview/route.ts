@@ -45,10 +45,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
   if (reasonValue === null) return Response.json({ error: "reason must be a string up to 500 characters." }, { status: 400 });
   if (!effectiveAt || Number.isNaN(effectiveAt.getTime())) return Response.json({ error: "effectiveAt must be a valid date string." }, { status: 400 });
 
-  const tomorrow = new Date();
-  tomorrow.setHours(23, 59, 59, 999);
-  if (effectiveAt > tomorrow) {
-    return Response.json({ error: "Future-dated position changes are not previewed for immediate application. Use a scheduled workflow when that capability is enabled." }, { status: 409 });
+  const maxScheduledAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  if (effectiveAt > maxScheduledAt) {
+    return Response.json({ error: "Position changes can be previewed at most 365 days in advance." }, { status: 409 });
   }
 
   try {
