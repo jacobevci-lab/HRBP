@@ -80,13 +80,15 @@ expect(healthPath, health, /assurance:[\s\S]*mfaConfigured[\s\S]*deviceTrustConf
 const editorPath = "components/security-policy-editor.tsx";
 const editor = await source(editorPath);
 expect(editorPath, editor, /assuranceMissing/, "settings UX must surface missing assurance mapping");
-expect(editorPath, editor, /currentMfaSatisfied[\s\S]*currentDeviceTrustSatisfied/, "settings UX must prevent enabling a control from an unassured current session");
+expect(editorPath, editor, /currentMfaSatisfied[\s\S]*currentDeviceTrustSatisfied[\s\S]*currentMapping/, "settings UX must prevent enabling a control from an unassured or stale-mapping current session");
+expect(editorPath, editor, /assuranceMappingStale/, "settings UX must explain stale assurance mapping sessions");
 expect(editorPath, editor, /OIDC MFA claim\/value mapping is not configured/, "MFA settings copy must distinguish configuration from enforcement");
 expect(editorPath, editor, /OIDC device-trust claim\/value mapping is not configured/, "device-trust settings copy must distinguish configuration from enforcement");
 
 const loaderPath = "components/security-policy-editor-loader.tsx";
 const loader = await source(loaderPath);
 expect(loaderPath, loader, /mfaRequired:\s*Boolean\(policy\?\.assuranceEnforcedAt && policy\.mfaRequired\)/, "settings must display only activated MFA policy");
+expect(loaderPath, loader, /currentMapping:\s*ctx\.assuranceVersion === authenticationAssuranceVersion\(\)/, "settings must compare the current session to the active assurance mapping");
 
 const livePath = "components/settings-live-page.tsx";
 const live = await source(livePath);
