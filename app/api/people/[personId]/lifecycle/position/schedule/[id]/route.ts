@@ -2,6 +2,7 @@ import { DataClassification, ScheduledPositionChangeStatus } from "@prisma/clien
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
+import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { asIdentifier } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -21,9 +22,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ p
   const result = await withDb((db) => db.$transaction(async (tx) => {
     const current = await tx.scheduledPositionChange.findFirst({
       where: { id, tenantId: ctx.tenantId, personId },
-      select: { id: true, status: true }
+      select: { id: true, status: true, employmentId: true }
     });
     if (!current) return { kind: "not-found" as const };
+    const scope = await resolveEmploymentScope(tx, ctx);
+    if (!canActOnEmployment(scope, current.employmentId)) return { kind: "forbidden" as const };
     if (current.status !== ScheduledPositionChangeStatus.PENDING) {
       return { kind: "state" as const, status: current.status };
     }
@@ -56,6 +59,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ p
   }));
 
   if (result.kind === "not-found") return Response.json({ error: "Scheduled position change was not found." }, { status: 404 });
+  if (result.kind === "forbidden") return forbidden("Employment is outside your authorized relationship scope.");
   if (result.kind === "state") return Response.json({ error: "Only pending scheduled position changes can be cancelled." }, { status: 409 });
   return Response.json({ data: { id, status: ScheduledPositionChangeStatus.CANCELLED, cancelledAt: result.cancelledAt } });
 }
