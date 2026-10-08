@@ -203,6 +203,7 @@ for (const token of [
   "must not contain wildcard domains",
   "HRBP_SCIM_ENABLED must be explicitly true or false",
   "HRBP_SCIM_TOKEN must be at least 32 characters",
+  "HRBP_SCIM_TOKEN_PREVIOUS must be at least 32 characters",
   "must use an explicit tag or digest"
 ]) assert.ok(preflightLib.includes(token), `On-prem preflight policy missing: ${token}`);
 for (const token of [
@@ -269,6 +270,7 @@ for (const key of [
 assert.match(env, /HRBP_LOCAL_AUTH_ENABLED=false/);
 assert.match(env, /HRBP_SCIM_ENABLED=false/);
 assert.match(env, /HRBP_SCIM_TOKEN=/);
+assert.match(env, /HRBP_SCIM_TOKEN_PREVIOUS=/);
 assert.match(env, /HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION=false/);
 assert.match(env, /HRBP_HTTP_BIND=127\.0\.0\.1/);
 assert.match(env, /HRBP_MAINTENANCE_INTERVAL_SECONDS=900/);
