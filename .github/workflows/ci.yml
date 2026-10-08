@@ -66,6 +66,8 @@ jobs:
         run: node --test scripts/job-change-impact-preview.postgres.test.mjs
       - name: Verify scheduled job-change lifecycle on PostgreSQL
         run: node --test scripts/scheduled-job-changes.postgres.test.mjs
+      - name: Verify governed emergency access on PostgreSQL
+        run: node --test scripts/emergency-access.postgres.test.mjs
       - run: npm run typecheck
       - run: npm run build
       - run: npm run cf:build
