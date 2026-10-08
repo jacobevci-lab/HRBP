@@ -232,3 +232,27 @@ test("security policy can enable assurance only after the current session demons
   assert.equal(calls.upserts, 1);
   assert.equal(calls.audits, 1);
 });
+
+
+test("security policy cannot activate assurance from a stale mapping session", async () => {
+  const { route, calls } = policyFixture({
+    ctx: {
+      tenantId: "tenant-1",
+      actorId: "admin-1",
+      role: "TENANT_ADMIN",
+      mfaSatisfied: true,
+      deviceTrustSatisfied: true,
+      assuranceVersion: "b".repeat(64)
+    }
+  });
+  const response = await patchPolicy(route, {
+    dataRegion: "TR",
+    mfaRequired: true,
+    deviceTrustRequired: false,
+    sessionMaxMinutes: 480
+  });
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /different assurance mapping|sign in again/i);
+  assert.equal(calls.upserts, 0);
+  assert.equal(calls.audits, 0);
+});
