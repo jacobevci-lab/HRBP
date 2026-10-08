@@ -99,3 +99,12 @@ Transfer and promotion are not executed from the first browser submission. An au
 The signed receipt also carries a deterministic digest of the reviewed relationship-impact state. Apply recomputes that state from the database before mutation, including source/target organization and position attributes, current manager relationship, direct-report count, target criticality and open recruiting demand. If any of those reviewed conditions changed, the receipt is stale and the operator must preview again.
 
 The receipt expires after ten minutes, cannot be reused by another actor, and is invalidated client-side when reviewed inputs change. The apply path still independently rechecks target vacancy/incumbency and writes employment, position state, lifecycle evidence and audit evidence in one transaction. The preview is decision support only: manager reassignment, compensation, open requisitions and location-dependent policy obligations are surfaced for review rather than silently changed.
+
+
+## Future-dated job-change boundary
+
+Future-dated transfers and promotions are persisted as governed schedule records; they do not mutate employment before the effective date. Schedule creation requires the same signed impact-preview receipt, write capabilities and employment relationship scope as immediate application.
+
+The maintenance executor revalidates the exact reviewed source/target and relationship-impact digest after the effective date arrives. If employment, manager/direct-report state, organization/grade/location/criticality, recruiting demand, target vacancy or incumbent state changed, the schedule becomes a terminal `BLOCKED` outcome and requires human review. It is never silently adapted to new facts.
+
+Only `PENDING` schedules can be cancelled. Successful execution writes employment/position state, lifecycle evidence, schedule state and append-only audit evidence transactionally. Aggregate monitoring exposes schedule status/due-age signals only; employee, requester, tenant and position identifiers never become metric labels.
