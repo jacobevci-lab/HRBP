@@ -90,3 +90,12 @@ System-integration activation can require a real transport probe, but HRBP does 
 Literal localhost, loopback, unspecified, link-local and multicast destinations are rejected. Private enterprise network origins require explicit allowlisting, while plain HTTP additionally requires a separate deployment opt-in and preflight warning. Transport errors are collapsed to bounded failure classes so DNS/TLS/provider exception text is not returned to the browser or stored in connection state.
 
 A successful probe proves endpoint transport reachability only. It does not assert that downstream credentials, scopes or business operations are valid; those remain connector-specific responsibilities.
+
+
+## High-impact job-change confirmation boundary
+
+Transfer and promotion are not executed from the first browser submission. An authorized operator must first obtain a short-lived signed impact preview. The receipt is bound to tenant, actor, person, employment, source and target position, event type, effective date and a digest of the stated business reason.
+
+The signed receipt also carries a deterministic digest of the reviewed relationship-impact state. Apply recomputes that state from the database before mutation, including source/target organization and position attributes, current manager relationship, direct-report count, target criticality and open recruiting demand. If any of those reviewed conditions changed, the receipt is stale and the operator must preview again.
+
+The receipt expires after ten minutes, cannot be reused by another actor, and is invalidated client-side when reviewed inputs change. The apply path still independently rechecks target vacancy/incumbency and writes employment, position state, lifecycle evidence and audit evidence in one transaction. The preview is decision support only: manager reassignment, compensation, open requisitions and location-dependent policy obligations are surfaced for review rather than silently changed.
