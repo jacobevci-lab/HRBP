@@ -36,6 +36,7 @@ jobs:
       HRBP_DOCUMENT_SCAN_TOKEN: ci-document-scan-token-1234567890
       HRBP_METRICS_TOKEN: ci-metrics-token-12345678901234567890
       HRBP_SCIM_TOKEN: ci-scim-token-123456789012345678901234
+      HRBP_SCIM_TOKEN_PREVIOUS: ci-scim-previous-token-123456789012345678
       HRBP_AUTH_TENANT_ID: ci-tenant
       HRBP_ALLOWED_EMAIL_DOMAINS: example.test
       HRBP_SCIM_ENABLED: "true"
@@ -138,6 +139,7 @@ jobs:
             --var HRBP_DOCUMENT_SCAN_TOKEN:$HRBP_DOCUMENT_SCAN_TOKEN \
             --var HRBP_METRICS_TOKEN:$HRBP_METRICS_TOKEN \
             --var HRBP_SCIM_TOKEN:$HRBP_SCIM_TOKEN \
+            --var HRBP_SCIM_TOKEN_PREVIOUS:$HRBP_SCIM_TOKEN_PREVIOUS \
             --var HRBP_AUTH_TENANT_ID:$HRBP_AUTH_TENANT_ID \
             --var HRBP_ALLOWED_EMAIL_DOMAINS:$HRBP_ALLOWED_EMAIL_DOMAINS \
             --var HRBP_SCIM_ENABLED:$HRBP_SCIM_ENABLED \
@@ -414,15 +416,16 @@ jobs:
           const db = new PrismaClient();
           const root = 'http://127.0.0.1:8787/api/scim/v2';
           const token = process.env.HRBP_SCIM_TOKEN;
+          const previousToken = process.env.HRBP_SCIM_TOKEN_PREVIOUS;
           const userName = 'ci.scim.user@example.test';
           const externalId = 'ci-scim-external-1';
 
-          async function call(path, { method = 'GET', body, auth = true } = {}) {
+          async function call(path, { method = 'GET', body, auth = true, bearer = token } = {}) {
             const response = await fetch(root + path, {
               method,
               headers: {
                 accept: 'application/scim+json',
-                ...(auth ? { authorization: 'Bearer ' + token } : {}),
+                ...(auth ? { authorization: 'Bearer ' + bearer } : {}),
                 ...(body ? { 'content-type': 'application/scim+json' } : {})
               },
               ...(body ? { body: JSON.stringify(body) } : {})
@@ -442,6 +445,12 @@ jobs:
           const unauth = await call('/ServiceProviderConfig', { auth: false });
           if (unauth.response.status !== 401 || !/^Bearer /i.test(unauth.response.headers.get('www-authenticate') || '')) {
             console.error('SCIM discovery did not enforce bearer authentication.', unauth.response.status);
+            process.exit(1);
+          }
+
+          const previousAuth = await call('/ServiceProviderConfig', { bearer: previousToken });
+          if (!previousAuth.response.ok) {
+            console.error('SCIM previous rotation token was not accepted during overlap.', previousAuth.response.status);
             process.exit(1);
           }
 
