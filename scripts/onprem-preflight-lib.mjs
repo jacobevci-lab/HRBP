@@ -174,9 +174,16 @@ export function validateOnpremEnv(env) {
   if (new Set(allowedEmailDomains).size !== allowedEmailDomains.length) {
     errors.push("HRBP_ALLOWED_EMAIL_DOMAINS must not contain duplicate domains.");
   }
-  if (allowedEmailDomains.some((value) =>
-    value.length > 253 || value.includes("..") || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(value)
-  )) {
+  if (allowedEmailDomains.some((value) => {
+    if (value.length > 253 || value.includes("..")) return true;
+    const labels = value.split(".");
+    if (labels.length < 2 || !/^[a-z]{2,63}$/i.test(labels.at(-1) ?? "")) return true;
+    return labels.some((label) =>
+      label.length < 1 ||
+      label.length > 63 ||
+      !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/i.test(label)
+    );
+  })) {
     errors.push("HRBP_ALLOWED_EMAIL_DOMAINS contains an invalid domain.");
   }
   if (scimEnabled && allowedEmailDomains.length === 0) {
