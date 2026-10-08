@@ -128,3 +128,88 @@ test("OIDC callback binds successful assurance evidence into the application ses
   assert.equal(calls.sessionClaims.tenantId, "tenant-1");
   assert.equal(calls.sessionClaims.actorId, "user-1");
 });
+
+
+function policyFixture({ ctx, existing = null, assuranceIssues = [] }) {
+  const calls = { upserts: 0, audits: 0 };
+  const inputValidation = {
+    readJsonObject: async (request) => request.json(),
+    asFiniteNumber: (value) => typeof value === "number" && Number.isFinite(value) ? value : null,
+    asOptionalText: (value, max) => value === undefined ? undefined : value === null || value === "" ? undefined : typeof value === "string" && value.length <= max ? value : null,
+    asText: (value, max) => typeof value === "string" && value.trim() && value.trim().length <= max ? value.trim() : null
+  };
+  const tx = {
+    tenantSecurityPolicy: {
+      upsert: async ({ create, update }) => {
+        calls.upserts += 1;
+        return { id: "policy-1", tenantId: ctx.tenantId, ...(existing ? update : create) };
+      }
+    }
+  };
+  const db = {
+    tenant: { findUnique: async () => ({ region: "TR" }) },
+    tenantSecurityPolicy: { findUnique: async () => existing },
+    $transaction: async (operation) => operation(tx)
+  };
+  const route = load("app/api/settings/security-policy/route.ts", {
+    "@prisma/client": { DataClassification: { RESTRICTED: "RESTRICTED" } },
+    "@/lib/audit": { appendAudit: async () => { calls.audits += 1; } },
+    "@/lib/auth-assurance": {
+      assurancePolicyIssues: () => assuranceIssues,
+      authenticationAssuranceConfiguration: () => ({ mfaConfigured: true, deviceTrustConfigured: true })
+    },
+    "@/lib/authorization": {
+      can: () => true,
+      forbidden: (message = "Forbidden.") => Response.json({ error: message }, { status: 403 })
+    },
+    "@/lib/db": { db },
+    "@/lib/input-validation": inputValidation,
+    "@/lib/request-context": {
+      getRequestContext: async () => ctx,
+      mutationOriginAllowed: () => true,
+      unauthorized: () => Response.json({ error: "Unauthorized." }, { status: 401 })
+    }
+  });
+  return { route, calls };
+}
+
+async function patchPolicy(route, body) {
+  return route.PATCH(new Request("https://hrbp.example.test/api/settings/security-policy", {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body)
+  }));
+}
+
+test("security policy cannot enable MFA from a session that has not demonstrated MFA", async () => {
+  const { route, calls } = policyFixture({
+    ctx: { tenantId: "tenant-1", actorId: "admin-1", role: "TENANT_ADMIN", mfaSatisfied: false, deviceTrustSatisfied: false }
+  });
+  const response = await patchPolicy(route, {
+    dataRegion: "TR",
+    mfaRequired: true,
+    deviceTrustRequired: false,
+    sessionMaxMinutes: 480
+  });
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /current OIDC session does not demonstrate MFA/i);
+  assert.equal(calls.upserts, 0);
+  assert.equal(calls.audits, 0);
+});
+
+test("security policy can enable assurance only after the current session demonstrates it", async () => {
+  const { route, calls } = policyFixture({
+    ctx: { tenantId: "tenant-1", actorId: "admin-1", role: "TENANT_ADMIN", mfaSatisfied: true, deviceTrustSatisfied: true }
+  });
+  const response = await patchPolicy(route, {
+    dataRegion: "TR",
+    mfaRequired: true,
+    deviceTrustRequired: true,
+    sessionMaxMinutes: 120,
+    breakGlassEnabled: true,
+    downloadWatermarking: true
+  });
+  assert.equal(response.status, 200);
+  assert.equal(calls.upserts, 1);
+  assert.equal(calls.audits, 1);
+});
