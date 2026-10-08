@@ -59,6 +59,7 @@ test("PostgreSQL governed emergency access lifecycle", { skip: process.env.CI !=
     unauthorized: () => Response.json({ error: "Unauthorized." }, { status: 401 })
   };
   const assurance = { authenticationAssuranceVersion: () => assuranceVersion };
+  const notificationOutbox = { enqueueNotificationOutbox: async () => ({ queued: true }) };
 
   const requestRoute = load("app/api/settings/emergency-access/route.ts", {
     "@prisma/client": prisma,
@@ -76,6 +77,7 @@ test("PostgreSQL governed emergency access lifecycle", { skip: process.env.CI !=
     "@/lib/authorization": authorization,
     "@/lib/db": { db },
     "@/lib/input-validation": inputValidation,
+    "@/lib/notification-outbox": notificationOutbox,
     "@/lib/request-context": requestContext
   });
   const revokeRoute = load("app/api/settings/emergency-access/[id]/route.ts", {
@@ -84,6 +86,7 @@ test("PostgreSQL governed emergency access lifecycle", { skip: process.env.CI !=
     "@/lib/authorization": authorization,
     "@/lib/db": { db },
     "@/lib/input-validation": inputValidation,
+    "@/lib/notification-outbox": notificationOutbox,
     "@/lib/request-context": requestContext
   });
   const emergency = load("lib/emergency-access.ts", {
