@@ -164,7 +164,24 @@ export function validateOnpremEnv(env) {
   const adminEmail = env.HRBP_BOOTSTRAP_ADMIN_EMAIL ?? "";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) errors.push("HRBP_BOOTSTRAP_ADMIN_EMAIL must be a valid email address.");
 
-  if ((env.HRBP_ALLOWED_EMAIL_DOMAINS ?? "").includes("*")) errors.push("HRBP_ALLOWED_EMAIL_DOMAINS must not contain wildcard domains.");
+  const allowedEmailDomains = (env.HRBP_ALLOWED_EMAIL_DOMAINS ?? "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  if ((env.HRBP_ALLOWED_EMAIL_DOMAINS ?? "").includes("*")) {
+    errors.push("HRBP_ALLOWED_EMAIL_DOMAINS must not contain wildcard domains.");
+  }
+  if (new Set(allowedEmailDomains).size !== allowedEmailDomains.length) {
+    errors.push("HRBP_ALLOWED_EMAIL_DOMAINS must not contain duplicate domains.");
+  }
+  if (allowedEmailDomains.some((value) =>
+    value.length > 253 || value.includes("..") || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(value)
+  )) {
+    errors.push("HRBP_ALLOWED_EMAIL_DOMAINS contains an invalid domain.");
+  }
+  if (scimEnabled && allowedEmailDomains.length === 0) {
+    errors.push("HRBP_ALLOWED_EMAIL_DOMAINS must contain at least one domain when SCIM is enabled.");
+  }
 
   for (const key of ["POSTGRES_IMAGE", "OBJECT_STORAGE_IMAGE", "OBJECT_STORAGE_TOOL_IMAGE", "DOCUMENT_SCANNER_IMAGE"]) {
     if (env[key] && !imagePinned(env[key])) errors.push(`${key} must use an explicit tag or digest and must not use a mutable channel.`);
