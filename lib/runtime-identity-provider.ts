@@ -1,4 +1,5 @@
 import { ConnectionStatus, IdentityProviderType, type Prisma, type PrismaClient } from "@prisma/client";
+import { authenticationAssuranceConfiguration } from "@/lib/auth-assurance";
 import { getOidcConfig, localAuthConfigurationStatus, type OidcConfig } from "@/lib/auth-config";
 
 export const oidcRuntimeProviderTypes = [
@@ -14,6 +15,8 @@ type IdentityRuntimeShape = {
   type: IdentityProviderType;
   issuer: string | null;
   clientId: string | null;
+  jitEnabled: boolean;
+  mfaRequired: boolean;
 };
 
 function normalizedIssuer(value: string | null | undefined) {
@@ -47,6 +50,12 @@ export function identityRuntimeActivationIssues(connection: IdentityRuntimeShape
     if (!connection.clientId || connection.clientId !== runtime.clientId) {
       issues.push("runtime clientId match");
     }
+    if (connection.jitEnabled && runtime.allowedEmailDomains.length === 0) {
+      issues.push("JIT allowed email domains");
+    }
+    if (connection.mfaRequired && !authenticationAssuranceConfiguration().mfaConfigured) {
+      issues.push("OIDC MFA claim/value mapping");
+    }
     return issues;
   }
 
@@ -69,11 +78,12 @@ export function identityRuntimeActivationIssues(connection: IdentityRuntimeShape
 
 /**
  * Database identity-provider records are governance state. Once an OIDC-family
- * provider is ACTIVE, the runtime login path must be bound to exactly that
- * provider instead of silently continuing with unrelated environment metadata.
+ * provider is ACTIVE, the runtime login path is bound to exactly that provider.
  *
+ * Managed provider flags become authentication policy: JIT is taken from the
+ * ACTIVE provider record and provider-level MFA requires signed token assurance.
  * Legacy deployments with no ACTIVE database OIDC provider keep the existing
- * environment-driven behavior until an administrator explicitly adopts a
+ * environment-driven JIT behavior until an administrator explicitly adopts a
  * governed runtime binding.
  */
 export async function enforceOidcRuntimeBinding(client: ScopeClient, config: OidcConfig) {
@@ -85,7 +95,14 @@ export async function enforceOidcRuntimeBinding(client: ScopeClient, config: Oid
     },
     orderBy: { createdAt: "asc" },
     take: 2,
-    select: { id: true, type: true, issuer: true, clientId: true }
+    select: {
+      id: true,
+      type: true,
+      issuer: true,
+      clientId: true,
+      jitEnabled: true,
+      mfaRequired: true
+    }
   });
 
   if (active.length === 0) return { managed: false as const };
@@ -103,6 +120,8 @@ export async function enforceOidcRuntimeBinding(client: ScopeClient, config: Oid
   return {
     managed: true as const,
     connectionId: connection.id,
-    type: connection.type
+    type: connection.type,
+    jitEnabled: connection.jitEnabled,
+    mfaRequired: connection.mfaRequired
   };
 }
