@@ -38,6 +38,11 @@ expect(authorizationPath, authorization, /breakGlassReadCapabilities[\s\S]*"case
 expect(authorizationPath, authorization, /ctx\.breakGlassActive === true[\s\S]*ctx\.role === PlatformRole\.TENANT_ADMIN[\s\S]*breakGlassReadCapabilities\.has\(capability\)/, "break-glass capability expansion must be tenant-admin and active-grant bound");
 expect(authorizationPath, authorization, /classification !== DataClassification\.HIGHLY_RESTRICTED[\s\S]*ctx\.breakGlassActive === true[\s\S]*ctx\.role === PlatformRole\.TENANT_ADMIN/, "break-glass must expand highly-restricted read classification checks only")
 
+const caseWallPath = "lib/case-wall.ts";
+const caseWall = await source(caseWallPath);
+expect(caseWallPath, caseWall, /ctx\.breakGlassActive === true && ctx\.role === PlatformRole\.TENANT_ADMIN/, "case wall bypass must require active tenant-admin break-glass");
+expect(caseWallPath, caseWall, /emergencyRead \? \{\} : \{[\s\S]*ownerUserId[\s\S]*assignments/, "ordinary case wall assignment scoping must remain intact outside break-glass");
+
 const requestRoutePath = "app/api/settings/emergency-access/route.ts";
 const requestRoute = await source(requestRoutePath);
 expect(requestRoutePath, requestRoute, /ctx\.mfaSatisfied === true[\s\S]*ctx\.assuranceVersion === authenticationAssuranceVersion\(\)/, "emergency access requests/decisions must require current MFA assurance mapping");
