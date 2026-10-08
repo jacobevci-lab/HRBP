@@ -72,7 +72,7 @@ The CSP intentionally does not yet define `default-src` or `script-src`: Next.js
 
 ## SCIM provisioning boundary
 
-SCIM is an optional service-to-service identity provisioning interface and is disabled by default. It uses a dedicated tenant-scoped bearer credential and never reuses browser-session, maintenance, metrics, scanner, database, storage, OIDC or SMTP secrets.
+SCIM is an optional service-to-service identity provisioning interface and is disabled by default. It uses a dedicated tenant-scoped bearer credential and never reuses browser-session, maintenance, metrics, scanner, database, storage, OIDC or SMTP secrets. Credential rotation can temporarily accept one separately configured previous bearer; the previous and current tokens must be distinct and the health surface reveals only whether that overlap is active. The retiring token should be removed immediately after the identity provider has switched.
 
 Provisioning can create and synchronize only application user identity state. SCIM cannot assign privileged HRBP roles; newly created accounts are fixed to `EMPLOYEE`. User mutations are restricted to `userName`, `displayName`, `externalId` and `active`, and request bodies, filters, pagination and resource identifiers are bounded before database use.
 
