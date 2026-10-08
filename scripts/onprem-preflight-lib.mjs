@@ -138,11 +138,23 @@ export function validateOnpremEnv(env) {
   }
   if (scimEnabled) {
     const scimToken = env.HRBP_SCIM_TOKEN ?? "";
+    const scimPreviousToken = env.HRBP_SCIM_TOKEN_PREVIOUS ?? "";
     if (!scimToken || isPlaceholder(scimToken)) errors.push("HRBP_SCIM_TOKEN is required when HRBP_SCIM_ENABLED=true.");
     if (scimToken.length < 32) errors.push("HRBP_SCIM_TOKEN must be at least 32 characters.");
     if (/\s/.test(scimToken)) errors.push("HRBP_SCIM_TOKEN must not contain whitespace.");
     if (secretValues.some(([, value]) => value === scimToken) || (env.HRBP_SMTP_PASSWORD && env.HRBP_SMTP_PASSWORD === scimToken)) {
       errors.push("HRBP_SCIM_TOKEN must not reuse another application secret.");
+    }
+    if (scimPreviousToken) {
+      if (isPlaceholder(scimPreviousToken)) errors.push("HRBP_SCIM_TOKEN_PREVIOUS must not contain an example placeholder.");
+      if (scimPreviousToken.length < 32) errors.push("HRBP_SCIM_TOKEN_PREVIOUS must be at least 32 characters when configured.");
+      if (/\s/.test(scimPreviousToken)) errors.push("HRBP_SCIM_TOKEN_PREVIOUS must not contain whitespace.");
+      if (scimPreviousToken === scimToken) errors.push("HRBP_SCIM_TOKEN_PREVIOUS must differ from HRBP_SCIM_TOKEN.");
+      if (secretValues.some(([, value]) => value === scimPreviousToken) ||
+          (env.HRBP_SMTP_PASSWORD && env.HRBP_SMTP_PASSWORD === scimPreviousToken)) {
+        errors.push("HRBP_SCIM_TOKEN_PREVIOUS must not reuse another application secret.");
+      }
+      warnings.push("SCIM previous bearer token overlap is active; remove HRBP_SCIM_TOKEN_PREVIOUS after the IdP has moved to the current token.");
     }
     if (scimAdoptionRaw === "true") {
       warnings.push("SCIM unmanaged-account adoption is enabled; review existing EMPLOYEE identities before provisioning.");
