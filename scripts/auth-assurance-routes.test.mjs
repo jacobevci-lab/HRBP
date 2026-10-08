@@ -120,7 +120,7 @@ test("OIDC callback binds successful assurance evidence into the application ses
   });
   const response = await invoke(route);
   assert.equal(response.status, 302);
-  assert.equal(new URL(response.headers.get("location")).pathname, "/");
+  assert.equal(response.headers.get("location"), "/");
   assert.equal(calls.userLookup, 1);
   assert.ok(calls.sessionClaims);
   assert.equal(calls.sessionClaims.mfaSatisfied, true);
