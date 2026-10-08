@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import ts from "typescript";
 
 function loadWithEnv(env) {
@@ -14,6 +15,7 @@ function loadWithEnv(env) {
     if (name === "@/lib/runtime-env") {
       return { runtimeString: (key) => Object.prototype.hasOwnProperty.call(env, key) ? env[key] : undefined };
     }
+    if (name === "node:crypto") return { createHash };
     throw new Error("Unexpected dependency " + name);
   });
   return module.exports;
