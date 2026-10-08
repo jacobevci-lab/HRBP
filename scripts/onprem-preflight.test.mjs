@@ -127,6 +127,28 @@ test("accepts guarded SCIM provisioning configuration", () => {
   assert.equal(result.ok, true, result.errors.join("\n"));
 });
 
+test("rejects invalid SCIM tenant email domains", () => {
+  const invalid = validateOnpremEnv({
+    ...base,
+    HRBP_SCIM_ENABLED: "true",
+    HRBP_SCIM_TOKEN: "scim-token-abcdefghijklmnopqrstuvwxyz-123456",
+    HRBP_ALLOWED_EMAIL_DOMAINS: "example..internal",
+    HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "false"
+  });
+  assert.equal(invalid.ok, false);
+  assert.ok(invalid.errors.some((entry) => entry.includes("invalid domain")));
+
+  const missing = validateOnpremEnv({
+    ...base,
+    HRBP_SCIM_ENABLED: "true",
+    HRBP_SCIM_TOKEN: "scim-token-abcdefghijklmnopqrstuvwxyz-123456",
+    HRBP_ALLOWED_EMAIL_DOMAINS: "",
+    HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "false"
+  });
+  assert.equal(missing.ok, false);
+  assert.ok(missing.errors.some((entry) => entry.includes("at least one domain")));
+});
+
 test("rejects weak/reused SCIM credentials and warns on unmanaged adoption", () => {
   const weak = validateOnpremEnv({
     ...base,
