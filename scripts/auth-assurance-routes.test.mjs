@@ -57,7 +57,10 @@ function fixture({ policy, assurance }) {
         jitProvisioning: false
       })
     },
-    "@/lib/auth-assurance": { evaluateOidcAssurance: () => assurance },
+    "@/lib/auth-assurance": {
+      evaluateOidcAssurance: () => assurance,
+      authenticationAssuranceVersion: () => "a".repeat(64)
+    },
     "@/lib/auth-session": {
       readOidcTransaction: () => ({ state: "state-1", nonce: "nonce-1", verifier: "verifier", returnTo: "/", exp: Math.floor(Date.now() / 1000) + 60 }),
       createSessionCookie: (claims) => {
@@ -139,6 +142,7 @@ test("OIDC callback binds successful assurance evidence into the application ses
   assert.ok(calls.sessionClaims);
   assert.equal(calls.sessionClaims.mfaSatisfied, true);
   assert.equal(calls.sessionClaims.deviceTrustSatisfied, true);
+  assert.equal(calls.sessionClaims.assuranceVersion, "a".repeat(64));
   assert.equal(calls.sessionClaims.tenantId, "tenant-1");
   assert.equal(calls.sessionClaims.actorId, "user-1");
 });
