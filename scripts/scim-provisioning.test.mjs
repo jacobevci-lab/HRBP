@@ -22,6 +22,9 @@ test("normalizes bounded tenant SCIM identities", () => {
   assert.equal(normalizeScimEmail("bad"), null);
   assert.equal(normalizeScimDomain("Example.COM"), "example.com");
   assert.equal(normalizeScimDomain("bad..example.com"), null);
+  assert.equal(normalizeScimDomain("-bad.example.com"), null);
+  assert.equal(normalizeScimDomain("bad-.example.com"), null);
+  assert.equal(normalizeScimDomain(".example.com"), null);
   assert.equal(scimEmailAllowed("user@example.com", ["example.com"]), true);
   assert.equal(scimEmailAllowed("user@sub.example.com", ["example.com"]), false);
   assert.equal(scimSubject("ext-1", "user@example.com"), "scim:ext-1");
