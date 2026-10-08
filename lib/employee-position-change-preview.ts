@@ -56,6 +56,7 @@ export function createPositionChangePreviewReceipt(input: {
   eventType: PositionChangeEventType;
   effectiveAt: Date;
   reason: string;
+  impactDigest: string;
 }) {
   const secret = sessionSecret();
   if (!secret) throw new Error("HRBP_SESSION_SECRET is not configured.");
@@ -91,7 +92,6 @@ export function verifyPositionChangePreviewReceipt(token: string, expected: {
   eventType: PositionChangeEventType;
   effectiveAt: Date;
   reason: string;
-  impactDigest: string;
 }) {
   if (!token || token.length > 8192) return null;
   const secret = sessionSecret();
