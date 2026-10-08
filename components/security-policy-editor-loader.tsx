@@ -1,4 +1,4 @@
-import { authenticationAssuranceConfiguration } from "@/lib/auth-assurance";
+import { authenticationAssuranceConfiguration, authenticationAssuranceVersion } from "@/lib/auth-assurance";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { getServerRequestContext } from "@/lib/server-session";
@@ -23,7 +23,8 @@ export async function SecurityPolicyEditorLoader() {
         mfaConfigured: assurance.mfaConfigured,
         deviceTrustConfigured: assurance.deviceTrustConfigured,
         currentMfaSatisfied: ctx.mfaSatisfied === true,
-        currentDeviceTrustSatisfied: ctx.deviceTrustSatisfied === true
+        currentDeviceTrustSatisfied: ctx.deviceTrustSatisfied === true,
+        currentMapping: ctx.assuranceVersion === authenticationAssuranceVersion()
       }}
       initial={{
         dataRegion: policy?.dataRegion ?? tenant.region,
