@@ -113,7 +113,8 @@ let scim = {
   status: "not-required-pre-upgrade",
   enabled: false,
   configured: false,
-  unmanagedAdoptionEnabled: false
+  unmanagedAdoptionEnabled: false,
+  rotationOverlapActive: false
 };
 if (mode === "post-deploy") {
   const body = await waitFor(
@@ -122,14 +123,16 @@ if (mode === "post-deploy") {
       typeof value?.enabled === "boolean" &&
       typeof value?.configured === "boolean" &&
       Number.isInteger(value?.allowedDomainCount) &&
-      typeof value?.unmanagedAdoptionEnabled === "boolean",
+      typeof value?.unmanagedAdoptionEnabled === "boolean" &&
+      typeof value?.rotationOverlapActive === "boolean",
     "SCIM health"
   );
   scim = {
     status: "healthy",
     enabled: body.enabled,
     configured: body.configured,
-    unmanagedAdoptionEnabled: body.unmanagedAdoptionEnabled
+    unmanagedAdoptionEnabled: body.unmanagedAdoptionEnabled,
+    rotationOverlapActive: body.rotationOverlapActive
   };
 }
 
