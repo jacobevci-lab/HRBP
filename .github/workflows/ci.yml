@@ -474,6 +474,65 @@ jobs:
             process.exit(1);
           }
 
+          await db.userAccount.create({
+            data: {
+              id: 'ci-scim-dormant-local',
+              tenantId: 'ci-tenant',
+              subject: 'ci-scim-dormant-local',
+              displayName: 'Dormant Local User',
+              email: 'dormant.local@example.test',
+              role: 'EMPLOYEE',
+              active: true,
+              localAuthEnabled: false,
+              localPasswordHash: 'synthetic-non-secret-local-hash'
+            }
+          });
+          const localTakeover = await call('/Users', {
+            method: 'POST',
+            body: {
+              schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
+              userName: 'dormant.local@example.test',
+              displayName: 'Should Not Adopt Local',
+              externalId: 'ci-dormant-local',
+              active: true
+            }
+          });
+          if (localTakeover.response.status !== 409) {
+            console.error('SCIM adopted an account with dormant local credentials.', localTakeover.response.status, localTakeover.json);
+            process.exit(1);
+          }
+
+          await db.userAccount.create({
+            data: {
+              id: 'ci-scim-adoptable-employee',
+              tenantId: 'ci-tenant',
+              subject: 'ci-scim-adoptable-employee',
+              displayName: 'Adoptable Employee',
+              email: 'adoptable.employee@example.test',
+              role: 'EMPLOYEE',
+              active: true,
+              localAuthEnabled: false
+            }
+          });
+          const adopted = await call('/Users', {
+            method: 'POST',
+            body: {
+              schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
+              userName: 'adoptable.employee@example.test',
+              displayName: 'Adopted Employee',
+              externalId: 'ci-adoptable-employee',
+              active: true
+            }
+          });
+          const adoptedState = await db.userAccount.findUnique({ where: { id: 'ci-scim-adoptable-employee' } });
+          if (!adopted.response.ok || adopted.response.status !== 200 ||
+              !adoptedState || adoptedState.provisioningSource !== 'SCIM' ||
+              adoptedState.provisioningExternalId !== 'ci-adoptable-employee' ||
+              adoptedState.role !== 'EMPLOYEE') {
+            console.error('Explicit SCIM unmanaged-account adoption did not preserve the employee privilege boundary.', adopted.response.status, adoptedState);
+            process.exit(1);
+          }
+
           const payload = {
             schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
             userName,
