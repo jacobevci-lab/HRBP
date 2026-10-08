@@ -62,6 +62,7 @@ expect(policyPath, policy, /mfaConfigured[\s\S]*deviceTrustConfigured/, "securit
 expect(policyPath, policy, /mfaRequired:\s*false/, "MFA must remain explicitly opt-in until an assured administrator enables it");
 expect(policyPath, policy, /assuranceEnforcedAt = next\.mfaRequired \|\| next\.deviceTrustRequired[\s\S]*existing\?\.assuranceEnforcedAt \?\? new Date\(\)/, "assurance enforcement must activate only through an explicit assured policy save");
 expect(policyPath, policy, /mfaRequired:\s*Boolean\(policy\.assuranceEnforcedAt && policy\.mfaRequired\)/, "security policy GET must project effective activated MFA state");
+expect(policyPath, policy, /settings\.authentication-assurance-activated[\s\S]*settings\.authentication-assurance-deactivated/, "assurance activation and deactivation must have distinct audit actions");
 
 const schemaPath = "prisma/platform.prisma";
 const schema = await source(schemaPath);
