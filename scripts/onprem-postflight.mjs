@@ -99,7 +99,9 @@ const database = await waitFor(
 );
 const auth = await waitFor(
   "/api/health/auth",
-  (body) => body?.status === "ok" && body?.configured === true,
+  (body) => body?.status === "ok" && body?.configured === true &&
+    body?.assurance?.mfaConfigured === true &&
+    typeof body?.assurance?.deviceTrustConfigured === "boolean",
   "Authentication health"
 );
 const notifications = await waitFor(
@@ -229,7 +231,9 @@ console.log(JSON.stringify({
     orm: database?.orm ?? null
   },
   authentication: {
-    mode: auth?.authentication ?? null
+    mode: auth?.authentication ?? null,
+    mfaAssuranceConfigured: auth?.assurance?.mfaConfigured === true,
+    deviceTrustAssuranceConfigured: auth?.assurance?.deviceTrustConfigured === true
   },
   notifications: {
     smtpEnabled: notifications?.email?.enabled ?? false,

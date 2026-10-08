@@ -16,6 +16,8 @@ const messages = {
     state: "The sign-in response did not pass state validation. Start a new sign-in attempt.",
     "not-provisioned": "Your identity is valid but has not been provisioned for this HRBP workspace.",
     disabled: "This HRBP account is disabled.",
+    "mfa-required": "Your identity provider sign-in did not include the MFA assurance required by this workspace. Complete MFA with your organization and try again.",
+    "device-trust-required": "Your identity provider sign-in did not include the trusted-device assurance required by this workspace. Use an approved managed device and try again.",
     callback: "Sign-in could not be completed. Review the identity provider configuration and Worker logs."
   },
   tr: {
@@ -25,6 +27,8 @@ const messages = {
     state: "Giriş yanıtı state doğrulamasını geçemedi. Yeni bir giriş denemesi başlatın.",
     "not-provisioned": "Kimliğiniz geçerli ancak bu HRBP çalışma alanı için henüz provision edilmemiş.",
     disabled: "Bu HRBP hesabı devre dışı.",
+    "mfa-required": "Kimlik sağlayıcı girişiniz bu çalışma alanının zorunlu tuttuğu MFA assurance bilgisini içermiyor. Kurumsal MFA adımını tamamlayıp yeniden deneyin.",
+    "device-trust-required": "Kimlik sağlayıcı girişiniz bu çalışma alanının zorunlu tuttuğu güvenilir cihaz assurance bilgisini içermiyor. Onaylı yönetilen cihazla yeniden deneyin.",
     callback: "Giriş tamamlanamadı. Kimlik sağlayıcı yapılandırmasını ve Worker loglarını inceleyin."
   }
 } as const;
@@ -82,7 +86,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Searc
         <span className="auth-footnote-icon"><LockKeyhole size={15}/></span>
         <div>
           <strong>{c("Security model","Güvenlik modeli")}</strong>
-          <span>{c("PKCE · state + nonce validation · provider JWT verification · local scrypt credentials with lockout · tenant role mapping · HttpOnly signed session · no caller-supplied production role headers","PKCE · state + nonce doğrulaması · sağlayıcı JWT doğrulaması · kilitlenme korumalı yerel scrypt kimlik bilgileri · tenant rol eşleme · HttpOnly imzalı oturum · istemciden sağlanan production rol header'ı yok")}</span>
+          <span>{c("PKCE · state + nonce validation · provider JWT verification · tenant MFA/device assurance enforcement · local scrypt credentials with lockout · tenant role mapping · HttpOnly signed session · no caller-supplied production role headers","PKCE · state + nonce doğrulaması · sağlayıcı JWT doğrulaması · tenant MFA/cihaz assurance zorlaması · kilitlenme korumalı yerel scrypt kimlik bilgileri · tenant rol eşleme · HttpOnly imzalı oturum · istemciden sağlanan production rol header'ı yok")}</span>
         </div>
       </div>
     </section>

@@ -1,3 +1,4 @@
+import { authenticationAssuranceConfiguration } from "@/lib/auth-assurance";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { getServerRequestContext } from "@/lib/server-session";
@@ -13,9 +14,12 @@ export async function SecurityPolicyEditorLoader() {
   ]);
   if (!tenant) return null;
 
+  const assurance = authenticationAssuranceConfiguration();
+
   return <section className="card settings-security-editor-card">
     <SecurityPolicyEditor
       canWrite={can(ctx, "settings:write")}
+      assurance={{ mfaConfigured: assurance.mfaConfigured, deviceTrustConfigured: assurance.deviceTrustConfigured }}
       initial={{
         dataRegion: policy?.dataRegion ?? tenant.region,
         kmsKeyRef: policy?.kmsKeyRef ?? null,

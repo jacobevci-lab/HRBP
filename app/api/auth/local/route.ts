@@ -114,6 +114,25 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid credentials." }, { status: 401 });
   }
 
+  const assurancePolicy = await db.tenantSecurityPolicy.findUnique({
+    where: { tenantId },
+    select: { mfaRequired: true, deviceTrustRequired: true }
+  });
+  if (assurancePolicy?.mfaRequired || assurancePolicy?.deviceTrustRequired) {
+    await db.$transaction((tx) => appendSystemAudit(tx, user.tenantId, user.id, {
+      action: "auth.local-assurance-denied",
+      resourceType: "UserAccount",
+      resourceId: user.id,
+      classification: DataClassification.RESTRICTED,
+      purpose: assurancePolicy.deviceTrustRequired
+        ? "Local sign-in cannot satisfy tenant device-trust assurance"
+        : "Local sign-in cannot satisfy tenant MFA assurance"
+    }));
+    return Response.json({
+      error: "Local sign-in is unavailable while the tenant requires OIDC authentication assurance."
+    }, { status: 403, headers: { "cache-control": "no-store" } });
+  }
+
   const identity = await db.$transaction(async (tx) => {
     const changed = await tx.userAccount.updateMany({
       where: { id: user.id, tenantId, active: true, localAuthEnabled: true,
@@ -176,6 +195,8 @@ export async function POST(request: Request) {
     credentialVersion: identity.user.localPasswordUpdatedAt?.toISOString() ?? null,
     accountSessionVersion: identity.user.sessionVersion,
     tenantSessionVersion: identity.tenantSessionVersion,
+    mfaSatisfied: false,
+    deviceTrustSatisfied: false,
     tenantId: identity.user.tenantId,
     actorId: identity.user.id,
     role: identity.user.role,

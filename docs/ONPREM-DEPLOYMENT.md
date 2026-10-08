@@ -139,6 +139,28 @@ Keep the endpoint on the private management path. Do not publish it through the 
 
 Postflight performs an authenticated scrape and fails deployment verification when the metrics endpoint is unavailable or does not expose the expected bounded metric families. Container health remains the liveness source for the maintenance scheduler and document-scanner sidecars; the application metrics endpoint complements rather than replaces those checks.
 
+### OIDC authentication assurance
+
+Tenant MFA and trusted-device policy flags are enforced from verified OIDC ID-token evidence. The default MFA mapping is:
+
+```dotenv
+HRBP_OIDC_MFA_CLAIM=amr
+HRBP_OIDC_MFA_VALUES=mfa
+```
+
+Providers that use a different top-level claim can override both values. Multiple accepted values are comma-separated. Matching is exact; HRBP does not use substring checks.
+
+Trusted-device enforcement is opt-in because providers represent device posture differently. Configure both settings before enabling **Require trusted device** in tenant security policy:
+
+```dotenv
+HRBP_OIDC_DEVICE_TRUST_CLAIM=device_trusted
+HRBP_OIDC_DEVICE_TRUST_VALUES=true,compliant
+```
+
+Claim names are bounded to simple top-level names and accepted-value lists are bounded. The install/upgrade preflight rejects malformed or half-configured mappings. Raw assurance claims are not stored in the HRBP session or operational metrics; the session records only whether MFA/device trust was satisfied.
+
+If a tenant explicitly requires MFA or device trust, optional local password authentication is rejected because it cannot provide OIDC assurance evidence. Existing signed sessions are also checked against the current tenant policy on every request, so tightening the policy takes effect without waiting for cookie expiry.
+
 ## SCIM 2.0 user provisioning
 
 HRBP can expose a tenant-scoped SCIM 2.0 user provisioning surface for enterprise identity providers. It is disabled by default and is independent from interactive OIDC sign-in.

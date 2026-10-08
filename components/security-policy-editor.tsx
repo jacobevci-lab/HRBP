@@ -25,7 +25,7 @@ function Toggle({ checked, disabled, label, detail, onChange }: { checked: boole
   </label>;
 }
 
-export function SecurityPolicyEditor({ initial, canWrite }: { initial: SecurityPolicyValue; canWrite: boolean }) {
+export function SecurityPolicyEditor({ initial, canWrite, assurance }: { initial: SecurityPolicyValue; canWrite: boolean; assurance: { mfaConfigured: boolean; deviceTrustConfigured: boolean } }) {
   const { locale } = useLocale();
   const router = useRouter();
   const tr = locale === "tr";
@@ -35,6 +35,7 @@ export function SecurityPolicyEditor({ initial, canWrite }: { initial: SecurityP
   const [message, setMessage] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
 
   const weakened = useMemo(() => !value.mfaRequired || value.exportRestrictedData || !value.downloadWatermarking || !value.breakGlassEnabled, [value]);
+  const assuranceMissing = (value.mfaRequired && !assurance.mfaConfigured) || (value.deviceTrustRequired && !assurance.deviceTrustConfigured);
 
   function patch<K extends keyof SecurityPolicyValue>(key: K, next: SecurityPolicyValue[K]) {
     setValue((current) => ({ ...current, [key]: next }));
@@ -71,6 +72,7 @@ export function SecurityPolicyEditor({ initial, canWrite }: { initial: SecurityP
     </div>
 
     {weakened ? <div className="settings-policy-warning"><AlertTriangle size={15}/><span>{c("One or more controls reduce the recommended tenant baseline. Confirm the business requirement before saving.", "Bir veya daha fazla kontrol önerilen tenant güvenlik tabanını zayıflatıyor. Kaydetmeden önce iş gereksinimini doğrulayın.")}</span></div> : null}
+    {assuranceMissing ? <div className="settings-policy-warning"><AlertTriangle size={15}/><span>{c("A required authentication assurance control has no configured OIDC claim mapping. The policy cannot be saved or satisfied until the mapping is configured.", "Zorunlu kimlik doğrulama assurance kontrolü için OIDC claim eşlemesi yapılandırılmamış. Eşleme tamamlanana kadar politika kaydedilemez veya karşılanamaz.")}</span></div> : null}
 
     <div className="settings-policy-fields">
       <label>{c("Data region", "Veri bölgesi")}<input value={value.dataRegion} maxLength={64} disabled={!canWrite || busy} onChange={(event) => patch("dataRegion", event.target.value)} required/></label>
@@ -78,8 +80,8 @@ export function SecurityPolicyEditor({ initial, canWrite }: { initial: SecurityP
     </div>
 
     <div className="settings-policy-toggles">
-      <Toggle checked={value.mfaRequired} disabled={!canWrite || busy} onChange={(next) => patch("mfaRequired", next)} label={c("Require MFA", "MFA zorunlu")} detail={c("Require multi-factor authentication for tenant sessions.", "Tenant oturumlarında çok faktörlü kimlik doğrulama zorunlu olsun.")}/>
-      <Toggle checked={value.deviceTrustRequired} disabled={!canWrite || busy} onChange={(next) => patch("deviceTrustRequired", next)} label={c("Require trusted device", "Güvenilir cihaz zorunlu")} detail={c("Enforce device trust as an additional access condition.", "Ek erişim koşulu olarak cihaz güvenini zorunlu kıl.")}/>
+      <Toggle checked={value.mfaRequired} disabled={!canWrite || busy || (!assurance.mfaConfigured && !value.mfaRequired)} onChange={(next) => patch("mfaRequired", next)} label={c("Require MFA", "MFA zorunlu")} detail={assurance.mfaConfigured ? c("Require OIDC sign-in evidence matching the configured MFA claim/value mapping. Existing sessions are rechecked on every request.", "Yapılandırılmış MFA claim/değer eşlemesini karşılayan OIDC giriş kanıtını zorunlu kılar. Mevcut oturumlar her istekte yeniden kontrol edilir.") : c("OIDC MFA claim/value mapping is not configured.", "OIDC MFA claim/değer eşlemesi yapılandırılmamış.")}/>
+      <Toggle checked={value.deviceTrustRequired} disabled={!canWrite || busy || (!assurance.deviceTrustConfigured && !value.deviceTrustRequired)} onChange={(next) => patch("deviceTrustRequired", next)} label={c("Require trusted device", "Güvenilir cihaz zorunlu")} detail={assurance.deviceTrustConfigured ? c("Require OIDC sign-in evidence matching the configured trusted-device claim/value mapping.", "Yapılandırılmış güvenilir cihaz claim/değer eşlemesini karşılayan OIDC giriş kanıtını zorunlu kılar.") : c("OIDC device-trust claim/value mapping is not configured.", "OIDC cihaz güveni claim/değer eşlemesi yapılandırılmamış.")}/>
       <Toggle checked={value.downloadWatermarking} disabled={!canWrite || busy} onChange={(next) => patch("downloadWatermarking", next)} label={c("Download watermarking", "İndirme filigranı")} detail={c("Apply watermark controls to governed document downloads.", "Yönetişim kapsamındaki doküman indirmelerine filigran uygula.")}/>
       <Toggle checked={value.exportRestrictedData} disabled={!canWrite || busy} onChange={(next) => patch("exportRestrictedData", next)} label={c("Allow restricted-data export", "Kısıtlı veri dışa aktarımına izin ver")} detail={c("Permit export of restricted classifications for authorized users.", "Yetkili kullanıcıların kısıtlı sınıflandırmaları dışa aktarmasına izin ver.")}/>
       <Toggle checked={value.breakGlassEnabled} disabled={!canWrite || busy} onChange={(next) => patch("breakGlassEnabled", next)} label={c("Break-glass access", "Break-glass erişimi")} detail={c("Keep emergency administrative recovery capability enabled.", "Acil durum yönetici kurtarma erişimini etkin tut.")}/>

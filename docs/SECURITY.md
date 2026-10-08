@@ -18,6 +18,16 @@ TLS in transit; encrypted storage at rest; KMS-backed envelope encryption for se
 ## Session security
 Application sessions are HMAC-signed but are not treated as irrevocable bearer cookies. Every authenticated request revalidates the tenant-scoped account plus tenant/account session versions. The rollout from legacy v1 cookies to the versioned v2 contract intentionally requires one new sign-in; old cookies are never grandfathered into the revocable contract. Administrators can revoke one account or the entire tenant; copied cookies fail on the next verified request. The tenant security policy can also shorten the maximum session lifetime immediately, while the platform runtime TTL remains an upper bound. Password-reset/local-auth controls continue to invalidate local sessions independently.
 
+## Authentication assurance enforcement
+
+Tenant MFA and trusted-device requirements are enforced against cryptographically verified OIDC ID-token claims rather than being UI-only policy flags. MFA defaults to the standard `amr` claim with the exact accepted value `mfa`; deployments can map another top-level OIDC claim and bounded allowlisted values. Trusted-device enforcement is disabled until an explicit claim/value mapping is configured.
+
+When a tenant policy requires MFA or device trust, sign-in fails closed unless the verified ID token contains matching evidence. The resulting signed HRBP session carries only two booleans—MFA satisfied and device trust satisfied—not raw provider claim values. Every authenticated request rechecks the current tenant policy, so enabling an assurance requirement invalidates older sessions that lack the required evidence on their next verified request.
+
+Local password authentication never claims MFA or trusted-device evidence. If an explicit tenant security policy requires either OIDC assurance control, local sign-in is denied and the denial is written to the append-only audit ledger. This prevents the optional local-auth path from becoming a silent assurance bypass.
+
+The security-policy API refuses to enable an assurance control that the deployment cannot evaluate, and Settings exposes only secret-free readiness booleans. Authentication health likewise reports whether MFA and device-trust claim mappings are configured without returning claim values or identity-provider payloads.
+
 ## Audit
 Security-relevant reads and all mutations produce append-only audit events. Audit entries include actor, action, resource, purpose, timestamp and network context. Each tenant ledger is hash-chained and carries a monotonic ledger sequence plus a durable tail record. Appends acquire a tenant-scoped PostgreSQL transaction advisory lock before reserving the next sequence, and the database enforces unique tenant/sequence, tenant/hash and predecessor references so concurrent requests cannot commit a fork. Versioned migration refuses pre-existing duplicate hashes, forks, multiple roots or disconnected events instead of silently normalizing corrupted history. Online and scheduled integrity checks verify sequence continuity, predecessor hashes, event hashes and the durable tail state.
 

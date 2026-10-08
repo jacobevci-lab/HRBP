@@ -1,5 +1,6 @@
 import { DataClassification } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
+import { assurancePolicyIssues, authenticationAssuranceConfiguration } from "@/lib/auth-assurance";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { asFiniteNumber, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
@@ -33,7 +34,14 @@ export async function GET(request: Request) {
       breakGlassEnabled: true,
       updatedAt: null
     },
-    permissions: { write: can(ctx, "settings:write") }
+    permissions: { write: can(ctx, "settings:write") },
+    assurance: (() => {
+      const config = authenticationAssuranceConfiguration();
+      return {
+        mfaConfigured: config.mfaConfigured,
+        deviceTrustConfigured: config.deviceTrustConfigured
+      };
+    })()
   }, { headers: { "cache-control": "no-store" } });
 }
 
@@ -82,6 +90,16 @@ export async function PATCH(request: Request) {
     breakGlassEnabled: booleanValue(body.breakGlassEnabled, existing?.breakGlassEnabled ?? true),
     updatedById: ctx.actorId
   };
+
+  const assuranceIssues = assurancePolicyIssues({
+    mfaRequired: next.mfaRequired,
+    deviceTrustRequired: next.deviceTrustRequired
+  });
+  if (assuranceIssues.length) {
+    return Response.json({
+      error: `Authentication assurance is not configured for: ${assuranceIssues.join(", ")}.`
+    }, { status: 409, headers: { "cache-control": "no-store" } });
+  }
 
   const data = await db.$transaction(async (tx) => {
     const policy = await tx.tenantSecurityPolicy.upsert({
