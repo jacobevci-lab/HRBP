@@ -100,8 +100,10 @@ const database = await waitFor(
 const auth = await waitFor(
   "/api/health/auth",
   (body) => body?.status === "ok" && body?.configured === true &&
-    body?.assurance?.mfaConfigured === true &&
-    typeof body?.assurance?.deviceTrustConfigured === "boolean",
+    (mode === "pre-upgrade" || (
+      body?.assurance?.mfaConfigured === true &&
+      typeof body?.assurance?.deviceTrustConfigured === "boolean"
+    )),
   "Authentication health"
 );
 const notifications = await waitFor(
@@ -232,8 +234,12 @@ console.log(JSON.stringify({
   },
   authentication: {
     mode: auth?.authentication ?? null,
-    mfaAssuranceConfigured: auth?.assurance?.mfaConfigured === true,
-    deviceTrustAssuranceConfigured: auth?.assurance?.deviceTrustConfigured === true
+    mfaAssuranceConfigured: mode === "pre-upgrade" && auth?.assurance === undefined
+      ? "not-required-pre-upgrade"
+      : auth?.assurance?.mfaConfigured === true,
+    deviceTrustAssuranceConfigured: mode === "pre-upgrade" && auth?.assurance === undefined
+      ? "not-required-pre-upgrade"
+      : auth?.assurance?.deviceTrustConfigured === true
   },
   notifications: {
     smtpEnabled: notifications?.email?.enabled ?? false,
