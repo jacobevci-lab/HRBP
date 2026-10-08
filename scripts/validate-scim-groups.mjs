@@ -33,7 +33,8 @@ expect(collectionPath, collection, /parseScimGroupFilter/, "group list must supp
 expect(collectionPath, collection, /provisioningSource:\s*"SCIM"[\s\S]*id:\s*\{ in: uniqueMemberIds \}/, "group members must resolve only to SCIM-managed tenant users");
 expect(collectionPath, collection, /lockScimTenant/, "group writes must serialize against SCIM identity writes");
 expect(collectionPath, collection, /TransactionIsolationLevel\.Serializable/, "group creation/update must use serializable isolation");
-expect(collectionPath, collection, /identity\.scim-group-provisioned[\s\S]*identity\.scim-group-updated/, "group lifecycle must be audited");
+expect(collectionPath, collection, /identity\.scim-group-provisioned/, "group provisioning must be audited");
+expect(collectionPath, collection, /identity\.scim-group-updated/, "group synchronization updates must be audited");
 reject(collectionPath, collection, /501/, "SCIM Group collection must no longer be an unsupported stub");
 
 const resourcePath = "app/api/scim/v2/Groups/[id]/route.ts";
