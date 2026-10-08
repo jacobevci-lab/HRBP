@@ -15,12 +15,31 @@ type PositionChangePreviewClaims = {
   eventType: PositionChangeEventType;
   effectiveAt: string;
   reasonDigest: string;
+  impactDigest: string;
   issuedAt: number;
   exp: number;
 };
 
 function digestReason(reason: string) {
   return createHash("sha256").update(reason, "utf8").digest("hex");
+}
+
+export function positionChangeImpactDigest(input: {
+  sourcePositionId: string | null;
+  sourceOrgUnitId: string | null;
+  sourceGrade: string | null;
+  sourceLocation: string | null;
+  sourceCritical: boolean;
+  managerEmploymentId: string | null;
+  directReportCount: number;
+  targetPositionId: string;
+  targetOrgUnitId: string;
+  targetGrade: string | null;
+  targetLocation: string | null;
+  targetCritical: boolean;
+  openTargetRequisitionCount: number;
+}) {
+  return createHash("sha256").update(JSON.stringify(input), "utf8").digest("hex");
 }
 
 function boundedId(value: unknown) {
@@ -37,6 +56,7 @@ export function createPositionChangePreviewReceipt(input: {
   eventType: PositionChangeEventType;
   effectiveAt: Date;
   reason: string;
+  impactDigest: string;
 }) {
   const secret = sessionSecret();
   if (!secret) throw new Error("HRBP_SESSION_SECRET is not configured.");
@@ -54,6 +74,7 @@ export function createPositionChangePreviewReceipt(input: {
     eventType: input.eventType,
     effectiveAt: input.effectiveAt.toISOString(),
     reasonDigest: digestReason(input.reason),
+    impactDigest: input.impactDigest,
     issuedAt,
     exp
   };
@@ -71,6 +92,7 @@ export function verifyPositionChangePreviewReceipt(token: string, expected: {
   eventType: PositionChangeEventType;
   effectiveAt: Date;
   reason: string;
+  impactDigest: string;
 }) {
   if (!token || token.length > 8192) return null;
   const secret = sessionSecret();
@@ -91,6 +113,7 @@ export function verifyPositionChangePreviewReceipt(token: string, expected: {
       claims.targetPositionId !== expected.targetPositionId ||
       claims.eventType !== expected.eventType ||
       claims.effectiveAt !== expected.effectiveAt.toISOString() ||
-      claims.reasonDigest !== digestReason(expected.reason)) return null;
+      claims.reasonDigest !== digestReason(expected.reason) ||
+      claims.impactDigest !== expected.impactDigest) return null;
   return claims;
 }
