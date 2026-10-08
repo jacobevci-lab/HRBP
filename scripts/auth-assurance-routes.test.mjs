@@ -174,7 +174,8 @@ function policyFixture({ ctx, existing = null, assuranceIssues = [] }) {
     "@/lib/audit": { appendAudit: async () => { calls.audits += 1; } },
     "@/lib/auth-assurance": {
       assurancePolicyIssues: () => assuranceIssues,
-      authenticationAssuranceConfiguration: () => ({ mfaConfigured: true, deviceTrustConfigured: true })
+      authenticationAssuranceConfiguration: () => ({ mfaConfigured: true, deviceTrustConfigured: true }),
+      authenticationAssuranceVersion: () => "a".repeat(64)
     },
     "@/lib/authorization": {
       can: () => true,
@@ -201,7 +202,7 @@ async function patchPolicy(route, body) {
 
 test("security policy cannot enable MFA from a session that has not demonstrated MFA", async () => {
   const { route, calls } = policyFixture({
-    ctx: { tenantId: "tenant-1", actorId: "admin-1", role: "TENANT_ADMIN", mfaSatisfied: false, deviceTrustSatisfied: false }
+    ctx: { tenantId: "tenant-1", actorId: "admin-1", role: "TENANT_ADMIN", mfaSatisfied: false, deviceTrustSatisfied: false, assuranceVersion: "a".repeat(64) }
   });
   const response = await patchPolicy(route, {
     dataRegion: "TR",
@@ -217,7 +218,7 @@ test("security policy cannot enable MFA from a session that has not demonstrated
 
 test("security policy can enable assurance only after the current session demonstrates it", async () => {
   const { route, calls } = policyFixture({
-    ctx: { tenantId: "tenant-1", actorId: "admin-1", role: "TENANT_ADMIN", mfaSatisfied: true, deviceTrustSatisfied: true }
+    ctx: { tenantId: "tenant-1", actorId: "admin-1", role: "TENANT_ADMIN", mfaSatisfied: true, deviceTrustSatisfied: true, assuranceVersion: "a".repeat(64) }
   });
   const response = await patchPolicy(route, {
     dataRegion: "TR",
