@@ -2,7 +2,8 @@ import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatu
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
-import { asEnumValue, asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
+import { verifyPositionChangePreviewReceipt } from "@/lib/employee-position-change-preview";
+import { asEnumValue, asIdentifier, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
 import { isPrismaRecordNotFound } from "@/lib/prisma-safety";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 
@@ -30,6 +31,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
 
   const targetPositionId = asIdentifier(body.targetPositionId);
   const eventType = asEnumValue(body.eventType, allowedEvents);
+  const previewReceipt = asText(body.previewReceipt, 8192);
   const reasonValue = asOptionalText(body.reason, 500);
   if (reasonValue === null) return Response.json({ error: "reason must be a string up to 500 characters." }, { status: 400 });
   const reason = reasonValue ?? "";
@@ -37,6 +39,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
 
   if (!targetPositionId) return Response.json({ error: "targetPositionId is required and must be a string." }, { status: 400 });
   if (!eventType) return Response.json({ error: "eventType must be TRANSFERRED or PROMOTED." }, { status: 400 });
+  if (!previewReceipt) return Response.json({ error: "A fresh signed impact preview receipt is required before applying a position change." }, { status: 409 });
   if (!effectiveAt || Number.isNaN(effectiveAt.getTime())) return Response.json({ error: "effectiveAt must be a valid date string." }, { status: 400 });
 
   const tomorrow = new Date();
@@ -58,6 +61,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
       });
       if (!employment) throw new Error("EMPLOYMENT_NOT_FOUND");
       if (employment.positionId === targetPositionId) throw new Error("SAME_POSITION");
+
+      const preview = verifyPositionChangePreviewReceipt(previewReceipt, {
+        tenantId: ctx.tenantId,
+        actorId: ctx.actorId,
+        personId,
+        targetPositionId,
+        eventType,
+        effectiveAt,
+        reason
+      });
+      if (!preview) throw new Error("PREVIEW_REQUIRED");
+      if (preview.employmentId !== employment.id || preview.sourcePositionId !== employment.positionId) {
+        throw new Error("PREVIEW_STALE");
+      }
 
       const target = await tx.position.findFirst({
         where: { id: targetPositionId, tenantId: ctx.tenantId, validTo: null },
@@ -136,10 +153,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
       TARGET_NOT_FOUND: ["The target position was not found in this tenant.", 404],
       TARGET_NOT_OPEN: ["The target position is not open for assignment.", 409],
       TARGET_OCCUPIED: ["The target position already has an active incumbent.", 409],
+      PREVIEW_REQUIRED: ["The signed impact preview is missing, expired or does not match this position change. Generate a new preview.", 409],
+      PREVIEW_STALE: ["The employee position changed after the impact preview was generated. Refresh and generate a new preview.", 409],
       STATE_CONFLICT: ["The employment changed concurrently. Refresh and try again.", 409]
     };
     if (errors[code]) return Response.json({ error: errors[code][0] }, { status: errors[code][1] });
-    console.error("Employee position lifecycle transition failed", error);
+    console.error("[HRBP] Employee position lifecycle transition failed.");
     return Response.json({ error: "Employee position lifecycle change could not be completed." }, { status: 500 });
   }
 }
