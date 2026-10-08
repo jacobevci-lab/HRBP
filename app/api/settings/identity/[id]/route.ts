@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { identityActivationIssues } from "@/lib/settings-connection-validation";
+import { identityRuntimeActivationIssues, isOidcRuntimeProvider, oidcRuntimeProviderTypes } from "@/lib/runtime-identity-provider";
 
 type LifecycleAction = "validate" | "activate" | "disable" | "reopen";
 
@@ -56,6 +57,30 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const issues = identityActivationIssues(current);
     if (issues.length) return Response.json({ error: `Identity provider is not activation-ready. Missing: ${issues.join(", ")}.` }, { status: 409 });
     if (!current.lastValidatedAt) return Response.json({ error: "Validate the identity-provider configuration before activation." }, { status: 409 });
+
+    const runtimeIssues = identityRuntimeActivationIssues(current);
+    if (runtimeIssues.length) {
+      return Response.json({
+        error: `Identity provider cannot be activated against the current login runtime. Missing, mismatched or unsupported: ${runtimeIssues.join(", ")}.`
+      }, { status: 409 });
+    }
+
+    if (isOidcRuntimeProvider(current.type)) {
+      const conflictingProvider = await db.identityProviderConnection.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          id: { not: id },
+          status: ConnectionStatus.ACTIVE,
+          type: { in: [...oidcRuntimeProviderTypes] }
+        },
+        select: { id: true, name: true }
+      });
+      if (conflictingProvider) {
+        return Response.json({
+          error: `Only one runtime OIDC-family identity provider can be active. Disable ${conflictingProvider.name} before activating this connection.`
+        }, { status: 409 });
+      }
+    }
 
     const data = await db.$transaction(async (tx) => {
       const updated = await tx.identityProviderConnection.update({
