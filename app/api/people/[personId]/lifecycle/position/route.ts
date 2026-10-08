@@ -1,8 +1,8 @@
-import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatus } from "@prisma/client";
+import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatus, RequisitionStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
-import { verifyPositionChangePreviewReceipt } from "@/lib/employee-position-change-preview";
+import { positionChangeImpactDigest, verifyPositionChangePreviewReceipt } from "@/lib/employee-position-change-preview";
 import { asEnumValue, asIdentifier, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
 import { isPrismaRecordNotFound } from "@/lib/prisma-safety";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
@@ -15,6 +15,12 @@ const ACTIVE_EMPLOYMENT_STATUSES: EmploymentStatus[] = [
 ];
 
 const allowedEvents = [LifecycleEventType.TRANSFERRED, LifecycleEventType.PROMOTED] as const;
+const openRequisitionStatuses = [
+  RequisitionStatus.DRAFT,
+  RequisitionStatus.APPROVAL,
+  RequisitionStatus.OPEN,
+  RequisitionStatus.ON_HOLD
+];
 
 export async function POST(request: Request, { params }: { params: Promise<{ personId: string }> }) {
   const ctx = await getRequestContext(request);
@@ -56,11 +62,67 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
         select: {
           id: true,
           positionId: true,
-          position: { select: { id: true, positionCode: true, title: true, status: true } }
+          managerEmploymentId: true,
+          position: {
+            select: {
+              id: true,
+              positionCode: true,
+              title: true,
+              status: true,
+              grade: true,
+              location: true,
+              critical: true,
+              orgUnitId: true
+            }
+          },
+          _count: { select: { directReports: true } }
         }
       });
       if (!employment) throw new Error("EMPLOYMENT_NOT_FOUND");
       if (employment.positionId === targetPositionId) throw new Error("SAME_POSITION");
+
+      const target = await tx.position.findFirst({
+        where: { id: targetPositionId, tenantId: ctx.tenantId, validTo: null },
+        select: { id: true, positionCode: true, title: true, status: true, grade: true, location: true, critical: true, orgUnitId: true }
+      });
+      if (!target) throw new Error("TARGET_NOT_FOUND");
+      if (target.status !== PositionStatus.OPEN) throw new Error("TARGET_NOT_OPEN");
+
+      const [incumbent, openTargetRequisitionCount] = await Promise.all([
+        tx.employment.findFirst({
+          where: {
+            tenantId: ctx.tenantId,
+            positionId: target.id,
+            status: { in: ACTIVE_EMPLOYMENT_STATUSES },
+            NOT: { id: employment.id }
+          },
+          select: { id: true }
+        }),
+        tx.requisition.count({
+          where: {
+            tenantId: ctx.tenantId,
+            positionId: target.id,
+            status: { in: openRequisitionStatuses }
+          }
+        })
+      ]);
+      if (incumbent) throw new Error("TARGET_OCCUPIED");
+
+      const impactDigest = positionChangeImpactDigest({
+        sourcePositionId: employment.positionId,
+        sourceOrgUnitId: employment.position?.orgUnitId ?? null,
+        sourceGrade: employment.position?.grade ?? null,
+        sourceLocation: employment.position?.location ?? null,
+        sourceCritical: employment.position?.critical ?? false,
+        managerEmploymentId: employment.managerEmploymentId,
+        directReportCount: employment._count.directReports,
+        targetPositionId: target.id,
+        targetOrgUnitId: target.orgUnitId,
+        targetGrade: target.grade,
+        targetLocation: target.location,
+        targetCritical: target.critical,
+        openTargetRequisitionCount
+      });
 
       const preview = verifyPositionChangePreviewReceipt(previewReceipt, {
         tenantId: ctx.tenantId,
@@ -69,30 +131,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
         targetPositionId,
         eventType,
         effectiveAt,
-        reason
+        reason,
+        impactDigest
       });
       if (!preview) throw new Error("PREVIEW_REQUIRED");
       if (preview.employmentId !== employment.id || preview.sourcePositionId !== employment.positionId) {
         throw new Error("PREVIEW_STALE");
       }
-
-      const target = await tx.position.findFirst({
-        where: { id: targetPositionId, tenantId: ctx.tenantId, validTo: null },
-        select: { id: true, positionCode: true, title: true, status: true }
-      });
-      if (!target) throw new Error("TARGET_NOT_FOUND");
-      if (target.status !== PositionStatus.OPEN) throw new Error("TARGET_NOT_OPEN");
-
-      const incumbent = await tx.employment.findFirst({
-        where: {
-          tenantId: ctx.tenantId,
-          positionId: target.id,
-          status: { in: ACTIVE_EMPLOYMENT_STATUSES },
-          NOT: { id: employment.id }
-        },
-        select: { id: true }
-      });
-      if (incumbent) throw new Error("TARGET_OCCUPIED");
 
       try {
         await tx.employment.update({
@@ -154,7 +199,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
       TARGET_NOT_OPEN: ["The target position is not open for assignment.", 409],
       TARGET_OCCUPIED: ["The target position already has an active incumbent.", 409],
       PREVIEW_REQUIRED: ["The signed impact preview is missing, expired or does not match this position change. Generate a new preview.", 409],
-      PREVIEW_STALE: ["The employee position changed after the impact preview was generated. Refresh and generate a new preview.", 409],
+      PREVIEW_STALE: ["The employee or related position-impact state changed after the impact preview was generated. Refresh and generate a new preview.", 409],
       STATE_CONFLICT: ["The employment changed concurrently. Refresh and try again.", 409]
     };
     if (errors[code]) return Response.json({ error: errors[code][0] }, { status: errors[code][1] });
