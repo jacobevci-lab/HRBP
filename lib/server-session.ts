@@ -33,6 +33,8 @@ export async function getServerRequestContext(): Promise<RequestContext | null> 
     tenantId: claims.tenantId,
     actorId: claims.actorId,
     role: claims.role,
-    employmentId: claims.employmentId
+    employmentId: claims.employmentId,
+    mfaSatisfied: claims.mfaSatisfied === true,
+    deviceTrustSatisfied: claims.deviceTrustSatisfied === true
   };
 }
