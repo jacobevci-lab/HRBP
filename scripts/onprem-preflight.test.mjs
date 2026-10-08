@@ -19,6 +19,9 @@ const base = {
   HRBP_SCIM_TOKEN: "",
   HRBP_SCIM_TOKEN_PREVIOUS: "",
   HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "false",
+  HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS: "",
+  HRBP_INTEGRATION_PROBE_ALLOW_HTTP: "false",
+  HRBP_INTEGRATION_PROBE_TIMEOUT_MS: "5000",
   HRBP_OIDC_ISSUER: "https://login.example.com/tenant/v2.0",
   HRBP_OIDC_CLIENT_ID: "client-id-123",
   HRBP_OIDC_CLIENT_SECRET: "oidc-secret-abcdefghijklmnop",
@@ -204,6 +207,35 @@ test("rejects weak/reused SCIM credentials and warns on unmanaged adoption", () 
   assert.ok(reused.errors.some((entry) => entry.includes("must not reuse")));
   assert.ok(reused.warnings.some((entry) => entry.includes("unmanaged-account adoption")));
   assert.ok(!JSON.stringify(reused).includes(base.HRBP_MAINTENANCE_TOKEN));
+});
+
+test("accepts allowlisted HTTPS integration live-validation origins", () => {
+  const result = validateOnpremEnv({
+    ...base,
+    HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS: "https://api.example.com,https://10.20.30.40",
+    HRBP_INTEGRATION_PROBE_ALLOW_HTTP: "false",
+    HRBP_INTEGRATION_PROBE_TIMEOUT_MS: "4500"
+  });
+  assert.equal(result.ok, true, result.errors.join("\n"));
+});
+
+test("rejects unsafe integration live-validation origins and timeout bounds", () => {
+  const unsafe = validateOnpremEnv({
+    ...base,
+    HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS: "https://169.254.169.254",
+    HRBP_INTEGRATION_PROBE_TIMEOUT_MS: "500"
+  });
+  assert.equal(unsafe.ok, false);
+  assert.ok(unsafe.errors.some((entry) => entry.includes("ALLOWED_ORIGINS")));
+  assert.ok(unsafe.errors.some((entry) => entry.includes("TIMEOUT_MS")));
+
+  const http = validateOnpremEnv({
+    ...base,
+    HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS: "http://intranet.example.test",
+    HRBP_INTEGRATION_PROBE_ALLOW_HTTP: "true"
+  });
+  assert.equal(http.ok, true, http.errors.join("\n"));
+  assert.ok(http.warnings.some((entry) => entry.includes("HTTP integration live validation")));
 });
 
 test("accepts bounded TLS SMTP delivery configuration", () => {
