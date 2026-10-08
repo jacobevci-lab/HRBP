@@ -1,4 +1,4 @@
-import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatus, RequisitionStatus } from "@prisma/client";
+import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatus, Prisma, RequisitionStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
@@ -154,7 +154,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
           data: { status: PositionStatus.OPEN }
         });
       }
-      await tx.position.update({ where: { id: target.id, tenantId: ctx.tenantId }, data: { status: PositionStatus.FILLED } });
+      const targetClaim = await tx.position.updateMany({
+        where: {
+          id: target.id,
+          tenantId: ctx.tenantId,
+          status: PositionStatus.OPEN,
+          validTo: null
+        },
+        data: { status: PositionStatus.FILLED }
+      });
+      if (targetClaim.count !== 1) throw new Error("STATE_CONFLICT");
 
       const fromLabel = employment.position ? `${employment.position.title} (${employment.position.positionCode})` : "Unassigned";
       const toLabel = `${target.title} (${target.positionCode})`;
@@ -186,7 +195,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
         eventType,
         effectiveAt
       };
-    }));
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 
     return Response.json({ data: result });
   } catch (error) {
@@ -202,6 +211,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ per
       STATE_CONFLICT: ["The employment changed concurrently. Refresh and try again.", 409]
     };
     if (errors[code]) return Response.json({ error: errors[code][0] }, { status: errors[code][1] });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034") {
+      return Response.json({ error: "The employee or target position changed concurrently. Refresh and generate a new preview." }, { status: 409 });
+    }
     console.error("[HRBP] Employee position lifecycle transition failed.");
     return Response.json({ error: "Employee position lifecycle change could not be completed." }, { status: 500 });
   }
