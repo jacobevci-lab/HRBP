@@ -15,6 +15,7 @@ export type SessionClaims = {
   tenantSessionVersion: number;
   mfaSatisfied?: boolean;
   deviceTrustSatisfied?: boolean;
+  assuranceVersion?: string | null;
   tenantId: string;
   actorId: string;
   role: PlatformRole;
@@ -104,6 +105,7 @@ export function validSessionClaims(claims: SessionClaims | null): claims is Sess
       !Number.isSafeInteger(claims.tenantSessionVersion) || claims.tenantSessionVersion < 1) return false;
   if (claims.mfaSatisfied !== undefined && typeof claims.mfaSatisfied !== "boolean") return false;
   if (claims.deviceTrustSatisfied !== undefined && typeof claims.deviceTrustSatisfied !== "boolean") return false;
+  if (claims.assuranceVersion !== undefined && claims.assuranceVersion !== null && !/^[a-f0-9]{64}$/.test(claims.assuranceVersion)) return false;
   const now = Math.floor(Date.now() / 1000);
   return Number.isSafeInteger(claims.issuedAt) && Number.isSafeInteger(claims.exp) &&
     claims.issuedAt <= now + 60 && claims.exp > now && claims.exp > claims.issuedAt && claims.exp - claims.issuedAt <= 86400;
