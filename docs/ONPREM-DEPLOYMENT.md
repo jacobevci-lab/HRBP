@@ -130,6 +130,7 @@ The current snapshot includes:
 
 - notification outbox counts by bounded channel/status, due-job count, oldest actionable age and oldest dispatcher-lock age,
 - document malware-scan counts by state, due-job count, oldest pending age and oldest scanner-lock age,
+- SCIM-managed identity counts plus enabled/configured/rotation/adoption posture gauges,
 - scrape health and collection duration.
 
 Keep the endpoint on the private management path. Do not publish it through the customer-facing reverse proxy. A remote Prometheus/monitoring collector should reach it only through the customer's approved private management network or an authenticated monitoring proxy. `HRBP_METRICS_TOKEN` must not be reused as the maintenance, scanner, session, object-storage, database, OIDC or SMTP secret; install/upgrade preflight enforces this separation.
