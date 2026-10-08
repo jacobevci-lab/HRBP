@@ -45,19 +45,20 @@ export async function GET(request: Request) {
 
   const rows = await db.auditEvent.findMany({
     where,
-    orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+    orderBy: [{ ledgerSequence: "desc" }],
     take: 5000,
     select: {
-      id: true, actorId: true, action: true, resourceType: true, resourceId: true,
+      id: true, ledgerSequence: true, actorId: true, action: true, resourceType: true, resourceId: true,
       purpose: true, classification: true, ipAddress: true, occurredAt: true,
       hash: true, previousHash: true
     }
   });
 
-  const header = ["id", "occurredAt", "actorId", "action", "resourceType", "resourceId", "classification", "ipAddress", "purpose", "hash", "previousHash"];
+  const header = ["ledgerSequence", "id", "occurredAt", "actorId", "action", "resourceType", "resourceId", "classification", "ipAddress", "purpose", "hash", "previousHash"];
   const lines = [header.map(safeCell).join(",")];
   for (const row of rows) {
     lines.push([
+      row.ledgerSequence,
       row.id,
       row.occurredAt.toISOString(),
       row.actorId,

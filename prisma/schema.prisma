@@ -205,6 +205,7 @@ model Tenant {
   documents           DocumentRecord[]
   lifecycle           EmployeeLifecycleEvent[]
   audit               AuditEvent[]
+  auditLedgerState    AuditLedgerState?
   requisitions        Requisition[]
   candidates          Candidate[]
   applications        Application[]
@@ -774,6 +775,7 @@ model EmployeeLifecycleEvent {
 model AuditEvent {
   id             String @id @default(cuid())
   tenantId       String
+  ledgerSequence BigInt
   actorId        String
   action         String
   resourceType   String
@@ -786,6 +788,17 @@ model AuditEvent {
   previousHash   String?
   tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
+  @@unique([tenantId, ledgerSequence])
+  @@unique([tenantId, hash])
+  @@unique([tenantId, previousHash])
   @@index([tenantId, occurredAt])
   @@index([tenantId, resourceType, resourceId])
+}
+
+model AuditLedgerState {
+  tenantId   String @id
+  tailHash   String?
+  eventCount BigInt @default(0)
+  updatedAt  DateTime @updatedAt
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }

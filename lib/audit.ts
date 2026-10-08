@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { DataClassification, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { appendToAuditLedger } from "@/lib/audit-ledger-lock.mjs";
 import type { RequestContext } from "@/lib/request-context";
 
 export type AuditInput = {
@@ -46,29 +47,12 @@ type AuditActorContext = {
 };
 
 async function appendAuditActor(tx: Prisma.TransactionClient, ctx: AuditActorContext, input: AuditInput) {
-  const occurredAt = new Date();
-  const previous = await tx.auditEvent.findFirst({
-    where: { tenantId: ctx.tenantId },
-    orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-    select: { hash: true }
-  });
-  const classification = input.classification ?? DataClassification.CONFIDENTIAL;
-  const purpose = input.purpose ?? ctx.purpose ?? null;
-  const ipAddress = ctx.ipAddress ?? null;
-  const hash = computeAuditHash({
-    tenantId: ctx.tenantId,
-    actorId: ctx.actorId,
-    action: input.action,
-    resourceType: input.resourceType,
-    resourceId: input.resourceId,
-    purpose,
-    classification,
-    ipAddress,
-    occurredAt
-  }, previous?.hash ?? null);
-
-  return tx.auditEvent.create({
-    data: {
+  return appendToAuditLedger(tx, ctx.tenantId, async ({ previousHash, ledgerSequence }) => {
+    const occurredAt = new Date();
+    const classification = input.classification ?? DataClassification.CONFIDENTIAL;
+    const purpose = input.purpose ?? ctx.purpose ?? null;
+    const ipAddress = ctx.ipAddress ?? null;
+    const hash = computeAuditHash({
       tenantId: ctx.tenantId,
       actorId: ctx.actorId,
       action: input.action,
@@ -77,10 +61,27 @@ async function appendAuditActor(tx: Prisma.TransactionClient, ctx: AuditActorCon
       purpose,
       classification,
       ipAddress,
-      occurredAt,
-      hash,
-      previousHash: previous?.hash
-    }
+      occurredAt
+    }, previousHash);
+
+    const event = await tx.auditEvent.create({
+      data: {
+        tenantId: ctx.tenantId,
+        ledgerSequence,
+        actorId: ctx.actorId,
+        action: input.action,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+        purpose,
+        classification,
+        ipAddress,
+        occurredAt,
+        hash,
+        previousHash
+      }
+    });
+
+    return { nextHash: hash, value: event };
   });
 }
 

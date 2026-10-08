@@ -35,7 +35,7 @@ export async function getAuditLiveData(tenantId: string, filter: AuditFilter = {
   const [rows, total, last24h, classifications, resourceGroups, actorGroups, integrity] = await Promise.all([
     db.auditEvent.findMany({
       where,
-      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      orderBy: [{ ledgerSequence: "desc" }],
       take: 250,
       select: {
         id: true, actorId: true, action: true, resourceType: true, resourceId: true,

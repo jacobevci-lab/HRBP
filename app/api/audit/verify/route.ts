@@ -18,57 +18,121 @@ export async function GET(request: Request) {
       }, { status: 413 });
     }
 
-    const events = await db.auditEvent.findMany({
-      where: { tenantId: ctx.tenantId },
-      select: {
-        id: true, tenantId: true, actorId: true, action: true, resourceType: true, resourceId: true,
-        purpose: true, classification: true, ipAddress: true, occurredAt: true, hash: true, previousHash: true
+    const [state, events] = await Promise.all([
+      db.auditLedgerState.findUnique({
+        where: { tenantId: ctx.tenantId },
+        select: { tailHash: true, eventCount: true }
+      }),
+      db.auditEvent.findMany({
+        where: { tenantId: ctx.tenantId },
+        orderBy: [{ ledgerSequence: "asc" }],
+        select: {
+          id: true,
+          tenantId: true,
+          ledgerSequence: true,
+          actorId: true,
+          action: true,
+          resourceType: true,
+          resourceId: true,
+          purpose: true,
+          classification: true,
+          ipAddress: true,
+          occurredAt: true,
+          hash: true,
+          previousHash: true
+        }
+      })
+    ]);
+
+    if (!events.length) {
+      if (state && (state.eventCount !== BigInt(0) || state.tailHash !== null)) {
+        return Response.json({
+          status: "invalid",
+          verified: 0,
+          total: 0,
+          error: "Ledger state is non-empty while no audit events exist."
+        }, { status: 409 });
       }
-    });
-
-    if (!events.length) return Response.json({ status: "ok", verified: 0, total: 0, root: null, tail: null });
-
-    const roots = events.filter((event) => !event.previousHash);
-    if (roots.length !== 1) return Response.json({ status: "invalid", verified: 0, total, error: `Expected one ledger root, found ${roots.length}.` }, { status: 409 });
-
-    const childByPrevious = new Map<string, (typeof events)[number]>();
-    for (const event of events) {
-      if (!event.previousHash) continue;
-      if (childByPrevious.has(event.previousHash)) {
-        return Response.json({ status: "invalid", verified: 0, total, error: "Ledger contains a forked previousHash reference." }, { status: 409 });
-      }
-      childByPrevious.set(event.previousHash, event);
+      return Response.json({ status: "ok", verified: 0, total: 0, root: null, tail: null });
     }
 
-    const visited = new Set<string>();
-    let current: (typeof events)[number] | undefined = roots[0];
-    let tail = roots[0].hash;
+    if (!state) {
+      return Response.json({
+        status: "invalid",
+        verified: 0,
+        total,
+        error: "Ledger state is missing for a non-empty audit ledger."
+      }, { status: 409 });
+    }
 
-    while (current) {
-      if (visited.has(current.id)) return Response.json({ status: "invalid", verified: visited.size, total, error: "Ledger cycle detected." }, { status: 409 });
-      visited.add(current.id);
+    if (state.eventCount !== BigInt(total)) {
+      return Response.json({
+        status: "invalid",
+        verified: 0,
+        total,
+        error: "Ledger state event count does not match persisted audit events."
+      }, { status: 409 });
+    }
+
+    let previousHash: string | null = null;
+    for (let index = 0; index < events.length; index += 1) {
+      const event = events[index];
+      const expectedSequence = BigInt(index + 1);
+
+      if (event.ledgerSequence !== expectedSequence) {
+        return Response.json({
+          status: "invalid",
+          verified: index,
+          total,
+          eventId: event.id,
+          error: "Ledger sequence is not contiguous."
+        }, { status: 409 });
+      }
+      if (event.previousHash !== previousHash) {
+        return Response.json({
+          status: "invalid",
+          verified: index,
+          total,
+          eventId: event.id,
+          error: "Stored previousHash does not match the preceding audit event hash."
+        }, { status: 409 });
+      }
+
       const expected = computeAuditHash({
-        tenantId: current.tenantId,
-        actorId: current.actorId,
-        action: current.action,
-        resourceType: current.resourceType,
-        resourceId: current.resourceId,
-        purpose: current.purpose,
-        classification: current.classification,
-        ipAddress: current.ipAddress,
-        occurredAt: current.occurredAt
-      }, current.previousHash);
-      if (expected !== current.hash) {
-        return Response.json({ status: "invalid", verified: visited.size - 1, total, eventId: current.id, error: "Audit event hash mismatch." }, { status: 409 });
+        tenantId: event.tenantId,
+        actorId: event.actorId,
+        action: event.action,
+        resourceType: event.resourceType,
+        resourceId: event.resourceId,
+        purpose: event.purpose,
+        classification: event.classification,
+        ipAddress: event.ipAddress,
+        occurredAt: event.occurredAt
+      }, event.previousHash);
+
+      if (expected !== event.hash) {
+        return Response.json({
+          status: "invalid",
+          verified: index,
+          total,
+          eventId: event.id,
+          error: "Audit event hash mismatch."
+        }, { status: 409 });
       }
-      tail = current.hash;
-      current = childByPrevious.get(current.hash);
+      previousHash = event.hash;
     }
 
-    if (visited.size !== events.length) {
-      return Response.json({ status: "invalid", verified: visited.size, total, error: "One or more audit events are disconnected from the hash chain." }, { status: 409 });
+    const root = events[0].hash;
+    const tail = events.at(-1)?.hash ?? null;
+    if (tail !== state.tailHash) {
+      return Response.json({
+        status: "invalid",
+        verified: events.length,
+        total,
+        error: "Ledger state tail does not match the verified audit chain."
+      }, { status: 409 });
     }
 
-    return Response.json({ status: "ok", verified: visited.size, total, root: roots[0].hash, tail });
+    return Response.json({ status: "ok", verified: events.length, total, root, tail });
   });
 }
