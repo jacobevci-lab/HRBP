@@ -140,10 +140,18 @@ const highlyRestrictedReaders = new Set<PlatformRole>([
   PlatformRole.PRIVACY_OFFICER
 ]);
 
+const breakGlassReadCapabilities = new Set<Capability>([
+  "cases:read",
+  "privacy:read"
+]);
+
 export function can(ctx: RequestContext, capability: Capability) {
   // Deprecated UI compatibility aliases. Domain APIs must use granular capabilities.
   if (capability === "compensation:write") return grants[ctx.role].includes("compensation:propose");
   if (capability === "payroll:write") return grants[ctx.role].includes("payroll:prepare");
+  if (ctx.breakGlassActive === true && ctx.role === PlatformRole.TENANT_ADMIN && breakGlassReadCapabilities.has(capability)) {
+    return true;
+  }
   return grants[ctx.role].includes(capability);
 }
 
