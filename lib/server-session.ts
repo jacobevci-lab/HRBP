@@ -35,6 +35,7 @@ export async function getServerRequestContext(): Promise<RequestContext | null> 
     role: claims.role,
     employmentId: claims.employmentId,
     mfaSatisfied: claims.mfaSatisfied === true,
-    deviceTrustSatisfied: claims.deviceTrustSatisfied === true
+    deviceTrustSatisfied: claims.deviceTrustSatisfied === true,
+    assuranceVersion: claims.assuranceVersion ?? null
   };
 }
