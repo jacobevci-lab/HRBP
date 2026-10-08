@@ -171,6 +171,17 @@ test("SCIM Group PatchOp supports membership delta without privileged attributes
     members: ["user-2", "user-3"]
   });
 
+  assert.deepEqual(applyScimGroupPatch({
+    schemas: [SCIM_PATCH_SCHEMA],
+    Operations: [
+      { op: "Remove", path: "members", value: [{ value: "user-1" }] }
+    ]
+  }, current), {
+    displayName: "HRBP",
+    externalId: "group-ext-1",
+    members: ["user-2"]
+  }, "value-scoped member removal must preserve unrelated members");
+
   assert.equal(applyScimGroupPatch({
     schemas: [SCIM_PATCH_SCHEMA],
     Operations: [{ op: "replace", path: "role", value: "TENANT_ADMIN" }]
