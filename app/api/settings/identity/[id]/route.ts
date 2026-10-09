@@ -1,9 +1,11 @@
 import { ConnectionStatus, DataClassification, Prisma } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
+import { getOidcConfig } from "@/lib/auth-config";
 import { db } from "@/lib/db";
 import { lockIdentityProviderTenant } from "@/lib/identity-provider-lifecycle";
 import { asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
+import { oidcValidationCurrent, probeOidcDiscovery } from "@/lib/oidc";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { identityActivationIssues } from "@/lib/settings-connection-validation";
 import {
@@ -19,6 +21,8 @@ type LifecycleCode =
   | "STATE_CONFLICT"
   | "CONFIG_INCOMPLETE"
   | "VALIDATION_REQUIRED"
+  | "VALIDATION_EXPIRED"
+  | "LIVE_VALIDATION_FAILED"
   | "RUNTIME_NOT_READY"
   | "OIDC_CONFLICT";
 
@@ -45,6 +49,12 @@ function lifecycleErrorResponse(error: unknown) {
     }
     if (error.code === "VALIDATION_REQUIRED") {
       return Response.json({ error: "Validate the identity-provider configuration before activation." }, { status: 409 });
+    }
+    if (error.code === "VALIDATION_EXPIRED") {
+      return Response.json({ error: "OIDC live validation evidence is older than 24 hours. Revalidate the provider before activation." }, { status: 409 });
+    }
+    if (error.code === "LIVE_VALIDATION_FAILED") {
+      return Response.json({ error: `OIDC live validation failed. ${error.detail ?? "Provider discovery is unavailable or invalid."}` }, { status: 409 });
     }
     if (error.code === "RUNTIME_NOT_READY") {
       return Response.json({
@@ -81,6 +91,43 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   if (action === "validate") {
     try {
+      const snapshot = await db.identityProviderConnection.findFirst({
+        where: { id, tenantId: ctx.tenantId }
+      });
+      if (!snapshot) throw new IdentityLifecycleError("NOT_FOUND");
+      if (snapshot.status !== ConnectionStatus.DRAFT) {
+        throw new IdentityLifecycleError("INVALID_STATE", "Only DRAFT identity providers can be configuration-validated.");
+      }
+
+      const issues = identityActivationIssues(snapshot);
+      if (issues.length) throw new IdentityLifecycleError("CONFIG_INCOMPLETE", issues.join(", "));
+
+      let liveValidationDetail: string | null = null;
+      if (isOidcRuntimeProvider(snapshot.type)) {
+        const runtimeIssues = identityRuntimeActivationIssues(snapshot);
+        if (runtimeIssues.length) throw new IdentityLifecycleError("RUNTIME_NOT_READY", runtimeIssues.join(", "));
+        const runtime = getOidcConfig();
+        if (!runtime) throw new IdentityLifecycleError("RUNTIME_NOT_READY", "runtime OIDC configuration");
+
+        try {
+          const metadata = await probeOidcDiscovery(runtime.issuer);
+          liveValidationDetail = `Live OIDC discovery validated issuer and secure endpoints for ${metadata.issuer}`;
+        } catch (error) {
+          const reason = error instanceof Error ? error.message.slice(0, 240) : "Provider discovery is unavailable or invalid.";
+          console.error("[HRBP] OIDC live validation failed.", error);
+          await db.$transaction(async (tx) => {
+            await appendAudit(tx, ctx, {
+              action: "settings.identity-provider-live-validation-failed",
+              resourceType: "IdentityProviderConnection",
+              resourceId: id,
+              classification: DataClassification.RESTRICTED,
+              purpose: reason
+            });
+          });
+          throw new IdentityLifecycleError("LIVE_VALIDATION_FAILED", reason);
+        }
+      }
+
       const data = await db.$transaction(async (tx) => {
         await lockIdentityProviderTenant(tx, ctx.tenantId);
         const current = await tx.identityProviderConnection.findFirst({
@@ -90,9 +137,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (current.status !== ConnectionStatus.DRAFT) {
           throw new IdentityLifecycleError("INVALID_STATE", "Only DRAFT identity providers can be configuration-validated.");
         }
+        if (current.updatedAt.getTime() !== snapshot.updatedAt.getTime()) {
+          throw new IdentityLifecycleError("STATE_CONFLICT");
+        }
 
-        const issues = identityActivationIssues(current);
-        if (issues.length) throw new IdentityLifecycleError("CONFIG_INCOMPLETE", issues.join(", "));
+        const currentIssues = identityActivationIssues(current);
+        if (currentIssues.length) throw new IdentityLifecycleError("CONFIG_INCOMPLETE", currentIssues.join(", "));
+        if (isOidcRuntimeProvider(current.type)) {
+          const runtimeIssues = identityRuntimeActivationIssues(current);
+          if (runtimeIssues.length) throw new IdentityLifecycleError("RUNTIME_NOT_READY", runtimeIssues.join(", "));
+        }
 
         const result = await tx.identityProviderConnection.updateMany({
           where: {
@@ -106,11 +160,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (result.count !== 1) throw new IdentityLifecycleError("STATE_CONFLICT");
 
         await appendAudit(tx, ctx, {
-          action: "settings.identity-provider-config-validated",
+          action: isOidcRuntimeProvider(current.type)
+            ? "settings.identity-provider-live-validated"
+            : "settings.identity-provider-config-validated",
           resourceType: "IdentityProviderConnection",
           resourceId: id,
           classification: DataClassification.RESTRICTED,
-          purpose: "Identity-provider configuration metadata validated before governed activation"
+          purpose: liveValidationDetail ?? "Identity-provider configuration metadata validated before governed activation"
         });
         return tx.identityProviderConnection.findUnique({ where: { id } });
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -144,6 +200,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const issues = identityActivationIssues(current);
         if (issues.length) throw new IdentityLifecycleError("CONFIG_INCOMPLETE", issues.join(", "));
         if (!current.lastValidatedAt) throw new IdentityLifecycleError("VALIDATION_REQUIRED");
+        if (isOidcRuntimeProvider(current.type) && !oidcValidationCurrent(current.lastValidatedAt)) {
+          throw new IdentityLifecycleError("VALIDATION_EXPIRED");
+        }
 
         const runtimeIssues = identityRuntimeActivationIssues(current);
         if (runtimeIssues.length) throw new IdentityLifecycleError("RUNTIME_NOT_READY", runtimeIssues.join(", "));
