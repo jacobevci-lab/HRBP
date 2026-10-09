@@ -28,7 +28,7 @@ const prisma = {
   }
 };
 
-function runtimeModule({ oidc, localConfigured = false, mfaConfigured = true }) {
+function runtimeModule({ oidc, localConfigured = false, mfaConfigured = true, scimConfigured = true }) {
   return load("lib/runtime-identity-provider.ts", {
     "@prisma/client": prisma,
     "@/lib/auth-assurance": {
@@ -37,6 +37,9 @@ function runtimeModule({ oidc, localConfigured = false, mfaConfigured = true }) 
     "@/lib/auth-config": {
       getOidcConfig: () => oidc,
       localAuthConfigurationStatus: () => ({ enabled: localConfigured, configured: localConfigured, missing: [] })
+    },
+    "@/lib/scim": {
+      scimRuntimeConfig: () => ({ configured: scimConfigured })
     }
   });
 }
@@ -70,7 +73,8 @@ test("one active matching OIDC provider binds runtime JIT and MFA policy", async
         issuer: "https://idp.example.test",
         clientId: "client-1",
         jitEnabled: true,
-        mfaRequired: true
+        mfaRequired: true,
+        scimEnabled: false
       }]
     }
   };
@@ -93,7 +97,8 @@ test("active provider metadata drift fails closed", async () => {
         issuer: "https://different.example.test",
         clientId: "client-1",
         jitEnabled: false,
-        mfaRequired: true
+        mfaRequired: true,
+        scimEnabled: false
       }]
     }
   };
@@ -108,8 +113,8 @@ test("multiple active OIDC-family providers fail closed", async () => {
   const client = {
     identityProviderConnection: {
       findMany: async () => [
-        { id: "idp-1", type: "OIDC", issuer: "https://idp.example.test", clientId: "client-1", jitEnabled: false, mfaRequired: true },
-        { id: "idp-2", type: "OKTA", issuer: "https://idp.example.test", clientId: "client-1", jitEnabled: false, mfaRequired: true }
+        { id: "idp-1", type: "OIDC", issuer: "https://idp.example.test", clientId: "client-1", jitEnabled: false, mfaRequired: true, scimEnabled: false },
+        { id: "idp-2", type: "OKTA", issuer: "https://idp.example.test", clientId: "client-1", jitEnabled: false, mfaRequired: true, scimEnabled: false }
       ]
     }
   };
@@ -127,7 +132,8 @@ test("activation readiness distinguishes metadata validity from runtime policy s
     issuer: "https://idp.example.test",
     clientId: "client-1",
     jitEnabled: true,
-    mfaRequired: true
+    mfaRequired: true,
+    scimEnabled: false
   }), []);
 
   assert.deepEqual(runtime.identityRuntimeActivationIssues({
@@ -135,7 +141,8 @@ test("activation readiness distinguishes metadata validity from runtime policy s
     issuer: "https://other.example.test",
     clientId: "client-2",
     jitEnabled: false,
-    mfaRequired: false
+    mfaRequired: false,
+    scimEnabled: false
   }), ["runtime issuer match", "runtime clientId match"]);
 
   assert.deepEqual(runtime.identityRuntimeActivationIssues({
@@ -143,7 +150,8 @@ test("activation readiness distinguishes metadata validity from runtime policy s
     issuer: null,
     clientId: null,
     jitEnabled: false,
-    mfaRequired: false
+    mfaRequired: false,
+    scimEnabled: false
   }), ["SAML login runtime adapter"]);
 
   assert.deepEqual(runtime.identityRuntimeActivationIssues({
@@ -151,7 +159,8 @@ test("activation readiness distinguishes metadata validity from runtime policy s
     issuer: "ldaps://ldap.example.test",
     clientId: null,
     jitEnabled: false,
-    mfaRequired: false
+    mfaRequired: false,
+    scimEnabled: false
   }), ["LDAP login runtime adapter"]);
 
   assert.deepEqual(runtime.identityRuntimeActivationIssues({
@@ -159,7 +168,8 @@ test("activation readiness distinguishes metadata validity from runtime policy s
     issuer: null,
     clientId: null,
     jitEnabled: false,
-    mfaRequired: false
+    mfaRequired: false,
+    scimEnabled: false
   }), ["local authentication runtime"]);
 });
 
@@ -173,7 +183,8 @@ test("managed JIT cannot activate without an explicit allowed-domain boundary", 
     issuer: "https://idp.example.test",
     clientId: "client-1",
     jitEnabled: true,
-    mfaRequired: false
+    mfaRequired: false,
+    scimEnabled: false
   }), ["JIT allowed email domains"]);
 });
 
@@ -184,6 +195,20 @@ test("managed MFA cannot activate without signed-token assurance mapping", () =>
     issuer: "https://idp.example.test",
     clientId: "client-1",
     jitEnabled: false,
-    mfaRequired: true
+    mfaRequired: true,
+    scimEnabled: false
   }), ["OIDC MFA claim/value mapping"]);
+});
+
+
+test("managed SCIM cannot activate until the runtime token/domain boundary is ready", () => {
+  const runtime = runtimeModule({ oidc: runtimeConfig, scimConfigured: false });
+  assert.deepEqual(runtime.identityRuntimeActivationIssues({
+    type: "OIDC",
+    issuer: "https://idp.example.test",
+    clientId: "client-1",
+    jitEnabled: false,
+    mfaRequired: false,
+    scimEnabled: true
+  }), ["SCIM runtime configuration"]);
 });
