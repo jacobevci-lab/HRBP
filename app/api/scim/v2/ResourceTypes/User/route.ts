@@ -3,6 +3,6 @@ import { scimAccess, scimJson, scimRuntimeConfig, scimUserResourceType } from "@
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const denied = scimAccess(request); if (denied) return denied;
+  const denied = await scimAccess(request); if (denied) return denied;
   return scimJson(scimUserResourceType(scimRuntimeConfig().baseUrl));
 }
