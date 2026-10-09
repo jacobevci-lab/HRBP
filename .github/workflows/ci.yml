@@ -53,17 +53,11 @@ jobs:
             sudo systemctl status postgresql --no-pager || true
             exit 1
           fi
-          sudo -u postgres psql -v ON_ERROR_STOP=1 <<'SQL'
-          DO $
-          BEGIN
-            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hrbp') THEN
-              CREATE ROLE hrbp LOGIN PASSWORD 'hrbp' CREATEDB;
-            ELSE
-              ALTER ROLE hrbp WITH LOGIN PASSWORD 'hrbp' CREATEDB;
-            END IF;
-          END
-          $;
-          SQL
+          if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='hrbp'" | grep -q 1; then
+            sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE hrbp LOGIN PASSWORD 'hrbp' CREATEDB"
+          else
+            sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER ROLE hrbp WITH LOGIN PASSWORD 'hrbp' CREATEDB"
+          fi
           if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='hrbp'" | grep -q 1; then
             sudo -u postgres createdb -O hrbp hrbp
           fi
