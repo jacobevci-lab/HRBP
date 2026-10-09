@@ -1,4 +1,4 @@
-import { SCIM_LIST_SCHEMA, scimAccess, scimJson, scimUserSchemaDefinition } from "@/lib/scim";
+import { SCIM_LIST_SCHEMA, scimAccess, scimGroupSchemaDefinition, scimJson, scimUserSchemaDefinition } from "@/lib/scim";
 
 export const dynamic = "force-dynamic";
 
@@ -6,9 +6,9 @@ export async function GET(request: Request) {
   const denied = scimAccess(request); if (denied) return denied;
   return scimJson({
     schemas: [SCIM_LIST_SCHEMA],
-    totalResults: 1,
+    totalResults: 2,
     startIndex: 1,
-    itemsPerPage: 1,
-    Resources: [scimUserSchemaDefinition()]
+    itemsPerPage: 2,
+    Resources: [scimUserSchemaDefinition(), scimGroupSchemaDefinition()]
   });
 }

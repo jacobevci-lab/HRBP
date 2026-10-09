@@ -228,6 +228,8 @@ model Tenant {
   compensationChanges CompensationChange[]
   scheduledPositionChanges ScheduledPositionChange[]
   emergencyAccessGrants EmergencyAccessGrant[]
+  scimGroups          ScimGroup[]
+  scimGroupMembers    ScimGroupMember[]
   payrollCountryPacks PayrollCountryPack[]
   payrollPeriods      PayrollPeriod[]
   payrollRuns         PayrollRun[]
@@ -260,6 +262,7 @@ model UserAccount {
   emergencyAccessRequests EmergencyAccessGrant[] @relation("EmergencyAccessRequester")
   emergencyAccessDecisions EmergencyAccessGrant[] @relation("EmergencyAccessDecider")
   emergencyAccessRevocations EmergencyAccessGrant[] @relation("EmergencyAccessRevoker")
+  scimGroupMemberships ScimGroupMember[]
 
   @@unique([tenantId, subject])
   @@unique([tenantId, provisioningSource, provisioningExternalId])

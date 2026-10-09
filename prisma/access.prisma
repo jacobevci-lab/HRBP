@@ -52,3 +52,34 @@ model EmploymentJurisdiction {
   @@index([tenantId, countryCode, effectiveTo])
   @@index([tenantId, employmentId, effectiveTo])
 }
+
+
+model ScimGroup {
+  id          String @id @default(cuid())
+  tenantId    String
+  externalId  String?
+  displayName String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members     ScimGroupMember[]
+
+  @@unique([tenantId, externalId])
+  @@index([tenantId, displayName])
+  @@index([tenantId, updatedAt])
+}
+
+model ScimGroupMember {
+  id        String @id @default(cuid())
+  tenantId  String
+  groupId   String
+  userId    String
+  createdAt DateTime @default(now())
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  group     ScimGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user      UserAccount @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@index([tenantId, userId])
+  @@index([tenantId, groupId])
+}

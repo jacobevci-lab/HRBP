@@ -1,4 +1,5 @@
 export const SCIM_USER_SCHEMA: string;
+export const SCIM_GROUP_SCHEMA: string;
 export const SCIM_LIST_SCHEMA: string;
 export const SCIM_ERROR_SCHEMA: string;
 export const SCIM_PATCH_SCHEMA: string;
@@ -16,3 +17,17 @@ export function applyScimPatch(body:Record<string,unknown>,current:MutableScimUs
 export function scimUserProjection(user:{id:string;email:string|null;displayName:string;active:boolean;provisioningExternalId:string|null;provisionedAt:Date|null;provisioningUpdatedAt:Date|null},baseUrl:string):Record<string,unknown>;
 export function scimUserResourceType(baseUrl:string):Record<string,unknown>;
 export function scimUserSchemaDefinition():Record<string,unknown>;
+
+export type ScimGroupInput={displayName:string;externalId:string|null;members:string[]};
+export type MutableScimGroup={displayName:unknown;externalId:unknown;members:string[]};
+export function parseScimGroupFilter(value:string|null):{kind:"none"}|{kind:"displayName";value:string}|{kind:"externalId";value:string}|null;
+export function parseScimGroupMembers(value:unknown):string[]|null;
+export function parseScimGroupInput(body:Record<string,unknown>,current?:{displayName:string;externalId:string|null;members:string[]}):ScimGroupInput|null;
+export function applyScimGroupPatch(body:Record<string,unknown>,current:{displayName:string;externalId:string|null;members:string[]}):MutableScimGroup|null;
+export function scimGroupProjection(
+  group:{id:string;externalId:string|null;displayName:string;createdAt:Date;updatedAt:Date},
+  members:Array<{id:string;displayName:string}>,
+  baseUrl:string
+):Record<string,unknown>;
+export function scimGroupResourceType(baseUrl:string):Record<string,unknown>;
+export function scimGroupSchemaDefinition():Record<string,unknown>;
