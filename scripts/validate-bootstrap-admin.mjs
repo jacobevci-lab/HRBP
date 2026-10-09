@@ -31,6 +31,11 @@ const ciPath = ".github/workflows/ci.yml";
 const ci = await source(ciPath);
 expect(ciPath, ci, /bootstrap-admin\.postgres\.test\.mjs/, "CI must prove bootstrap administration against PostgreSQL");
 
+const settingsPath = "components/settings-live-page.tsx";
+const settings = await source(settingsPath);
+expect(settingsPath, settings, /governedIdentityAdopted && oidc\?\.bootstrapAdminEmail/, "Settings must surface stale bootstrap configuration after governance adoption");
+expect(settingsPath, settings, /Remove HRBP_BOOTSTRAP_ADMIN_EMAIL/, "Settings must tell operators how to remove the blocked bootstrap configuration");
+
 const packagePath = "package.json";
 const pkg = await source(packagePath);
 expect(packagePath, pkg, /bootstrap-admin:validate/, "bootstrap governance validator must be registered");
