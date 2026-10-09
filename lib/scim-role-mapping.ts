@@ -69,13 +69,13 @@ async function resolvedRoleState(
   ]);
 
   const groupIds = [...new Set(memberships.map((row) => row.groupId))];
-  const activeMappings = groupIds.length
+  const mappedGroupIds = proposal ? groupIds.filter((id) => id !== proposal.groupId) : groupIds;
+  const activeMappings = mappedGroupIds.length
     ? await client.scimGroupRoleMapping.findMany({
       where: {
         tenantId,
         status: ScimRoleMappingStatus.ACTIVE,
-        groupId: { in: groupIds },
-        ...(proposal ? { groupId: { in: groupIds.filter((id) => id !== proposal.groupId) } } : {})
+        groupId: { in: mappedGroupIds }
       },
       select: { groupId: true, role: true }
     })
