@@ -209,6 +209,8 @@ for (const token of [
   "HRBP_SCIM_ENABLED must be explicitly true or false",
   "HRBP_SCIM_TOKEN must be at least 32 characters",
   "HRBP_SCIM_TOKEN_PREVIOUS must be at least 32 characters",
+  "HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT must be a valid RFC3339 timestamp",
+  "HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT must be no more than 7 days in the future",
   "HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS contains an invalid",
   "HRBP_INTEGRATION_PROBE_TIMEOUT_MS must be between 1000 and 10000",
   "HRBP_SCHEDULED_JOB_CHANGE_BATCH_SIZE must be between 10 and 250",
@@ -291,6 +293,7 @@ assert.match(env, /HRBP_OIDC_DEVICE_TRUST_VALUES=/);
 assert.match(env, /HRBP_SCIM_ENABLED=false/);
 assert.match(env, /HRBP_SCIM_TOKEN=/);
 assert.match(env, /HRBP_SCIM_TOKEN_PREVIOUS=/);
+assert.match(env, /HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT=/);
 assert.match(env, /HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION=false/);
 assert.match(env, /HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS=/);
 assert.match(env, /HRBP_INTEGRATION_PROBE_ALLOW_HTTP=false/);
@@ -409,6 +412,7 @@ for (const token of [
   "CLEAN",
   "SCIM 2.0",
   "HRBP_SCIM_TOKEN",
+  "HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT",
   "unmanaged-account adoption"
 ]) assert.ok(docs.includes(token), `On-prem runbook missing recovery guidance: ${token}`);
 
