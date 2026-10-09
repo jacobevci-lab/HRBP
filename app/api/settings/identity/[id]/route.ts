@@ -168,7 +168,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             status: ConnectionStatus.DRAFT,
             updatedAt: current.updatedAt
           },
-          data: { status: ConnectionStatus.ACTIVE }
+          data: { status: ConnectionStatus.ACTIVE, runtimeVersion: { increment: 1 } }
         });
         if (result.count !== 1) throw new IdentityLifecycleError("STATE_CONFLICT");
 
@@ -232,7 +232,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
             status: current.status,
             updatedAt: current.updatedAt
           },
-          data: { status: ConnectionStatus.DISABLED }
+          data: { status: ConnectionStatus.DISABLED, runtimeVersion: { increment: 1 } }
         });
         if (result.count !== 1) throw new IdentityLifecycleError("STATE_CONFLICT");
 
@@ -277,7 +277,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           status: current.status,
           updatedAt: current.updatedAt
         },
-        data: { status: ConnectionStatus.DRAFT, lastValidatedAt: null }
+        data: { status: ConnectionStatus.DRAFT, lastValidatedAt: null, runtimeVersion: { increment: 1 } }
       });
       if (result.count !== 1) throw new IdentityLifecycleError("STATE_CONFLICT");
 
