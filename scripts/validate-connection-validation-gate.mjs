@@ -12,13 +12,20 @@ expect(schemaPath, schema, /model IntegrationConnection[\s\S]*lastValidatedAt\s+
 const identityPath = "app/api/settings/identity/[id]/route.ts";
 const identity = await source(identityPath);
 expect(identityPath, identity, /type LifecycleAction = "validate" \| "activate" \| "disable" \| "reopen"/, "identity lifecycle must include configuration validation");
-expect(identityPath, identity, /action === "validate"[\s\S]*identityActivationIssues\(current\)/, "identity validation must reuse governed readiness checks");
+expect(identityPath, identity, /lockIdentityProviderTenant\(tx, ctx\.tenantId\)/, "identity lifecycle transitions must serialize per tenant");
+expect(identityPath, identity, /action === "validate"[\s\S]*identityActivationIssues\(current\)[\s\S]*updateMany\([\s\S]*updatedAt: current\.updatedAt/, "identity validation must re-check DRAFT metadata with optimistic state evidence");
 expect(identityPath, identity, /settings\.identity-provider-config-validated/, "identity validation must be audited");
-expect(identityPath, identity, /!current\.lastValidatedAt[\s\S]*Validate the identity-provider configuration before activation/, "identity activation must require recorded validation evidence");
+expect(identityPath, identity, /action === "activate"[\s\S]*current\.status !== ConnectionStatus\.DRAFT[\s\S]*VALIDATION_REQUIRED[\s\S]*identityRuntimeActivationIssues\(current\)/, "identity activation must revalidate lifecycle, validation evidence and runtime readiness inside the transaction");
+expect(identityPath, identity, /conflictingProvider = await tx\.identityProviderConnection\.findFirst/, "OIDC active-provider conflict detection must run inside the serialized transaction");
+expect(identityPath, identity, /status: ConnectionStatus\.DRAFT,[\s\S]*updatedAt: current\.updatedAt[\s\S]*status: ConnectionStatus\.ACTIVE/, "identity activation must update only the fresh DRAFT state");
 expect(identityPath, identity, /status: ConnectionStatus\.DRAFT, lastValidatedAt: null/, "reopening identity configuration must invalidate prior validation");
-expect(identityPath, identity, /action === "validate"[\s\S]*data:\s*\{\s*lastValidatedAt:\s*new Date\(\)\s*\}[\s\S]*settings\.identity-provider-config-validated/, "identity validation must record validation evidence without changing lifecycle state");
-expect(identityPath, identity, /identityRuntimeActivationIssues\(current\)[\s\S]*current login runtime/, "identity activation must distinguish metadata validity from runtime support");
-expect(identityPath, identity, /isOidcRuntimeProvider\(current\.type\)[\s\S]*Only one runtime OIDC-family identity provider can be active/, "runtime-backed OIDC activation must prevent ambiguous active providers");
+expect(identityPath, identity, /TransactionIsolationLevel\.Serializable/, "identity lifecycle mutations must use serializable transactions");
+expect(identityPath, identity, /P2034[\s\S]*state changed concurrently/, "serializable identity conflicts must surface as bounded retryable conflicts");
+
+const lifecycleLockPath = "lib/identity-provider-lifecycle.ts";
+const lifecycleLock = await source(lifecycleLockPath);
+expect(lifecycleLockPath, lifecycleLock, /pg_advisory_xact_lock[\s\S]*hashtextextended/, "identity lifecycle lock must use a PostgreSQL transaction advisory lock");
+expect(lifecycleLockPath, lifecycleLock, /61977431::bigint/, "identity lifecycle advisory lock must keep its dedicated namespace salt");
 
 const runtimeBindingPath = "lib/runtime-identity-provider.ts";
 const runtimeBinding = await source(runtimeBindingPath);
@@ -90,6 +97,9 @@ expect(settingsLivePath, settingsLive, /effectiveScimEnabled = managedOidc \? ma
 expect(settingsLivePath, settingsLive, /identityRuntimeActivationIssues\(managedOidc\)/, "settings runtime readiness must surface governed identity policy drift");
 
 expect(packagePath, pkg, /identity-provider-auth-policy\.test\.mjs/, "managed identity-provider auth policy behavioral tests must run in the connection validation gate");
+const ciWorkflowPath = ".github/workflows/ci.yml";
+const ciWorkflow = await source(ciWorkflowPath);
+expect(ciWorkflowPath, ciWorkflow, /identity-provider-lifecycle\.postgres\.test\.mjs/, "CI must prove concurrent identity-provider activation against PostgreSQL");
 expect(packagePath, pkg, /integration-live-validation:validate/, "live validation policy tests must be registered");
 expect(packagePath, pkg, /prebuild[\s\S]*connection-validation:validate/, "connection validation gate must run before production builds");
 
