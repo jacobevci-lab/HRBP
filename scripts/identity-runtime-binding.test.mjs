@@ -93,7 +93,8 @@ test("one active matching OIDC provider binds runtime JIT and MFA policy", async
         clientId: "client-1",
         jitEnabled: true,
         mfaRequired: true,
-        scimEnabled: false
+        scimEnabled: false,
+        updatedAt: new Date("2026-10-09T20:00:00.000Z")
       }]
     }
   };
@@ -103,7 +104,8 @@ test("one active matching OIDC provider binds runtime JIT and MFA policy", async
     type: "OIDC",
     jitEnabled: true,
     mfaRequired: true,
-    scimEnabled: false
+    scimEnabled: false,
+    bindingVersion: new Date("2026-10-09T20:00:00.000Z").getTime()
   });
 });
 
