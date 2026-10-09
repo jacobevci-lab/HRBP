@@ -58,6 +58,29 @@ test("OIDC discovery validates metadata, blocks redirects and caches only succes
   assert.equal(first.token_endpoint, "https://idp.example.test/oauth2/token");
 });
 
+test("live OIDC probe bypasses discovery cache on every validation", async () => {
+  const oidc = load("lib/oidc.ts");
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return jsonResponse(metadata("https://live.example.test"));
+  };
+
+  await oidc.probeOidcDiscovery("https://live.example.test", fetchImpl);
+  await oidc.probeOidcDiscovery("https://live.example.test", fetchImpl);
+  assert.equal(calls, 2);
+});
+
+test("OIDC validation freshness expires after 24 hours and rejects future-skewed evidence", () => {
+  const oidc = load("lib/oidc.ts");
+  const now = Date.parse("2026-10-09T21:00:00.000Z");
+  assert.equal(oidc.oidcValidationCurrent(new Date(now - 60_000), now), true);
+  assert.equal(oidc.oidcValidationCurrent(new Date(now - 24 * 60 * 60 * 1000), now), true);
+  assert.equal(oidc.oidcValidationCurrent(new Date(now - 24 * 60 * 60 * 1000 - 1), now), false);
+  assert.equal(oidc.oidcValidationCurrent(new Date(now + 60_001), now), false);
+  assert.equal(oidc.oidcValidationCurrent(null, now), false);
+});
+
 test("transient discovery failure is evicted from cache so provider recovery is observed", async () => {
   const oidc = load("lib/oidc.ts");
   let calls = 0;
