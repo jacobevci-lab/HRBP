@@ -21,6 +21,8 @@ const mirrorBuilds = ci.match(/NODE_BASE_IMAGE=public\.ecr\.aws\/docker\/library
 if (mirrorBuilds.length !== 3) failures.push("CI must mirror runtime, scheduler and scanner Node builds exactly three times.");
 if (/pull document-scanner-engine/.test(ci)) failures.push("Pull-request CI must not depend on Docker Hub availability for the third-party ClamAV image.");
 expect(upgrade, /pull document-scanner-engine/, "The operator-controlled upgrade path must still pull and verify the pinned scanner engine.");
+expect(regression, /retry\(\)[\s\S]*for attempt in 1 2 3/, "Platform Regression network installs must use bounded retry.");
+expect(regression, /retry "npm ci"[\s\S]*retry "Playwright package install"[\s\S]*retry "Chromium install"/, "Platform Regression must retry npm and browser-tooling downloads without hiding final logs.");
 
 if (failures.length) {
   console.error("CI registry resilience validation failed:\n- " + failures.join("\n- "));
