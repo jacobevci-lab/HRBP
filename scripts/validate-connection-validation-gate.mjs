@@ -29,6 +29,10 @@ expect(runtimeBindingPath, runtimeBinding, /SAML login runtime adapter[\s\S]*LDA
 expect(runtimeBindingPath, runtimeBinding, /jitEnabled:\s*true[\s\S]*mfaRequired:\s*true/, "managed runtime binding must load provider JIT and MFA policy flags");
 expect(runtimeBindingPath, runtimeBinding, /connection\.jitEnabled && runtime\.allowedEmailDomains\.length === 0[\s\S]*JIT allowed email domains/, "managed JIT activation must require an explicit domain boundary");
 expect(runtimeBindingPath, runtimeBinding, /connection\.mfaRequired && !authenticationAssuranceConfiguration\(\)\.mfaConfigured[\s\S]*OIDC MFA claim\/value mapping/, "managed MFA activation must require signed-token assurance mapping");
+expect(runtimeBindingPath, runtimeBinding, /connection\.scimEnabled && !scimRuntimeConfig\(\)\.configured[\s\S]*SCIM runtime configuration/, "managed SCIM activation must require a configured runtime boundary");
+expect(runtimeBindingPath, runtimeBinding, /connection\.type === IdentityProviderType\.LOCAL[\s\S]*connection\.scimEnabled[\s\S]*SCIM requires federated identity provider/, "local identity providers must not activate governed SCIM");
+expect(runtimeBindingPath, runtimeBinding, /jitEnabled:\s*true[\s\S]*mfaRequired:\s*true[\s\S]*scimEnabled:\s*true/, "managed runtime binding must load provider JIT, MFA and SCIM policy flags");
+expect(runtimeBindingPath, runtimeBinding, /scimEnabled:\s*connection\.scimEnabled/, "managed runtime binding must return provider SCIM policy");
 
 const loginPath = "app/api/auth/login/route.ts";
 const login = await source(loginPath);
@@ -82,6 +86,7 @@ expect(packagePath, pkg, /connection-validation:validate/, "connection validatio
 const settingsLivePath = "components/settings-live-page.tsx";
 const settingsLive = await source(settingsLivePath);
 expect(settingsLivePath, settingsLive, /managedOidc \? managedOidc\.jitEnabled : Boolean\(oidc\?\.jitProvisioning\)/, "settings must display effective managed-versus-legacy JIT state");
+expect(settingsLivePath, settingsLive, /effectiveScimEnabled = managedOidc \? managedOidc\.scimEnabled : scim\.enabled/, "settings must display effective managed-versus-legacy SCIM state");
 expect(settingsLivePath, settingsLive, /identityRuntimeActivationIssues\(managedOidc\)/, "settings runtime readiness must surface governed identity policy drift");
 
 expect(packagePath, pkg, /identity-provider-auth-policy\.test\.mjs/, "managed identity-provider auth policy behavioral tests must run in the connection validation gate");
