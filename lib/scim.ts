@@ -72,19 +72,26 @@ export function scimError(status:number,detail:string,scimType?:string,extra?:He
 }
 export async function scimAccess(request:Request){
   const config=scimRuntimeConfig();
-  if(!config.enabled) return scimError(404,"SCIM provisioning is disabled.");
-  if(!config.configured) return scimError(503,"SCIM provisioning is not ready.");
-  if(!internalBearerAuthorized(request,"HRBP_SCIM_TOKEN") && !internalBearerAuthorized(request,"HRBP_SCIM_TOKEN_PREVIOUS")){
-    return scimError(401,"Valid SCIM bearer credentials are required.",undefined,{"www-authenticate":'Bearer realm="HRBP SCIM"'});
-  }
+  let policy;
   try {
-    const policy = await resolveGovernedScimPolicy(db, config.tenantId);
-    if(policy.managed && !policy.scimEnabled) {
-      return scimError(404,"SCIM provisioning is disabled by the active governed identity provider.");
-    }
+    policy = await resolveGovernedScimPolicy(db, config.tenantId);
   } catch {
     console.error("[HRBP] Governed SCIM runtime policy is unavailable.");
     return scimError(503,"SCIM provisioning policy is unavailable.");
+  }
+
+  const requestedEnabled = policy.managed ? policy.scimEnabled : config.enabled;
+  if(!requestedEnabled) {
+    return scimError(
+      404,
+      policy.managed
+        ? "SCIM provisioning is disabled by the active governed identity provider."
+        : "SCIM provisioning is disabled."
+    );
+  }
+  if(!config.configured) return scimError(503,"SCIM provisioning is enabled by policy but its runtime configuration is not ready.");
+  if(!internalBearerAuthorized(request,"HRBP_SCIM_TOKEN") && !internalBearerAuthorized(request,"HRBP_SCIM_TOKEN_PREVIOUS")){
+    return scimError(401,"Valid SCIM bearer credentials are required.",undefined,{"www-authenticate":'Bearer realm="HRBP SCIM"'});
   }
   return null;
 }

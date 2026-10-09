@@ -12,8 +12,9 @@ expect(scimPath, scim, /resolveGovernedScimPolicy[\s\S]*ConnectionStatus\.ACTIVE
 expect(scimPath, scim, /active\.length !== 1[\s\S]*SCIM_PROVIDER_AMBIGUOUS/, "ambiguous active providers must fail governed SCIM closed");
 expect(scimPath, scim, /export async function scimAccess/, "SCIM access must support live governed policy lookup");
 expect(scimPath, scim, /resolveGovernedScimPolicy\(db, config\.tenantId\)/, "SCIM access must evaluate current database policy on each request");
-expect(scimPath, scim, /policy\.managed && !policy\.scimEnabled[\s\S]*disabled by the active governed identity provider/, "active provider SCIM disablement must take immediate effect");
+expect(scimPath, scim, /requestedEnabled = policy\.managed \? policy\.scimEnabled : config\.enabled[\s\S]*!requestedEnabled[\s\S]*disabled by the active governed identity provider/, "active provider SCIM disablement must take immediate effect");
 expect(scimPath, scim, /catch[\s\S]*SCIM provisioning policy is unavailable/, "SCIM policy lookup failures must fail closed");
+expect(scimPath, scim, /requestedEnabled[\s\S]*!config\.configured[\s\S]*enabled by policy but its runtime configuration is not ready/, "governed SCIM runtime outages must surface as unavailable rather than disabled");
 
 const runtimePath = "lib/runtime-identity-provider.ts";
 const runtime = await source(runtimePath);
