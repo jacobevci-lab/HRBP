@@ -13,6 +13,11 @@ import {
   scimRuntimeConfig,
   validScimId
 } from "@/lib/scim";
+import {
+  reconcileScimManagedRoles,
+  SCIM_ROLE_MAPPING_AMBIGUOUS,
+  SCIM_ROLE_MAPPING_MANUAL_CONFLICT
+} from "@/lib/scim-role-mapping";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +50,11 @@ async function replaceManagedGroup(input: {
     await lockScimTenant(tx, input.tenantId);
     const current = await tx.scimGroup.findFirst({
       where: { id: input.id, tenantId: input.tenantId },
-      select: { id: true, updatedAt: true }
+      select: {
+        id: true,
+        updatedAt: true,
+        members: { select: { userId: true } }
+      }
     });
     if (!current) return null;
     if (input.expectedUpdatedAt && current.updatedAt.getTime() !== input.expectedUpdatedAt.getTime()) {
@@ -92,6 +101,21 @@ async function replaceManagedGroup(input: {
       purpose: `SCIM group membership synchronized with ${memberIds.length} managed member(s)`
     });
 
+    const affectedUserIds = [...new Set([
+      ...current.members.map((member) => member.userId),
+      ...memberIds
+    ])];
+    const reconciled = await reconcileScimManagedRoles(tx, input.tenantId, affectedUserIds);
+    if (reconciled.changed) {
+      await appendSystemAudit(tx, input.tenantId, "system:scim-provisioner", {
+        action: "identity.scim-group-role-reconciled",
+        resourceType: "ScimGroup",
+        resourceId: current.id,
+        classification: DataClassification.RESTRICTED,
+        purpose: `Directory group synchronization reconciled ${reconciled.changed} application role assignment(s)`
+      });
+    }
+
     return { group, users };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 }
@@ -102,6 +126,12 @@ function groupError(error: unknown) {
   }
   if (error instanceof Error && error.message === "SCIM_GROUP_STATE_CONFLICT") {
     return scimError(409, "The SCIM group changed while this patch was being applied; retry with fresh state.", "mutability");
+  }
+  if (error instanceof Error && error.message === SCIM_ROLE_MAPPING_AMBIGUOUS) {
+    return scimError(409, "Group membership would give a user conflicting application roles through multiple governed mappings.", "uniqueness");
+  }
+  if (error instanceof Error && error.message === SCIM_ROLE_MAPPING_MANUAL_CONFLICT) {
+    return scimError(409, "Group membership would overwrite a manually governed application role.", "mutability");
   }
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
     return scimError(409, "A group with the supplied externalId already exists.", "uniqueness");
@@ -194,17 +224,22 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     await lockScimTenant(tx, config.tenantId);
     const current = await tx.scimGroup.findFirst({
       where: { id, tenantId: config.tenantId },
-      select: { id: true }
+      select: {
+        id: true,
+        members: { select: { userId: true } }
+      }
     });
     if (!current) return null;
 
+    const affectedUserIds = current.members.map((member) => member.userId);
     await tx.scimGroup.delete({ where: { id: current.id } });
+    const reconciled = await reconcileScimManagedRoles(tx, config.tenantId, affectedUserIds);
     await appendSystemAudit(tx, config.tenantId, "system:scim-provisioner", {
       action: "identity.scim-group-deprovisioned",
       resourceType: "ScimGroup",
       resourceId: current.id,
       classification: DataClassification.RESTRICTED,
-      purpose: "SCIM group deprovisioning removed directory membership state"
+      purpose: `SCIM group deprovisioning removed directory membership state and reconciled ${reconciled.changed} application role assignment(s)`
     });
     return current.id;
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
