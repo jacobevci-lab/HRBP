@@ -12,6 +12,14 @@ export type OidcMetadata = {
 const metadataCache = new Map<string, Promise<OidcMetadata>>();
 const OIDC_DISCOVERY_MAX_BYTES = 128 * 1024;
 const OIDC_DISCOVERY_TIMEOUT_MS = 5000;
+export const OIDC_VALIDATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+export function oidcValidationCurrent(value: Date | string | number | null | undefined, nowMs = Date.now()) {
+  const timestamp = value instanceof Date ? value.getTime() : typeof value === "string" || typeof value === "number" ? new Date(value).getTime() : Number.NaN;
+  if (!Number.isFinite(timestamp) || !Number.isFinite(nowMs)) return false;
+  const age = nowMs - timestamp;
+  return age >= -60_000 && age <= OIDC_VALIDATION_MAX_AGE_MS;
+}
 
 function normalizedOidcUrl(value: string, httpsRequired = false) {
   if (!value || value.length > 2048) return null;
