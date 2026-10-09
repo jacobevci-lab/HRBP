@@ -20,6 +20,7 @@ export async function GET() {
       governed: policy.managed,
       governedProvider: policy.managed ? policy.providerName : null,
       governedScimEnabled: policy.managed ? policy.scimEnabled : null,
+      governedProviderInactive: policy.managed ? policy.inactive : false,
       allowedDomainCount: config.allowedDomains.length,
       unmanagedAdoptionEnabled: config.allowUnmanagedAdoption,
       rotationOverlapActive: config.rotationOverlapActive
@@ -36,6 +37,7 @@ export async function GET() {
       governed: null,
       governedProvider: null,
       governedScimEnabled: null,
+      governedProviderInactive: null,
       allowedDomainCount: config.allowedDomains.length,
       unmanagedAdoptionEnabled: config.allowUnmanagedAdoption,
       rotationOverlapActive: config.rotationOverlapActive,

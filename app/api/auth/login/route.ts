@@ -41,7 +41,8 @@ export async function GET(request: Request) {
     console.error("OIDC login initialization failed", error);
     const code = error instanceof Error && (
       error.message === "IDENTITY_PROVIDER_AMBIGUOUS" ||
-      error.message === "IDENTITY_PROVIDER_DRIFT"
+      error.message === "IDENTITY_PROVIDER_DRIFT" ||
+      error.message === "IDENTITY_PROVIDER_INACTIVE"
     ) ? "configuration" : "provider";
     return Response.redirect(`${origin}/auth/sign-in?error=${code}`, 302);
   }

@@ -58,9 +58,28 @@ test("legacy environment-driven OIDC stays usable until an active governed provi
   const client = {
     identityProviderConnection: {
       findMany: async () => []
+    },
+    tenant: {
+      findUnique: async () => ({ identityGovernanceAdoptedAt: null })
     }
   };
   assert.deepEqual(await runtime.enforceOidcRuntimeBinding(client, runtimeConfig), { managed: false });
+});
+
+test("governed OIDC adoption blocks legacy environment fallback when no provider is active", async () => {
+  const runtime = runtimeModule({ oidc: runtimeConfig });
+  const client = {
+    identityProviderConnection: {
+      findMany: async () => []
+    },
+    tenant: {
+      findUnique: async () => ({ identityGovernanceAdoptedAt: new Date("2026-10-09T07:00:00.000Z") })
+    }
+  };
+  await assert.rejects(
+    runtime.enforceOidcRuntimeBinding(client, runtimeConfig),
+    /IDENTITY_PROVIDER_INACTIVE/
+  );
 });
 
 test("one active matching OIDC provider binds runtime JIT and MFA policy", async () => {
