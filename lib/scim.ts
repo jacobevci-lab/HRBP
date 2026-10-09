@@ -69,6 +69,7 @@ export function scimRuntimeConfig() {
     previousTokenValid &&
     previousExpiryValid &&
     previousExpiry &&
+    previousExpiry.getTime() > now &&
     previousExpiry.getTime() - now <= maxOverlapMs
   );
   return {
