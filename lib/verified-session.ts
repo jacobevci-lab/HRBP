@@ -1,6 +1,8 @@
 import { authenticationAssuranceVersion } from "@/lib/auth-assurance";
+import { getOidcConfig } from "@/lib/auth-config";
 import { effectiveSessionMaxMinutes, type SessionClaims, validSessionClaims } from "@/lib/auth-session";
 import { db } from "@/lib/db";
+import { enforceOidcRuntimeBinding } from "@/lib/runtime-identity-provider";
 
 /** No cross-request cache: revocation/role/password/policy changes take effect on the next request. */
 export async function verifySessionAccount(claims: SessionClaims | null): Promise<SessionClaims | null> {
@@ -26,6 +28,18 @@ export async function verifySessionAccount(claims: SessionClaims | null): Promis
         (user.email ?? undefined) !== claims.email) return null;
     if (claims.accountSessionVersion !== user.sessionVersion ||
         claims.tenantSessionVersion !== user.tenant.sessionVersion) return null;
+
+    if (claims.authMethod === "oidc") {
+      const oidc = getOidcConfig();
+      if (!oidc || oidc.tenantId !== claims.tenantId) return null;
+      const runtimeBinding = await enforceOidcRuntimeBinding(db, oidc);
+      if (runtimeBinding.managed) {
+        if (!claims.identityProviderId || claims.identityProviderId !== runtimeBinding.connectionId) return null;
+      } else if (claims.identityProviderId !== undefined) {
+        return null;
+      }
+    }
+
     if (policy?.assuranceEnforcedAt && policy.mfaRequired && claims.mfaSatisfied !== true) return null;
     if (policy?.assuranceEnforcedAt && policy.deviceTrustRequired && claims.deviceTrustSatisfied !== true) return null;
     if (policy?.assuranceEnforcedAt && claims.authMethod === "oidc" && claims.assuranceVersion !== authenticationAssuranceVersion()) return null;
