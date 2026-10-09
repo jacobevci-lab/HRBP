@@ -213,3 +213,16 @@ test("managed SCIM cannot activate until the runtime token/domain boundary is re
     scimEnabled: true
   }), ["SCIM runtime configuration"]);
 });
+
+
+test("local identity provider cannot claim governed SCIM runtime", () => {
+  const runtime = runtimeModule({ oidc: runtimeConfig, localConfigured: true, scimConfigured: true });
+  assert.deepEqual(runtime.identityRuntimeActivationIssues({
+    type: "LOCAL",
+    issuer: null,
+    clientId: null,
+    jitEnabled: false,
+    mfaRequired: false,
+    scimEnabled: true
+  }), ["SCIM requires federated identity provider"]);
+});
