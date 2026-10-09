@@ -7,6 +7,7 @@ import { NotificationDeadLetterAction } from "@/components/notification-dead-let
 import { NotificationOperationsConsole } from "@/components/notification-operations-console";
 import { SmtpTestAction } from "@/components/smtp-test-action";
 import { SessionRevocationAdmin } from "@/components/session-revocation-admin";
+import { ScimRoleMappingAdmin } from "@/components/scim-role-mapping-admin";
 import { authConfigurationStatus, getOidcConfig } from "@/lib/auth-config";
 import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
@@ -213,7 +214,7 @@ export async function SettingsLivePage() {
       <p className="settings-live-footnote">{c(locale, "Only the latest 50 tenant-scoped local authentication events are shown here; the full immutable history remains available in Audit.", "Burada yalnızca tenant kapsamındaki son 50 yerel kimlik doğrulama olayı gösterilir; tam değiştirilemez geçmiş Audit alanında kalır.")}</p>
     </section>
 
-    {canWrite ? <><SessionRevocationAdmin/><LocalAccountAdmin/><AccessScopeAdmin/>
+    {canWrite ? <><SessionRevocationAdmin/><LocalAccountAdmin/><ScimRoleMappingAdmin/><AccessScopeAdmin/>
       <EmergencyAccessAdmin/><JurisdictionAdmin/></> : null}
   </div>;
 }
