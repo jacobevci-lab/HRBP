@@ -383,6 +383,7 @@ assert.ok(pkg.scripts?.["onprem:validate"]?.includes("document-scanner:validate"
 assert.ok(pkg.scripts?.["scim:validate"]?.includes("node --test scripts/scim-provisioning.test.mjs"), "SCIM user protocol validation must remain registered.");
 assert.ok(pkg.scripts?.["scim:validate"]?.includes("scim:groups:validate"), "SCIM group protocol validation must remain registered.");
 assert.ok(pkg.scripts?.["scim:validate"]?.includes("scim:role-mapping:validate"), "SCIM role mapping governance validation must remain registered.");
+assert.ok(pkg.scripts?.["scim:validate"]?.includes("scim:runtime-policy:validate"), "Governed SCIM runtime policy validation must remain registered.");
 assert.equal(pkg.scripts?.["integration-live-validation:validate"], "node --test scripts/integration-live-validation.test.mjs", "Integration live-validation tests must remain registered.");
 assert.ok(pkg.scripts?.prebuild?.includes("scim:validate"), "SCIM protocol validation must gate production builds.");
 assert.equal(pkg.scripts?.["onprem:preflight"], "node scripts/onprem-preflight.mjs --env-file .env.onprem --phase install");
