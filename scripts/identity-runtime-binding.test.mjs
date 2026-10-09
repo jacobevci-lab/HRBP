@@ -83,7 +83,8 @@ test("one active matching OIDC provider binds runtime JIT and MFA policy", async
     connectionId: "idp-1",
     type: "OIDC",
     jitEnabled: true,
-    mfaRequired: true
+    mfaRequired: true,
+    scimEnabled: false
   });
 });
 
