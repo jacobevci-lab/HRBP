@@ -16,6 +16,32 @@ function load(path, mocks) {
   return module.exports;
 }
 
+const authSession = load("lib/auth-session.ts", {
+  "node:crypto": await import("node:crypto"),
+  "@prisma/client": {
+    PlatformRole: {
+      EMPLOYEE: "EMPLOYEE",
+      MANAGER: "MANAGER",
+      HRBP: "HRBP",
+      HR_OPERATIONS: "HR_OPERATIONS",
+      RECRUITER: "RECRUITER",
+      TIME_ADMIN: "TIME_ADMIN",
+      TALENT_ADMIN: "TALENT_ADMIN",
+      COMPENSATION_ADMIN: "COMPENSATION_ADMIN",
+      PAYROLL_ADMIN: "PAYROLL_ADMIN",
+      ER_INVESTIGATOR: "ER_INVESTIGATOR",
+      LEGAL: "LEGAL",
+      PRIVACY_OFFICER: "PRIVACY_OFFICER",
+      SECURITY_AUDITOR: "SECURITY_AUDITOR",
+      TENANT_ADMIN: "TENANT_ADMIN"
+    }
+  },
+  "@/lib/runtime-env": {
+    runtimeNumber: (_key, fallback) => fallback,
+    runtimeString: () => undefined
+  }
+});
+
 function claims(overrides = {}) {
   const now = Math.floor(Date.now() / 1000);
   return {
@@ -94,6 +120,14 @@ function fixture(runtimeBinding) {
   });
   return { runtime, getRuntimeCalls: () => runtimeCalls };
 }
+
+test("session claim validation requires provider id and generation as a complete pair", () => {
+  const paired = claims({ identityProviderId: "idp-1", identityProviderVersion: 7 });
+  assert.equal(authSession.validSessionClaims(paired), true);
+  assert.equal(authSession.validSessionClaims(claims({ identityProviderId: "idp-1" })), false);
+  assert.equal(authSession.validSessionClaims(claims({ identityProviderVersion: 7 })), false);
+  assert.equal(authSession.validSessionClaims(claims({ identityProviderId: "idp-1", identityProviderVersion: 0 })), false);
+});
 
 test("managed OIDC session remains valid only with the exact provider binding generation", async () => {
   const { runtime } = fixture({
