@@ -86,6 +86,8 @@ jobs:
         run: node --test scripts/emergency-access.postgres.test.mjs
       - name: Verify serialized identity-provider activation on PostgreSQL
         run: node --test scripts/identity-provider-lifecycle.postgres.test.mjs
+      - name: Verify one-time OIDC bootstrap administration on PostgreSQL
+        run: node --test scripts/bootstrap-admin.postgres.test.mjs
       - run: npm run typecheck
       - run: npm run build
       - run: npm run cf:build
