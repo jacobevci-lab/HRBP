@@ -21,11 +21,23 @@ expect(identityPath, identity, /status: ConnectionStatus\.DRAFT,[\s\S]*updatedAt
 expect(identityPath, identity, /status: ConnectionStatus\.DRAFT, lastValidatedAt: null/, "reopening identity configuration must invalidate prior validation");
 expect(identityPath, identity, /TransactionIsolationLevel\.Serializable/, "identity lifecycle mutations must use serializable transactions");
 expect(identityPath, identity, /P2034[\s\S]*state changed concurrently/, "serializable identity conflicts must surface as bounded retryable conflicts");
+expect(identityPath, identity, /probeOidcDiscovery\(runtime\.issuer\)/, "OIDC validation must perform uncached live discovery against the runtime-bound issuer");
+expect(identityPath, identity, /settings\.identity-provider-live-validation-failed/, "failed OIDC discovery must be audited");
+expect(identityPath, identity, /settings\.identity-provider-live-validated/, "successful OIDC discovery must be audited separately from metadata-only validation");
+expect(identityPath, identity, /current\.updatedAt\.getTime\(\) !== snapshot\.updatedAt\.getTime\(\)[\s\S]*STATE_CONFLICT/, "OIDC live validation evidence must not be written after concurrent metadata changes");
+expect(identityPath, identity, /oidcValidationCurrent\(current\.lastValidatedAt\)[\s\S]*VALIDATION_EXPIRED/, "OIDC activation must require fresh live-validation evidence");
 
 const lifecycleLockPath = "lib/identity-provider-lifecycle.ts";
 const lifecycleLock = await source(lifecycleLockPath);
 expect(lifecycleLockPath, lifecycleLock, /pg_advisory_xact_lock[\s\S]*hashtextextended/, "identity lifecycle lock must use a PostgreSQL transaction advisory lock");
 expect(lifecycleLockPath, lifecycleLock, /61977431::bigint/, "identity lifecycle advisory lock must keep its dedicated namespace salt");
+
+const oidcPath = "lib/oidc.ts";
+const oidcSource = await source(oidcPath);
+expect(oidcPath, oidcSource, /export function probeOidcDiscovery/, "OIDC discovery must expose an uncached validation probe");
+expect(oidcPath, oidcSource, /OIDC_VALIDATION_MAX_AGE_MS = 24 \* 60 \* 60 \* 1000/, "OIDC validation evidence must expire after 24 hours");
+expect(oidcPath, oidcSource, /redirect:\s*"error"/, "OIDC discovery must reject redirects");
+expect(oidcPath, oidcSource, /OIDC_DISCOVERY_MAX_BYTES = 128 \* 1024/, "OIDC discovery responses must remain bounded");
 
 const runtimeBindingPath = "lib/runtime-identity-provider.ts";
 const runtimeBinding = await source(runtimeBindingPath);
@@ -77,6 +89,9 @@ const panelPath = "components/connection-lifecycle-panel.tsx";
 const panel = await source(panelPath);
 expect(panelPath, panel, /Validation required|Doğrulama gerekli/, "connection lifecycle must expose missing validation evidence");
 expect(panelPath, panel, /integrationValidationCurrent\(row\.lastValidatedAt\)[\s\S]*validated=\{validationCurrent\}/, "integration lifecycle actions must receive fresh live-validation state");
+expect(panelPath, panel, /oidcValidationCurrent\(row\.lastValidatedAt\)/, "identity lifecycle must evaluate fresh OIDC live-validation evidence");
+expect(panelPath, panel, /Live validation expired|Canlı doğrulama süresi doldu/, "identity lifecycle must surface expired OIDC validation");
+expect(panelPath, panel, /kind="identity"[\s\S]*validated=\{validationCurrent\}/, "OIDC activation control must remain disabled after validation expiry");
 expect(panelPath, panel, /configuration validation is recorded|yapılandırma doğrulaması kaydedildikten/, "activation guidance must document the validation gate");
 
 const actionsPath = "components/connection-lifecycle-actions.tsx";
