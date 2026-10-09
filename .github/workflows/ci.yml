@@ -113,21 +113,22 @@ jobs:
           cp .env.onprem.example .env.onprem
           docker compose --env-file .env.onprem -f docker-compose.onprem.yml config > /tmp/hrbp-onprem-compose.yml
 
-          # GitHub-hosted runners share anonymous Docker Hub limits. Pull the
-          # base once with backoff, then use the local image with the legacy
-          # builder so BuildKit does not repeatedly resolve registry metadata.
-          retry 5 10 docker pull node:22-bookworm-slim
+          # GitHub-hosted runners share anonymous Docker Hub limits. Use the
+          # AWS Public ECR mirror of the Docker Official node image in CI while
+          # keeping the production Dockerfile default unchanged.
+          NODE_BASE_IMAGE="public.ecr.aws/docker/library/node:22-bookworm-slim"
+          retry 5 10 docker pull "$NODE_BASE_IMAGE"
           export DOCKER_BUILDKIT=0
 
-          retry 3 10 docker build --pull=false --target runtime --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:onprem-ci .
+          retry 3 10 docker build --pull=false --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" --target runtime --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:onprem-ci .
           docker image inspect hrbp-one:onprem-ci --format '{{json .Config.Healthcheck}}' | grep -q '/api/health/runtime'
           test "$(docker image inspect hrbp-one:onprem-ci --format '{{.Config.User}}')" = "node"
 
-          retry 3 10 docker build --pull=false --target scheduler --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:scheduler-ci .
+          retry 3 10 docker build --pull=false --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" --target scheduler --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:scheduler-ci .
           docker image inspect hrbp-one:scheduler-ci --format '{{json .Config.Healthcheck}}' | grep -q 'onprem-maintenance-health.mjs'
           test "$(docker image inspect hrbp-one:scheduler-ci --format '{{.Config.User}}')" = "node"
 
-          retry 3 10 docker build --pull=false --target scanner --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:scanner-ci .
+          retry 3 10 docker build --pull=false --build-arg NODE_BASE_IMAGE="$NODE_BASE_IMAGE" --target scanner --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:scanner-ci .
           docker image inspect hrbp-one:scanner-ci --format '{{json .Config.Healthcheck}}' | grep -q 'document-scan-health.mjs'
           test "$(docker image inspect hrbp-one:scanner-ci --format '{{.Config.User}}')" = "node"
 
