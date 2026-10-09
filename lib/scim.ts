@@ -49,14 +49,35 @@ export function scimRuntimeConfig() {
     .split(",").map((value)=>normalizeScimDomain(value)).filter((value):value is string=>Boolean(value)).slice(0,50);
   const token = runtimeString("HRBP_SCIM_TOKEN") ?? "";
   const previousToken = runtimeString("HRBP_SCIM_TOKEN_PREVIOUS") ?? "";
+  const previousExpiresAtRaw = runtimeString("HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT") ?? "";
   const allowUnmanagedAdoption = runtimeBoolean("HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION", false);
   const tokenValid = token.length >= 32 && !/\s/.test(token);
-  const previousTokenValid = !previousToken || (previousToken.length >= 32 && !/\s/.test(previousToken) && previousToken !== token);
+  const previousTokenValid = Boolean(previousToken) && previousToken.length >= 32 && !/\s/.test(previousToken) && previousToken !== token;
+  const previousExpiry = previousExpiresAtRaw ? new Date(previousExpiresAtRaw) : null;
+  const previousExpiryValid = Boolean(previousExpiry && !Number.isNaN(previousExpiry.getTime()));
+  const now = Date.now();
+  const maxOverlapMs = 7 * 24 * 60 * 60 * 1000;
+  const rotationOverlapActive = Boolean(
+    previousTokenValid &&
+    previousExpiryValid &&
+    previousExpiry &&
+    previousExpiry.getTime() > now &&
+    previousExpiry.getTime() - now <= maxOverlapMs
+  );
+  const rotationExpired = Boolean(previousToken && previousExpiryValid && previousExpiry && previousExpiry.getTime() <= now);
+  const rotationConfigurationValid = !previousToken || Boolean(
+    previousTokenValid &&
+    previousExpiryValid &&
+    previousExpiry &&
+    previousExpiry.getTime() - now <= maxOverlapMs
+  );
   return {
     enabled, tenantId, baseUrl, allowedDomains, allowUnmanagedAdoption,
-    rotationOverlapActive: Boolean(previousToken),
-    configured: enabled && /^[A-Za-z0-9._-]{3,64}$/.test(tenantId) && allowedDomains.length > 0 &&
-      tokenValid && previousTokenValid
+    rotationOverlapActive,
+    rotationExpired,
+    rotationConfigurationValid,
+    rotationExpiresAt: previousExpiryValid && previousExpiry ? previousExpiry.toISOString() : null,
+    configured: enabled && /^[A-Za-z0-9._-]{3,64}$/.test(tenantId) && allowedDomains.length > 0 && tokenValid
   };
 }
 export function scimHeaders(extra?:HeadersInit) {
@@ -90,7 +111,10 @@ export async function scimAccess(request:Request){
     );
   }
   if(!config.configured) return scimError(503,"SCIM provisioning is enabled by policy but its runtime configuration is not ready.");
-  if(!internalBearerAuthorized(request,"HRBP_SCIM_TOKEN") && !internalBearerAuthorized(request,"HRBP_SCIM_TOKEN_PREVIOUS")){
+  const currentAuthorized = internalBearerAuthorized(request,"HRBP_SCIM_TOKEN");
+  const previousAuthorized = config.rotationOverlapActive &&
+    internalBearerAuthorized(request,"HRBP_SCIM_TOKEN_PREVIOUS");
+  if(!currentAuthorized && !previousAuthorized){
     return scimError(401,"Valid SCIM bearer credentials are required.",undefined,{"www-authenticate":'Bearer realm="HRBP SCIM"'});
   }
   return null;
