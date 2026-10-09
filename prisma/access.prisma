@@ -15,6 +15,12 @@ enum EmploymentAccessEffect {
   EXCLUDE
 }
 
+enum ScimRoleMappingStatus {
+  DRAFT
+  ACTIVE
+  DISABLED
+}
+
 model EmploymentAccessGrant {
   id           String @id @default(cuid())
   tenantId     String
@@ -63,6 +69,7 @@ model ScimGroup {
   updatedAt   DateTime @updatedAt
   tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   members     ScimGroupMember[]
+  roleMapping ScimGroupRoleMapping?
 
   @@unique([tenantId, externalId])
   @@index([tenantId, displayName])
@@ -82,4 +89,26 @@ model ScimGroupMember {
   @@unique([groupId, userId])
   @@index([tenantId, userId])
   @@index([tenantId, groupId])
+}
+
+
+model ScimGroupRoleMapping {
+  id            String @id @default(cuid())
+  tenantId      String
+  groupId       String @unique
+  role          PlatformRole
+  status        ScimRoleMappingStatus @default(DRAFT)
+  createdById   String
+  activatedById String?
+  activatedAt   DateTime?
+  disabledById  String?
+  disabledAt    DateTime?
+  attestation   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  group         ScimGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, role])
+  @@index([tenantId, updatedAt])
 }
