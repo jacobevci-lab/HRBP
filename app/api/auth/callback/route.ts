@@ -3,6 +3,7 @@ import { PlatformRole } from "@prisma/client";
 import { getOidcConfig } from "@/lib/auth-config";
 import { authenticationAssuranceVersion, evaluateOidcAssurance } from "@/lib/auth-assurance";
 import { clearOidcTransactionCookie, createSessionCookie, readOidcTransaction } from "@/lib/auth-session";
+import { provisionBootstrapAdmin } from "@/lib/bootstrap-admin";
 import { withDb } from "@/lib/db";
 import { discoverOidc, exchangeAuthorizationCode, verifyIdToken } from "@/lib/oidc";
 import { enforceOidcRuntimeBinding } from "@/lib/runtime-identity-provider";
@@ -72,17 +73,15 @@ export async function GET(request: Request) {
       const jitEnabled = runtimeBinding.managed ? runtimeBinding.jitEnabled : config.jitProvisioning;
       const jitAllowed = Boolean(jitEnabled && domain && config.allowedEmailDomains.includes(domain));
 
-      if (!user && bootstrap) {
-        user = await db.userAccount.create({
-          data: {
-            tenantId: config.tenantId,
-            subject,
-            displayName,
-            email,
-            role: PlatformRole.TENANT_ADMIN,
-            active: true
-          }
+      if (!user && bootstrap && email) {
+        const bootstrapResult = await provisionBootstrapAdmin(db, {
+          tenantId: config.tenantId,
+          subject,
+          displayName,
+          email
         });
+        user = bootstrapResult.user;
+        if (!user && bootstrapResult.closed) throw new Error("IDENTITY_NOT_PROVISIONED");
       } else if (!user && jitAllowed) {
         user = await db.userAccount.create({
           data: {
