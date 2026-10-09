@@ -140,7 +140,7 @@ function groupError(error: unknown) {
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = scimAccess(request); if (denied) return denied;
+  const denied = await scimAccess(request); if (denied) return denied;
   const config = scimRuntimeConfig();
   const id = (await params).id;
   if (!validScimId(id)) return scimError(400, "A valid SCIM group resource id is required.", "invalidValue");
@@ -151,7 +151,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = scimAccess(request); if (denied) return denied;
+  const denied = await scimAccess(request); if (denied) return denied;
   const config = scimRuntimeConfig();
   const id = (await params).id;
   if (!validScimId(id)) return scimError(400, "A valid SCIM group resource id is required.", "invalidValue");
@@ -178,7 +178,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = scimAccess(request); if (denied) return denied;
+  const denied = await scimAccess(request); if (denied) return denied;
   const config = scimRuntimeConfig();
   const id = (await params).id;
   if (!validScimId(id)) return scimError(400, "A valid SCIM group resource id is required.", "invalidValue");
@@ -215,7 +215,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = scimAccess(request); if (denied) return denied;
+  const denied = await scimAccess(request); if (denied) return denied;
   const config = scimRuntimeConfig();
   const id = (await params).id;
   if (!validScimId(id)) return scimError(400, "A valid SCIM group resource id is required.", "invalidValue");
