@@ -13,17 +13,6 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: hrbp
-          POSTGRES_PASSWORD: disposable-audit-only
-          POSTGRES_DB: hrbp_audit
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U hrbp -d hrbp_audit"
-          --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgresql://hrbp:disposable-audit-only@127.0.0.1:5432/hrbp_audit
       CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://hrbp:disposable-audit-only@127.0.0.1:5432/hrbp_audit
@@ -36,6 +25,42 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Start PostgreSQL for regression audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql postgresql-contrib
+          fi
+          sudo systemctl start postgresql
+          ready=0
+          for i in {1..30}; do
+            if sudo -u postgres pg_isready >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            sudo systemctl status postgresql --no-pager || true
+            exit 1
+          fi
+          sudo -u postgres psql -v ON_ERROR_STOP=1 <<'SQL'
+          DO $
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hrbp') THEN
+              CREATE ROLE hrbp LOGIN PASSWORD 'disposable-audit-only' CREATEDB;
+            ELSE
+              ALTER ROLE hrbp WITH LOGIN PASSWORD 'disposable-audit-only' CREATEDB;
+            END IF;
+          END
+          $;
+          SQL
+          if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='hrbp_audit'" | grep -q 1; then
+            sudo -u postgres createdb -O hrbp hrbp_audit
+          fi
+          PGPASSWORD=disposable-audit-only psql -h 127.0.0.1 -U hrbp -d hrbp_audit -v ON_ERROR_STOP=1 -c 'SELECT 1'
       - name: Create ephemeral test secrets
         run: |
           session_secret=$(openssl rand -hex 48)
