@@ -97,7 +97,7 @@ expect(panelPath, panel, /configuration validation is recorded|yapılandırma do
 const actionsPath = "components/connection-lifecycle-actions.tsx";
 const actions = await source(actionsPath);
 expect(actionsPath, actions, /type Action = "validate" \| "activate" \| "disable" \| "reopen"/, "connection actions must support validation");
-expect(actionsPath, actions, /Validate config|Yapıyı doğrula/, "connection actions must expose configuration validation");
+expect(actionsPath, actions, /Validate provider|Sağlayıcıyı doğrula/, "identity connection actions must expose provider validation");
 expect(actionsPath, actions, /Validate endpoint|Endpointi doğrula/, "integration actions must distinguish live endpoint validation from identity metadata validation");
 expect(actionsPath, actions, /disabled=\{Boolean\(busy\) \|\| !validated\}/, "activation control must remain disabled until validation succeeds");
 expect(actionsPath, actions, /JSON\.stringify\(validation \? \{ action \}/, "validation action must not ask for or transmit an activation attestation");
