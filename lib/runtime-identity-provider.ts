@@ -65,6 +65,7 @@ export function identityRuntimeActivationIssues(connection: IdentityRuntimeShape
   }
 
   if (connection.type === IdentityProviderType.LOCAL) {
+    if (connection.scimEnabled) issues.push("SCIM requires federated identity provider");
     if (!localAuthConfigurationStatus().configured) issues.push("local authentication runtime");
     return issues;
   }
