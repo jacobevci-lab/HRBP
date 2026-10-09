@@ -1,6 +1,8 @@
 import { authenticationAssuranceVersion } from "@/lib/auth-assurance";
+import { getOidcConfig } from "@/lib/auth-config";
 import { effectiveSessionMaxMinutes, type SessionClaims, validSessionClaims } from "@/lib/auth-session";
 import { db } from "@/lib/db";
+import { enforceOidcRuntimeBinding } from "@/lib/runtime-identity-provider";
 
 /** No cross-request cache: revocation/role/password/policy changes take effect on the next request. */
 export async function verifySessionAccount(claims: SessionClaims | null): Promise<SessionClaims | null> {
@@ -8,7 +10,10 @@ export async function verifySessionAccount(claims: SessionClaims | null): Promis
   // Legacy sessions cannot tell local credentials from OIDC. Require one new sign-in.
   if (claims.authMethod !== "local" && claims.authMethod !== "oidc") return null;
   try {
-    const [user, policy] = await Promise.all([
+    const oidcConfig = claims.authMethod === "oidc" ? getOidcConfig() : null;
+    if (claims.authMethod === "oidc" && (!oidcConfig || oidcConfig.tenantId !== claims.tenantId)) return null;
+
+    const [user, policy, runtimeBinding] = await Promise.all([
       db.userAccount.findFirst({
         where: { id: claims.actorId, tenantId: claims.tenantId, active: true },
         select: {
@@ -20,12 +25,26 @@ export async function verifySessionAccount(claims: SessionClaims | null): Promis
       db.tenantSecurityPolicy.findUnique({
         where: { tenantId: claims.tenantId },
         select: { sessionMaxMinutes: true, mfaRequired: true, deviceTrustRequired: true, assuranceEnforcedAt: true }
-      })
+      }),
+      claims.authMethod === "oidc" && oidcConfig
+        ? enforceOidcRuntimeBinding(db, oidcConfig)
+        : Promise.resolve(null)
     ]);
     if (!user || user.subject !== claims.subject || user.role !== claims.role ||
         (user.email ?? undefined) !== claims.email) return null;
     if (claims.accountSessionVersion !== user.sessionVersion ||
         claims.tenantSessionVersion !== user.tenant.sessionVersion) return null;
+
+    if (claims.authMethod === "oidc") {
+      if (!runtimeBinding) return null;
+      if (runtimeBinding.managed) {
+        if (claims.identityProviderId !== runtimeBinding.connectionId ||
+            claims.identityProviderVersion !== runtimeBinding.bindingVersion) return null;
+        if (runtimeBinding.mfaRequired && claims.mfaSatisfied !== true) return null;
+      } else if (claims.identityProviderId !== undefined || claims.identityProviderVersion !== undefined) {
+        return null;
+      }
+    }
     if (policy?.assuranceEnforcedAt && policy.mfaRequired && claims.mfaSatisfied !== true) return null;
     if (policy?.assuranceEnforcedAt && policy.deviceTrustRequired && claims.deviceTrustSatisfied !== true) return null;
     if (policy?.assuranceEnforcedAt && claims.authMethod === "oidc" && claims.assuranceVersion !== authenticationAssuranceVersion()) return null;

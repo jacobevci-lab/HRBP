@@ -162,7 +162,8 @@ test("managed provider with JIT enabled can provision an allowlisted employee ev
       connectionId: "idp-1",
       type: "ENTRA_ID",
       jitEnabled: true,
-      mfaRequired: false
+      mfaRequired: false,
+      bindingVersion: 1791576000000
     },
     envJit: false,
     existingUser: false
@@ -173,6 +174,8 @@ test("managed provider with JIT enabled can provision an allowlisted employee ev
   assert.equal(calls.createdUser.role, "EMPLOYEE");
   assert.equal(calls.createdUser.email, "user@example.test");
   assert.ok(calls.sessionClaims);
+  assert.equal(calls.sessionClaims.identityProviderId, "idp-1");
+  assert.equal(calls.sessionClaims.identityProviderVersion, 1791576000000);
 });
 
 test("managed JIT still requires the deployment email-domain allowlist", async () => {

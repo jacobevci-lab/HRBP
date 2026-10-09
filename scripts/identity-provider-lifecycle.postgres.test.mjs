@@ -143,9 +143,10 @@ test("PostgreSQL serializes governed identity-provider activation", { skip: proc
         status: "ACTIVE",
         type: { in: ["ENTRA_ID", "OKTA", "OIDC"] }
       },
-      select: { id: true }
+      select: { id: true, runtimeVersion: true }
     });
     assert.equal(active.length, 1, "exactly one OIDC-family provider must remain active");
+    assert.equal(active[0].runtimeVersion, 2, "activation must rotate the provider runtime generation exactly once");
 
     const rejected = results.find((entry) => entry.status === 409);
     assert.match(rejected?.body?.error ?? "", /(Only one runtime OIDC-family identity provider can be active|state changed concurrently)/i);
@@ -160,6 +161,70 @@ test("PostgreSQL serializes governed identity-provider activation", { skip: proc
     });
     assert.equal(activationAudit.length, 1, "only the committed activation should be audited");
     assert.equal(activationAudit[0].resourceId, active[0].id);
+
+    const tenant = await db.tenant.findUnique({
+      where: { id: tenantId },
+      select: { identityGovernanceAdoptedAt: true }
+    });
+    assert.ok(tenant?.identityGovernanceAdoptedAt, "first governed OIDC activation must persist sticky tenant adoption");
+
+    const adoptionAudit = await db.auditEvent.findMany({
+      where: {
+        tenantId,
+        resourceType: "Tenant",
+        resourceId: tenantId,
+        action: "settings.identity-governance-adopted"
+      },
+      select: { id: true }
+    });
+    assert.equal(adoptionAudit.length, 1, "tenant governance adoption must be audited exactly once");
+
+    const disabled = await route.PATCH(new Request("https://hrbp.test/api/settings/identity/" + active[0].id, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "disable",
+        reason: "CI verifies sticky governed fallback protection"
+      })
+    }), { params: Promise.resolve({ id: active[0].id }) });
+    assert.equal(disabled.status, 200);
+    const disabledState = await db.identityProviderConnection.findUnique({
+      where: { id: active[0].id },
+      select: { runtimeVersion: true, status: true }
+    });
+    assert.equal(disabledState?.status, "DISABLED");
+    assert.equal(disabledState?.runtimeVersion, 3, "disable must rotate the provider runtime generation again");
+    assert.equal(await db.identityProviderConnection.count({
+      where: { tenantId, status: "ACTIVE", type: { in: ["ENTRA_ID", "OKTA", "OIDC"] } }
+    }), 0);
+
+    const runtimeBinding = load("lib/runtime-identity-provider.ts", {
+      "@prisma/client": prisma,
+      "@/lib/auth-assurance": { authenticationAssuranceConfiguration: () => ({ mfaConfigured: true }) },
+      "@/lib/auth-config": {
+        getOidcConfig: () => ({
+          issuer: "https://legacy.example.test",
+          clientId: "legacy-client",
+          tenantId,
+          scopes: "openid profile email",
+          allowedEmailDomains: ["example.test"],
+          jitProvisioning: true
+        }),
+        localAuthConfigurationStatus: () => ({ enabled: false, configured: false, missing: [] })
+      },
+      "@/lib/scim": { scimRuntimeConfig: () => ({ configured: true }) }
+    });
+    await assert.rejects(
+      runtimeBinding.enforceOidcRuntimeBinding(db, {
+        issuer: "https://legacy.example.test",
+        clientId: "legacy-client",
+        tenantId,
+        scopes: "openid profile email",
+        allowedEmailDomains: ["example.test"],
+        jitProvisioning: true
+      }),
+      /IDENTITY_PROVIDER_INACTIVE/
+    );
   } finally {
     try {
       await db.auditEvent.deleteMany({ where: { tenantId } });

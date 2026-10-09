@@ -88,9 +88,10 @@ export function identityRuntimeActivationIssues(connection: IdentityRuntimeShape
  *
  * Managed provider flags become authentication policy: JIT is taken from the
  * ACTIVE provider record and provider-level MFA requires signed token assurance.
- * Legacy deployments with no ACTIVE database OIDC provider keep the existing
- * environment-driven JIT behavior until an administrator explicitly adopts a
- * governed runtime binding.
+ * Legacy deployments keep environment-driven JIT behavior only until the
+ * tenant explicitly adopts a governed OIDC runtime. After adoption, removing
+ * the last ACTIVE provider fails closed instead of silently restoring legacy
+ * environment authentication.
  */
 export async function enforceOidcRuntimeBinding(client: ScopeClient, config: OidcConfig) {
   const active = await client.identityProviderConnection.findMany({
@@ -108,11 +109,19 @@ export async function enforceOidcRuntimeBinding(client: ScopeClient, config: Oid
       clientId: true,
       jitEnabled: true,
       mfaRequired: true,
-      scimEnabled: true
+      scimEnabled: true,
+      runtimeVersion: true
     }
   });
 
-  if (active.length === 0) return { managed: false as const };
+  if (active.length === 0) {
+    const tenant = await client.tenant.findUnique({
+      where: { id: config.tenantId },
+      select: { identityGovernanceAdoptedAt: true }
+    });
+    if (tenant?.identityGovernanceAdoptedAt) throw new Error("IDENTITY_PROVIDER_INACTIVE");
+    return { managed: false as const };
+  }
   if (active.length !== 1) throw new Error("IDENTITY_PROVIDER_AMBIGUOUS");
 
   const connection = active[0];
@@ -130,6 +139,7 @@ export async function enforceOidcRuntimeBinding(client: ScopeClient, config: Oid
     type: connection.type,
     jitEnabled: connection.jitEnabled,
     mfaRequired: connection.mfaRequired,
-    scimEnabled: connection.scimEnabled
+    scimEnabled: connection.scimEnabled,
+    bindingVersion: connection.runtimeVersion
   };
 }
