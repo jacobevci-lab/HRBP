@@ -9,6 +9,14 @@ const schemaPath = "prisma/platform.prisma";
 const schema = await source(schemaPath);
 expect(schemaPath, schema, /model IntegrationConnection[\s\S]*lastValidatedAt\s+DateTime\?/, "integration connections must persist configuration validation evidence");
 
+const platformSchemaPath = "prisma/platform.prisma";
+const platformSchema = await source(platformSchemaPath);
+expect(platformSchemaPath, platformSchema, /model IdentityProviderConnection[\s\S]*runtimeVersion\s+Int\s+@default\(1\)/, "identity providers must persist a monotonic runtime generation");
+
+const runtimeVersionMigrationPath = "prisma/migrations/20261009113000_identity_provider_runtime_version/migration.sql";
+const runtimeVersionMigration = await source(runtimeVersionMigrationPath);
+expect(runtimeVersionMigrationPath, runtimeVersionMigration, /ADD COLUMN "runtimeVersion" INTEGER NOT NULL DEFAULT 1/, "identity-provider runtime generation must be versioned");
+
 const tenantSchemaPath = "prisma/schema.prisma";
 const tenantSchema = await source(tenantSchemaPath);
 expect(tenantSchemaPath, tenantSchema, /identityGovernanceAdoptedAt\s+DateTime\?/, "tenant schema must persist sticky identity-governance adoption");
@@ -30,6 +38,9 @@ expect(identityPath, identity, /status: ConnectionStatus\.DRAFT,[\s\S]*updatedAt
 expect(identityPath, identity, /status: ConnectionStatus\.DRAFT, lastValidatedAt: null/, "reopening identity configuration must invalidate prior validation");
 expect(identityPath, identity, /TransactionIsolationLevel\.Serializable/, "identity lifecycle mutations must use serializable transactions");
 expect(identityPath, identity, /P2034[\s\S]*state changed concurrently/, "serializable identity conflicts must surface as bounded retryable conflicts");
+expect(identityPath, identity, /status: ConnectionStatus\.ACTIVE, runtimeVersion: \{ increment: 1 \}/, "activation must rotate the provider runtime generation");
+expect(identityPath, identity, /status: ConnectionStatus\.DISABLED, runtimeVersion: \{ increment: 1 \}/, "disable must rotate the provider runtime generation");
+expect(identityPath, identity, /status: ConnectionStatus\.DRAFT, lastValidatedAt: null, runtimeVersion: \{ increment: 1 \}/, "reopen must rotate the provider runtime generation");
 expect(identityPath, identity, /isOidcRuntimeProvider\(current\.type\)[\s\S]*identityGovernanceAdoptedAt:\s*null[\s\S]*settings\.identity-governance-adopted/, "first governed OIDC activation must persist and audit tenant adoption");
 
 const lifecycleLockPath = "lib/identity-provider-lifecycle.ts";
@@ -50,8 +61,8 @@ expect(runtimeBindingPath, runtimeBinding, /connection\.scimEnabled && !scimRunt
 expect(runtimeBindingPath, runtimeBinding, /connection\.type === IdentityProviderType\.LOCAL[\s\S]*connection\.scimEnabled[\s\S]*SCIM requires federated identity provider/, "local identity providers must not activate governed SCIM");
 expect(runtimeBindingPath, runtimeBinding, /jitEnabled:\s*true[\s\S]*mfaRequired:\s*true[\s\S]*scimEnabled:\s*true/, "managed runtime binding must load provider JIT, MFA and SCIM policy flags");
 expect(runtimeBindingPath, runtimeBinding, /scimEnabled:\s*connection\.scimEnabled/, "managed runtime binding must return provider SCIM policy");
-expect(runtimeBindingPath, runtimeBinding, /updatedAt:\s*true/, "managed OIDC runtime binding must load provider lifecycle version");
-expect(runtimeBindingPath, runtimeBinding, /bindingVersion:\s*connection\.updatedAt\.getTime\(\)/, "managed OIDC runtime binding must expose a stable provider generation");
+expect(runtimeBindingPath, runtimeBinding, /runtimeVersion:\s*true/, "managed OIDC runtime binding must load provider lifecycle generation");
+expect(runtimeBindingPath, runtimeBinding, /bindingVersion:\s*connection\.runtimeVersion/, "managed OIDC runtime binding must expose the monotonic provider generation");
 expect(runtimeBindingPath, runtimeBinding, /active\.length === 0[\s\S]*client\.tenant\.findUnique[\s\S]*identityGovernanceAdoptedAt[\s\S]*IDENTITY_PROVIDER_INACTIVE/, "adopted tenants with no active provider must fail OIDC closed instead of restoring legacy fallback");
 
 const loginPath = "app/api/auth/login/route.ts";
