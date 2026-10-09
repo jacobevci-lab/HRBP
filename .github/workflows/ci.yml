@@ -142,12 +142,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT="$(date -u -d '+2 hours' +'%Y-%m-%dT%H:%M:%SZ')"
           npx wrangler dev --local --port 8787 \
             --var HRBP_MAINTENANCE_TOKEN:$HRBP_MAINTENANCE_TOKEN \
             --var HRBP_DOCUMENT_SCAN_TOKEN:$HRBP_DOCUMENT_SCAN_TOKEN \
             --var HRBP_METRICS_TOKEN:$HRBP_METRICS_TOKEN \
             --var HRBP_SCIM_TOKEN:$HRBP_SCIM_TOKEN \
             --var HRBP_SCIM_TOKEN_PREVIOUS:$HRBP_SCIM_TOKEN_PREVIOUS \
+            --var HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT:$HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT \
             --var HRBP_AUTH_TENANT_ID:$HRBP_AUTH_TENANT_ID \
             --var HRBP_ALLOWED_EMAIL_DOMAINS:$HRBP_ALLOWED_EMAIL_DOMAINS \
             --var HRBP_SCIM_ENABLED:$HRBP_SCIM_ENABLED \
