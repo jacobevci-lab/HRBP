@@ -11,6 +11,7 @@ export type SessionClaims = {
   v: 2;
   authMethod?: "local" | "oidc";
   credentialVersion?: string | null;
+  identityProviderId?: string;
   accountSessionVersion: number;
   tenantSessionVersion: number;
   mfaSatisfied?: boolean;
@@ -101,6 +102,9 @@ export function validSessionClaims(claims: SessionClaims | null): claims is Sess
   if (required.some((value) => typeof value !== "string" || !value || value.length > 512)) return false;
   if (claims.employmentId !== undefined && (typeof claims.employmentId !== "string" || !claims.employmentId || claims.employmentId.length > 191)) return false;
   if (claims.email !== undefined && (typeof claims.email !== "string" || claims.email.length > 512)) return false;
+  if (claims.identityProviderId !== undefined &&
+      (typeof claims.identityProviderId !== "string" || !/^[A-Za-z0-9._-]{3,191}$/.test(claims.identityProviderId))) return false;
+  if (claims.authMethod === "local" && claims.identityProviderId !== undefined) return false;
   if (!Number.isSafeInteger(claims.accountSessionVersion) || claims.accountSessionVersion < 1 ||
       !Number.isSafeInteger(claims.tenantSessionVersion) || claims.tenantSessionVersion < 1) return false;
   if (claims.mfaSatisfied !== undefined && typeof claims.mfaSatisfied !== "boolean") return false;
