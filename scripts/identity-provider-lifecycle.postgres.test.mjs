@@ -143,9 +143,10 @@ test("PostgreSQL serializes governed identity-provider activation", { skip: proc
         status: "ACTIVE",
         type: { in: ["ENTRA_ID", "OKTA", "OIDC"] }
       },
-      select: { id: true }
+      select: { id: true, runtimeVersion: true }
     });
     assert.equal(active.length, 1, "exactly one OIDC-family provider must remain active");
+    assert.equal(active[0].runtimeVersion, 2, "activation must rotate the provider runtime generation exactly once");
 
     const rejected = results.find((entry) => entry.status === 409);
     assert.match(rejected?.body?.error ?? "", /(Only one runtime OIDC-family identity provider can be active|state changed concurrently)/i);
@@ -187,6 +188,12 @@ test("PostgreSQL serializes governed identity-provider activation", { skip: proc
       })
     }), { params: Promise.resolve({ id: active[0].id }) });
     assert.equal(disabled.status, 200);
+    const disabledState = await db.identityProviderConnection.findUnique({
+      where: { id: active[0].id },
+      select: { runtimeVersion: true, status: true }
+    });
+    assert.equal(disabledState?.status, "DISABLED");
+    assert.equal(disabledState?.runtimeVersion, 3, "disable must rotate the provider runtime generation again");
     assert.equal(await db.identityProviderConnection.count({
       where: { tenantId, status: "ACTIVE", type: { in: ["ENTRA_ID", "OKTA", "OIDC"] } }
     }), 0);
