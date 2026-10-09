@@ -63,6 +63,18 @@ expect(callbackPath, callback, /enforceOidcRuntimeBinding\(db, config\)[\s\S]*di
 expect(callbackPath, callback, /IDENTITY_PROVIDER_AMBIGUOUS[\s\S]*IDENTITY_PROVIDER_DRIFT[\s\S]*IDENTITY_PROVIDER_INACTIVE[\s\S]*configuration/, "runtime binding failures must surface only as bounded configuration errors");
 expect(callbackPath, callback, /runtimeBinding\.managed && runtimeBinding\.mfaRequired && !assurance\.mfaSatisfied[\s\S]*MFA_REQUIRED/, "active provider MFA policy must be enforced before account provisioning");
 expect(callbackPath, callback, /jitEnabled = runtimeBinding\.managed \? runtimeBinding\.jitEnabled : config\.jitProvisioning/, "managed provider JIT policy must override the legacy environment toggle while preserving unmanaged compatibility");
+expect(callbackPath, callback, /identityProviderId:\s*runtimeBinding\.managed \? runtimeBinding\.connectionId : undefined/, "managed OIDC sessions must be stamped with the active governed provider id");
+
+const authSessionPath = "lib/auth-session.ts";
+const authSession = await source(authSessionPath);
+expect(authSessionPath, authSession, /identityProviderId\?:\s*string/, "OIDC session claims must carry optional governed provider identity");
+expect(authSessionPath, authSession, /authMethod === "local"[\s\S]*identityProviderId !== undefined/, "local sessions must reject governed provider identity claims");
+
+const verifiedSessionPath = "lib/verified-session.ts";
+const verifiedSession = await source(verifiedSessionPath);
+expect(verifiedSessionPath, verifiedSession, /claims\.authMethod === "oidc"[\s\S]*enforceOidcRuntimeBinding\(db, oidc\)/, "OIDC sessions must revalidate the governed provider on every request");
+expect(verifiedSessionPath, verifiedSession, /runtimeBinding\.managed[\s\S]*claims\.identityProviderId !== runtimeBinding\.connectionId/, "managed OIDC sessions must be invalidated when the active provider changes");
+expect(verifiedSessionPath, verifiedSession, /runtimeBinding\.managed[\s\S]*else if \(claims\.identityProviderId !== undefined\)/, "legacy runtime must reject sessions stamped by a no-longer-managed provider");
 
 const integrationPath = "app/api/settings/integrations/[id]/route.ts";
 const integration = await source(integrationPath);
@@ -110,6 +122,7 @@ expect(settingsLivePath, settingsLive, /governedIdentityAdopted[\s\S]*legacy env
 expect(settingsLivePath, settingsLive, /identityRuntimeActivationIssues\(managedOidc\)/, "settings runtime readiness must surface governed identity policy drift");
 
 expect(packagePath, pkg, /identity-provider-auth-policy\.test\.mjs/, "managed identity-provider auth policy behavioral tests must run in the connection validation gate");
+expect(packagePath, pkg, /provider-bound-oidc-session\.test\.mjs/, "provider-bound OIDC session invalidation tests must run in the connection validation gate");
 const ciWorkflowPath = ".github/workflows/ci.yml";
 const ciWorkflow = await source(ciWorkflowPath);
 expect(ciWorkflowPath, ciWorkflow, /identity-provider-lifecycle\.postgres\.test\.mjs/, "CI must prove concurrent identity-provider activation against PostgreSQL");
