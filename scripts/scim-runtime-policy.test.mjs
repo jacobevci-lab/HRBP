@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 
-function loadScim({ activeProviders = [], databaseError = null, enabled = true, bearer = true } = {}) {
+function loadScim({ activeProviders = [], databaseError = null, enabled = true, bearer = true, governanceAdoptedAt = null } = {}) {
   const js = ts.transpileModule(readFileSync("lib/scim.ts", "utf8"), {
     fileName: "lib/scim.ts",
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
@@ -15,6 +15,9 @@ function loadScim({ activeProviders = [], databaseError = null, enabled = true, 
         if (databaseError) throw databaseError;
         return activeProviders;
       }
+    },
+    tenant: {
+      findUnique: async () => ({ identityGovernanceAdoptedAt: governanceAdoptedAt })
     }
   };
   const env = {
@@ -52,9 +55,30 @@ function loadScim({ activeProviders = [], databaseError = null, enabled = true, 
 test("legacy SCIM runtime remains available until a governed active provider exists", async () => {
   const runtime = loadScim();
   assert.deepEqual(await runtime.resolveGovernedScimPolicy({
-    identityProviderConnection: { findMany: async () => [] }
+    identityProviderConnection: { findMany: async () => [] },
+    tenant: { findUnique: async () => ({ identityGovernanceAdoptedAt: null }) }
   }, "tenant-1"), { managed: false });
   assert.equal(await runtime.scimAccess(new Request("https://hrbp.example.test/api/scim/v2/Users")), null);
+});
+
+test("sticky identity governance blocks SCIM fallback when no governed provider is active", async () => {
+  const runtime = loadScim({
+    governanceAdoptedAt: new Date("2026-10-09T07:00:00.000Z")
+  });
+  const policy = await runtime.resolveGovernedScimPolicy({
+    identityProviderConnection: { findMany: async () => [] },
+    tenant: { findUnique: async () => ({ identityGovernanceAdoptedAt: new Date("2026-10-09T07:00:00.000Z") }) }
+  }, "tenant-1");
+  assert.deepEqual(policy, {
+    managed: true,
+    providerId: null,
+    providerName: null,
+    scimEnabled: false,
+    inactive: true
+  });
+  const response = await runtime.scimAccess(new Request("https://hrbp.example.test/api/scim/v2/Users"));
+  assert.equal(response.status, 404);
+  assert.match((await response.json()).detail, /governed identity has no active provider/i);
 });
 
 test("active governed provider can explicitly disable SCIM even when runtime token is configured", async () => {
@@ -92,7 +116,7 @@ test("database errors fail governed SCIM policy closed", async () => {
   assert.match((await response.json()).detail, /policy is unavailable/i);
 });
 
-test("invalid bearer credentials are rejected before governed policy lookup matters", async () => {
+test("invalid bearer credentials are rejected after governed policy permits SCIM", async () => {
   const runtime = loadScim({
     activeProviders: [{ id: "idp-1", name: "Corporate Entra", scimEnabled: true }],
     bearer: false

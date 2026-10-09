@@ -173,6 +173,7 @@ test("managed provider with JIT enabled can provision an allowlisted employee ev
   assert.equal(calls.createdUser.role, "EMPLOYEE");
   assert.equal(calls.createdUser.email, "user@example.test");
   assert.ok(calls.sessionClaims);
+  assert.equal(calls.sessionClaims.identityProviderId, "idp-1");
 });
 
 test("managed JIT still requires the deployment email-domain allowlist", async () => {
@@ -204,4 +205,5 @@ test("unmanaged legacy deployment keeps environment-controlled JIT behavior", as
   assert.equal(response.headers.get("location"), "/");
   assert.equal(calls.userCreates, 1);
   assert.ok(calls.sessionClaims);
+  assert.equal(calls.sessionClaims.identityProviderId, undefined);
 });
