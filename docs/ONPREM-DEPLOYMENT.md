@@ -161,7 +161,7 @@ Claim names are bounded to simple top-level names and accepted-value lists are b
 
 If a tenant explicitly requires MFA or device trust, optional local password authentication is rejected because it cannot provide OIDC assurance evidence. Existing signed sessions are also checked against the current tenant policy on every request, so tightening the policy takes effect without waiting for cookie expiry. Assurance controls are explicit tenant policy choices: before enabling one, the administrator must already be signed in with a session that demonstrates the corresponding evidence. This avoids locking the tenant out with an unproven claim mapping.
 
-## SCIM 2.0 user provisioning
+## SCIM 2.0 user and group provisioning
 
 HRBP can expose a tenant-scoped SCIM 2.0 user provisioning surface for enterprise identity providers. It is disabled by default and is independent from interactive OIDC sign-in.
 
