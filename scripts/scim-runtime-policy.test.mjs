@@ -101,3 +101,14 @@ test("invalid bearer credentials are rejected before governed policy lookup matt
   assert.equal(response.status, 401);
   assert.match(response.headers.get("www-authenticate") ?? "", /Bearer/);
 });
+
+
+test("governed SCIM enablement reports runtime-not-ready instead of pretending policy is off", async () => {
+  const runtime = loadScim({
+    activeProviders: [{ id: "idp-1", name: "Corporate Entra", scimEnabled: true }],
+    enabled: false
+  });
+  const response = await runtime.scimAccess(new Request("https://hrbp.example.test/api/scim/v2/Users"));
+  assert.equal(response.status, 503);
+  assert.match((await response.json()).detail, /enabled by policy.*runtime configuration is not ready/i);
+});
