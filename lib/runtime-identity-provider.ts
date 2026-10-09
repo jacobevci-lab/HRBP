@@ -110,7 +110,7 @@ export async function enforceOidcRuntimeBinding(client: ScopeClient, config: Oid
       jitEnabled: true,
       mfaRequired: true,
       scimEnabled: true,
-      updatedAt: true
+      runtimeVersion: true
     }
   });
 
@@ -140,6 +140,6 @@ export async function enforceOidcRuntimeBinding(client: ScopeClient, config: Oid
     jitEnabled: connection.jitEnabled,
     mfaRequired: connection.mfaRequired,
     scimEnabled: connection.scimEnabled,
-    bindingVersion: connection.updatedAt.getTime()
+    bindingVersion: connection.runtimeVersion
   };
 }
