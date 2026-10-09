@@ -68,6 +68,34 @@ function fixture({ runtimeBinding, runtimeError = null }) {
   return runtime;
 }
 
+function authSessionRuntime() {
+  return load("lib/auth-session.ts", {
+    "@prisma/client": {
+      PlatformRole: {
+        EMPLOYEE: "EMPLOYEE",
+        MANAGER: "MANAGER",
+        HRBP: "HRBP",
+        HR_OPERATIONS: "HR_OPERATIONS",
+        RECRUITER: "RECRUITER",
+        TIME_ADMIN: "TIME_ADMIN",
+        TALENT_ADMIN: "TALENT_ADMIN",
+        COMPENSATION_ADMIN: "COMPENSATION_ADMIN",
+        PAYROLL_ADMIN: "PAYROLL_ADMIN",
+        ER_INVESTIGATOR: "ER_INVESTIGATOR",
+        LEGAL: "LEGAL",
+        PRIVACY_OFFICER: "PRIVACY_OFFICER",
+        SECURITY_AUDITOR: "SECURITY_AUDITOR",
+        TENANT_ADMIN: "TENANT_ADMIN"
+      }
+    },
+    "@/lib/runtime-env": {
+      runtimeNumber: (_key, fallback) => fallback,
+      runtimeString: () => undefined
+    },
+    "@/lib/safe-redirect": { sanitizeReturnTo: () => "/" }
+  });
+}
+
 function claims(overrides = {}) {
   const now = Math.floor(Date.now() / 1000);
   return {
@@ -146,4 +174,12 @@ test("legacy environment OIDC session remains valid only while runtime is unmana
   const session = claims();
   assert.equal(await runtime.verifySessionAccount(session), session);
   assert.equal(await runtime.verifySessionAccount(claims({ identityProviderId: "idp-1" })), null);
+});
+
+
+test("session claim validation permits provider identity only on OIDC sessions", () => {
+  const authSession = authSessionRuntime();
+  assert.equal(authSession.validSessionClaims(claims({ identityProviderId: "idp-1" })), true);
+  assert.equal(authSession.validSessionClaims(claims({ authMethod: "local", identityProviderId: "idp-1" })), false);
+  assert.equal(authSession.validSessionClaims(claims({ identityProviderId: "bad provider id" })), false);
 });
