@@ -170,7 +170,24 @@ export function validateOnpremEnv(env) {
           (env.HRBP_SMTP_PASSWORD && env.HRBP_SMTP_PASSWORD === scimPreviousToken)) {
         errors.push("HRBP_SCIM_TOKEN_PREVIOUS must not reuse another application secret.");
       }
-      warnings.push("SCIM previous bearer token overlap is active; remove HRBP_SCIM_TOKEN_PREVIOUS after the IdP has moved to the current token.");
+
+      const rawExpiry = env.HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT ?? "";
+      const expiry = rawExpiry ? new Date(rawExpiry) : null;
+      if (!expiry || Number.isNaN(expiry.getTime())) {
+        errors.push("HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT must be a valid RFC3339 timestamp when HRBP_SCIM_TOKEN_PREVIOUS is configured.");
+      } else {
+        const now = Date.now();
+        const maxOverlapMs = 7 * 24 * 60 * 60 * 1000;
+        if (expiry.getTime() <= now) {
+          errors.push("HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT must be in the future while the previous token is configured.");
+        } else if (expiry.getTime() - now > maxOverlapMs) {
+          errors.push("HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT must be no more than 7 days in the future.");
+        } else {
+          warnings.push(`SCIM previous bearer token overlap is active until ${expiry.toISOString()}; remove the previous token and expiry after the IdP has moved to the current token.`);
+        }
+      }
+    } else if (env.HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT) {
+      errors.push("HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT must be empty unless HRBP_SCIM_TOKEN_PREVIOUS is configured.");
     }
     if (scimAdoptionRaw === "true") {
       warnings.push("SCIM unmanaged-account adoption is enabled; review existing EMPLOYEE identities before provisioning.");
