@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 30
     services:
       postgres:
-        image: postgres:16
+        image: public.ecr.aws/docker/library/postgres:16
         env:
           POSTGRES_USER: hrbp
           POSTGRES_PASSWORD: disposable-audit-only
@@ -48,11 +48,30 @@ jobs:
           echo "::add-mask::$engagement_secret"
           echo "HRBP_ENGAGEMENT_RESPONSE_SECRET=$engagement_secret" >> "$GITHUB_ENV"
       - name: Install application and isolated browser tooling
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p .audit
-          npm ci > .audit/install.log 2>&1
-          npm install --no-save --package-lock=false playwright@1.56.1 > .audit/playwright-install.log 2>&1
-          npx playwright install --with-deps chromium > .audit/browser-install.log 2>&1
+
+          retry() {
+            local label="$1"
+            local log="$2"
+            shift 2
+            local attempt
+            for attempt in 1 2 3; do
+              if "$@" > "$log" 2>&1; then
+                return 0
+              fi
+              echo "$label failed on attempt $attempt" | tee -a "$log"
+              if [ "$attempt" -lt 3 ]; then sleep $((attempt * 5)); fi
+            done
+            tail -80 "$log"
+            return 1
+          }
+
+          retry "npm ci" .audit/install.log npm ci
+          retry "Playwright package install" .audit/playwright-install.log npm install --no-save --package-lock=false playwright@1.56.1
+          retry "Chromium install" .audit/browser-install.log npx playwright install --with-deps chromium
       - name: Verify native download observation independently of application code
         run: |
           node --test scripts/audit-download-observer.test.mjs
