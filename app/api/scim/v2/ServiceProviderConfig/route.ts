@@ -3,7 +3,7 @@ import { scimAccess, scimJson } from "@/lib/scim";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const denied = scimAccess(request); if (denied) return denied;
+  const denied = await scimAccess(request); if (denied) return denied;
   return scimJson({
     schemas: ["urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"],
     patch: { supported: true },

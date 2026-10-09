@@ -1,8 +1,40 @@
-import { PlatformRole, Prisma } from "@prisma/client";
+import { ConnectionStatus, IdentityProviderType, PlatformRole, Prisma, type PrismaClient } from "@prisma/client";
+import { db } from "@/lib/db";
 import { internalBearerAuthorized } from "@/lib/internal-auth";
 import { runtimeBoolean, runtimeString } from "@/lib/runtime-env";
 export * from "@/lib/scim-protocol.mjs";
 import { normalizeScimDomain, SCIM_ERROR_SCHEMA } from "@/lib/scim-protocol.mjs";
+
+type ScopeClient = PrismaClient | Prisma.TransactionClient;
+
+const governedScimProviderTypes = [
+  IdentityProviderType.ENTRA_ID,
+  IdentityProviderType.OKTA,
+  IdentityProviderType.OIDC
+] as const;
+
+export async function resolveGovernedScimPolicy(client: ScopeClient, tenantId: string) {
+  const active = await client.identityProviderConnection.findMany({
+    where: {
+      tenantId,
+      status: ConnectionStatus.ACTIVE,
+      type: { in: [...governedScimProviderTypes] }
+    },
+    orderBy: { createdAt: "asc" },
+    take: 2,
+    select: { id: true, name: true, scimEnabled: true }
+  });
+
+  if (active.length === 0) return { managed: false as const };
+  if (active.length !== 1) throw new Error("SCIM_PROVIDER_AMBIGUOUS");
+
+  return {
+    managed: true as const,
+    providerId: active[0].id,
+    providerName: active[0].name,
+    scimEnabled: active[0].scimEnabled
+  };
+}
 
 export function scimRuntimeConfig() {
   const enabled = runtimeBoolean("HRBP_SCIM_ENABLED", false);
@@ -38,12 +70,21 @@ export function scimJson(body:unknown,status=200,extra?:HeadersInit){return Resp
 export function scimError(status:number,detail:string,scimType?:string,extra?:HeadersInit){
   return scimJson({schemas:[SCIM_ERROR_SCHEMA],status:String(status),...(scimType?{scimType}:{}),detail},status,extra);
 }
-export function scimAccess(request:Request){
+export async function scimAccess(request:Request){
   const config=scimRuntimeConfig();
   if(!config.enabled) return scimError(404,"SCIM provisioning is disabled.");
   if(!config.configured) return scimError(503,"SCIM provisioning is not ready.");
   if(!internalBearerAuthorized(request,"HRBP_SCIM_TOKEN") && !internalBearerAuthorized(request,"HRBP_SCIM_TOKEN_PREVIOUS")){
     return scimError(401,"Valid SCIM bearer credentials are required.",undefined,{"www-authenticate":'Bearer realm="HRBP SCIM"'});
+  }
+  try {
+    const policy = await resolveGovernedScimPolicy(db, config.tenantId);
+    if(policy.managed && !policy.scimEnabled) {
+      return scimError(404,"SCIM provisioning is disabled by the active governed identity provider.");
+    }
+  } catch {
+    console.error("[HRBP] Governed SCIM runtime policy is unavailable.");
+    return scimError(503,"SCIM provisioning policy is unavailable.");
   }
   return null;
 }

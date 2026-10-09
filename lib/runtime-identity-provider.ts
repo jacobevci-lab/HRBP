@@ -1,6 +1,7 @@
 import { ConnectionStatus, IdentityProviderType, type Prisma, type PrismaClient } from "@prisma/client";
 import { authenticationAssuranceConfiguration } from "@/lib/auth-assurance";
 import { getOidcConfig, localAuthConfigurationStatus, type OidcConfig } from "@/lib/auth-config";
+import { scimRuntimeConfig } from "@/lib/scim";
 
 export const oidcRuntimeProviderTypes = [
   IdentityProviderType.ENTRA_ID,
@@ -17,6 +18,7 @@ type IdentityRuntimeShape = {
   clientId: string | null;
   jitEnabled: boolean;
   mfaRequired: boolean;
+  scimEnabled: boolean;
 };
 
 function normalizedIssuer(value: string | null | undefined) {
@@ -56,10 +58,14 @@ export function identityRuntimeActivationIssues(connection: IdentityRuntimeShape
     if (connection.mfaRequired && !authenticationAssuranceConfiguration().mfaConfigured) {
       issues.push("OIDC MFA claim/value mapping");
     }
+    if (connection.scimEnabled && !scimRuntimeConfig().configured) {
+      issues.push("SCIM runtime configuration");
+    }
     return issues;
   }
 
   if (connection.type === IdentityProviderType.LOCAL) {
+    if (connection.scimEnabled) issues.push("SCIM requires federated identity provider");
     if (!localAuthConfigurationStatus().configured) issues.push("local authentication runtime");
     return issues;
   }
@@ -101,7 +107,8 @@ export async function enforceOidcRuntimeBinding(client: ScopeClient, config: Oid
       issuer: true,
       clientId: true,
       jitEnabled: true,
-      mfaRequired: true
+      mfaRequired: true,
+      scimEnabled: true
     }
   });
 
@@ -122,6 +129,7 @@ export async function enforceOidcRuntimeBinding(client: ScopeClient, config: Oid
     connectionId: connection.id,
     type: connection.type,
     jitEnabled: connection.jitEnabled,
-    mfaRequired: connection.mfaRequired
+    mfaRequired: connection.mfaRequired,
+    scimEnabled: connection.scimEnabled
   };
 }

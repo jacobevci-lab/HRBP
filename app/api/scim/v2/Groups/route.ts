@@ -48,7 +48,7 @@ function groupSelect() {
 }
 
 export async function GET(request: Request) {
-  const denied = scimAccess(request); if (denied) return denied;
+  const denied = await scimAccess(request); if (denied) return denied;
   const config = scimRuntimeConfig();
   const url = new URL(request.url);
   const filter = parseScimGroupFilter(url.searchParams.get("filter"));
@@ -82,7 +82,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const denied = scimAccess(request); if (denied) return denied;
+  const denied = await scimAccess(request); if (denied) return denied;
   const config = scimRuntimeConfig();
   const body = await readScimObject(request);
   if (!body) return scimError(400, "A valid SCIM Group JSON object is required.", "invalidSyntax");
