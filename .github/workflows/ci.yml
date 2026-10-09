@@ -88,7 +88,6 @@ jobs:
           docker build --target scanner --build-arg GITHUB_SHA="$GITHUB_SHA" --build-arg NODE_BASE_IMAGE=public.ecr.aws/docker/library/node:22-bookworm-slim -f Dockerfile.onprem -t hrbp-one:scanner-ci .
           docker image inspect hrbp-one:scanner-ci --format '{{json .Config.Healthcheck}}' | grep -q 'document-scan-health.mjs'
           test "$(docker image inspect hrbp-one:scanner-ci --format '{{.Config.User}}')" = "node"
-          docker compose --env-file .env.onprem -f docker-compose.onprem.yml pull document-scanner-engine
       - name: Rehearse on-prem backup and restore
         shell: bash
         run: |
