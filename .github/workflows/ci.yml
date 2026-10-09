@@ -16,20 +16,6 @@ concurrency:
 jobs:
   web:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: hrbp
-          POSTGRES_PASSWORD: hrbp
-          POSTGRES_DB: hrbp
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U hrbp -d hrbp"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     env:
       DATABASE_URL: postgresql://hrbp:hrbp@localhost:5432/hrbp
       HRBP_MAINTENANCE_TOKEN: ci-maintenance-token-1234567890
@@ -46,6 +32,42 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Start PostgreSQL for integration tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql postgresql-contrib
+          fi
+          sudo systemctl start postgresql
+          ready=0
+          for i in {1..30}; do
+            if sudo -u postgres pg_isready >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            sudo systemctl status postgresql --no-pager || true
+            exit 1
+          fi
+          sudo -u postgres psql -v ON_ERROR_STOP=1 <<'SQL'
+          DO $
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hrbp') THEN
+              CREATE ROLE hrbp LOGIN PASSWORD 'hrbp' CREATEDB;
+            ELSE
+              ALTER ROLE hrbp WITH LOGIN PASSWORD 'hrbp' CREATEDB;
+            END IF;
+          END
+          $;
+          SQL
+          if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='hrbp'" | grep -q 1; then
+            sudo -u postgres createdb -O hrbp hrbp
+          fi
+          PGPASSWORD=hrbp psql -h 127.0.0.1 -U hrbp -d hrbp -v ON_ERROR_STOP=1 -c 'SELECT 1'
       - run: npm ci
       - name: Production dependency audit
         run: npm run security:audit:prod
@@ -77,18 +99,45 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          retry() {
+            local attempts="$1"
+            local delay="$2"
+            shift 2
+            local n=1
+            until "$@"; do
+              if [ "$n" -ge "$attempts" ]; then
+                echo "Command failed after $attempts attempts: $*" >&2
+                return 1
+              fi
+              echo "Transient registry/network failure; retrying in ${delay}s ($n/$attempts): $*" >&2
+              sleep "$delay"
+              n=$((n + 1))
+              delay=$((delay * 2))
+            done
+          }
+
           cp .env.onprem.example .env.onprem
           docker compose --env-file .env.onprem -f docker-compose.onprem.yml config > /tmp/hrbp-onprem-compose.yml
-          docker build --target runtime --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:onprem-ci .
+
+          # GitHub-hosted runners share anonymous Docker Hub limits. Pull the
+          # base once with backoff, then use the local image with the legacy
+          # builder so BuildKit does not repeatedly resolve registry metadata.
+          retry 5 10 docker pull node:22-bookworm-slim
+          export DOCKER_BUILDKIT=0
+
+          retry 3 10 docker build --pull=false --target runtime --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:onprem-ci .
           docker image inspect hrbp-one:onprem-ci --format '{{json .Config.Healthcheck}}' | grep -q '/api/health/runtime'
           test "$(docker image inspect hrbp-one:onprem-ci --format '{{.Config.User}}')" = "node"
-          docker build --target scheduler --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:scheduler-ci .
+
+          retry 3 10 docker build --pull=false --target scheduler --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:scheduler-ci .
           docker image inspect hrbp-one:scheduler-ci --format '{{json .Config.Healthcheck}}' | grep -q 'onprem-maintenance-health.mjs'
           test "$(docker image inspect hrbp-one:scheduler-ci --format '{{.Config.User}}')" = "node"
-          docker build --target scanner --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:scanner-ci .
+
+          retry 3 10 docker build --pull=false --target scanner --build-arg GITHUB_SHA="$GITHUB_SHA" -f Dockerfile.onprem -t hrbp-one:scanner-ci .
           docker image inspect hrbp-one:scanner-ci --format '{{json .Config.Healthcheck}}' | grep -q 'document-scan-health.mjs'
           test "$(docker image inspect hrbp-one:scanner-ci --format '{{.Config.User}}')" = "node"
-          docker compose --env-file .env.onprem -f docker-compose.onprem.yml pull document-scanner-engine
+
+          retry 5 10 docker compose --env-file .env.onprem -f docker-compose.onprem.yml pull document-scanner-engine
       - name: Rehearse on-prem backup and restore
         shell: bash
         run: |
