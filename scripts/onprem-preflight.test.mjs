@@ -18,6 +18,7 @@ const base = {
   HRBP_SCIM_ENABLED: "false",
   HRBP_SCIM_TOKEN: "",
   HRBP_SCIM_TOKEN_PREVIOUS: "",
+  HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT: "",
   HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "false",
   HRBP_INTEGRATION_PROBE_ALLOWED_ORIGINS: "",
   HRBP_INTEGRATION_PROBE_ALLOW_HTTP: "false",
@@ -180,6 +181,7 @@ test("accepts bounded SCIM token rotation overlap and warns until old token is r
     HRBP_SCIM_ENABLED: "true",
     HRBP_SCIM_TOKEN: "scim-current-abcdefghijklmnopqrstuvwxyz-123456",
     HRBP_SCIM_TOKEN_PREVIOUS: "scim-previous-abcdefghijklmnopqrstuvwxyz-654321",
+    HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
     HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "false"
   });
   assert.equal(result.ok, true, result.errors.join("\n"));
@@ -205,6 +207,44 @@ test("rejects unsafe SCIM previous-token rotation values", () => {
   assert.equal(reused.ok, false);
   assert.ok(reused.errors.some((entry) => entry.includes("HRBP_SCIM_TOKEN_PREVIOUS must not reuse")));
   assert.ok(!JSON.stringify(reused).includes(base.HRBP_MAINTENANCE_TOKEN));
+
+  const missingExpiry = validateOnpremEnv({
+    ...base,
+    HRBP_SCIM_ENABLED: "true",
+    HRBP_SCIM_TOKEN: "scim-current-abcdefghijklmnopqrstuvwxyz-123456",
+    HRBP_SCIM_TOKEN_PREVIOUS: "scim-previous-abcdefghijklmnopqrstuvwxyz-654321",
+    HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT: ""
+  });
+  assert.equal(missingExpiry.ok, false);
+  assert.ok(missingExpiry.errors.some((entry) => entry.includes("PREVIOUS_EXPIRES_AT")));
+
+  const expired = validateOnpremEnv({
+    ...base,
+    HRBP_SCIM_ENABLED: "true",
+    HRBP_SCIM_TOKEN: "scim-current-abcdefghijklmnopqrstuvwxyz-123456",
+    HRBP_SCIM_TOKEN_PREVIOUS: "scim-previous-abcdefghijklmnopqrstuvwxyz-654321",
+    HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT: new Date(Date.now() - 60 * 1000).toISOString()
+  });
+  assert.equal(expired.ok, false);
+  assert.ok(expired.errors.some((entry) => entry.includes("must be in the future")));
+
+  const tooLong = validateOnpremEnv({
+    ...base,
+    HRBP_SCIM_ENABLED: "true",
+    HRBP_SCIM_TOKEN: "scim-current-abcdefghijklmnopqrstuvwxyz-123456",
+    HRBP_SCIM_TOKEN_PREVIOUS: "scim-previous-abcdefghijklmnopqrstuvwxyz-654321",
+    HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString()
+  });
+  assert.equal(tooLong.ok, false);
+  assert.ok(tooLong.errors.some((entry) => entry.includes("no more than 7 days")));
+
+  const orphanExpiry = validateOnpremEnv({
+    ...base,
+    HRBP_SCIM_TOKEN_PREVIOUS: "",
+    HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+  });
+  assert.equal(orphanExpiry.ok, false);
+  assert.ok(orphanExpiry.errors.some((entry) => entry.includes("must be empty")));
 });
 
 test("rejects invalid SCIM tenant email domains", () => {
