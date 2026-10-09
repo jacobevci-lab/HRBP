@@ -230,6 +230,7 @@ model Tenant {
   emergencyAccessGrants EmergencyAccessGrant[]
   scimGroups          ScimGroup[]
   scimGroupMembers    ScimGroupMember[]
+  scimRoleMappings    ScimGroupRoleMapping[]
   payrollCountryPacks PayrollCountryPack[]
   payrollPeriods      PayrollPeriod[]
   payrollRuns         PayrollRun[]
@@ -257,6 +258,7 @@ model UserAccount {
   provisioningExternalId String?
   provisionedAt          DateTime?
   provisioningUpdatedAt  DateTime?
+  roleManagedByScimGroup  Boolean @default(false)
   tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assignments CaseAssignment[]
   emergencyAccessRequests EmergencyAccessGrant[] @relation("EmergencyAccessRequester")
