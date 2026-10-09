@@ -3,7 +3,7 @@ import { SCIM_LIST_SCHEMA, scimAccess, scimGroupResourceType, scimJson, scimRunt
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const denied = scimAccess(request); if (denied) return denied;
+  const denied = await scimAccess(request); if (denied) return denied;
   const config = scimRuntimeConfig();
   return scimJson({
     schemas: [SCIM_LIST_SCHEMA],
