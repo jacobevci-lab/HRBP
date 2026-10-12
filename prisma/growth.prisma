@@ -222,14 +222,18 @@ model SuccessionPlan {
 }
 
 model SuccessionCandidate {
-  id                  String @id @default(cuid())
-  tenantId            String
-  planId              String
-  employmentId        String
-  readiness           SuccessionReadiness
-  rank                Int?
-  developmentGap      String?
-  addedAt             DateTime @default(now())
+  id                    String @id @default(cuid())
+  tenantId              String
+  planId                String
+  employmentId          String
+  readiness             SuccessionReadiness
+  readinessReason       String?
+  readinessReviewedAt   DateTime?
+  readinessReviewedById String?
+  rank                  Int?
+  developmentGap        String?
+  addedAt               DateTime @default(now())
+  updatedAt             DateTime @updatedAt
   plan                SuccessionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
   learningAssignments LearningAssignment[] @relation("SuccessionCandidateDevelopment")
   developmentPlans    DevelopmentPlan[] @relation("SuccessionCandidateDevelopmentPlans")
