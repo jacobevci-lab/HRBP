@@ -1,5 +1,5 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
-import type { OidcConfig } from "@/lib/auth-config";
+import { normalizeOidcIssuer, type OidcConfig } from "@/lib/auth-config";
 
 export type OidcMetadata = {
   issuer: string;
@@ -33,12 +33,6 @@ function normalizedOidcUrl(value: string, httpsRequired = false) {
   } catch {
     return null;
   }
-}
-
-function normalizedIssuer(value: string) {
-  const parsed = normalizedOidcUrl(value);
-  if (!parsed || parsed.search) return null;
-  return parsed.toString().replace(/\/$/, "");
 }
 
 async function boundedJsonObject(response: Response) {
@@ -126,14 +120,14 @@ async function fetchValidatedOidcMetadata(normalized: string, fetchImpl: typeof 
 }
 
 export function probeOidcDiscovery(issuer: string, fetchImpl: typeof fetch = fetch): Promise<OidcMetadata> {
-  const normalized = normalizedIssuer(issuer);
-  if (!normalized) return Promise.reject(new Error("OIDC issuer must be a valid HTTP(S) URL without query or fragment."));
+  const normalized = normalizeOidcIssuer(issuer);
+  if (!normalized) return Promise.reject(new Error("OIDC issuer must use HTTPS without credentials, query or fragment; loopback HTTP is allowed only for local development."));
   return fetchValidatedOidcMetadata(normalized, fetchImpl);
 }
 
 export function discoverOidc(issuer: string, fetchImpl: typeof fetch = fetch): Promise<OidcMetadata> {
-  const normalized = normalizedIssuer(issuer);
-  if (!normalized) return Promise.reject(new Error("OIDC issuer must be a valid HTTP(S) URL without query or fragment."));
+  const normalized = normalizeOidcIssuer(issuer);
+  if (!normalized) return Promise.reject(new Error("OIDC issuer must use HTTPS without credentials, query or fragment; loopback HTTP is allowed only for local development."));
 
   const cached = metadataCache.get(normalized);
   if (cached) return cached;
