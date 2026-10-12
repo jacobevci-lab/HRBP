@@ -17,6 +17,10 @@ expect(scimPath, scim, /catch[\s\S]*SCIM provisioning policy is unavailable/, "S
 expect(scimPath, scim, /requestedEnabled[\s\S]*!config\.configured[\s\S]*enabled by policy but its runtime configuration is not ready/, "governed SCIM runtime outages must surface as unavailable rather than disabled");
 expect(scimPath, scim, /active\.length === 0[\s\S]*client\.tenant\.findUnique[\s\S]*identityGovernanceAdoptedAt[\s\S]*inactive:\s*true/, "sticky identity governance must keep SCIM managed-off when no provider is active");
 expect(scimPath, scim, /policy\.inactive[\s\S]*governed identity has no active provider/, "SCIM must distinguish inactive governed identity from explicit provider disablement");
+expect(scimPath, scim, /HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT/, "SCIM previous-token overlap must require an explicit expiry");
+expect(scimPath, scim, /7 \* 24 \* 60 \* 60 \* 1000/, "SCIM previous-token overlap must be capped at seven days");
+expect(scimPath, scim, /previousAuthorized = config\.rotationOverlapActive[\s\S]*HRBP_SCIM_TOKEN_PREVIOUS/, "previous SCIM credentials must be accepted only while the bounded overlap is active");
+expect(scimPath, scim, /rotationExpired[\s\S]*rotationConfigurationValid[\s\S]*rotationExpiresAt/, "SCIM runtime config must expose bounded rotation posture");
 
 const runtimePath = "lib/runtime-identity-provider.ts";
 const runtime = await source(runtimePath);
@@ -56,6 +60,7 @@ const health = await source(healthPath);
 expect(healthPath, health, /resolveGovernedScimPolicy\(db, config\.tenantId\)/, "SCIM health must report governed provider policy");
 expect(healthPath, health, /governedScimEnabled/, "SCIM health must expose secret-free effective provider state");
 expect(healthPath, health, /governedProviderInactive/, "SCIM health must expose inactive governed-provider state without secrets");
+expect(healthPath, health, /rotationConfigurationValid[\s\S]*rotationExpired[\s\S]*rotationExpiresAt/, "SCIM health must expose bounded rotation posture without token material");
 expect(healthPath, health, /policyUnavailable/, "SCIM health must distinguish policy-store failure");
 
 const settingsPath = "components/settings-live-page.tsx";
@@ -64,6 +69,9 @@ expect(settingsPath, settings, /effectiveScimEnabled = managedOidc \? managedOid
 expect(settingsPath, settings, /SCIM \{effectiveScimEnabled \? "on" : "off"\}/, "identity runtime summary must show effective SCIM state");
 expect(settingsPath, settings, /SCIM is disabled by the active governed provider/, "Settings must explain provider-driven SCIM disablement");
 expect(settingsPath, settings, /SCIM is blocked because governed identity has no ACTIVE provider/, "Settings must explain sticky SCIM blocking when the governed provider is inactive");
+expect(settingsPath, settings, /previous-token overlap active until|eski token geçişi/, "Settings must show the bounded previous-token overlap expiry");
+expect(settingsPath, settings, /previous token is expired and rejected|eski tokenın süresi doldu/, "Settings must make expired previous credentials operationally visible");
+expect(settingsPath, settings, /rotationConfigurationValid/, "Settings readiness must include rotation configuration validity");
 
 const identityTestsPath = "scripts/identity-runtime-binding.test.mjs";
 const identityTests = await source(identityTestsPath);
