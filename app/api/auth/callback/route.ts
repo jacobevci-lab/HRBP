@@ -136,6 +136,7 @@ export async function GET(request: Request) {
     headers.append("set-cookie", createSessionCookie({
       authMethod: "oidc",
       identityProviderId: runtimeBinding.managed ? runtimeBinding.connectionId : undefined,
+      identityProviderVersion: runtimeBinding.managed ? runtimeBinding.bindingVersion : undefined,
       accountSessionVersion: identity.user.sessionVersion,
       tenantSessionVersion: identity.tenantSessionVersion,
       mfaSatisfied: assurance.mfaSatisfied,
