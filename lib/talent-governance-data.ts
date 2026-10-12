@@ -14,6 +14,7 @@ export type TalentGovernanceRow = {
   potential: string;
   criticalTalent: boolean;
   notes: string | null;
+  correctionReason: string | null;
   assessor: string;
   assessedAt: string;
 };
@@ -38,6 +39,7 @@ export async function getTalentGovernanceData(ctx: RequestContext): Promise<Tale
         potential: true,
         criticalTalent: true,
         notes: true,
+        correctionReason: true,
         assessedById: true,
         assessedAt: true
       }
@@ -79,6 +81,7 @@ export async function getTalentGovernanceData(ctx: RequestContext): Promise<Tale
           potential: row.potential,
           criticalTalent: row.criticalTalent,
           notes: row.notes,
+          correctionReason: row.correctionReason,
           assessor: assessor?.displayName ?? assessor?.email ?? row.assessedById,
           assessedAt: row.assessedAt.toISOString()
         };

@@ -195,6 +195,7 @@ model TalentAssessment {
   assessedById     String
   assessedAt       DateTime @default(now())
   notes            String?
+  correctionReason String?
   classification   DataClassification @default(CONFIDENTIAL)
   developmentPlans DevelopmentPlan[] @relation("TalentAssessmentDevelopmentPlans")
 

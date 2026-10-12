@@ -81,16 +81,19 @@ export function TalentGovernanceConsole({ cycleLabels, rows }: TalentGovernanceD
         performance: data.get("performance"),
         potential: data.get("potential"),
         criticalTalent: data.get("criticalTalent") === "on",
-        notes: data.get("notes") || null
+        notes: data.get("notes") || null,
+        correctionReason: data.get("correctionReason") || undefined,
+        expectedAssessedAt: row.assessedAt
       });
     }}>
       <div className="growth-lifecycle-icon"><Award size={16}/></div>
-      <div className="growth-lifecycle-copy"><strong>{row.person}</strong><small>{row.employeeNumber} · {row.position} · {row.organization}</small><span>{row.cycleLabel} · {c("Assessed by", "Değerlendiren")} {row.assessor} · {dateTime(row.assessedAt, locale)}</span></div>
+      <div className="growth-lifecycle-copy"><strong>{row.person}</strong><small>{row.employeeNumber} · {row.position} · {row.organization}</small><span>{row.cycleLabel} · {c("Assessed by", "Değerlendiren")} {row.assessor} · {dateTime(row.assessedAt, locale)}</span>{row.correctionReason ? <span>{c("Last correction reason", "Son düzeltme gerekçesi")}: {row.correctionReason}</span> : null}</div>
       <div className="performance-review-controls">
         <select name="performance" defaultValue={row.performance}>{performanceBands.map((value) => <option key={value} value={value}>{label(value, locale)}</option>)}</select>
         <select name="potential" defaultValue={row.potential}>{potentialBands.map((value) => <option key={value} value={value}>{label(value, locale)}</option>)}</select>
         <label className="growth-check"><input name="criticalTalent" type="checkbox" defaultChecked={row.criticalTalent}/> {c("Critical", "Kritik")}</label>
         <input name="notes" maxLength={4000} defaultValue={row.notes ?? ""} placeholder={c("Assessment notes", "Değerlendirme notları")}/>
+        <textarea name="correctionReason" maxLength={2000} placeholder={c("Reason required when performance, potential or critical-talent decision changes (12+ characters)", "Performans, potansiyel veya kritik-yetenek kararı değişiyorsa gerekçe zorunlu (12+ karakter)")}/>
         <button className="secondary-button" disabled={pending !== null}>{pending === row.id ? "…" : c("Save correction", "Düzeltmeyi kaydet")}</button>
       </div>
     </form>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No talent assessments are available in your authorized scope.", "Yetkili kapsamınızda yetenek değerlendirmesi yok.")}</span></div>}</div>

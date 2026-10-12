@@ -17,13 +17,22 @@ expect(talentPatchPath, talentPatch, /can\(ctx,\s*"talent:write"\)/, "talent cor
 expect(talentPatchPath, talentPatch, /canActOnEmployment/, "talent corrections must enforce relationship scope");
 expect(talentPatchPath, talentPatch, /assessedById:\s*ctx\.actorId/, "talent corrections must bind the human assessor identity");
 expect(talentPatchPath, talentPatch, /talent-assessment\.corrected/, "talent corrections must emit explicit audit evidence");
-expect(talentPatchPath, talentPatch, /slice\(0,\s*4000\)/, "talent correction notes must be bounded");
+expect(talentPatchPath, talentPatch, /expectedAssessedAt/, "talent corrections must require optimistic concurrency evidence");
+expect(talentPatchPath, talentPatch, /asOptionalText\(body\.notes, 4000\)/, "talent correction notes must be bounded without silent truncation");
+expect(talentPatchPath, talentPatch, /asOptionalText\(body\.correctionReason, 2000\)/, "material talent correction reasons must be bounded");
+expect(talentPatchPath, talentPatch, /decisionChanged[\s\S]*correctionReason\.length < 12/, "material talent decisions must require a meaningful correction reason");
+expect(talentPatchPath, talentPatch, /updateMany\([\s\S]*assessedAt:\s*assessment\.assessedAt/, "talent correction writes must reject stale concurrent decisions");
+expect(talentPatchPath, talentPatch, /correctionReason[\s\S]*assessedById:\s*ctx\.actorId[\s\S]*assessedAt:\s*correctedAt/, "material corrections must persist rationale and refresh human assessor provenance");
+expect(talentPatchPath, talentPatch, /previous=\$\{assessment\.performance\}\/\$\{assessment\.potential\}\/critical:\$\{assessment\.criticalTalent\}[\s\S]*next=\$\{nextPerformance\}\/\$\{nextPotential\}\/critical:\$\{nextCriticalTalent\}[\s\S]*reasonRecorded=\$\{Boolean\(decisionChanged && correctionReason\)\}/, "talent correction audit must capture decision shape without copying rationale text");
+expect(talentPatchPath, talentPatch, /STALE_STATE/, "concurrent talent corrections must surface a bounded stale-state conflict");
 
 const talentDataPath = "lib/talent-governance-data.ts";
 const talentData = await source(talentDataPath);
 expect(talentDataPath, talentData, /resolveEmploymentScope/, "talent governance reads must resolve relationship scope");
 expect(talentDataPath, talentData, /employmentIdFilter\(scope\)/, "talent governance reads must filter authorized employments");
 expect(talentDataPath, talentData, /userAccount\.findMany/, "talent governance must resolve assessor identity without hiding the human owner");
+expect(talentDataPath, talentData, /correctionReason:\s*true/, "talent governance data must load persisted correction rationale");
+expect(talentDataPath, talentData, /correctionReason:\s*row\.correctionReason/, "talent governance UI must receive correction rationale");
 
 const talentConsolePath = "components/talent-governance-console.tsx";
 const talentConsole = await source(talentConsolePath);
@@ -31,6 +40,16 @@ expect(talentConsolePath, talentConsole, /\/api\/talent\/assessments\/\$\{id\}/,
 expect(talentConsolePath, talentConsole, /method:\s*"PATCH"/, "talent governance console must use explicit patch mutations");
 expect(talentConsolePath, talentConsole, /criticalTalent/, "talent governance console must preserve explicit critical-talent designation");
 expect(talentConsolePath, talentConsole, /Assessed by|Değerlendiren/, "talent governance console must expose assessor ownership");
+expect(talentConsolePath, talentConsole, /expectedAssessedAt:\s*row\.assessedAt/, "talent correction UI must submit concurrency evidence");
+expect(talentConsolePath, talentConsole, /name="correctionReason"[\s\S]*maxLength=\{2000\}/, "talent correction UI must mirror the bounded rationale contract");
+expect(talentConsolePath, talentConsole, /row\.correctionReason/, "talent governance UI must surface the last material correction rationale");
+
+const growthSchemaPath = "prisma/growth.prisma";
+const growthSchema = await source(growthSchemaPath);
+expect(growthSchemaPath, growthSchema, /model TalentAssessment[\s\S]*correctionReason\s+String\?/, "talent assessments must persist material correction rationale");
+const talentMigrationPath = "prisma/migrations/20261012160000_talent_assessment_correction_reason/migration.sql";
+const talentMigration = await source(talentMigrationPath);
+expect(talentMigrationPath, talentMigration, /ALTER TABLE "TalentAssessment"[\s\S]*ADD COLUMN "correctionReason" TEXT/, "talent correction rationale must be delivered through a versioned migration");
 
 const coursePath = "app/api/learning/courses/[id]/route.ts";
 const course = await source(coursePath);
