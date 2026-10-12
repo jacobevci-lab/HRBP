@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   if (!config) return Response.redirect(`${origin}/auth/sign-in?error=configuration`, 302);
 
   try {
-    await withDb((db) => enforceOidcRuntimeBinding(db, config));
+    const runtimeBinding = await withDb((db) => enforceOidcRuntimeBinding(db, config));
     const metadata = await discoverOidc(config.issuer);
     const requestUrl = new URL(request.url);
     const returnTo = sanitizeReturnTo(requestUrl.searchParams.get("returnTo"));
@@ -35,7 +35,14 @@ export async function GET(request: Request) {
       location: authorizationUrl.toString(),
       "cache-control": "no-store"
     });
-    headers.append("set-cookie", createOidcTransactionCookie({ state, nonce, verifier, returnTo }));
+    headers.append("set-cookie", createOidcTransactionCookie({
+      state,
+      nonce,
+      verifier,
+      returnTo,
+      identityProviderId: runtimeBinding.managed ? runtimeBinding.connectionId : undefined,
+      identityProviderVersion: runtimeBinding.managed ? runtimeBinding.bindingVersion : undefined
+    }));
     return new Response(null, { status: 302, headers });
   } catch (error) {
     console.error("OIDC login initialization failed", error);

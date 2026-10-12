@@ -77,6 +77,7 @@ const loginPath = "app/api/auth/login/route.ts";
 const login = await source(loginPath);
 expect(loginPath, login, /enforceOidcRuntimeBinding\(db, config\)[\s\S]*discoverOidc\(config\.issuer\)/, "OIDC login must verify governed runtime binding before provider discovery");
 expect(loginPath, login, /IDENTITY_PROVIDER_INACTIVE[\s\S]*configuration/, "OIDC login must surface inactive adopted governance as a bounded configuration error");
+expect(loginPath, login, /const runtimeBinding = await withDb[\s\S]*createOidcTransactionCookie\([\s\S]*identityProviderId:\s*runtimeBinding\.managed \? runtimeBinding\.connectionId : undefined[\s\S]*identityProviderVersion:\s*runtimeBinding\.managed \? runtimeBinding\.bindingVersion : undefined/, "OIDC login transactions must capture the governed provider id and generation");
 
 const callbackPath = "app/api/auth/callback/route.ts";
 const callback = await source(callbackPath);
@@ -86,11 +87,15 @@ expect(callbackPath, callback, /runtimeBinding\.managed && runtimeBinding\.mfaRe
 expect(callbackPath, callback, /jitEnabled = runtimeBinding\.managed \? runtimeBinding\.jitEnabled : config\.jitProvisioning/, "managed provider JIT policy must override the legacy environment toggle while preserving unmanaged compatibility");
 expect(callbackPath, callback, /identityProviderId:\s*runtimeBinding\.managed \? runtimeBinding\.connectionId : undefined/, "managed OIDC sessions must be stamped with the active governed provider id");
 expect(callbackPath, callback, /identityProviderVersion:\s*runtimeBinding\.managed \? runtimeBinding\.bindingVersion : undefined/, "managed OIDC sessions must carry the active provider generation");
+expect(callbackPath, callback, /transaction\.identityProviderId !== runtimeBinding\.connectionId[\s\S]*transaction\.identityProviderVersion !== runtimeBinding\.bindingVersion[\s\S]*IDENTITY_PROVIDER_TRANSACTION_STALE/, "OIDC callbacks must reject provider lifecycle drift between login start and callback");
+expect(callbackPath, callback, /IDENTITY_PROVIDER_TRANSACTION_STALE[\s\S]*\? "transaction"/, "stale provider-bound callbacks must return a bounded restartable transaction error");
 
 const authSessionPath = "lib/auth-session.ts";
 const authSession = await source(authSessionPath);
 expect(authSessionPath, authSession, /identityProviderId\?:\s*string/, "OIDC session claims must carry optional governed provider identity");
 expect(authSessionPath, authSession, /identityProviderVersion\?:\s*number/, "OIDC session claims must carry optional governed provider generation");
+expect(authSessionPath, authSession, /export type OidcTransaction = \{[\s\S]*v:\s*2;[\s\S]*identityProviderId\?:\s*string;[\s\S]*identityProviderVersion\?:\s*number;/, "OIDC transaction cookie must move to version 2 and carry optional provider binding");
+expect(authSessionPath, authSession, /validOidcTransaction[\s\S]*identityProviderId === undefined\) !== \(transaction\.identityProviderVersion === undefined/, "OIDC transactions must reject incomplete provider id/version bindings");
 
 const verifiedSessionPath = "lib/verified-session.ts";
 const verifiedSession = await source(verifiedSessionPath);
@@ -148,6 +153,7 @@ expect(settingsLivePath, settingsLive, /identityRuntimeActivationIssues\(managed
 
 expect(packagePath, pkg, /identity-provider-auth-policy\.test\.mjs/, "managed identity-provider auth policy behavioral tests must run in the connection validation gate");
 expect(packagePath, pkg, /provider-bound-oidc-session\.test\.mjs/, "provider-bound OIDC session invalidation tests must run in the connection validation gate");
+expect(packagePath, pkg, /oidc-transaction-binding\.test\.mjs/, "provider-bound OIDC transaction tests must run in the connection validation gate");
 const ciWorkflowPath = ".github/workflows/ci.yml";
 const ciWorkflow = await source(ciWorkflowPath);
 expect(ciWorkflowPath, ciWorkflow, /identity-provider-lifecycle\.postgres\.test\.mjs/, "CI must prove concurrent identity-provider activation against PostgreSQL");

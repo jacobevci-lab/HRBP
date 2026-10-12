@@ -22,8 +22,18 @@ function fixture({
   assurance = { mfaSatisfied: true, deviceTrustSatisfied: false },
   existingUser = true,
   email = "user@example.test",
-  allowedEmailDomains = ["example.test"]
+  allowedEmailDomains = ["example.test"],
+  transactionBinding
 }) {
+  const effectiveRuntimeBinding = runtimeBinding?.managed
+    ? { bindingVersion: 7, ...runtimeBinding }
+    : runtimeBinding;
+  const effectiveTransactionBinding = transactionBinding ?? (effectiveRuntimeBinding?.managed
+    ? {
+        identityProviderId: effectiveRuntimeBinding.connectionId,
+        identityProviderVersion: effectiveRuntimeBinding.bindingVersion
+      }
+    : {});
   const calls = { userLookup: 0, userCreates: 0, createdUser: null, sessionClaims: null };
   const baseUser = {
     id: "user-1",
@@ -83,6 +93,8 @@ function fixture({
         nonce: "nonce-1",
         verifier: "verifier",
         returnTo: "/",
+        identityProviderId: effectiveTransactionBinding.identityProviderId,
+        identityProviderVersion: effectiveTransactionBinding.identityProviderVersion,
         exp: Math.floor(Date.now() / 1000) + 60
       }),
       createSessionCookie: (claims) => {
@@ -93,7 +105,7 @@ function fixture({
     },
     "@/lib/db": { withDb: (operation) => operation(db) },
     "@/lib/runtime-identity-provider": {
-      enforceOidcRuntimeBinding: async () => runtimeBinding
+      enforceOidcRuntimeBinding: async () => effectiveRuntimeBinding
     },
     "@/lib/oidc": {
       discoverOidc: async () => ({
@@ -204,4 +216,58 @@ test("unmanaged legacy deployment keeps environment-controlled JIT behavior", as
   assert.equal(response.headers.get("location"), "/");
   assert.equal(calls.userCreates, 1);
   assert.ok(calls.sessionClaims);
+});
+
+
+test("OIDC callback rejects a transaction started under an older provider generation", async () => {
+  const { route, calls } = fixture({
+    runtimeBinding: {
+      managed: true,
+      connectionId: "idp-1",
+      bindingVersion: 8,
+      type: "OIDC",
+      jitEnabled: false,
+      mfaRequired: false
+    },
+    transactionBinding: {
+      identityProviderId: "idp-1",
+      identityProviderVersion: 7
+    }
+  });
+  const response = await invoke(route);
+  assert.match(response.headers.get("location") ?? "", /error=transaction/);
+  assert.equal(calls.userLookup, 0);
+  assert.equal(calls.sessionClaims, null);
+});
+
+test("OIDC callback rejects an unmanaged transaction after governed provider adoption", async () => {
+  const { route, calls } = fixture({
+    runtimeBinding: {
+      managed: true,
+      connectionId: "idp-1",
+      bindingVersion: 1,
+      type: "OIDC",
+      jitEnabled: false,
+      mfaRequired: false
+    },
+    transactionBinding: {}
+  });
+  const response = await invoke(route);
+  assert.match(response.headers.get("location") ?? "", /error=transaction/);
+  assert.equal(calls.userLookup, 0);
+  assert.equal(calls.sessionClaims, null);
+});
+
+test("OIDC callback rejects a governed transaction if runtime becomes unmanaged", async () => {
+  const { route, calls } = fixture({
+    runtimeBinding: { managed: false },
+    transactionBinding: {
+      identityProviderId: "idp-1",
+      identityProviderVersion: 7
+    }
+  });
+  const response = await invoke(route);
+  assert.match(response.headers.get("location") ?? "", /error=transaction/);
+  assert.equal(calls.userLookup, 0);
+  assert.equal(calls.sessionClaims, null);
 });
