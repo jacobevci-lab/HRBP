@@ -70,6 +70,12 @@ function fixture({ runtimeBinding, runtimeError = null }) {
 
 function authSessionRuntime() {
   return load("lib/auth-session.ts", {
+    "node:crypto": {
+      createHash: () => ({ update: () => ({ digest: () => "hash" }) }),
+      createHmac: () => ({ update: () => ({ digest: () => "sig" }) }),
+      randomBytes: () => Buffer.alloc(32),
+      timingSafeEqual: () => true
+    },
     "@prisma/client": {
       PlatformRole: {
         EMPLOYEE: "EMPLOYEE",
@@ -118,47 +124,53 @@ function claims(overrides = {}) {
   };
 }
 
-test("managed OIDC session remains valid only for the provider that issued it", async () => {
-  const runtime = fixture({
-    runtimeBinding: {
-      managed: true,
-      connectionId: "idp-1",
-      type: "OIDC",
-      jitEnabled: false,
-      mfaRequired: false,
-      scimEnabled: false
-    }
-  });
-  const session = claims({ identityProviderId: "idp-1" });
+function managedBinding(overrides = {}) {
+  return {
+    managed: true,
+    connectionId: "idp-1",
+    bindingVersion: 7,
+    type: "OIDC",
+    jitEnabled: false,
+    mfaRequired: false,
+    scimEnabled: false,
+    ...overrides
+  };
+}
+
+test("managed OIDC session remains valid only for exact provider and generation", async () => {
+  const runtime = fixture({ runtimeBinding: managedBinding() });
+  const session = claims({ identityProviderId: "idp-1", identityProviderVersion: 7 });
   assert.equal(await runtime.verifySessionAccount(session), session);
 });
 
 test("provider switch invalidates a previously issued managed OIDC session", async () => {
-  const runtime = fixture({
-    runtimeBinding: {
-      managed: true,
-      connectionId: "idp-2",
-      type: "OIDC",
-      jitEnabled: false,
-      mfaRequired: false,
-      scimEnabled: false
-    }
-  });
-  assert.equal(await runtime.verifySessionAccount(claims({ identityProviderId: "idp-1" })), null);
+  const runtime = fixture({ runtimeBinding: managedBinding({ connectionId: "idp-2", bindingVersion: 8 }) });
+  assert.equal(await runtime.verifySessionAccount(claims({
+    identityProviderId: "idp-1",
+    identityProviderVersion: 7
+  })), null);
+});
+
+test("provider lifecycle generation change invalidates existing sessions", async () => {
+  const runtime = fixture({ runtimeBinding: managedBinding({ bindingVersion: 8 }) });
+  assert.equal(await runtime.verifySessionAccount(claims({
+    identityProviderId: "idp-1",
+    identityProviderVersion: 7
+  })), null);
 });
 
 test("managed provider adoption forces pre-adoption legacy OIDC sessions to reauthenticate", async () => {
-  const runtime = fixture({
-    runtimeBinding: {
-      managed: true,
-      connectionId: "idp-1",
-      type: "OIDC",
-      jitEnabled: false,
-      mfaRequired: false,
-      scimEnabled: false
-    }
-  });
+  const runtime = fixture({ runtimeBinding: managedBinding() });
   assert.equal(await runtime.verifySessionAccount(claims()), null);
+});
+
+test("provider-level MFA stays effective for already-issued governed sessions", async () => {
+  const runtime = fixture({ runtimeBinding: managedBinding({ mfaRequired: true }) });
+  assert.equal(await runtime.verifySessionAccount(claims({
+    identityProviderId: "idp-1",
+    identityProviderVersion: 7,
+    mfaSatisfied: false
+  })), null);
 });
 
 test("provider disablement or governed runtime failure invalidates OIDC sessions fail-closed", async () => {
@@ -166,20 +178,41 @@ test("provider disablement or governed runtime failure invalidates OIDC sessions
     runtimeBinding: { managed: false },
     runtimeError: new Error("IDENTITY_PROVIDER_INACTIVE")
   });
-  assert.equal(await runtime.verifySessionAccount(claims({ identityProviderId: "idp-1" })), null);
+  assert.equal(await runtime.verifySessionAccount(claims({
+    identityProviderId: "idp-1",
+    identityProviderVersion: 7
+  })), null);
 });
 
 test("legacy environment OIDC session remains valid only while runtime is unmanaged", async () => {
   const runtime = fixture({ runtimeBinding: { managed: false } });
-  const session = claims();
-  assert.equal(await runtime.verifySessionAccount(session), session);
-  assert.equal(await runtime.verifySessionAccount(claims({ identityProviderId: "idp-1" })), null);
+  const legacy = claims();
+  assert.equal(await runtime.verifySessionAccount(legacy), legacy);
+  assert.equal(await runtime.verifySessionAccount(claims({
+    identityProviderId: "idp-1",
+    identityProviderVersion: 7
+  })), null);
 });
 
-
-test("session claim validation permits provider identity only on OIDC sessions", () => {
+test("session claim validation requires provider id and generation as an OIDC-only pair", () => {
   const authSession = authSessionRuntime();
-  assert.equal(authSession.validSessionClaims(claims({ identityProviderId: "idp-1" })), true);
-  assert.equal(authSession.validSessionClaims(claims({ authMethod: "local", identityProviderId: "idp-1" })), false);
-  assert.equal(authSession.validSessionClaims(claims({ identityProviderId: "bad provider id" })), false);
+  assert.equal(authSession.validSessionClaims(claims({
+    identityProviderId: "idp-1",
+    identityProviderVersion: 7
+  })), true);
+  assert.equal(authSession.validSessionClaims(claims({ identityProviderId: "idp-1" })), false);
+  assert.equal(authSession.validSessionClaims(claims({ identityProviderVersion: 7 })), false);
+  assert.equal(authSession.validSessionClaims(claims({
+    authMethod: "local",
+    identityProviderId: "idp-1",
+    identityProviderVersion: 7
+  })), false);
+  assert.equal(authSession.validSessionClaims(claims({
+    identityProviderId: "bad provider id",
+    identityProviderVersion: 7
+  })), false);
+  assert.equal(authSession.validSessionClaims(claims({
+    identityProviderId: "idp-1",
+    identityProviderVersion: 0
+  })), false);
 });
