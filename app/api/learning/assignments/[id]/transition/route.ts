@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           developmentSkill: { select: { code: true, name: true } },
           developmentPlan: { select: { id: true, title: true, ownerId: true } },
           successionCandidate: {
-            select: { id: true, plan: { select: { ownerId: true, positionId: true } } }
+            select: { id: true, active: true, plan: { select: { ownerId: true, positionId: true } } }
           }
         }
       });
@@ -92,7 +92,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         });
       }
 
-      if (next === LearningAssignmentStatus.COMPLETED && assignment.successionCandidate && assignment.developmentSkill && assignment.targetProficiency) {
+      if (next === LearningAssignmentStatus.COMPLETED && assignment.successionCandidate?.active && assignment.developmentSkill && assignment.targetProficiency) {
         const [position, activeOwner] = await Promise.all([
           tx.position.findFirst({
             where: { id: assignment.successionCandidate.plan.positionId, tenantId: ctx.tenantId },
