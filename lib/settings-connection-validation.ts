@@ -1,4 +1,5 @@
 import { IdentityProviderType } from "@prisma/client";
+import { normalizeOidcIssuer } from "@/lib/auth-config";
 import { asOptionalText } from "@/lib/input-validation";
 
 export function optionalEndpoint(value: unknown, protocols: string[], maxLength = 1024): string | null | undefined {
@@ -13,9 +14,13 @@ export function optionalEndpoint(value: unknown, protocols: string[], maxLength 
 }
 
 export function identityIssuer(value: unknown, type: IdentityProviderType) {
-  return type === IdentityProviderType.LDAP
-    ? optionalEndpoint(value, ["ldap:", "ldaps:"])
-    : optionalEndpoint(value, ["https:", "http:"]);
+  if (type === IdentityProviderType.LDAP) return optionalEndpoint(value, ["ldap:", "ldaps:"]);
+  const parsed = asOptionalText(value, 1024);
+  if (parsed === undefined || parsed === null) return parsed;
+  if (([IdentityProviderType.ENTRA_ID, IdentityProviderType.OKTA, IdentityProviderType.OIDC] as IdentityProviderType[]).includes(type)) {
+    return normalizeOidcIssuer(parsed);
+  }
+  return optionalEndpoint(parsed, ["https:", "http:"]);
 }
 
 export function identityMetadataUrl(value: unknown) {
