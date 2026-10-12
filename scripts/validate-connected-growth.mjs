@@ -19,6 +19,7 @@ expect(createPath, create, /can\(ctx,\s*"succession:write"\)[\s\S]*can\(ctx,\s*"
 expect(createPath, create, /canActOnEmployment/, "candidate employment must remain relationship scoped");
 expect(createPath, create, /employmentPrimaryKeyFilter\(scope\)/, "target succession position must remain relationship scoped");
 expect(createPath, create, /PLAN_INACTIVE/, "inactive succession plans must reject development assignments");
+expect(createPath, create, /CANDIDATE_INACTIVE/, "removed succession candidates must reject new development assignments");
 expect(createPath, create, /active:\s*true/, "development assignments must use active catalog records");
 expect(createPath, create, /DUPLICATE_OPEN_PLAN/, "duplicate open candidate-course-skill plans must be rejected");
 expect(createPath, create, /TARGET_NOT_ABOVE_CURRENT/, "target proficiency must be above current human-assessed proficiency");
@@ -35,6 +36,7 @@ for (const transitionPath of [
   expect(transitionPath, transition, /successionCandidate/, "reassessment must require succession candidate provenance");
   expect(transitionPath, transition, /developmentSkill/, "reassessment must require a structured development skill");
   expect(transitionPath, transition, /targetProficiency/, "reassessment must require a governed target proficiency");
+  expect(transitionPath, transition, /successionCandidate\?\.active/, "succession reassessment notifications must only target active candidate records");
   expect(transitionPath, transition, /updateMany/, "learning transitions must remain state-aware");
 }
 
@@ -59,6 +61,7 @@ expect(dataPath, data, /developmentAssignments/, "succession governance must sur
 expect(dataPath, data, /currentProficiency/, "succession governance must compare current assessed proficiency with the learning target");
 expect(dataPath, data, /includeDevelopmentCatalog/, "learning mutation catalog must be conditionally loaded");
 expect(dataPath, data, /employmentIdFilter\(scope\)/, "connected succession reads must preserve relationship scope");
+expect(dataPath, data, /candidates:\s*\{[\s\S]*where:\s*\{\s*active:\s*true,\s*\.\.\.employmentIdFilter\(scope\)/, "connected succession reads must exclude removed historical candidates from the active pipeline");
 
 const modulePath = "components/growth-module-page.tsx";
 const modulePage = await source(modulePath);
