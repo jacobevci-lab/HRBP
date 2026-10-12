@@ -17,7 +17,7 @@ function load(path, mocks) {
 }
 
 function fixture({ policy, assurance }) {
-  const calls = { userLookup: 0, sessionClaims: null };
+  const calls = { userLookup: 0, sessionClaims: null, oidcAudits: 0 };
   const user = {
     id: "user-1",
     tenantId: "tenant-1",
@@ -46,7 +46,11 @@ function fixture({ policy, assurance }) {
   };
   const route = load("app/api/auth/callback/route.ts", {
     "@/lib/safe-redirect": { sanitizeReturnTo: () => "/" },
-    "@prisma/client": { PlatformRole: { TENANT_ADMIN: "TENANT_ADMIN", EMPLOYEE: "EMPLOYEE" } },
+    "@prisma/client": {
+      DataClassification: { INTERNAL: "INTERNAL" },
+      PlatformRole: { TENANT_ADMIN: "TENANT_ADMIN", EMPLOYEE: "EMPLOYEE" }
+    },
+    "@/lib/audit": { recordAudit: async () => { calls.oidcAudits += 1; } },
     "@/lib/auth-config": {
       getOidcConfig: () => ({
         issuer: "https://idp.example.test",
@@ -146,6 +150,7 @@ test("OIDC callback binds successful assurance evidence into the application ses
   assert.equal(calls.sessionClaims.assuranceVersion, "a".repeat(64));
   assert.equal(calls.sessionClaims.tenantId, "tenant-1");
   assert.equal(calls.sessionClaims.actorId, "user-1");
+  assert.equal(calls.oidcAudits, 1);
 });
 
 
