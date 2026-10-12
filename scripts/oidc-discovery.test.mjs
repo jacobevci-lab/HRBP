@@ -222,3 +222,139 @@ test("OIDC issuer normalization rejects credentials, query, fragment and non-loo
     assert.equal(authConfig.normalizeOidcIssuer(value), null, value);
   }
 });
+
+
+test("authorization-code exchange blocks redirects, uses timeout and preserves PKCE/client binding", async () => {
+  const oidc = loadOidc();
+  const config = {
+    issuer: "https://idp.example.test",
+    clientId: "client-1",
+    clientSecret: "client-secret-value",
+    tenantId: "tenant-1",
+    scopes: "openid profile email",
+    allowedEmailDomains: ["example.test"],
+    jitProvisioning: false
+  };
+  const result = await oidc.exchangeAuthorizationCode({
+    config,
+    metadata: metadata(),
+    code: "authorization-code",
+    verifier: "verifier-value",
+    redirectUri: "https://hrbp.example.test/api/auth/callback",
+    fetchImpl: async (url, options) => {
+      assert.equal(url, "https://idp.example.test/oauth2/token");
+      assert.equal(options.method, "POST");
+      assert.equal(options.redirect, "error");
+      assert.equal(options.cache, "no-store");
+      assert.ok(options.signal instanceof AbortSignal);
+      const body = options.body;
+      assert.ok(body instanceof URLSearchParams);
+      assert.equal(body.get("grant_type"), "authorization_code");
+      assert.equal(body.get("client_id"), "client-1");
+      assert.equal(body.get("client_secret"), "client-secret-value");
+      assert.equal(body.get("code"), "authorization-code");
+      assert.equal(body.get("code_verifier"), "verifier-value");
+      assert.equal(body.get("redirect_uri"), "https://hrbp.example.test/api/auth/callback");
+      return jsonResponse({ id_token: "header.payload.signature", access_token: "opaque-access-token" });
+    }
+  });
+  assert.equal(result.id_token, "header.payload.signature");
+  assert.equal(result.access_token, "opaque-access-token");
+});
+
+test("authorization-code exchange rejects oversized token responses before JSON parsing", async () => {
+  const oidc = loadOidc();
+  await assert.rejects(
+    oidc.exchangeAuthorizationCode({
+      config: {
+        issuer: "https://idp.example.test",
+        clientId: "client-1",
+        tenantId: "tenant-1",
+        scopes: "openid profile email",
+        allowedEmailDomains: [],
+        jitProvisioning: false
+      },
+      metadata: metadata(),
+      code: "authorization-code",
+      verifier: "verifier-value",
+      redirectUri: "https://hrbp.example.test/api/auth/callback",
+      fetchImpl: async () => new Response("{}", {
+        status: 200,
+        headers: { "content-length": String(128 * 1024), "content-type": "application/json" }
+      })
+    }),
+    /token exchange response is too large/
+  );
+});
+
+test("authorization-code exchange never echoes provider error descriptions", async () => {
+  const oidc = loadOidc();
+  const secretDescription = "sensitive upstream diagnostics must not reach logs";
+  await assert.rejects(
+    oidc.exchangeAuthorizationCode({
+      config: {
+        issuer: "https://idp.example.test",
+        clientId: "client-1",
+        tenantId: "tenant-1",
+        scopes: "openid profile email",
+        allowedEmailDomains: [],
+        jitProvisioning: false
+      },
+      metadata: metadata(),
+      code: "authorization-code",
+      verifier: "verifier-value",
+      redirectUri: "https://hrbp.example.test/api/auth/callback",
+      fetchImpl: async () => jsonResponse({
+        error: "invalid_grant",
+        error_description: secretDescription
+      }, { status: 400 })
+    }),
+    (error) => {
+      assert.match(error.message, /invalid_grant/);
+      assert.doesNotMatch(error.message, new RegExp(secretDescription));
+      return true;
+    }
+  );
+});
+
+test("authorization-code exchange rejects invalid JSON and missing or oversized ID tokens", async () => {
+  const oidc = loadOidc();
+  const common = {
+    config: {
+      issuer: "https://idp.example.test",
+      clientId: "client-1",
+      tenantId: "tenant-1",
+      scopes: "openid profile email",
+      allowedEmailDomains: [],
+      jitProvisioning: false
+    },
+    metadata: metadata(),
+    code: "authorization-code",
+    verifier: "verifier-value",
+    redirectUri: "https://hrbp.example.test/api/auth/callback"
+  };
+
+  await assert.rejects(
+    oidc.exchangeAuthorizationCode({
+      ...common,
+      fetchImpl: async () => new Response("{", { status: 200, headers: { "content-type": "application/json" } })
+    }),
+    /not valid JSON/
+  );
+
+  await assert.rejects(
+    oidc.exchangeAuthorizationCode({
+      ...common,
+      fetchImpl: async () => jsonResponse({ access_token: "access-only" })
+    }),
+    /valid bounded ID token/
+  );
+
+  await assert.rejects(
+    oidc.exchangeAuthorizationCode({
+      ...common,
+      fetchImpl: async () => jsonResponse({ id_token: "x".repeat(40000) })
+    }),
+    /valid bounded ID token/
+  );
+});
