@@ -23,7 +23,8 @@ function fixture({
   existingUser = true,
   email = "user@example.test",
   allowedEmailDomains = ["example.test"],
-  transactionBinding
+  transactionBinding,
+  auditError = null
 }) {
   const effectiveRuntimeBinding = runtimeBinding?.managed
     ? { bindingVersion: 7, ...runtimeBinding }
@@ -34,7 +35,7 @@ function fixture({
         identityProviderVersion: effectiveRuntimeBinding.bindingVersion
       }
     : {});
-  const calls = { userLookup: 0, userCreates: 0, createdUser: null, sessionClaims: null };
+  const calls = { userLookup: 0, userCreates: 0, createdUser: null, sessionClaims: null, auditEvents: [] };
   const baseUser = {
     id: "user-1",
     tenantId: "tenant-1",
@@ -72,7 +73,16 @@ function fixture({
 
   const route = load("app/api/auth/callback/route.ts", {
     "@/lib/safe-redirect": { sanitizeReturnTo: () => "/" },
-    "@prisma/client": { PlatformRole: { TENANT_ADMIN: "TENANT_ADMIN", EMPLOYEE: "EMPLOYEE" } },
+    "@prisma/client": {
+      DataClassification: { INTERNAL: "INTERNAL" },
+      PlatformRole: { TENANT_ADMIN: "TENANT_ADMIN", EMPLOYEE: "EMPLOYEE" }
+    },
+    "@/lib/audit": {
+      recordAudit: async (input) => {
+        if (auditError) throw auditError;
+        calls.auditEvents.push(input);
+      }
+    },
     "@/lib/auth-config": {
       getOidcConfig: () => ({
         issuer: "https://idp.example.test",
@@ -127,8 +137,8 @@ function fixture({
   return { route, calls };
 }
 
-async function invoke(route) {
-  return route.GET(new Request("https://hrbp.example.test/api/auth/callback?code=code-1&state=state-1"));
+async function invoke(route, headers = {}) {
+  return route.GET(new Request("https://hrbp.example.test/api/auth/callback?code=code-1&state=state-1", { headers }));
 }
 
 test("managed provider MFA rejects an unassured token even when tenant MFA policy is off", async () => {
@@ -270,4 +280,52 @@ test("OIDC callback rejects a governed transaction if runtime becomes unmanaged"
   assert.match(response.headers.get("location") ?? "", /error=transaction/);
   assert.equal(calls.userLookup, 0);
   assert.equal(calls.sessionClaims, null);
+});
+
+
+test("successful governed OIDC sign-in records provider generation and assurance audit evidence", async () => {
+  const { route, calls } = fixture({
+    runtimeBinding: {
+      managed: true,
+      connectionId: "idp-1",
+      bindingVersion: 9,
+      type: "OIDC",
+      jitEnabled: false,
+      mfaRequired: false
+    },
+    assurance: { mfaSatisfied: true, deviceTrustSatisfied: true }
+  });
+  const response = await invoke(route, { "cf-connecting-ip": "203.0.113.9" });
+  assert.equal(response.headers.get("location"), "/");
+  assert.equal(calls.auditEvents.length, 1);
+  const event = calls.auditEvents[0];
+  assert.equal(event.action, "auth.oidc-succeeded");
+  assert.equal(event.resourceType, "UserAccount");
+  assert.equal(event.resourceId, "user-1");
+  assert.equal(event.ctx.tenantId, "tenant-1");
+  assert.equal(event.ctx.actorId, "user-1");
+  assert.equal(event.ctx.ipAddress, "203.0.113.9");
+  assert.equal(event.ctx.mfaSatisfied, true);
+  assert.equal(event.ctx.deviceTrustSatisfied, true);
+  assert.match(event.purpose, /idp-1 generation 9/);
+  assert.match(event.purpose, /MFA=true/);
+  assert.match(event.purpose, /deviceTrust=true/);
+});
+
+test("OIDC session issuance fails closed when immutable audit persistence is unavailable", async () => {
+  const { route, calls } = fixture({
+    runtimeBinding: {
+      managed: true,
+      connectionId: "idp-1",
+      bindingVersion: 7,
+      type: "OIDC",
+      jitEnabled: false,
+      mfaRequired: false
+    },
+    auditError: new Error("audit unavailable")
+  });
+  const response = await invoke(route);
+  assert.match(response.headers.get("location") ?? "", /error=callback/);
+  assert.equal(calls.sessionClaims, null);
+  assert.equal(calls.userLookup, 1);
 });
