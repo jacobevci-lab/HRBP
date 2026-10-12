@@ -88,7 +88,7 @@ expect(verifiedSessionPath, verifiedSession, /claims\.authMethod === "oidc"[\s\S
 expect(verifiedSessionPath, verifiedSession, /runtimeBinding\.managed[\s\S]*claims\.identityProviderId !== runtimeBinding\.connectionId/, "managed OIDC sessions must be invalidated when the active provider changes");
 expect(verifiedSessionPath, verifiedSession, /claims\.identityProviderVersion !== runtimeBinding\.bindingVersion/, "managed OIDC sessions must be invalidated when provider lifecycle generation changes");
 expect(verifiedSessionPath, verifiedSession, /runtimeBinding\.mfaRequired && claims\.mfaSatisfied !== true/, "provider MFA policy must remain effective for existing sessions");
-expect(verifiedSessionPath, verifiedSession, /runtimeBinding\.managed[\s\S]*else if \(claims\.identityProviderId !== undefined\)/, "legacy runtime must reject sessions stamped by a no-longer-managed provider");
+expect(verifiedSessionPath, verifiedSession, /runtimeBinding\.managed[\s\S]*else if \(claims\.identityProviderId !== undefined \|\| claims\.identityProviderVersion !== undefined\)/, "legacy runtime must reject sessions stamped by a no-longer-managed provider");
 
 const integrationPath = "app/api/settings/integrations/[id]/route.ts";
 const integration = await source(integrationPath);
