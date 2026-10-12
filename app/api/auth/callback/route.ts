@@ -37,6 +37,14 @@ export async function GET(request: Request) {
 
   try {
     const runtimeBinding = await withDb((db) => enforceOidcRuntimeBinding(db, config));
+    if (runtimeBinding.managed) {
+      if (transaction.identityProviderId !== runtimeBinding.connectionId ||
+          transaction.identityProviderVersion !== runtimeBinding.bindingVersion) {
+        throw new Error("IDENTITY_PROVIDER_TRANSACTION_STALE");
+      }
+    } else if (transaction.identityProviderId !== undefined || transaction.identityProviderVersion !== undefined) {
+      throw new Error("IDENTITY_PROVIDER_TRANSACTION_STALE");
+    }
     const metadata = await discoverOidc(config.issuer);
     const redirectUri = config.redirectUri || `${origin}/api/auth/callback`;
     const tokenSet = await exchangeAuthorizationCode({ config, metadata, code, verifier: transaction.verifier, redirectUri });
@@ -160,6 +168,8 @@ export async function GET(request: Request) {
       error.message === "IDENTITY_PROVIDER_INACTIVE"
     )
       ? "configuration"
+      : error instanceof Error && error.message === "IDENTITY_PROVIDER_TRANSACTION_STALE"
+      ? "transaction"
       : error instanceof Error && error.message === "IDENTITY_NOT_PROVISIONED"
       ? "not-provisioned"
       : error instanceof Error && error.message === "IDENTITY_DISABLED"
