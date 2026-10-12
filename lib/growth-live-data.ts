@@ -192,7 +192,7 @@ export async function getSuccessionGrowthData(input: string | RequestContext) {
         name: true,
         reviewDueAt: true,
         candidates: {
-          where: { ...employmentIdFilter(scope) },
+          where: { active: true, ...employmentIdFilter(scope) },
           select: { employmentId: true, readiness: true, rank: true }
         }
       }
