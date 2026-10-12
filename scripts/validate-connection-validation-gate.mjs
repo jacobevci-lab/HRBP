@@ -124,7 +124,10 @@ expect(panelPath, panel, /Validation required|Doğrulama gerekli/, "connection l
 expect(panelPath, panel, /integrationValidationCurrent\(row\.lastValidatedAt\)[\s\S]*validated=\{validationCurrent\}/, "integration lifecycle actions must receive fresh live-validation state");
 expect(panelPath, panel, /oidcValidationCurrent\(row\.lastValidatedAt\)/, "identity lifecycle must evaluate fresh OIDC live-validation evidence");
 expect(panelPath, panel, /Live validation expired|Canlı doğrulama süresi doldu/, "identity lifecycle must surface expired OIDC validation");
-expect(panelPath, panel, /kind="identity"[\s\S]*validated=\{validationCurrent\}/, "OIDC activation control must remain disabled after validation expiry");
+expect(panelPath, panel, /identityRuntimeActivationIssues\(row\)/, "identity lifecycle readiness must include runtime adapter and runtime-policy blockers");
+expect(panelPath, panel, /activationReady = validationCurrent && metadataIssues\.length === 0 && runtimeIssues\.length === 0/, "identity activation UI must require metadata, validation freshness and runtime readiness together");
+expect(panelPath, panel, /Runtime blocked|Runtime engeli/, "identity lifecycle must make unavailable runtime adapters explicit instead of appearing ready");
+expect(panelPath, panel, /kind="identity"[\s\S]*validated=\{activationReady\}/, "identity activation control must stay disabled while any runtime blocker exists");
 expect(panelPath, panel, /configuration validation is recorded|yapılandırma doğrulaması kaydedildikten/, "activation guidance must document the validation gate");
 
 const actionsPath = "components/connection-lifecycle-actions.tsx";
