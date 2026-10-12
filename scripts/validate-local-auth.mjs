@@ -93,11 +93,14 @@ expect(settingsPagePath, settingsPage, /localAuthEnabled:\s*true/, "tenant setti
 
 const settingsObservabilityPath = "components/settings-live-page.tsx";
 const settingsObservability = await source(settingsObservabilityPath);
-expect(settingsObservabilityPath, settingsObservability, /auth\.local-succeeded[\s\S]*auth\.local-failed[\s\S]*auth\.local-locked/, "settings must expose bounded local authentication audit telemetry");
-expect(settingsObservabilityPath, settingsObservability, /take:\s*50/, "local authentication telemetry must remain bounded");
-expect(settingsObservabilityPath, settingsObservability, /tenantId:\s*ctx\.tenantId/, "local authentication telemetry must remain tenant scoped");
-expect(settingsObservabilityPath, settingsObservability, /resourceType:\s*"UserAccount"/, "local authentication telemetry must read only user-account audit evidence");
-reject(settingsObservabilityPath, settingsObservability, /select:\s*\{[^}]*localPasswordHash|event\.localPasswordHash/, "local authentication telemetry must not select or render password hashes");
+expect(settingsObservabilityPath, settingsObservability, /auth\.oidc-succeeded[\s\S]*auth\.local-succeeded[\s\S]*auth\.local-failed[\s\S]*auth\.local-locked[\s\S]*auth\.session-logout/, "settings must expose unified OIDC, local-auth and logout audit telemetry");
+expect(settingsObservabilityPath, settingsObservability, /take:\s*50/, "authentication event telemetry must remain bounded");
+expect(settingsObservabilityPath, settingsObservability, /tenantId:\s*ctx\.tenantId/, "authentication telemetry must remain tenant scoped");
+expect(settingsObservabilityPath, settingsObservability, /resourceType:\s*"UserAccount"/, "authentication telemetry must read only user-account audit evidence");
+expect(settingsObservabilityPath, settingsObservability, /OIDC SUCCESS · 24H[\s\S]*LOCAL SUCCESS · 24H[\s\S]*LOCAL RISK · 24H[\s\S]*LOGOUT · 24H/, "authentication telemetry must summarize the primary 24-hour authentication and session signals");
+expect(settingsObservabilityPath, settingsObservability, /Credentials, tokens and password hashes are never included|Kimlik bilgileri, tokenlar ve parola hash değerleri hiçbir zaman gösterilmez/, "authentication telemetry guidance must explicitly exclude credential and token material");
+reject(settingsObservabilityPath, settingsObservability, /select:\s*\{[^}]*localPasswordHash|event\.localPasswordHash/, "authentication telemetry must not select or render password hashes");
+reject(settingsObservabilityPath, settingsObservability, /event\.(token|password|secret)|select:\s*\{[^}]*(token|password|secret)/i, "authentication telemetry must not select or render credential material");
 
 
 const authConfigPath = "lib/auth-config.ts";
