@@ -12,6 +12,14 @@ export type OidcMetadata = {
 const metadataCache = new Map<string, Promise<OidcMetadata>>();
 const OIDC_DISCOVERY_MAX_BYTES = 128 * 1024;
 const OIDC_DISCOVERY_TIMEOUT_MS = 5000;
+export const OIDC_VALIDATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+export function oidcValidationCurrent(value: Date | string | number | null | undefined, nowMs = Date.now()) {
+  const timestamp = value instanceof Date ? value.getTime() : typeof value === "string" || typeof value === "number" ? new Date(value).getTime() : Number.NaN;
+  if (!Number.isFinite(timestamp) || !Number.isFinite(nowMs)) return false;
+  const age = nowMs - timestamp;
+  return age >= -60_000 && age <= OIDC_VALIDATION_MAX_AGE_MS;
+}
 
 function normalizedOidcUrl(value: string, httpsRequired = false) {
   if (!value || value.length > 2048) return null;
@@ -102,6 +110,26 @@ function validatedOidcMetadata(expectedIssuer: string, value: Record<string, unk
   };
 }
 
+async function fetchValidatedOidcMetadata(normalized: string, fetchImpl: typeof fetch) {
+  const response = await fetchImpl(`${normalized}/.well-known/openid-configuration`, {
+    headers: { accept: "application/json" },
+    cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(OIDC_DISCOVERY_TIMEOUT_MS)
+  });
+  if (!response.ok) {
+    try { await response.body?.cancel(); } catch {}
+    throw new Error(`OIDC discovery failed with HTTP ${response.status}.`);
+  }
+  return validatedOidcMetadata(normalized, await boundedJsonObject(response));
+}
+
+export function probeOidcDiscovery(issuer: string, fetchImpl: typeof fetch = fetch): Promise<OidcMetadata> {
+  const normalized = normalizedIssuer(issuer);
+  if (!normalized) return Promise.reject(new Error("OIDC issuer must be a valid HTTP(S) URL without query or fragment."));
+  return fetchValidatedOidcMetadata(normalized, fetchImpl);
+}
+
 export function discoverOidc(issuer: string, fetchImpl: typeof fetch = fetch): Promise<OidcMetadata> {
   const normalized = normalizedIssuer(issuer);
   if (!normalized) return Promise.reject(new Error("OIDC issuer must be a valid HTTP(S) URL without query or fragment."));
@@ -109,20 +137,7 @@ export function discoverOidc(issuer: string, fetchImpl: typeof fetch = fetch): P
   const cached = metadataCache.get(normalized);
   if (cached) return cached;
 
-  const promise = (async () => {
-    const response = await fetchImpl(`${normalized}/.well-known/openid-configuration`, {
-      headers: { accept: "application/json" },
-      cache: "no-store",
-      redirect: "error",
-      signal: AbortSignal.timeout(OIDC_DISCOVERY_TIMEOUT_MS)
-    });
-    if (!response.ok) {
-      try { await response.body?.cancel(); } catch {}
-      throw new Error(`OIDC discovery failed with HTTP ${response.status}.`);
-    }
-    return validatedOidcMetadata(normalized, await boundedJsonObject(response));
-  })();
-
+  const promise = fetchValidatedOidcMetadata(normalized, fetchImpl);
   metadataCache.set(normalized, promise);
   promise.catch(() => {
     if (metadataCache.get(normalized) === promise) metadataCache.delete(normalized);
