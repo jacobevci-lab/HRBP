@@ -17,7 +17,7 @@ export function identityIssuer(value: unknown, type: IdentityProviderType) {
   if (type === IdentityProviderType.LDAP) return optionalEndpoint(value, ["ldap:", "ldaps:"]);
   const parsed = asOptionalText(value, 1024);
   if (parsed === undefined || parsed === null) return parsed;
-  if ([IdentityProviderType.ENTRA_ID, IdentityProviderType.OKTA, IdentityProviderType.OIDC].includes(type)) {
+  if (([IdentityProviderType.ENTRA_ID, IdentityProviderType.OKTA, IdentityProviderType.OIDC] as IdentityProviderType[]).includes(type)) {
     return normalizeOidcIssuer(parsed);
   }
   return optionalEndpoint(parsed, ["https:", "http:"]);
