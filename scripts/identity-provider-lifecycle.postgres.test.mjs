@@ -143,9 +143,10 @@ test("PostgreSQL serializes governed identity-provider activation", { skip: proc
         status: "ACTIVE",
         type: { in: ["ENTRA_ID", "OKTA", "OIDC"] }
       },
-      select: { id: true }
+      select: { id: true, runtimeVersion: true }
     });
     assert.equal(active.length, 1, "exactly one OIDC-family provider must remain active");
+    assert.equal(active[0].runtimeVersion, 2, "successful activation must advance the provider runtime generation");
 
     const rejected = results.find((entry) => entry.status === 409);
     assert.match(rejected?.body?.error ?? "", /(Only one runtime OIDC-family identity provider can be active|state changed concurrently)/i);
@@ -190,6 +191,11 @@ test("PostgreSQL serializes governed identity-provider activation", { skip: proc
     assert.equal(await db.identityProviderConnection.count({
       where: { tenantId, status: "ACTIVE", type: { in: ["ENTRA_ID", "OKTA", "OIDC"] } }
     }), 0);
+    const disabledProvider = await db.identityProviderConnection.findUnique({
+      where: { id: active[0].id },
+      select: { runtimeVersion: true }
+    });
+    assert.equal(disabledProvider?.runtimeVersion, 3, "disable must advance the provider runtime generation again");
 
     const runtimeBinding = load("lib/runtime-identity-provider.ts", {
       "@prisma/client": prisma,
