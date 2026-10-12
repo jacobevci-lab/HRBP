@@ -96,6 +96,29 @@ export function SuccessionGovernanceConsole({ plans, courses, skills, allowLearn
         <div className="performance-review-controls"><input name="reviewDueAt" type="date" defaultValue={dateOnly(plan.reviewDueAt)}/><button className="secondary-button" disabled={pending !== null}>{pending === `plan-${plan.id}` ? "…" : c("Save review date", "İnceleme tarihini kaydet")}</button><button className="secondary-button" type="button" disabled={pending !== null} onClick={() => void mutate(`plan-state-${plan.id}`, `/api/succession/plans/${plan.id}`, "PATCH", { active: !plan.active })}>{pending === `plan-state-${plan.id}` ? "…" : plan.active ? c("Deactivate", "Pasife al") : c("Reactivate", "Yeniden etkinleştir")}</button></div>
       </form>
 
+      <form className="performance-operation review-operation" onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        void mutate(`plan-review-${plan.id}`, `/api/succession/plans/${plan.id}/review`, "POST", {
+          summary: data.get("summary"),
+          nextReviewDueAt: data.get("nextReviewDueAt"),
+          expectedUpdatedAt: plan.updatedAt
+        });
+      }}>
+        <div className="performance-operation-main">
+          <strong>{c("Governed succession review", "Yönetişimli yedekleme incelemesi")}</strong>
+          <small>{plan.lastReviewedAt
+            ? c(`Last attested ${dateOnly(plan.lastReviewedAt)} by ${plan.lastReviewedBy ?? "governed reviewer"}`, `Son onaylı inceleme ${dateOnly(plan.lastReviewedAt)} · ${plan.lastReviewedBy ?? "yönetişimli inceleyen"}`)
+            : c("No attested human review has been recorded yet.", "Henüz onaylı insan incelemesi kaydedilmedi.")}</small>
+          {plan.lastReviewSummary ? <span>{plan.lastReviewSummary}</span> : null}
+        </div>
+        {plan.active ? <div className="performance-review-controls">
+          <textarea name="summary" required minLength={12} maxLength={2000} placeholder={c("Review summary (12–2000 characters)", "İnceleme özeti (12–2000 karakter)")}/>
+          <input name="nextReviewDueAt" type="date" required aria-label={c("Next review date", "Sonraki inceleme tarihi")}/>
+          <button className="secondary-button" disabled={pending !== null}>{pending === `plan-review-${plan.id}` ? "…" : c("Complete review", "İncelemeyi tamamla")}</button>
+        </div> : <div className="performance-finalized"><CircleAlert size={14}/>{c("Reactivate the plan before attesting a new review.", "Yeni incelemeyi onaylamadan önce planı yeniden etkinleştirin.")}</div>}
+      </form>
+
       {plan.active && plan.candidates.length ? <div className="growth-lifecycle-list">{plan.candidates.map((candidate) => <Fragment key={candidate.id}>
         <form className="growth-lifecycle-row" onSubmit={(event) => {
           event.preventDefault();
