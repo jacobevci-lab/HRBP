@@ -34,8 +34,10 @@ export async function verifySessionAccount(claims: SessionClaims | null): Promis
       if (!oidc || oidc.tenantId !== claims.tenantId) return null;
       const runtimeBinding = await enforceOidcRuntimeBinding(db, oidc);
       if (runtimeBinding.managed) {
-        if (!claims.identityProviderId || claims.identityProviderId !== runtimeBinding.connectionId) return null;
-      } else if (claims.identityProviderId !== undefined) {
+        if (claims.identityProviderId !== runtimeBinding.connectionId ||
+            claims.identityProviderVersion !== runtimeBinding.bindingVersion) return null;
+        if (runtimeBinding.mfaRequired && claims.mfaSatisfied !== true) return null;
+      } else if (claims.identityProviderId !== undefined || claims.identityProviderVersion !== undefined) {
         return null;
       }
     }
