@@ -230,6 +230,10 @@ model SuccessionCandidate {
   readinessReason       String?
   readinessReviewedAt   DateTime?
   readinessReviewedById String?
+  active                Boolean @default(true)
+  removedAt             DateTime?
+  removedById           String?
+  removalReason         String?
   rank                  Int?
   developmentGap        String?
   addedAt               DateTime @default(now())
