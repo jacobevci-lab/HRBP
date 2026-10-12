@@ -24,6 +24,9 @@ function fixture({
   email = "user@example.test",
   allowedEmailDomains = ["example.test"]
 }) {
+  const effectiveRuntimeBinding = runtimeBinding?.managed
+    ? { bindingVersion: 7, ...runtimeBinding }
+    : runtimeBinding;
   const calls = { userLookup: 0, userCreates: 0, createdUser: null, sessionClaims: null };
   const baseUser = {
     id: "user-1",
@@ -83,6 +86,8 @@ function fixture({
         nonce: "nonce-1",
         verifier: "verifier",
         returnTo: "/",
+        identityProviderId: effectiveRuntimeBinding?.managed ? effectiveRuntimeBinding.connectionId : undefined,
+        identityProviderVersion: effectiveRuntimeBinding?.managed ? effectiveRuntimeBinding.bindingVersion : undefined,
         exp: Math.floor(Date.now() / 1000) + 60
       }),
       createSessionCookie: (claims) => {
@@ -93,7 +98,7 @@ function fixture({
     },
     "@/lib/db": { withDb: (operation) => operation(db) },
     "@/lib/runtime-identity-provider": {
-      enforceOidcRuntimeBinding: async () => runtimeBinding
+      enforceOidcRuntimeBinding: async () => effectiveRuntimeBinding
     },
     "@/lib/oidc": {
       discoverOidc: async () => ({
