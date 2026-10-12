@@ -12,6 +12,8 @@ export type OidcMetadata = {
 const metadataCache = new Map<string, Promise<OidcMetadata>>();
 const OIDC_DISCOVERY_MAX_BYTES = 128 * 1024;
 const OIDC_DISCOVERY_TIMEOUT_MS = 5000;
+const OIDC_VALIDATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const OIDC_VALIDATION_CLOCK_SKEW_MS = 60 * 1000;
 export const OIDC_VALIDATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export function oidcValidationCurrent(value: Date | string | number | null | undefined, nowMs = Date.now()) {
@@ -128,6 +130,31 @@ export function probeOidcDiscovery(issuer: string, fetchImpl: typeof fetch = fet
   const normalized = normalizedIssuer(issuer);
   if (!normalized) return Promise.reject(new Error("OIDC issuer must be a valid HTTP(S) URL without query or fragment."));
   return fetchValidatedOidcMetadata(normalized, fetchImpl);
+}
+
+export async function probeOidcDiscovery(issuer: string, fetchImpl: typeof fetch = fetch): Promise<OidcMetadata> {
+  const normalized = normalizedIssuer(issuer);
+  if (!normalized) throw new Error("OIDC issuer must be a valid HTTP(S) URL without query or fragment.");
+
+  const response = await fetchImpl(`${normalized}/.well-known/openid-configuration`, {
+    headers: { accept: "application/json" },
+    cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(OIDC_DISCOVERY_TIMEOUT_MS)
+  });
+  if (!response.ok) {
+    try { await response.body?.cancel(); } catch {}
+    throw new Error(`OIDC discovery failed with HTTP ${response.status}.`);
+  }
+  return validatedOidcMetadata(normalized, await boundedJsonObject(response));
+}
+
+export function oidcValidationCurrent(value: Date | string | null | undefined, now = Date.now()) {
+  if (!value) return false;
+  const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
+  if (!Number.isFinite(timestamp)) return false;
+  if (timestamp > now + OIDC_VALIDATION_CLOCK_SKEW_MS) return false;
+  return now - timestamp <= OIDC_VALIDATION_MAX_AGE_MS;
 }
 
 export function discoverOidc(issuer: string, fetchImpl: typeof fetch = fetch): Promise<OidcMetadata> {
