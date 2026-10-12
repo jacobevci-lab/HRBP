@@ -154,9 +154,9 @@ test("discovery rejects oversized metadata before parsing", async () => {
 
 test("issuer configuration rejects credentials, query and non-http protocols", async () => {
   const oidc = loadOidc();
-  await assert.rejects(oidc.discoverOidc("https://user:pass@example.test", async () => jsonResponse({})), /valid HTTP/);
-  await assert.rejects(oidc.discoverOidc("https://example.test?tenant=x", async () => jsonResponse({})), /valid HTTP/);
-  await assert.rejects(oidc.discoverOidc("file:///etc/passwd", async () => jsonResponse({})), /valid HTTP/);
+  await assert.rejects(oidc.discoverOidc("https://user:pass@example.test", async () => jsonResponse({})), /must use HTTPS/);
+  await assert.rejects(oidc.discoverOidc("https://example.test?tenant=x", async () => jsonResponse({})), /must use HTTPS/);
+  await assert.rejects(oidc.discoverOidc("file:///etc/passwd", async () => jsonResponse({})), /must use HTTPS/);
 });
 
 
