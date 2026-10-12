@@ -132,7 +132,10 @@ jobs:
           docker image inspect hrbp-one:scanner-ci --format '{{json .Config.Healthcheck}}' | grep -q 'document-scan-health.mjs'
           test "$(docker image inspect hrbp-one:scanner-ci --format '{{.Config.User}}')" = "node"
 
-          retry 5 10 docker compose --env-file .env.onprem -f docker-compose.onprem.yml pull document-scanner-engine
+          # Scanner availability is validated at install/upgrade time. PR CI
+          # verifies the resolved pinned image contract without depending on
+          # Docker Hub's shared anonymous runner quota.
+          grep -q 'image: clamav/clamav:1.5.4-debian' /tmp/hrbp-onprem-compose.yml
       - name: Rehearse on-prem backup and restore
         shell: bash
         run: |
