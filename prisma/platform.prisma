@@ -146,6 +146,7 @@ model IdentityProviderConnection {
   jitEnabled        Boolean @default(false)
   mfaRequired       Boolean @default(true)
   status            ConnectionStatus @default(DRAFT)
+  runtimeVersion    Int @default(1)
   lastValidatedAt   DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
