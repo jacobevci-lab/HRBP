@@ -43,6 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           status: true,
           managerRating: true,
           finalRating: true,
+          updatedAt: true,
           cycle: { select: { status: true, name: true } }
         }
       });
@@ -57,19 +58,40 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (next === ReviewStatus.FINALIZED && !review.managerRating) throw new Error("MANAGER_RATING_REQUIRED");
       if (next === ReviewStatus.FINALIZED && !finalRating) throw new Error("FINAL_RATING_REQUIRED");
 
-      const updated = await tx.performanceReview.update({
-        where: { id },
+      const calibrationNotes = typeof body.calibrationNotes === "string" ? body.calibrationNotes.trim() : "";
+      if (body.calibrationNotes !== undefined && typeof body.calibrationNotes !== "string") {
+        throw new Error("INVALID_CALIBRATION_NOTES");
+      }
+      if (calibrationNotes.length > 4000) throw new Error("CALIBRATION_NOTES_TOO_LONG");
+      const ratingOverride = next === ReviewStatus.FINALIZED &&
+        Boolean(review.managerRating && finalRating && finalRating !== review.managerRating);
+      if (ratingOverride && calibrationNotes.length < 12) throw new Error("CALIBRATION_OVERRIDE_REASON_REQUIRED");
+
+      const result = await tx.performanceReview.updateMany({
+        where: {
+          id,
+          tenantId: ctx.tenantId,
+          status: review.status,
+          updatedAt: review.updatedAt
+        },
         data: {
           status: next,
           finalRating,
-          calibrationNotes: next === ReviewStatus.FINALIZED && body.calibrationNotes ? String(body.calibrationNotes).trim().slice(0, 4000) : undefined
+          calibrationNotes: next === ReviewStatus.FINALIZED ? (calibrationNotes || null) : undefined
         }
       });
+      if (result.count !== 1) throw new Error("STALE_STATE");
+      const updated = await tx.performanceReview.findUnique({ where: { id } });
+      if (!updated) throw new Error("NOT_FOUND");
+
       await appendAudit(tx, ctx, {
         action: `performance-review.transition.${review.status.toLowerCase()}.${next.toLowerCase()}`,
         resourceType: "PerformanceReview",
         resourceId: id,
-        classification: DataClassification.CONFIDENTIAL
+        classification: DataClassification.CONFIDENTIAL,
+        purpose: next === ReviewStatus.FINALIZED
+          ? `Calibration finalized: manager=${review.managerRating}; final=${finalRating}; override=${ratingOverride}; justificationRecorded=${Boolean(calibrationNotes)}`
+          : undefined
       });
       if (next === ReviewStatus.SELF_REVIEW) {
         await enqueuePerformanceParticipantNotification(tx, {
@@ -92,6 +114,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (code === "CYCLE_PHASE") return Response.json({ error: "Review transition is not allowed in the current review-cycle phase." }, { status: 409 });
     if (code === "MANAGER_RATING_REQUIRED") return Response.json({ error: "A manager-submitted rating is required before calibration can be finalized." }, { status: 400 });
     if (code === "FINAL_RATING_REQUIRED") return Response.json({ error: "A human-entered final rating is required before finalization." }, { status: 400 });
+    if (code === "INVALID_CALIBRATION_NOTES") return Response.json({ error: "Calibration notes must be text when provided." }, { status: 400 });
+    if (code === "CALIBRATION_NOTES_TOO_LONG") return Response.json({ error: "Calibration notes must not exceed 4000 characters." }, { status: 400 });
+    if (code === "CALIBRATION_OVERRIDE_REASON_REQUIRED") return Response.json({ error: "Changing the manager rating during calibration requires a justification of at least 12 characters." }, { status: 400 });
+    if (code === "STALE_STATE") return Response.json({ error: "This calibration decision changed concurrently. Refresh before submitting another final rating." }, { status: 409 });
     throw error;
   }
 }
