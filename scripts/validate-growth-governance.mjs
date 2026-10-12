@@ -102,6 +102,15 @@ expect(successionCandidatePath, successionCandidate, /export async function DELE
 expect(successionCandidatePath, successionCandidate, /canActOnEmployment/, "candidate maintenance must remain relationship scoped");
 expect(successionCandidatePath, successionCandidate, /RANK_CONFLICT/, "candidate maintenance must prevent rank collisions");
 expect(successionCandidatePath, successionCandidate, /succession-candidate\.removed/, "candidate removal must emit audit evidence");
+expect(successionCandidatePath, successionCandidate, /expectedUpdatedAt/, "candidate maintenance must require optimistic concurrency evidence");
+expect(successionCandidatePath, successionCandidate, /readinessChanged[\s\S]*readinessReason\.length < 12/, "readiness changes must require a meaningful human decision reason");
+expect(successionCandidatePath, successionCandidate, /asOptionalText\(body\.readinessReason, 2000\)/, "readiness decision reasons must be bounded to 2000 characters");
+expect(successionCandidatePath, successionCandidate, /asOptionalText\(body\.developmentGap, 2000\)/, "development gaps must be bounded without silent truncation");
+expect(successionCandidatePath, successionCandidate, /updateMany\([\s\S]*updatedAt:\s*candidate\.updatedAt/, "candidate updates must use state-aware optimistic concurrency");
+expect(successionCandidatePath, successionCandidate, /readinessReviewedAt:[\s\S]*readinessReviewedById:\s*ctx\.actorId/, "readiness decisions must persist human reviewer provenance");
+expect(successionCandidatePath, successionCandidate, /succession-candidate\.readiness-reviewed/, "readiness changes must emit a dedicated audit event");
+expect(successionCandidatePath, successionCandidate, /previous=\$\{candidate\.readiness\}; next=\$\{readiness\}; reasonRecorded=true/, "readiness audit evidence must record decision shape without copying the reason text");
+expect(successionCandidatePath, successionCandidate, /STALE_STATE/, "concurrent candidate updates must fail with a bounded stale-state conflict");
 
 const successionPlanPath = "app/api/succession/plans/route.ts";
 const successionPlan = await source(successionPlanPath);
@@ -138,6 +147,11 @@ expect(successionSchemaPath, successionSchema, /model SuccessionPlan[\s\S]*lastR
 const successionMigrationPath = "prisma/migrations/20261012113000_succession_review_attestation/migration.sql";
 const successionMigration = await source(successionMigrationPath);
 expect(successionMigrationPath, successionMigration, /ADD COLUMN "lastReviewedAt"[\s\S]*ADD COLUMN "lastReviewedById"[\s\S]*ADD COLUMN "lastReviewSummary"/, "succession review attestation must be delivered through a versioned migration");
+expect(successionSchemaPath, successionSchema, /model SuccessionCandidate[\s\S]*readinessReason\s+String\?[\s\S]*readinessReviewedAt\s+DateTime\?[\s\S]*readinessReviewedById\s+String\?[\s\S]*updatedAt\s+DateTime\s+@updatedAt/, "successor candidates must persist human readiness decision provenance and concurrency state");
+const readinessMigrationPath = "prisma/migrations/20261012153000_succession_readiness_decision/migration.sql";
+const readinessMigration = await source(readinessMigrationPath);
+expect(readinessMigrationPath, readinessMigration, /ADD COLUMN "readinessReason"[\s\S]*ADD COLUMN "readinessReviewedAt"[\s\S]*ADD COLUMN "readinessReviewedById"[\s\S]*ADD COLUMN "updatedAt"/, "readiness decision governance must be delivered through a versioned migration");
+expect(readinessMigrationPath, readinessMigration, /UPDATE "SuccessionCandidate"[\s\S]*SET "updatedAt" = "addedAt"[\s\S]*ALTER COLUMN "updatedAt" SET NOT NULL/, "readiness migration must safely backfill optimistic concurrency state for existing candidates");
 
 const successionDataPath = "lib/succession-governance-data.ts";
 const successionData = await source(successionDataPath);
@@ -149,6 +163,11 @@ expect(successionDataPath, successionData, /lastReviewedById:\s*true/, "successi
 expect(successionDataPath, successionData, /lastReviewSummary:\s*true/, "succession governance data must load the bounded human review summary");
 expect(successionDataPath, successionData, /userAccount\.findMany/, "succession governance data must resolve reviewer actor display names tenant-locally");
 expect(successionDataPath, successionData, /updatedAt:\s*plan\.updatedAt\.toISOString\(\)/, "succession governance UI must receive concurrency evidence for review attestation");
+expect(successionDataPath, successionData, /readinessReason:\s*true/, "succession governance data must load human readiness rationale");
+expect(successionDataPath, successionData, /readinessReviewedAt:\s*true/, "succession governance data must load readiness decision timestamps");
+expect(successionDataPath, successionData, /readinessReviewedById:\s*true/, "succession governance data must load readiness reviewer identity");
+expect(successionDataPath, successionData, /updatedAt:\s*candidate\.updatedAt\.toISOString\(\)/, "candidate UI must receive optimistic concurrency evidence");
+expect(successionDataPath, successionData, /readinessReviewedBy:[\s\S]*reviewerMap\.get\(candidate\.readinessReviewedById\)/, "readiness reviewer identity must resolve tenant-locally for the governance UI");
 
 const successionConsolePath = "components/succession-governance-console.tsx";
 const successionConsole = await source(successionConsolePath);
@@ -161,6 +180,10 @@ expect(successionConsolePath, successionConsole, /expectedUpdatedAt:\s*plan\.upd
 expect(successionConsolePath, successionConsole, /name="summary"[\s\S]*minLength=\{12\}[\s\S]*maxLength=\{2000\}/, "succession review UI must mirror bounded summary requirements");
 expect(successionConsolePath, successionConsole, /name="nextReviewDueAt"[\s\S]*type="date"[\s\S]*required/, "succession review UI must require the next review date");
 expect(successionConsolePath, successionConsole, /plan\.lastReviewedAt[\s\S]*plan\.lastReviewedBy[\s\S]*plan\.lastReviewSummary/, "succession UI must surface prior human review evidence");
+expect(successionConsolePath, successionConsole, /readinessReason:\s*data\.get\("readinessReason"\)/, "succession UI must submit the human readiness decision reason");
+expect(successionConsolePath, successionConsole, /expectedUpdatedAt:\s*candidate\.updatedAt/, "candidate UI must submit optimistic concurrency evidence");
+expect(successionConsolePath, successionConsole, /name="readinessReason"[\s\S]*maxLength=\{2000\}/, "readiness reason input must mirror the bounded backend contract");
+expect(successionConsolePath, successionConsole, /candidate\.readinessReviewedAt[\s\S]*candidate\.readinessReviewedBy[\s\S]*candidate\.readinessReason/, "succession UI must surface prior readiness decision provenance");
 
 const reminderPath = "lib/succession-reminders.ts";
 const reminders = await source(reminderPath);
