@@ -13,6 +13,10 @@ expect(identityPath, identity, /status !== ConnectionStatus\.DRAFT/, "identity m
 expect(identityPath, identity, /updatedAt\.getTime\(\) !== expectedUpdatedAt\.getTime\(\)/, "identity metadata editing must enforce optimistic concurrency");
 expect(identityPath, identity, /TransactionIsolationLevel\.Serializable/, "identity metadata editing must be serializable");
 expect(identityPath, identity, /identityIssuer/, "identity metadata editing must reuse governed endpoint validation");
+const helperPath = "lib/settings-connection-validation.ts";
+const helper = await source(helperPath);
+expect(helperPath, helper, /normalizeOidcIssuer/, "OIDC-family connection metadata must reuse the secure runtime issuer normalizer");
+expect(helperPath, helper, /ENTRA_ID[\s\S]*OKTA[\s\S]*OIDC[\s\S]*normalizeOidcIssuer/, "Entra, Okta and generic OIDC metadata must enforce the same secure issuer transport boundary");
 expect(identityPath, identity, /identityMetadataUrl/, "identity metadata editing must validate SAML metadata URL");
 expect(identityPath, identity, /lastValidatedAt:\s*null/, "identity metadata changes must invalidate prior validation evidence");
 expect(identityPath, identity, /settings\.identity-provider-metadata-updated/, "identity metadata edits must be audited");
@@ -47,6 +51,11 @@ expect(modulePath, modulePage, /can\(ctx,\s*"settings:write"\)/, "metadata edito
 
 const packagePath = "package.json";
 const pkg = await source(packagePath);
+const createIdentityPath = "app/api/settings/identity/route.ts";
+const createIdentity = await source(createIdentityPath);
+expect(createIdentityPath, createIdentity, /issuer must use HTTPS without credentials, query or fragment; loopback HTTP is allowed only for local development/, "identity creation must explain the secure OIDC issuer requirement");
+expect(identityPath, identity, /issuer must use HTTPS without credentials, query or fragment; loopback HTTP is allowed only for local development/, "identity metadata editing must explain the secure OIDC issuer requirement");
+
 expect(packagePath, pkg, /connection-metadata:validate/, "connection metadata validator must be registered");
 expect(packagePath, pkg, /prebuild[\s\S]*connection-metadata:validate/, "connection metadata validation must run before production builds");
 
