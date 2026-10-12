@@ -1,5 +1,20 @@
 import { runtimeBoolean, runtimeString } from "@/lib/runtime-env";
 
+const OIDC_LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
+
+export function normalizeOidcIssuer(value: string | null | undefined): string | null {
+  if (!value || value.length > 2048) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.username || parsed.password || parsed.hash || parsed.search) return null;
+    const loopback = OIDC_LOOPBACK_HOSTS.has(parsed.hostname);
+    if (parsed.protocol !== "https:" && !(parsed.protocol === "http:" && loopback)) return null;
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
 export type OidcConfig = {
   issuer: string;
   clientId: string;
@@ -13,7 +28,7 @@ export type OidcConfig = {
 };
 
 export function getOidcConfig(): OidcConfig | null {
-  const issuer = runtimeString("HRBP_OIDC_ISSUER")?.replace(/\/$/, "");
+  const issuer = normalizeOidcIssuer(runtimeString("HRBP_OIDC_ISSUER"));
   const clientId = runtimeString("HRBP_OIDC_CLIENT_ID");
   const tenantId = runtimeString("HRBP_AUTH_TENANT_ID");
   const sessionSecret = runtimeString("HRBP_SESSION_SECRET");
@@ -38,7 +53,9 @@ export function getOidcConfig(): OidcConfig | null {
 
 export function authConfigurationStatus() {
   const missing: string[] = [];
-  if (!runtimeString("HRBP_OIDC_ISSUER")) missing.push("HRBP_OIDC_ISSUER");
+  const rawIssuer = runtimeString("HRBP_OIDC_ISSUER");
+  if (!rawIssuer) missing.push("HRBP_OIDC_ISSUER");
+  else if (!normalizeOidcIssuer(rawIssuer)) missing.push("HRBP_OIDC_ISSUER (HTTPS required; loopback HTTP only)");
   if (!runtimeString("HRBP_OIDC_CLIENT_ID")) missing.push("HRBP_OIDC_CLIENT_ID");
   if (!runtimeString("HRBP_AUTH_TENANT_ID")) missing.push("HRBP_AUTH_TENANT_ID");
   const secret = runtimeString("HRBP_SESSION_SECRET");
