@@ -1,11 +1,9 @@
 import { ConnectionStatus, DataClassification, Prisma } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
-import { getOidcConfig } from "@/lib/auth-config";
 import { db } from "@/lib/db";
 import { lockIdentityProviderTenant } from "@/lib/identity-provider-lifecycle";
 import { asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
-import { oidcValidationCurrent, probeOidcDiscovery } from "@/lib/oidc";
 import { oidcValidationCurrent, probeOidcDiscovery } from "@/lib/oidc";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { identityActivationIssues } from "@/lib/settings-connection-validation";
@@ -56,12 +54,6 @@ function lifecycleErrorResponse(error: unknown) {
     }
     if (error.code === "LIVE_VALIDATION_FAILED") {
       return Response.json({ error: `Live OIDC provider validation failed (${error.detail ?? "DISCOVERY_UNAVAILABLE"}). Check provider reachability and discovery metadata, then retry.` }, { status: 409 });
-    }
-    if (error.code === "VALIDATION_EXPIRED") {
-      return Response.json({ error: "OIDC live validation evidence is older than 24 hours. Revalidate the provider before activation." }, { status: 409 });
-    }
-    if (error.code === "LIVE_VALIDATION_FAILED") {
-      return Response.json({ error: `OIDC live validation failed. ${error.detail ?? "Provider discovery is unavailable or invalid."}` }, { status: 409 });
     }
     if (error.code === "RUNTIME_NOT_READY") {
       return Response.json({
