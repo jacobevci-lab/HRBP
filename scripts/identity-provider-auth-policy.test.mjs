@@ -126,7 +126,8 @@ test("managed provider MFA rejects an unassured token even when tenant MFA polic
       connectionId: "idp-1",
       type: "OIDC",
       jitEnabled: false,
-      mfaRequired: true
+      mfaRequired: true,
+      bindingVersion: 7
     },
     assurance: { mfaSatisfied: false, deviceTrustSatisfied: false }
   });
@@ -144,7 +145,8 @@ test("managed provider with JIT disabled overrides legacy environment JIT enable
       connectionId: "idp-1",
       type: "OIDC",
       jitEnabled: false,
-      mfaRequired: false
+      mfaRequired: false,
+      bindingVersion: 7
     },
     envJit: true,
     existingUser: false
@@ -162,7 +164,8 @@ test("managed provider with JIT enabled can provision an allowlisted employee ev
       connectionId: "idp-1",
       type: "ENTRA_ID",
       jitEnabled: true,
-      mfaRequired: false
+      mfaRequired: false,
+      bindingVersion: 7
     },
     envJit: false,
     existingUser: false
@@ -174,6 +177,7 @@ test("managed provider with JIT enabled can provision an allowlisted employee ev
   assert.equal(calls.createdUser.email, "user@example.test");
   assert.ok(calls.sessionClaims);
   assert.equal(calls.sessionClaims.identityProviderId, "idp-1");
+  assert.equal(calls.sessionClaims.identityProviderVersion, 7);
 });
 
 test("managed JIT still requires the deployment email-domain allowlist", async () => {
@@ -183,7 +187,8 @@ test("managed JIT still requires the deployment email-domain allowlist", async (
       connectionId: "idp-1",
       type: "OKTA",
       jitEnabled: true,
-      mfaRequired: false
+      mfaRequired: false,
+      bindingVersion: 7
     },
     envJit: false,
     existingUser: false,
