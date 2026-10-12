@@ -4,6 +4,8 @@ import { can } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { getServerLocale } from "@/lib/i18n-server";
 import { integrationValidationCurrent } from "@/lib/integration-live-validation.mjs";
+import { oidcValidationCurrent } from "@/lib/oidc";
+import { isOidcRuntimeProvider } from "@/lib/runtime-identity-provider";
 import { getServerRequestContext } from "@/lib/server-session";
 import { identityActivationIssues, integrationActivationIssues } from "@/lib/settings-connection-validation";
 
@@ -38,7 +40,9 @@ export async function ConnectionLifecyclePanel() {
         <div className="connection-lifecycle-table-wrap"><table className="connection-lifecycle-table"><thead><tr><th>{c(locale, "Provider", "Sağlayıcı")}</th><th>{c(locale, "Type", "Tür")}</th><th>{c(locale, "Readiness", "Hazırlık")}</th><th>{c(locale, "Status", "Durum")}</th>{canWrite ? <th>{c(locale, "Action", "Aksiyon")}</th> : null}</tr></thead><tbody>
           {identities.length ? identities.map((row) => {
             const issues = identityActivationIssues(row);
-            return <tr key={row.id}><td><strong>{row.name}</strong><small>{row.issuer ?? row.metadataUrl ?? "—"}</small></td><td>{row.type.replaceAll("_", " ")}</td><td>{issues.length ? <span className="connection-readiness attention">{c(locale, `Missing ${issues.join(", ")}`, `Eksik: ${issues.join(", ")}`)}</span> : row.lastValidatedAt ? <span className="connection-readiness ready">{c(locale, "Validated", "Doğrulandı")} · {fmt(locale, row.lastValidatedAt)}</span> : <span className="connection-readiness attention">{c(locale, "Validation required", "Doğrulama gerekli")}</span>}</td><td><span className={`connection-status ${statusTone(row.status)}`}>{row.status}</span></td>{canWrite ? <td><ConnectionLifecycleActions kind="identity" id={row.id} name={row.name} status={row.status} validated={Boolean(row.lastValidatedAt)}/></td> : null}</tr>;
+            const oidcRuntime = isOidcRuntimeProvider(row.type);
+            const validationCurrent = oidcRuntime ? oidcValidationCurrent(row.lastValidatedAt) : Boolean(row.lastValidatedAt);
+            return <tr key={row.id}><td><strong>{row.name}</strong><small>{row.issuer ?? row.metadataUrl ?? "—"}</small></td><td>{row.type.replaceAll("_", " ")}</td><td>{issues.length ? <span className="connection-readiness attention">{c(locale, `Missing ${issues.join(", ")}`, `Eksik: ${issues.join(", ")}`)}</span> : validationCurrent ? <span className="connection-readiness ready">{oidcRuntime ? c(locale, "Live validated", "Canlı doğrulandı") : c(locale, "Validated", "Doğrulandı")} · {fmt(locale, row.lastValidatedAt)}</span> : row.lastValidatedAt && oidcRuntime ? <span className="connection-readiness attention">{c(locale, "Live validation expired", "Canlı doğrulama süresi doldu")} · {fmt(locale, row.lastValidatedAt)}</span> : <span className="connection-readiness attention">{oidcRuntime ? c(locale, "Live validation required", "Canlı doğrulama gerekli") : c(locale, "Validation required", "Doğrulama gerekli")}</span>}</td><td><span className={`connection-status ${statusTone(row.status)}`}>{row.status}</span></td>{canWrite ? <td><ConnectionLifecycleActions kind="identity" id={row.id} name={row.name} status={row.status} validated={validationCurrent}/></td> : null}</tr>;
           }) : <tr><td colSpan={canWrite ? 5 : 4} className="connection-lifecycle-empty">{c(locale, "No identity provider records.", "Kimlik sağlayıcı kaydı yok.")}</td></tr>}
         </tbody></table></div>
       </div>

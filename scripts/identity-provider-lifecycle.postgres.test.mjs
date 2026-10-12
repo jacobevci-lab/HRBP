@@ -56,6 +56,8 @@ test("PostgreSQL serializes governed identity-provider activation", { skip: proc
     mutationOriginAllowed: () => true,
     unauthorized: () => Response.json({ error: "Unauthorized." }, { status: 401 })
   };
+  let liveProbeCalls = 0;
+  let liveProbeError = null;
   const runtime = {
     identityRuntimeActivationIssues: () => [],
     isOidcRuntimeProvider: (type) => ["ENTRA_ID", "OKTA", "OIDC"].includes(type),
@@ -74,6 +76,29 @@ test("PostgreSQL serializes governed identity-provider activation", { skip: proc
     "@/lib/db": { db },
     "@/lib/identity-provider-lifecycle": lifecycle,
     "@/lib/input-validation": inputValidation,
+    "@/lib/auth-config": {
+      getOidcConfig: () => ({
+        issuer: "https://runtime-idp.example.test",
+        clientId: "runtime-client",
+        tenantId,
+        scopes: "openid profile email",
+        allowedEmailDomains: ["example.test"],
+        jitProvisioning: false
+      })
+    },
+    "@/lib/oidc": {
+      oidcValidationCurrent: () => true,
+      probeOidcDiscovery: async (issuer) => {
+        liveProbeCalls += 1;
+        if (liveProbeError) throw liveProbeError;
+        return {
+          issuer,
+          authorization_endpoint: issuer + "/authorize",
+          token_endpoint: issuer + "/token",
+          jwks_uri: issuer + "/jwks"
+        };
+      }
+    },
     "@/lib/request-context": requestContext,
     "@/lib/settings-connection-validation": readiness,
     "@/lib/runtime-identity-provider": runtime
@@ -87,6 +112,16 @@ test("PostgreSQL serializes governed identity-provider activation", { skip: proc
         action: "activate",
         attestation: "Approved CI activation evidence"
       })
+    }), { params: Promise.resolve({ id }) });
+    const text = await response.text();
+    return { status: response.status, body: text ? JSON.parse(text) : null };
+  }
+
+  async function validate(id) {
+    const response = await route.PATCH(new Request("https://hrbp.test/api/settings/identity/" + id, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "validate" })
     }), { params: Promise.resolve({ id }) });
     const text = await response.text();
     return { status: response.status, body: text ? JSON.parse(text) : null };
@@ -161,63 +196,57 @@ test("PostgreSQL serializes governed identity-provider activation", { skip: proc
     assert.equal(activationAudit.length, 1, "only the committed activation should be audited");
     assert.equal(activationAudit[0].resourceId, active[0].id);
 
-    const tenant = await db.tenant.findUnique({
-      where: { id: tenantId },
-      select: { identityGovernanceAdoptedAt: true }
+    const liveProvider = await db.identityProviderConnection.create({
+      data: {
+        tenantId,
+        name: "OIDC Live Validation",
+        type: "OIDC",
+        issuer: "https://runtime-idp.example.test",
+        clientId: "runtime-client",
+        secretRef: "secret://live",
+        status: "DRAFT"
+      }
     });
-    assert.ok(tenant?.identityGovernanceAdoptedAt, "first governed OIDC activation must persist sticky tenant adoption");
-
-    const adoptionAudit = await db.auditEvent.findMany({
+    const validated = await validate(liveProvider.id);
+    assert.equal(validated.status, 200);
+    assert.equal(liveProbeCalls, 1);
+    const liveState = await db.identityProviderConnection.findUnique({ where: { id: liveProvider.id } });
+    assert.ok(liveState?.lastValidatedAt, "successful live OIDC validation must persist freshness evidence");
+    assert.equal(await db.auditEvent.count({
       where: {
         tenantId,
-        resourceType: "Tenant",
-        resourceId: tenantId,
-        action: "settings.identity-governance-adopted"
-      },
-      select: { id: true }
-    });
-    assert.equal(adoptionAudit.length, 1, "tenant governance adoption must be audited exactly once");
+        resourceType: "IdentityProviderConnection",
+        resourceId: liveProvider.id,
+        action: "settings.identity-provider-live-validated"
+      }
+    }), 1);
 
-    const disabled = await route.PATCH(new Request("https://hrbp.test/api/settings/identity/" + active[0].id, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        action: "disable",
-        reason: "CI verifies sticky governed fallback protection"
-      })
-    }), { params: Promise.resolve({ id: active[0].id }) });
-    assert.equal(disabled.status, 200);
-    assert.equal(await db.identityProviderConnection.count({
-      where: { tenantId, status: "ACTIVE", type: { in: ["ENTRA_ID", "OKTA", "OIDC"] } }
-    }), 0);
-
-    const runtimeBinding = load("lib/runtime-identity-provider.ts", {
-      "@prisma/client": prisma,
-      "@/lib/auth-assurance": { authenticationAssuranceConfiguration: () => ({ mfaConfigured: true }) },
-      "@/lib/auth-config": {
-        getOidcConfig: () => ({
-          issuer: "https://legacy.example.test",
-          clientId: "legacy-client",
-          tenantId,
-          scopes: "openid profile email",
-          allowedEmailDomains: ["example.test"],
-          jitProvisioning: true
-        }),
-        localAuthConfigurationStatus: () => ({ enabled: false, configured: false, missing: [] })
-      },
-      "@/lib/scim": { scimRuntimeConfig: () => ({ configured: true }) }
-    });
-    await assert.rejects(
-      runtimeBinding.enforceOidcRuntimeBinding(db, {
-        issuer: "https://legacy.example.test",
-        clientId: "legacy-client",
+    const failingProvider = await db.identityProviderConnection.create({
+      data: {
         tenantId,
-        scopes: "openid profile email",
-        allowedEmailDomains: ["example.test"],
-        jitProvisioning: true
-      }),
-      /IDENTITY_PROVIDER_INACTIVE/
-    );
+        name: "OIDC Live Validation Failure",
+        type: "OIDC",
+        issuer: "https://runtime-idp.example.test",
+        clientId: "runtime-client",
+        secretRef: "secret://live-failure",
+        status: "DRAFT"
+      }
+    });
+    liveProbeError = new Error("OIDC discovery failed with HTTP 503.");
+    const failedValidation = await validate(failingProvider.id);
+    liveProbeError = null;
+    assert.equal(failedValidation.status, 409);
+    assert.match(failedValidation.body?.error ?? "", /live OIDC provider validation failed/i);
+    const failedState = await db.identityProviderConnection.findUnique({ where: { id: failingProvider.id } });
+    assert.equal(failedState?.lastValidatedAt, null);
+    assert.equal(await db.auditEvent.count({
+      where: {
+        tenantId,
+        resourceType: "IdentityProviderConnection",
+        resourceId: failingProvider.id,
+        action: "settings.identity-provider-live-validation-failed"
+      }
+    }), 1);
   } finally {
     try {
       await db.auditEvent.deleteMany({ where: { tenantId } });
