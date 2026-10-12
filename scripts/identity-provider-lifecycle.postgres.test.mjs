@@ -236,7 +236,7 @@ test("PostgreSQL serializes governed identity-provider activation", { skip: proc
     const failedValidation = await validate(failingProvider.id);
     liveProbeError = null;
     assert.equal(failedValidation.status, 409);
-    assert.match(failedValidation.body?.error ?? "", /live validation failed/i);
+    assert.match(failedValidation.body?.error ?? "", /live OIDC provider validation failed/i);
     const failedState = await db.identityProviderConnection.findUnique({ where: { id: failingProvider.id } });
     assert.equal(failedState?.lastValidatedAt, null);
     assert.equal(await db.auditEvent.count({
