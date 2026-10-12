@@ -125,8 +125,10 @@ export function SuccessionGovernanceConsole({ plans, courses, skills, allowLearn
           const data = new FormData(event.currentTarget);
           void mutate(`candidate-${candidate.id}`, `/api/succession/candidates/${candidate.id}`, "PATCH", {
             readiness: data.get("readiness"),
+            readinessReason: data.get("readinessReason") || undefined,
             rank: data.get("rank") || null,
-            developmentGap: data.get("developmentGap") || null
+            developmentGap: data.get("developmentGap") || null,
+            expectedUpdatedAt: candidate.updatedAt
           });
         }}>
           <div className="growth-lifecycle-icon">{candidate.readiness === "READY_NOW" ? <CheckCircle2 size={16}/> : <AlertTriangle size={16}/>}</div>
@@ -134,9 +136,10 @@ export function SuccessionGovernanceConsole({ plans, courses, skills, allowLearn
             <strong>{candidate.person}</strong>
             <small>{candidate.employeeNumber} · {candidate.position}</small>
             <span>{candidate.developmentGap || c("No development gap recorded", "Gelişim açığı kaydedilmemiş")}</span>
+            {candidate.readinessReviewedAt ? <span><ShieldCheck size={11}/> {c(`Readiness reviewed ${dateOnly(candidate.readinessReviewedAt)} by ${candidate.readinessReviewedBy ?? "governed reviewer"}`, `Hazırlık seviyesi ${dateOnly(candidate.readinessReviewedAt)} tarihinde ${candidate.readinessReviewedBy ?? "yönetişimli inceleyen"} tarafından değerlendirildi`)}{candidate.readinessReason ? ` · ${candidate.readinessReason}` : ""}</span> : <span>{c("No attested readiness decision recorded yet", "Henüz onaylı hazırlık kararı kaydedilmedi")}</span>}
             {candidate.latestTalent ? <span><Sparkles size={11}/> {candidate.latestTalent.cycleLabel} · {label(candidate.latestTalent.performance, locale)} / {label(candidate.latestTalent.potential, locale)}{candidate.latestTalent.criticalTalent ? ` · ${c("Critical talent", "Kritik yetenek")}` : ""}</span> : <span>{c("No governed talent assessment linked", "Bağlı yönetişimli yetenek değerlendirmesi yok")}</span>}
           </div>
-          <div className="performance-review-controls"><select name="readiness" defaultValue={candidate.readiness}>{readinessValues.map((value) => <option key={value} value={value}>{label(value, locale)}</option>)}</select><input name="rank" type="number" min="1" max="99" placeholder={c("Rank", "Sıra")} defaultValue={candidate.rank ?? ""}/><input name="developmentGap" maxLength={2000} placeholder={c("Development gap", "Gelişim açığı")} defaultValue={candidate.developmentGap ?? ""}/><button className="secondary-button" disabled={pending !== null}>{pending === `candidate-${candidate.id}` ? "…" : c("Save", "Kaydet")}</button><button className="secondary-button" type="button" disabled={pending !== null} onClick={() => {
+          <div className="performance-review-controls"><select name="readiness" defaultValue={candidate.readiness}>{readinessValues.map((value) => <option key={value} value={value}>{label(value, locale)}</option>)}</select><textarea name="readinessReason" maxLength={2000} placeholder={c("Decision reason required when changing readiness (12+ characters)", "Hazırlık seviyesi değişiyorsa karar gerekçesi zorunlu (12+ karakter)")}/><input name="rank" type="number" min="1" max="99" placeholder={c("Rank", "Sıra")} defaultValue={candidate.rank ?? ""}/><input name="developmentGap" maxLength={2000} placeholder={c("Development gap", "Gelişim açığı")} defaultValue={candidate.developmentGap ?? ""}/><button className="secondary-button" disabled={pending !== null}>{pending === `candidate-${candidate.id}` ? "…" : c("Save", "Kaydet")}</button><button className="secondary-button" type="button" disabled={pending !== null} onClick={() => {
             if (window.confirm(c("Remove this successor candidate from the active plan?", "Bu yedek adayı aktif plandan çıkarmak istiyor musunuz?"))) void mutate(`remove-${candidate.id}`, `/api/succession/candidates/${candidate.id}`, "DELETE");
           }}><Trash2 size={14}/>{pending === `remove-${candidate.id}` ? "…" : c("Remove", "Çıkar")}</button></div>
         </form>
