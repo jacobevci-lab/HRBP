@@ -46,6 +46,10 @@ export type SuccessionPlanOperation = {
   critical: boolean;
   active: boolean;
   reviewDueAt: string | null;
+  updatedAt: string;
+  lastReviewedAt: string | null;
+  lastReviewedBy: string | null;
+  lastReviewSummary: string | null;
   overdue: boolean;
   candidates: SuccessionCandidateOperation[];
 };
@@ -100,6 +104,10 @@ export async function getSuccessionGovernanceData(
         positionId: true,
         active: true,
         reviewDueAt: true,
+        updatedAt: true,
+        lastReviewedAt: true,
+        lastReviewedById: true,
+        lastReviewSummary: true,
         candidates: {
           where: { ...employmentIdFilter(scope) },
           orderBy: [{ rank: "asc" }, { addedAt: "asc" }],
@@ -138,8 +146,9 @@ export async function getSuccessionGovernanceData(
     const positionIds = [...new Set(orderedPlans.map((plan) => plan.positionId))];
     const employmentIds = [...new Set(orderedPlans.flatMap((plan) => plan.candidates.map((candidate) => candidate.employmentId)))];
     const linkedSkillIds = [...new Set(orderedPlans.flatMap((plan) => plan.candidates.flatMap((candidate) => candidate.learningAssignments.flatMap((assignment) => assignment.developmentSkillId ? [assignment.developmentSkillId] : []))))];
+    const reviewerIds = [...new Set(orderedPlans.flatMap((plan) => plan.lastReviewedById ? [plan.lastReviewedById] : []))];
 
-    const [positions, employments, talentAssessments, employmentSkills, courses, skills] = await Promise.all([
+    const [positions, employments, talentAssessments, employmentSkills, courses, skills, reviewers] = await Promise.all([
       positionIds.length ? db.position.findMany({
         where: { tenantId: ctx.tenantId, id: { in: positionIds } },
         select: { id: true, positionCode: true, title: true, critical: true, orgUnit: { select: { name: true } } }
@@ -172,6 +181,10 @@ export async function getSuccessionGovernanceData(
         orderBy: [{ critical: "desc" }, { name: "asc" }],
         take: 500,
         select: { id: true, code: true, name: true, critical: true }
+      }) : Promise.resolve([]),
+      reviewerIds.length ? db.userAccount.findMany({
+        where: { tenantId: ctx.tenantId, id: { in: reviewerIds } },
+        select: { id: true, displayName: true, subject: true }
       }) : Promise.resolve([])
     ]);
 
@@ -182,6 +195,7 @@ export async function getSuccessionGovernanceData(
       if (!latestTalentMap.has(assessment.employmentId)) latestTalentMap.set(assessment.employmentId, assessment);
     }
     const proficiencyMap = new Map(employmentSkills.map((record) => [`${record.employmentId}:${record.skillId}`, record.proficiency]));
+    const reviewerMap = new Map(reviewers.map((reviewer) => [reviewer.id, reviewer.displayName || reviewer.subject]));
     const now = Date.now();
 
     return {
@@ -199,6 +213,10 @@ export async function getSuccessionGovernanceData(
           critical: position?.critical ?? false,
           active: plan.active,
           reviewDueAt: plan.reviewDueAt?.toISOString() ?? null,
+          updatedAt: plan.updatedAt.toISOString(),
+          lastReviewedAt: plan.lastReviewedAt?.toISOString() ?? null,
+          lastReviewedBy: plan.lastReviewedById ? reviewerMap.get(plan.lastReviewedById) ?? plan.lastReviewedById : null,
+          lastReviewSummary: plan.lastReviewSummary,
           overdue: Boolean(plan.active && plan.reviewDueAt && plan.reviewDueAt.getTime() < now),
           candidates: plan.candidates.map((candidate) => {
             const employment = employmentMap.get(candidate.employmentId);
