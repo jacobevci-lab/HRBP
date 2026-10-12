@@ -113,7 +113,7 @@ export async function getSuccessionGovernanceData(
         lastReviewedById: true,
         lastReviewSummary: true,
         candidates: {
-          where: { ...employmentIdFilter(scope) },
+          where: { active: true, ...employmentIdFilter(scope) },
           orderBy: [{ rank: "asc" }, { addedAt: "asc" }],
           select: {
             id: true,
