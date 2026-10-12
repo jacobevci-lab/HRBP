@@ -35,7 +35,7 @@ function fixture({
         identityProviderVersion: effectiveRuntimeBinding.bindingVersion
       }
     : {});
-  const calls = { userLookup: 0, userCreates: 0, createdUser: null, sessionClaims: null, auditEvents: [] };
+  const calls = { userLookup: 0, userCreates: 0, createdUser: null, sessionClaims: null, auditEvents: [], transactionClears: 0 };
   const baseUser = {
     id: "user-1",
     tenantId: "tenant-1",
@@ -111,7 +111,10 @@ function fixture({
         calls.sessionClaims = claims;
         return "hrbp_session=test; Path=/; HttpOnly";
       },
-      clearOidcTransactionCookie: () => "hrbp_oidc_txn=; Max-Age=0"
+      clearOidcTransactionCookie: () => {
+        calls.transactionClears += 1;
+        return "hrbp_oidc_txn=; Max-Age=0";
+      }
     },
     "@/lib/db": { withDb: (operation) => operation(db) },
     "@/lib/runtime-identity-provider": {
@@ -137,8 +140,8 @@ function fixture({
   return { route, calls };
 }
 
-async function invoke(route, headers = {}) {
-  return route.GET(new Request("https://hrbp.example.test/api/auth/callback?code=code-1&state=state-1", { headers }));
+async function invoke(route, headers = {}, query = "code=code-1&state=state-1") {
+  return route.GET(new Request(`https://hrbp.example.test/api/auth/callback?${query}`, { headers }));
 }
 
 test("managed provider MFA rejects an unassured token even when tenant MFA policy is off", async () => {
@@ -328,4 +331,41 @@ test("OIDC session issuance fails closed when immutable audit persistence is una
   assert.match(response.headers.get("location") ?? "", /error=callback/);
   assert.equal(calls.sessionClaims, null);
   assert.equal(calls.userLookup, 1);
+});
+
+
+test("provider-declined OIDC callback requires matching state and clears the transaction", async () => {
+  const { route, calls } = fixture({ runtimeBinding: { managed: false } });
+  const response = await invoke(route, {}, "error=access_denied&error_description=ignored&state=state-1");
+  assert.equal(response.status, 302);
+  assert.match(response.headers.get("location") ?? "", /error=provider/);
+  assert.match(response.headers.get("set-cookie") ?? "", /hrbp_oidc_txn=.*Max-Age=0/);
+  assert.equal(calls.transactionClears, 1);
+  assert.equal(calls.userLookup, 0);
+  assert.equal(calls.sessionClaims, null);
+});
+
+test("provider error with missing or mismatched state is treated as state failure, not trusted provider error", async () => {
+  for (const query of [
+    "error=access_denied",
+    "error=access_denied&state=wrong-state"
+  ]) {
+    const { route, calls } = fixture({ runtimeBinding: { managed: false } });
+    const response = await invoke(route, {}, query);
+    assert.equal(response.status, 302);
+    assert.match(response.headers.get("location") ?? "", /error=state/);
+    assert.match(response.headers.get("set-cookie") ?? "", /Max-Age=0/);
+    assert.equal(calls.transactionClears, 1);
+    assert.equal(calls.userLookup, 0);
+  }
+});
+
+test("terminal callback validation failures always clear the one-time OIDC transaction", async () => {
+  const { route, calls } = fixture({ runtimeBinding: { managed: false } });
+  const response = await invoke(route, {}, "state=state-1");
+  assert.equal(response.status, 302);
+  assert.match(response.headers.get("location") ?? "", /error=state/);
+  assert.match(response.headers.get("set-cookie") ?? "", /Max-Age=0/);
+  assert.equal(calls.transactionClears, 1);
+  assert.equal(calls.userLookup, 0);
 });
