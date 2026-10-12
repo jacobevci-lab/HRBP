@@ -116,11 +116,39 @@ expect(successionPlanUpdatePath, successionPlanUpdate, /employmentPrimaryKeyFilt
 expect(successionPlanUpdatePath, successionPlanUpdate, /succession-plan\.deactivated/, "succession plans must support auditable deactivation");
 expect(successionPlanUpdatePath, successionPlanUpdate, /succession-plan\.reactivated/, "succession plans must support auditable reactivation");
 
+const successionReviewPath = "app/api/succession/plans/[id]/review/route.ts";
+const successionReview = await source(successionReviewPath);
+expect(successionReviewPath, successionReview, /can\(ctx,\s*"succession:write"\)/, "succession review attestation must require succession:write");
+expect(successionReviewPath, successionReview, /mutationOriginAllowed\(request\)/, "succession review attestation must enforce same-origin mutation");
+expect(successionReviewPath, successionReview, /summary\.length < 12/, "succession review attestation must require a meaningful human summary");
+expect(successionReviewPath, successionReview, /asText\(body\.summary, 2000\)/, "succession review summary must be bounded to 2000 characters");
+expect(successionReviewPath, successionReview, /730 \* 24 \* 60 \* 60 \* 1000/, "next succession review must be bounded to two years");
+expect(successionReviewPath, successionReview, /expectedUpdatedAt/, "succession review attestation must require optimistic concurrency evidence");
+expect(successionReviewPath, successionReview, /!plan\.active/, "inactive succession plans must reject review attestation");
+expect(successionReviewPath, successionReview, /resolveEmploymentScope/, "succession review attestation must preserve relationship scope");
+expect(successionReviewPath, successionReview, /updateMany\([\s\S]*active:\s*true[\s\S]*updatedAt:\s*plan\.updatedAt/, "succession review attestation must use active-state and updatedAt evidence to reject stale writes");
+expect(successionReviewPath, successionReview, /lastReviewedAt:[\s\S]*lastReviewedById:\s*ctx\.actorId[\s\S]*lastReviewSummary:\s*summary[\s\S]*reviewDueAt/, "succession review attestation must persist reviewer, timestamp, summary and next review");
+expect(successionReviewPath, successionReview, /succession-plan\.review-attested/, "succession review attestation must emit explicit audit evidence");
+expect(successionReviewPath, successionReview, /summaryRecorded=true/, "succession review audit must record summary presence without copying summary text");
+expect(successionReviewPath, successionReview, /STALE_STATE/, "concurrent succession review attestation must fail with a bounded stale-state conflict");
+
+const successionSchemaPath = "prisma/growth.prisma";
+const successionSchema = await source(successionSchemaPath);
+expect(successionSchemaPath, successionSchema, /model SuccessionPlan[\s\S]*lastReviewedAt\s+DateTime\?[\s\S]*lastReviewedById\s+String\?[\s\S]*lastReviewSummary\s+String\?/, "succession plans must persist human review attestation evidence");
+const successionMigrationPath = "prisma/migrations/20261012113000_succession_review_attestation/migration.sql";
+const successionMigration = await source(successionMigrationPath);
+expect(successionMigrationPath, successionMigration, /ADD COLUMN "lastReviewedAt"[\s\S]*ADD COLUMN "lastReviewedById"[\s\S]*ADD COLUMN "lastReviewSummary"/, "succession review attestation must be delivered through a versioned migration");
+
 const successionDataPath = "lib/succession-governance-data.ts";
 const successionData = await source(successionDataPath);
 expect(successionDataPath, successionData, /resolveEmploymentScope/, "succession governance data must resolve relationship scope");
 expect(successionDataPath, successionData, /employmentIdFilter\(scope\)/, "successor queue must filter candidate employment scope");
 expect(successionDataPath, successionData, /overdue:\s*Boolean/, "succession governance data must identify overdue plan reviews");
+expect(successionDataPath, successionData, /lastReviewedAt:\s*true/, "succession governance data must load the latest review timestamp");
+expect(successionDataPath, successionData, /lastReviewedById:\s*true/, "succession governance data must load reviewer identity provenance");
+expect(successionDataPath, successionData, /lastReviewSummary:\s*true/, "succession governance data must load the bounded human review summary");
+expect(successionDataPath, successionData, /userAccount\.findMany/, "succession governance data must resolve reviewer actor display names tenant-locally");
+expect(successionDataPath, successionData, /updatedAt:\s*plan\.updatedAt\.toISOString\(\)/, "succession governance UI must receive concurrency evidence for review attestation");
 
 const successionConsolePath = "components/succession-governance-console.tsx";
 const successionConsole = await source(successionConsolePath);
@@ -128,6 +156,11 @@ expect(successionConsolePath, successionConsole, /\/api\/succession\/plans\/\$\{
 expect(successionConsolePath, successionConsole, /\/api\/succession\/candidates\/\$\{candidate\.id\}/, "succession console must use governed candidate endpoint");
 expect(successionConsolePath, successionConsole, /"PATCH"/, "succession console must use explicit patch mutations");
 expect(successionConsolePath, successionConsole, /"DELETE"/, "succession console must expose explicit candidate removal");
+expect(successionConsolePath, successionConsole, /\/api\/succession\/plans\/\$\{plan\.id\}\/review/, "succession console must use the governed review attestation endpoint");
+expect(successionConsolePath, successionConsole, /expectedUpdatedAt:\s*plan\.updatedAt/, "succession review UI must submit optimistic concurrency evidence");
+expect(successionConsolePath, successionConsole, /name="summary"[\s\S]*minLength=\{12\}[\s\S]*maxLength=\{2000\}/, "succession review UI must mirror bounded summary requirements");
+expect(successionConsolePath, successionConsole, /name="nextReviewDueAt"[\s\S]*type="date"[\s\S]*required/, "succession review UI must require the next review date");
+expect(successionConsolePath, successionConsole, /plan\.lastReviewedAt[\s\S]*plan\.lastReviewedBy[\s\S]*plan\.lastReviewSummary/, "succession UI must surface prior human review evidence");
 
 const reminderPath = "lib/succession-reminders.ts";
 const reminders = await source(reminderPath);
