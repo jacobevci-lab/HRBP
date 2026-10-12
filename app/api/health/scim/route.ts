@@ -23,7 +23,10 @@ export async function GET() {
       governedProviderInactive: policy.managed ? policy.inactive : false,
       allowedDomainCount: config.allowedDomains.length,
       unmanagedAdoptionEnabled: config.allowUnmanagedAdoption,
-      rotationOverlapActive: config.rotationOverlapActive
+      rotationOverlapActive: config.rotationOverlapActive,
+      rotationConfigurationValid: config.rotationConfigurationValid,
+      rotationExpired: config.rotationExpired,
+      rotationExpiresAt: config.rotationExpiresAt
     }, {
       status: healthy ? 200 : 503,
       headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
@@ -41,6 +44,9 @@ export async function GET() {
       allowedDomainCount: config.allowedDomains.length,
       unmanagedAdoptionEnabled: config.allowUnmanagedAdoption,
       rotationOverlapActive: config.rotationOverlapActive,
+      rotationConfigurationValid: config.rotationConfigurationValid,
+      rotationExpired: config.rotationExpired,
+      rotationExpiresAt: config.rotationExpiresAt,
       policyUnavailable: true
     }, {
       status: 503,
