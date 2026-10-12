@@ -172,6 +172,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         });
         if (result.count !== 1) throw new IdentityLifecycleError("STATE_CONFLICT");
 
+        if (isOidcRuntimeProvider(current.type)) {
+          const adoption = await tx.tenant.updateMany({
+            where: { id: ctx.tenantId, identityGovernanceAdoptedAt: null },
+            data: { identityGovernanceAdoptedAt: new Date() }
+          });
+          if (adoption.count === 1) {
+            await appendAudit(tx, ctx, {
+              action: "settings.identity-governance-adopted",
+              resourceType: "Tenant",
+              resourceId: ctx.tenantId,
+              classification: DataClassification.RESTRICTED,
+              purpose: "Tenant adopted governed OIDC runtime; legacy environment fallback is permanently blocked when no governed provider is active"
+            });
+          }
+        }
+
         await appendAudit(tx, ctx, {
           action: "settings.identity-provider-activated",
           resourceType: "IdentityProviderConnection",

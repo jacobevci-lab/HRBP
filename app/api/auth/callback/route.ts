@@ -152,7 +152,11 @@ export async function GET(request: Request) {
     return new Response(null, { status: 302, headers });
   } catch (error) {
     console.error("OIDC callback failed", error);
-    const code = error instanceof Error && (error.message === "IDENTITY_PROVIDER_AMBIGUOUS" || error.message === "IDENTITY_PROVIDER_DRIFT")
+    const code = error instanceof Error && (
+      error.message === "IDENTITY_PROVIDER_AMBIGUOUS" ||
+      error.message === "IDENTITY_PROVIDER_DRIFT" ||
+      error.message === "IDENTITY_PROVIDER_INACTIVE"
+    )
       ? "configuration"
       : error instanceof Error && error.message === "IDENTITY_NOT_PROVISIONED"
       ? "not-provisioned"

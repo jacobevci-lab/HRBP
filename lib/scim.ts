@@ -25,14 +25,30 @@ export async function resolveGovernedScimPolicy(client: ScopeClient, tenantId: s
     select: { id: true, name: true, scimEnabled: true }
   });
 
-  if (active.length === 0) return { managed: false as const };
+  if (active.length === 0) {
+    const tenant = await client.tenant.findUnique({
+      where: { id: tenantId },
+      select: { identityGovernanceAdoptedAt: true }
+    });
+    if (tenant?.identityGovernanceAdoptedAt) {
+      return {
+        managed: true as const,
+        providerId: null,
+        providerName: null,
+        scimEnabled: false,
+        inactive: true as const
+      };
+    }
+    return { managed: false as const };
+  }
   if (active.length !== 1) throw new Error("SCIM_PROVIDER_AMBIGUOUS");
 
   return {
     managed: true as const,
     providerId: active[0].id,
     providerName: active[0].name,
-    scimEnabled: active[0].scimEnabled
+    scimEnabled: active[0].scimEnabled,
+    inactive: false as const
   };
 }
 
@@ -85,7 +101,9 @@ export async function scimAccess(request:Request){
     return scimError(
       404,
       policy.managed
-        ? "SCIM provisioning is disabled by the active governed identity provider."
+        ? policy.inactive
+          ? "SCIM provisioning is disabled because governed identity has no active provider."
+          : "SCIM provisioning is disabled by the active governed identity provider."
         : "SCIM provisioning is disabled."
     );
   }

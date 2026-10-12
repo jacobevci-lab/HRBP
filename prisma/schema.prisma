@@ -203,6 +203,7 @@ model Tenant {
   createdAt           DateTime @default(now())
   sessionVersion      Int @default(1)
   sessionsRevokedAt   DateTime?
+  identityGovernanceAdoptedAt DateTime?
   users               UserAccount[]
   people              Person[]
   employments         Employment[]
