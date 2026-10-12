@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { getServerLocale } from "@/lib/i18n-server";
 import { integrationValidationCurrent } from "@/lib/integration-live-validation.mjs";
 import { oidcValidationCurrent } from "@/lib/oidc";
-import { isOidcRuntimeProvider } from "@/lib/runtime-identity-provider";
+import { identityRuntimeActivationIssues, isOidcRuntimeProvider } from "@/lib/runtime-identity-provider";
 import { getServerRequestContext } from "@/lib/server-session";
 import { identityActivationIssues, integrationActivationIssues } from "@/lib/settings-connection-validation";
 
