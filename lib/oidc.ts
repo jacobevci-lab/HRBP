@@ -73,7 +73,7 @@ async function boundedJsonObject(response: Response) {
 }
 
 function validatedOidcMetadata(expectedIssuer: string, value: Record<string, unknown>): OidcMetadata {
-  const issuer = typeof value.issuer === "string" ? normalizedIssuer(value.issuer) : null;
+  const issuer = typeof value.issuer === "string" ? normalizeOidcIssuer(value.issuer) : null;
   if (!issuer || issuer !== expectedIssuer) throw new Error("OIDC provider issuer does not match configured issuer.");
 
   const httpsRequired = expectedIssuer.startsWith("https://");
