@@ -9,7 +9,7 @@ type Kind = "identity" | "integration";
 type Status = "DRAFT" | "ACTIVE" | "DEGRADED" | "DISABLED";
 type Action = "validate" | "activate" | "disable" | "reopen";
 
-export function ConnectionLifecycleActions({ kind, id, name, status, validated }: { kind: Kind; id: string; name: string; status: Status; validated: boolean }) {
+export function ConnectionLifecycleActions({ kind, id, name, status, validated, activationReady = validated }: { kind: Kind; id: string; name: string; status: Status; validated: boolean; activationReady?: boolean }) {
   const router = useRouter();
   const { locale } = useLocale();
   const tr = locale === "tr";
@@ -48,7 +48,7 @@ export function ConnectionLifecycleActions({ kind, id, name, status, validated }
   return <div className="connection-lifecycle-actions">
     <div>
       {status === "DRAFT" ? <button type="button" disabled={Boolean(busy)} onClick={() => void execute("validate")}><BadgeCheck size={13}/>{kind === "integration" ? (validated ? c("Revalidate endpoint", "Endpointi tekrar doğrula") : c("Validate endpoint", "Endpointi doğrula")) : (validated ? c("Revalidate provider", "Sağlayıcıyı tekrar doğrula") : c("Validate provider", "Sağlayıcıyı doğrula"))}</button> : null}
-      {status === "DRAFT" ? <button type="button" disabled={Boolean(busy) || !validated} onClick={() => void execute("activate")}><CirclePlay size={13}/>{c("Activate", "Aktifleştir")}</button> : null}
+      {status === "DRAFT" ? <button type="button" disabled={Boolean(busy) || !activationReady} onClick={() => void execute("activate")}><CirclePlay size={13}/>{c("Activate", "Aktifleştir")}</button> : null}
       {status === "ACTIVE" || status === "DEGRADED" ? <button type="button" className="danger" disabled={Boolean(busy)} onClick={() => void execute("disable")}><ShieldOff size={13}/>{c("Disable", "Devre dışı")}</button> : null}
       {status === "DISABLED" || status === "DEGRADED" ? <button type="button" disabled={Boolean(busy)} onClick={() => void execute("reopen")}><RotateCcw size={13}/>{c("Reopen", "Taslağa aç")}</button> : null}
     </div>
