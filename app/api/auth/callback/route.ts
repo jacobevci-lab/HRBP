@@ -23,18 +23,26 @@ function redirectWithError(origin: string, code: string) {
   return `${origin}/auth/sign-in?error=${encodeURIComponent(code)}`;
 }
 
+function terminalAuthError(origin: string, code: string) {
+  const headers = new Headers({ location: redirectWithError(origin, code), "cache-control": "no-store" });
+  headers.append("set-cookie", clearOidcTransactionCookie());
+  return new Response(null, { status: 302, headers });
+}
+
 export async function GET(request: Request) {
   const origin = new URL(request.url).origin;
   const config = getOidcConfig();
   const transaction = readOidcTransaction(request);
   const requestUrl = new URL(request.url);
 
-  if (!config || !transaction) return Response.redirect(redirectWithError(origin, "transaction"), 302);
-  if (requestUrl.searchParams.get("error")) return Response.redirect(redirectWithError(origin, "provider"), 302);
+  if (!config || !transaction) return terminalAuthError(origin, "transaction");
+
+  const state = requestUrl.searchParams.get("state");
+  if (!state || state !== transaction.state) return terminalAuthError(origin, "state");
+  if (requestUrl.searchParams.get("error")) return terminalAuthError(origin, "provider");
 
   const code = requestUrl.searchParams.get("code");
-  const state = requestUrl.searchParams.get("state");
-  if (!code || !state || state !== transaction.state) return Response.redirect(redirectWithError(origin, "state"), 302);
+  if (!code) return terminalAuthError(origin, "state");
 
   try {
     const runtimeBinding = await withDb((db) => enforceOidcRuntimeBinding(db, config));
@@ -202,8 +210,6 @@ export async function GET(request: Request) {
           : error instanceof Error && error.message === "DEVICE_TRUST_REQUIRED"
             ? "device-trust-required"
             : "callback";
-    const headers = new Headers({ location: redirectWithError(origin, code), "cache-control": "no-store" });
-    headers.append("set-cookie", clearOidcTransactionCookie());
-    return new Response(null, { status: 302, headers });
+    return terminalAuthError(origin, code);
   }
 }
