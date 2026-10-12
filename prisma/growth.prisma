@@ -208,9 +208,12 @@ model SuccessionPlan {
   positionId  String
   name        String?
   active      Boolean @default(true)
-  ownerId     String?
-  reviewDueAt DateTime?
-  createdAt   DateTime @default(now())
+  ownerId           String?
+  reviewDueAt       DateTime?
+  lastReviewedAt    DateTime?
+  lastReviewedById  String?
+  lastReviewSummary String?
+  createdAt         DateTime @default(now())
   updatedAt   DateTime @updatedAt
   candidates  SuccessionCandidate[]
 
