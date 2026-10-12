@@ -35,10 +35,41 @@ test('legacy untyped session requires reauthentication',async()=>assert.equal(aw
 test('unavailable database and terminated employment fail closed',async()=>{assert.equal(await verifier(new Error('offline')).verifySessionAccount(claims),null);assert.equal(await verifier(user,null).verifySessionAccount({...claims,employmentId:'e'}),null);});
 const local=load('lib/local-auth.ts');
 test('legacy seed hash can authenticate and canonical hashes round-trip',()=>{const password='temporary-test-password';const salt=randomBytes(16).toString('base64url'),digest=scryptSync(password,Buffer.from(salt,'base64url'),64,{N:16384,r:8,p:1,maxmem:64*1024*1024}).toString('base64url');const legacy=`scrypt$16384$8$1${salt}${digest}`;assert.ok(local.isLegacySeedPasswordHash(legacy));assert.ok(local.verifyLocalPassword(password,legacy));assert.equal(local.verifyLocalPassword('wrong-test-password',legacy),false);const fixed=local.hashLocalPassword(password);assert.equal(fixed.split('$').length,6);assert.ok(local.verifyLocalPassword(password,fixed));assert.equal(local.verifyLocalPassword(password,legacy+'x'),false);});
-const logout=load('app/api/auth/logout/route.ts',{'@/lib/auth-session':auth,'@/lib/request-context':{mutationOriginAllowed:r=>r.headers.get('origin')===new URL(r.url).origin}});
+const logoutAudits=[];
+const logout=load('app/api/auth/logout/route.ts',{
+  '@prisma/client':{DataClassification:{INTERNAL:'INTERNAL'}},
+  '@/lib/audit':{recordAudit:async input=>{logoutAudits.push(input);}},
+  '@/lib/auth-session':auth,
+  '@/lib/request-context':{mutationOriginAllowed:r=>r.headers.get('origin')===new URL(r.url).origin}
+});
 test('GET and prefetch logout cannot erase cookies',async()=>{const r=await logout.GET(new Request('https://hrbp.invalid/api/auth/logout',{headers:{'next-router-prefetch':'1'}}));assert.equal(r.status,405);assert.equal(r.headers.get('set-cookie'),null);});
 test('explicit same-origin POST logout clears cookie and redirects',async()=>{const r=await logout.POST(new Request('https://hrbp.invalid/api/auth/logout',{method:'POST',headers:{origin:'https://hrbp.invalid'}}));assert.equal(r.status,303);assert.match(r.headers.get('set-cookie'),/Max-Age=0/);});
-for(const origin of [null,'https://evil.invalid'])test('untrusted logout blocked '+origin,async()=>{const r=await logout.POST(new Request('https://hrbp.invalid/api/auth/logout',{method:'POST',headers:origin?{origin}:{}}));assert.equal(r.status,403);assert.equal(r.headers.get('set-cookie'),null);});
+test('authenticated logout records bounded audit evidence before clearing the cookie',async()=>{
+  const {v,issuedAt,exp,...cookieClaims}=claims;
+  const cookie=auth.createSessionCookie(cookieClaims);
+  const r=await logout.POST(new Request('https://hrbp.invalid/api/auth/logout',{method:'POST',headers:{origin:'https://hrbp.invalid',cookie:cookie.split(';')[0],'cf-connecting-ip':'203.0.113.8'}}));
+  assert.equal(r.status,303);
+  assert.match(r.headers.get('set-cookie'),/Max-Age=0/);
+  assert.equal(logoutAudits.length,1);
+  assert.equal(logoutAudits[0].action,'auth.session-logout');
+  assert.equal(logoutAudits[0].resourceType,'UserAccount');
+  assert.equal(logoutAudits[0].resourceId,'a');
+  assert.equal(logoutAudits[0].ctx.tenantId,'t');
+  assert.equal(logoutAudits[0].ctx.actorId,'a');
+  assert.equal(logoutAudits[0].ctx.ipAddress,'203.0.113.8');
+});
+test('audit outage never traps a user in an authenticated browser session',async()=>{
+  const route=load('app/api/auth/logout/route.ts',{
+    '@prisma/client':{DataClassification:{INTERNAL:'INTERNAL'}},
+    '@/lib/audit':{recordAudit:async()=>{throw new Error('audit unavailable');}},
+    '@/lib/auth-session':{...auth,sessionFromRequest:()=>claims},
+    '@/lib/request-context':{mutationOriginAllowed:()=>true}
+  });
+  const r=await route.POST(new Request('https://hrbp.invalid/api/auth/logout',{method:'POST',headers:{origin:'https://hrbp.invalid'}}));
+  assert.equal(r.status,303);
+  assert.match(r.headers.get('set-cookie'),/Max-Age=0/);
+});
+for(const origin of [null,'https://evil.invalid'])test('untrusted logout blocked '+origin,async()=>{const before=logoutAudits.length;const r=await logout.POST(new Request('https://hrbp.invalid/api/auth/logout',{method:'POST',headers:origin?{origin}:{}}));assert.equal(r.status,403);assert.equal(r.headers.get('set-cookie'),null);assert.equal(logoutAudits.length,before);});
 function files(dir){return readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()?files(dir+'/'+e.name):[dir+'/'+e.name]);}
 test('all context consumers await current-account verification',()=>{let calls=0;for(const f of [...files('app'),...files('lib')].filter(f=>/\.tsx?$/.test(f))){const source=readFileSync(f,'utf8'),sf=ts.createSourceFile(f,source,ts.ScriptTarget.Latest,true);function visit(n){if(ts.isCallExpression(n)&&n.expression.getText(sf)==='getRequestContext'){assert.ok(ts.isAwaitExpression(n.parent),'Unawaited account check: '+f);calls++;}ts.forEachChild(n,visit);}visit(sf);}assert.ok(calls>=177);});
 test('signout renderers use explicit POST forms, never Next links',()=>{for(const f of ['components/session-indicator.tsx','components/topbar-account.tsx']){const text=readFileSync(f,'utf8');assert.match(text,/<form action="\/api\/auth\/logout" method="post"/);assert.doesNotMatch(text,/href="\/api\/auth\/logout"/);}});
