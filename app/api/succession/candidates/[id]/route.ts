@@ -1,4 +1,4 @@
-import { readJsonObject } from "@/lib/input-validation";
+import { asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
 import { DataClassification, EmploymentStatus, SuccessionReadiness } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -19,19 +19,30 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "succession:write")) return forbidden();
 
-  const { id } = await params;
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid succession candidate id is required." }, { status: 400 });
   const body = await readJsonObject(request) as Record<string, unknown>;
   if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const hasReadiness = Object.prototype.hasOwnProperty.call(body, "readiness");
   const hasRank = Object.prototype.hasOwnProperty.call(body, "rank");
   const hasGap = Object.prototype.hasOwnProperty.call(body, "developmentGap");
+  const hasReason = Object.prototype.hasOwnProperty.call(body, "readinessReason");
   if (!hasReadiness && !hasRank && !hasGap) return Response.json({ error: "readiness, rank or developmentGap is required." }, { status: 400 });
+
+  const expectedUpdatedAt = typeof body.expectedUpdatedAt === "string" ? new Date(body.expectedUpdatedAt) : null;
+  if (!expectedUpdatedAt || Number.isNaN(expectedUpdatedAt.getTime())) {
+    return Response.json({ error: "expectedUpdatedAt is required for concurrency-safe candidate updates." }, { status: 400 });
+  }
 
   const readiness = hasReadiness ? String(body.readiness ?? "") as SuccessionReadiness : undefined;
   if (hasReadiness && !Object.values(SuccessionReadiness).includes(readiness!)) return Response.json({ error: "A valid readiness value is required." }, { status: 400 });
   const rank = hasRank ? parseRank(body.rank) : undefined;
   if (hasRank && rank === undefined) return Response.json({ error: "rank must be an integer from 1 to 99 or null." }, { status: 400 });
-  const developmentGap = hasGap ? String(body.developmentGap ?? "").trim().slice(0, 2000) || null : undefined;
+  const parsedGap = hasGap ? asOptionalText(body.developmentGap, 2000) : undefined;
+  if (hasGap && parsedGap === null) return Response.json({ error: "developmentGap must not exceed 2000 characters." }, { status: 400 });
+  const developmentGap = hasGap ? parsedGap ?? null : undefined;
+  const readinessReason = hasReason ? asOptionalText(body.readinessReason, 2000) : undefined;
+  if (hasReason && readinessReason === null) return Response.json({ error: "readinessReason must not exceed 2000 characters." }, { status: 400 });
 
   try {
     const data = await db.$transaction(async (tx) => {
@@ -41,11 +52,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           id: true,
           planId: true,
           employmentId: true,
+          readiness: true,
+          updatedAt: true,
           plan: { select: { positionId: true, active: true } }
         }
       });
       if (!candidate) throw new Error("NOT_FOUND");
       if (!candidate.plan.active) throw new Error("PLAN_INACTIVE");
+      if (candidate.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("STALE_STATE");
+      const readinessChanged = Boolean(hasReadiness && readiness !== candidate.readiness);
+      if (readinessChanged && (!readinessReason || readinessReason.length < 12)) throw new Error("READINESS_REASON_REQUIRED");
       const scope = await resolveEmploymentScope(tx, ctx);
       if (!canActOnEmployment(scope, candidate.employmentId)) throw new Error("OUT_OF_SCOPE");
       if (scope !== null) {
@@ -68,19 +84,35 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (collision) throw new Error("RANK_CONFLICT");
       }
 
-      const updated = await tx.successionCandidate.update({
-        where: { id },
+      const result = await tx.successionCandidate.updateMany({
+        where: {
+          id,
+          tenantId: ctx.tenantId,
+          updatedAt: candidate.updatedAt
+        },
         data: {
           ...(hasReadiness ? { readiness } : {}),
+          ...(readinessChanged ? {
+            readinessReason,
+            readinessReviewedAt: new Date(),
+            readinessReviewedById: ctx.actorId
+          } : {}),
           ...(hasRank ? { rank } : {}),
           ...(hasGap ? { developmentGap } : {})
         }
       });
+      if (result.count !== 1) throw new Error("STALE_STATE");
+      const updated = await tx.successionCandidate.findUnique({ where: { id } });
+      if (!updated) throw new Error("NOT_FOUND");
+
       await appendAudit(tx, ctx, {
-        action: "succession-candidate.updated",
+        action: readinessChanged ? "succession-candidate.readiness-reviewed" : "succession-candidate.updated",
         resourceType: "SuccessionCandidate",
         resourceId: id,
-        classification: DataClassification.CONFIDENTIAL
+        classification: DataClassification.CONFIDENTIAL,
+        purpose: readinessChanged
+          ? `Human readiness decision: previous=${candidate.readiness}; next=${readiness}; reasonRecorded=true`
+          : undefined
       });
       return updated;
     });
@@ -92,6 +124,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (code === "OUT_OF_SCOPE") return forbidden("Candidate employment is outside your authorized relationship scope.");
     if (code === "PLAN_OUT_OF_SCOPE") return forbidden("Succession target position is outside your authorized relationship scope.");
     if (code === "RANK_CONFLICT") return Response.json({ error: "That rank is already assigned to another candidate on this plan." }, { status: 409 });
+    if (code === "READINESS_REASON_REQUIRED") return Response.json({ error: "Changing readiness requires a human decision reason of at least 12 characters." }, { status: 400 });
+    if (code === "STALE_STATE") return Response.json({ error: "Succession candidate changed concurrently. Refresh before saving another readiness decision." }, { status: 409 });
     throw error;
   }
 }
