@@ -1,6 +1,7 @@
 import { sanitizeReturnTo } from "@/lib/safe-redirect";
-import { PlatformRole } from "@prisma/client";
+import { DataClassification, PlatformRole } from "@prisma/client";
 import { getOidcConfig } from "@/lib/auth-config";
+import { recordAudit } from "@/lib/audit";
 import { authenticationAssuranceVersion, evaluateOidcAssurance } from "@/lib/auth-assurance";
 import { clearOidcTransactionCookie, createSessionCookie, readOidcTransaction } from "@/lib/auth-session";
 import { withDb } from "@/lib/db";
@@ -138,6 +139,28 @@ export async function GET(request: Request) {
         tenantSessionVersion: tenant.sessionVersion,
         sessionMaxMinutes: securityPolicy?.sessionMaxMinutes ?? 480
       };
+    });
+
+    await recordAudit({
+      ctx: {
+        tenantId: identity.user.tenantId,
+        actorId: identity.user.id,
+        role: identity.user.role,
+        employmentId: identity.employmentId,
+        mfaSatisfied: assurance.mfaSatisfied,
+        deviceTrustSatisfied: assurance.deviceTrustSatisfied,
+        assuranceVersion,
+        ipAddress: request.headers.get("cf-connecting-ip")?.trim() ||
+          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+          undefined
+      },
+      action: "auth.oidc-succeeded",
+      resourceType: "UserAccount",
+      resourceId: identity.user.id,
+      classification: DataClassification.INTERNAL,
+      purpose: runtimeBinding.managed
+        ? `Federated OIDC sign-in through governed provider ${runtimeBinding.connectionId} generation ${runtimeBinding.bindingVersion}; MFA=${assurance.mfaSatisfied}; deviceTrust=${assurance.deviceTrustSatisfied}`
+        : `Federated OIDC sign-in through legacy runtime provider; MFA=${assurance.mfaSatisfied}; deviceTrust=${assurance.deviceTrustSatisfied}`
     });
 
     const headers = new Headers({ location: sanitizeReturnTo(transaction.returnTo), "cache-control": "no-store" });
