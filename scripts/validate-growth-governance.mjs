@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 async function source(path) { return readFile(path, "utf8"); }
 const failures = [];
 function expect(path, text, pattern, message) { if (!pattern.test(text)) failures.push(`${path}: ${message}`); }
+function expectAbsent(path, text, pattern, message) { if (pattern.test(text)) failures.push(`${path}: ${message}`); }
 
 const modulePath = "components/growth-module-page.tsx";
 const modulePage = await source(modulePath);
@@ -94,6 +95,11 @@ expect(successionCreatePath, successionCreate, /PLAN_INACTIVE/, "inactive succes
 expect(successionCreatePath, successionCreate, /rank\s*<\s*1\s*\|\|\s*rank\s*>\s*99/, "candidate rank must be bounded");
 expect(successionCreatePath, successionCreate, /RANK_CONFLICT/, "candidate ranks must remain unique inside a plan");
 expect(successionCreatePath, successionCreate, /succession-candidate\.added/, "new successor candidates must emit explicit audit evidence");
+expect(successionCreatePath, successionCreate, /asOptionalText\(body\.readinessReason, 2000\)/, "candidate creation/reactivation must require bounded readiness rationale");
+expect(successionCreatePath, successionCreate, /readinessReason\.length < 12/, "candidate creation/reactivation must require meaningful human readiness rationale");
+expect(successionCreatePath, successionCreate, /active:\s*true[\s\S]*removedAt:\s*null[\s\S]*removedById:\s*null[\s\S]*removalReason:\s*null/, "re-adding a removed candidate must explicitly reactivate the same historical record");
+expect(successionCreatePath, successionCreate, /succession-candidate\.reactivated/, "candidate reactivation must emit explicit audit evidence");
+expect(successionCreatePath, successionCreate, /where:\s*\{[\s\S]*active:\s*true[\s\S]*rank/, "candidate rank collisions must ignore removed historical candidates");
 
 const successionCandidatePath = "app/api/succession/candidates/[id]/route.ts";
 const successionCandidate = await source(successionCandidatePath);
@@ -111,6 +117,12 @@ expect(successionCandidatePath, successionCandidate, /readinessReviewedAt:[\s\S]
 expect(successionCandidatePath, successionCandidate, /succession-candidate\.readiness-reviewed/, "readiness changes must emit a dedicated audit event");
 expect(successionCandidatePath, successionCandidate, /previous=\$\{candidate\.readiness\}; next=\$\{readiness\}; reasonRecorded=true/, "readiness audit evidence must record decision shape without copying the reason text");
 expect(successionCandidatePath, successionCandidate, /STALE_STATE/, "concurrent candidate updates must fail with a bounded stale-state conflict");
+expect(successionCandidatePath, successionCandidate, /CANDIDATE_INACTIVE/, "removed candidates must be immutable until explicitly reactivated");
+expect(successionCandidatePath, successionCandidate, /Removing a succession candidate requires a reason of at least 12 characters/, "candidate removal must require explicit human rationale");
+expect(successionCandidatePath, successionCandidate, /asOptionalText\(body\.removalReason, 2000\)/, "candidate removal rationale must be bounded");
+expect(successionCandidatePath, successionCandidate, /active:\s*false[\s\S]*removedAt[\s\S]*removedById:\s*ctx\.actorId[\s\S]*removalReason[\s\S]*rank:\s*null/, "candidate removal must preserve the record while clearing it from the active ranked pipeline");
+expect(successionCandidatePath, successionCandidate, /historyPreserved=true/, "candidate removal audit must explicitly record non-destructive history preservation");
+expectAbsent(successionCandidatePath, successionCandidate, /successionCandidate\.delete\(/, "succession candidate removal must never hard-delete governed history");
 
 const successionPlanPath = "app/api/succession/plans/route.ts";
 const successionPlan = await source(successionPlanPath);
@@ -140,6 +152,7 @@ expect(successionReviewPath, successionReview, /lastReviewedAt:[\s\S]*lastReview
 expect(successionReviewPath, successionReview, /succession-plan\.review-attested/, "succession review attestation must emit explicit audit evidence");
 expect(successionReviewPath, successionReview, /summaryRecorded=true/, "succession review audit must record summary presence without copying summary text");
 expect(successionReviewPath, successionReview, /STALE_STATE/, "concurrent succession review attestation must fail with a bounded stale-state conflict");
+expect(successionReviewPath, successionReview, /successionCandidate\.count\([\s\S]*active:\s*true/, "succession plan review evidence must count active candidates only");
 
 const successionSchemaPath = "prisma/growth.prisma";
 const successionSchema = await source(successionSchemaPath);
@@ -152,6 +165,10 @@ const readinessMigrationPath = "prisma/migrations/20261012153000_succession_read
 const readinessMigration = await source(readinessMigrationPath);
 expect(readinessMigrationPath, readinessMigration, /ADD COLUMN "readinessReason"[\s\S]*ADD COLUMN "readinessReviewedAt"[\s\S]*ADD COLUMN "readinessReviewedById"[\s\S]*ADD COLUMN "updatedAt"/, "readiness decision governance must be delivered through a versioned migration");
 expect(readinessMigrationPath, readinessMigration, /UPDATE "SuccessionCandidate"[\s\S]*SET "updatedAt" = "addedAt"[\s\S]*ALTER COLUMN "updatedAt" SET NOT NULL/, "readiness migration must safely backfill optimistic concurrency state for existing candidates");
+expect(successionSchemaPath, successionSchema, /model SuccessionCandidate[\s\S]*active\s+Boolean\s+@default\(true\)[\s\S]*removedAt\s+DateTime\?[\s\S]*removedById\s+String\?[\s\S]*removalReason\s+String\?/, "successor candidates must preserve non-destructive removal lifecycle evidence");
+const candidateLifecycleMigrationPath = "prisma/migrations/20261012164500_succession_candidate_lifecycle/migration.sql";
+const candidateLifecycleMigration = await source(candidateLifecycleMigrationPath);
+expect(candidateLifecycleMigrationPath, candidateLifecycleMigration, /ADD COLUMN "active" BOOLEAN NOT NULL DEFAULT true[\s\S]*ADD COLUMN "removedAt"[\s\S]*ADD COLUMN "removedById"[\s\S]*ADD COLUMN "removalReason"/, "candidate lifecycle must be delivered through a versioned migration");
 
 const successionDataPath = "lib/succession-governance-data.ts";
 const successionData = await source(successionDataPath);
@@ -168,6 +185,7 @@ expect(successionDataPath, successionData, /readinessReviewedAt:\s*true/, "succe
 expect(successionDataPath, successionData, /readinessReviewedById:\s*true/, "succession governance data must load readiness reviewer identity");
 expect(successionDataPath, successionData, /updatedAt:\s*candidate\.updatedAt\.toISOString\(\)/, "candidate UI must receive optimistic concurrency evidence");
 expect(successionDataPath, successionData, /readinessReviewedBy:[\s\S]*reviewerMap\.get\(candidate\.readinessReviewedById\)/, "readiness reviewer identity must resolve tenant-locally for the governance UI");
+expect(successionDataPath, successionData, /candidates:\s*\{[\s\S]*where:\s*\{\s*active:\s*true,\s*\.\.\.employmentIdFilter\(scope\)\s*\}/, "succession governance queue must show active candidates only");
 
 const successionConsolePath = "components/succession-governance-console.tsx";
 const successionConsole = await source(successionConsolePath);
@@ -184,6 +202,22 @@ expect(successionConsolePath, successionConsole, /readinessReason:\s*data\.get\(
 expect(successionConsolePath, successionConsole, /expectedUpdatedAt:\s*candidate\.updatedAt/, "candidate UI must submit optimistic concurrency evidence");
 expect(successionConsolePath, successionConsole, /name="readinessReason"[\s\S]*maxLength=\{2000\}/, "readiness reason input must mirror the bounded backend contract");
 expect(successionConsolePath, successionConsole, /candidate\.readinessReviewedAt[\s\S]*candidate\.readinessReviewedBy[\s\S]*candidate\.readinessReason/, "succession UI must surface prior readiness decision provenance");
+expect(successionConsolePath, successionConsole, /name="removalReason"[\s\S]*maxLength=\{2000\}/, "succession UI must collect bounded candidate removal rationale");
+expect(successionConsolePath, successionConsole, /removalReason:\s*reason[\s\S]*expectedUpdatedAt:\s*candidate\.updatedAt/, "candidate removal UI must submit reason and optimistic concurrency evidence");
+expectAbsent(successionConsolePath, successionConsole, /window\.confirm\(/, "candidate removal must not depend on browser-native confirmation dialogs");
+
+const growthOperationsPath = "components/growth-operations-console.tsx";
+const growthOperations = await source(growthOperationsPath);
+expect(growthOperationsPath, growthOperations, /readinessReason:\s*data\.get\("readinessReason"\)/, "candidate creation UI must submit human readiness rationale");
+expect(growthOperationsPath, growthOperations, /name="readinessReason"[\s\S]*required[\s\S]*minLength=\{12\}[\s\S]*maxLength=\{2000\}/, "candidate creation UI must mirror bounded readiness-rationale requirements");
+
+const growthLivePath = "lib/growth-live-data.ts";
+const growthLive = await source(growthLivePath);
+expect(growthLivePath, growthLive, /candidates:\s*\{[\s\S]*where:\s*\{\s*active:\s*true,\s*\.\.\.employmentIdFilter\(scope\)\s*\}/, "succession coverage metrics must exclude removed historical candidates");
+
+const successionDevelopmentPath = "app/api/succession/candidates/[id]/development-assignment/route.ts";
+const successionDevelopment = await source(successionDevelopmentPath);
+expect(successionDevelopmentPath, successionDevelopment, /CANDIDATE_INACTIVE/, "removed candidates must reject new development assignments");
 
 const reminderPath = "lib/succession-reminders.ts";
 const reminders = await source(reminderPath);
