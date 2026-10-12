@@ -56,8 +56,8 @@ export async function SettingsLivePage() {
   const integrationProbeConfigured = integrationProbeOrigins.length > 0;
   const baseCoreConfigured = auth.configured && storageConfigured && maintenanceConfigured;
 
-  const localAuthSince = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const [tenant, security, idps, integrations, userGroups, notificationGroups, activeQueues, workflowGroups, quarantineCount, localAccountCount, localAuthEvents, localAuthEventGroups, localAuthUsers, scimManagedCount, scimActiveCount, scimLastProvisioning, scimGroupCount, scimMembershipCount, scimLastGroupChange] = await Promise.all([
+  const authActivitySince = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [tenant, security, idps, integrations, userGroups, notificationGroups, activeQueues, workflowGroups, quarantineCount, localAccountCount, authEvents, authEventGroups, authEventUsers, scimManagedCount, scimActiveCount, scimLastProvisioning, scimGroupCount, scimMembershipCount, scimLastGroupChange] = await Promise.all([
     db.tenant.findUnique({ where: { id: ctx.tenantId }, select: { id: true, name: true, region: true, createdAt: true, identityGovernanceAdoptedAt: true } }),
     db.tenantSecurityPolicy.findUnique({ where: { tenantId: ctx.tenantId } }),
     db.identityProviderConnection.findMany({ where: { tenantId: ctx.tenantId }, orderBy: [{ status: "asc" }, { name: "asc" }], take: 50 }),
@@ -69,19 +69,19 @@ export async function SettingsLivePage() {
     db.documentVersion.count({ where: { tenantId: ctx.tenantId, scanStatus: { in: ["PENDING", "QUARANTINED", "FAILED"] } } }),
     db.userAccount.count({ where: { tenantId: ctx.tenantId, active: true, localAuthEnabled: true, localPasswordHash: { not: null } } }),
     db.auditEvent.findMany({
-      where: { tenantId: ctx.tenantId, resourceType: "UserAccount", action: { in: ["auth.local-succeeded", "auth.local-failed", "auth.local-locked"] } },
+      where: { tenantId: ctx.tenantId, resourceType: "UserAccount", action: { in: ["auth.oidc-succeeded", "auth.local-succeeded", "auth.local-failed", "auth.local-locked", "auth.session-logout"] } },
       orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
       take: 50,
       select: { id: true, action: true, resourceId: true, purpose: true, occurredAt: true }
     }),
     db.auditEvent.groupBy({
       by: ["action"],
-      where: { tenantId: ctx.tenantId, resourceType: "UserAccount", action: { in: ["auth.local-succeeded", "auth.local-failed", "auth.local-locked"] }, occurredAt: { gte: localAuthSince } },
+      where: { tenantId: ctx.tenantId, resourceType: "UserAccount", action: { in: ["auth.oidc-succeeded", "auth.local-succeeded", "auth.local-failed", "auth.local-locked", "auth.session-logout"] }, occurredAt: { gte: authActivitySince } },
       _count: { _all: true }
     }),
     db.userAccount.findMany({
-      where: { tenantId: ctx.tenantId, OR: [{ localAuthEnabled: true }, { localPasswordHash: { not: null } }] },
-      take: 200,
+      where: { tenantId: ctx.tenantId },
+      take: 500,
       select: { id: true, subject: true, displayName: true }
     }),
     db.userAccount.count({ where: { tenantId: ctx.tenantId, provisioningSource: "SCIM" } }),
@@ -125,11 +125,13 @@ export async function SettingsLivePage() {
   const attentionIntegrations = integrations.filter((row) => row.status === "DEGRADED" || (row.enabled && row.status !== "ACTIVE")).length;
   const deadLetters = notificationCounts.DEAD_LETTER ?? 0;
   const notificationBacklog = (notificationCounts.PENDING ?? 0) + (notificationCounts.FAILED ?? 0) + (notificationCounts.PROCESSING ?? 0);
-  const localAuthCounts = Object.fromEntries(localAuthEventGroups.map((row) => [row.action, row._count._all])) as Record<string, number>;
-  const localAuthAccountNames = new Map(localAuthUsers.map((row) => [row.id, `${row.displayName} · ${row.subject}`]));
-  const localAuthSuccess24h = localAuthCounts["auth.local-succeeded"] ?? 0;
-  const localAuthFailure24h = localAuthCounts["auth.local-failed"] ?? 0;
-  const localAuthLocked24h = localAuthCounts["auth.local-locked"] ?? 0;
+  const authCounts = Object.fromEntries(authEventGroups.map((row) => [row.action, row._count._all])) as Record<string, number>;
+  const authAccountNames = new Map(authEventUsers.map((row) => [row.id, `${row.displayName} · ${row.subject}`]));
+  const oidcSuccess24h = authCounts["auth.oidc-succeeded"] ?? 0;
+  const localAuthSuccess24h = authCounts["auth.local-succeeded"] ?? 0;
+  const localAuthFailure24h = authCounts["auth.local-failed"] ?? 0;
+  const localAuthLocked24h = authCounts["auth.local-locked"] ?? 0;
+  const sessionLogout24h = authCounts["auth.session-logout"] ?? 0;
 
   return <div className="settings-live-page">
     <div className="page-heading settings-live-heading">
@@ -206,17 +208,21 @@ export async function SettingsLivePage() {
 
 
     <section className="card settings-live-panel settings-local-auth-observability">
-      <div className="settings-live-panel-head"><div><span className="section-kicker">{c(locale, "Local authentication telemetry", "Yerel kimlik doğrulama telemetrisi")}</span><h3>{c(locale, "Recent local sign-in activity", "Son yerel giriş aktivitesi")}</h3><p>{c(locale, "Bounded authentication evidence from the append-only audit ledger. Passwords and hashes are never included.", "Değiştirilemez denetim zincirinden sınırlı kimlik doğrulama kanıtı. Parolalar ve hash değerleri hiçbir zaman gösterilmez.")}</p></div><KeyRound size={18}/></div>
+      <div className="settings-live-panel-head"><div><span className="section-kicker">{c(locale, "Authentication telemetry", "Kimlik doğrulama telemetrisi")}</span><h3>{c(locale, "Recent sign-in and session activity", "Son giriş ve oturum aktivitesi")}</h3><p>{c(locale, "Bounded tenant-scoped evidence from the append-only audit ledger across enterprise OIDC, local authentication and explicit sign-out. Credentials, tokens and password hashes are never included.", "Kurumsal OIDC, yerel kimlik doğrulama ve açık oturum kapatma olaylarını kapsayan değiştirilemez denetim zincirinden tenant kapsamlı sınırlı kanıt. Kimlik bilgileri, tokenlar ve parola hash değerleri hiçbir zaman gösterilmez.")}</p></div><KeyRound size={18}/></div>
       <div className="settings-notification-counts settings-local-auth-counts">
-        <div><small>{c(locale, "SUCCESS · 24H", "BAŞARILI · 24S")}</small><strong>{localAuthSuccess24h}</strong></div>
-        <div><small>{c(locale, "FAILED · 24H", "HATALI · 24S")}</small><strong>{localAuthFailure24h}</strong></div>
-        <div><small>{c(locale, "LOCKED · 24H", "KİLİTLİ · 24S")}</small><strong>{localAuthLocked24h}</strong></div>
-        <div><small>{c(locale, "EVENTS SHOWN", "GÖSTERİLEN OLAY")}</small><strong>{localAuthEvents.length}</strong></div>
+        <div><small>{c(locale, "OIDC SUCCESS · 24H", "OIDC BAŞARILI · 24S")}</small><strong>{oidcSuccess24h}</strong></div>
+        <div><small>{c(locale, "LOCAL SUCCESS · 24H", "YEREL BAŞARILI · 24S")}</small><strong>{localAuthSuccess24h}</strong></div>
+        <div><small>{c(locale, "LOCAL RISK · 24H", "YEREL RİSK · 24S")}</small><strong>{localAuthFailure24h + localAuthLocked24h}</strong></div>
+        <div><small>{c(locale, "LOGOUT · 24H", "ÇIKIŞ · 24S")}</small><strong>{sessionLogout24h}</strong></div>
       </div>
       <div className="settings-live-table-wrap"><table className="settings-live-table"><thead><tr><th>{c(locale, "Account", "Hesap")}</th><th>{c(locale, "Event", "Olay")}</th><th>{c(locale, "Purpose", "Amaç")}</th><th>{c(locale, "Occurred", "Zaman")}</th></tr></thead><tbody>
-        {localAuthEvents.length ? localAuthEvents.map((event) => <tr key={event.id}><td><strong>{localAuthAccountNames.get(event.resourceId) ?? c(locale, "Local account", "Yerel hesap")}</strong></td><td><State ok={event.action === "auth.local-succeeded"} label={event.action.replace("auth.local-", "").toUpperCase()}/></td><td>{event.purpose ?? "—"}</td><td>{fmt(locale, event.occurredAt)}</td></tr>) : <tr><td colSpan={4} className="settings-live-empty">{c(locale, "No local authentication events have been recorded yet.", "Henüz yerel kimlik doğrulama olayı kaydedilmedi.")}</td></tr>}
+        {authEvents.length ? authEvents.map((event) => {
+          const eventLabel = event.action === "auth.oidc-succeeded" ? "OIDC SUCCESS" : event.action === "auth.local-succeeded" ? "LOCAL SUCCESS" : event.action === "auth.local-failed" ? "LOCAL FAILED" : event.action === "auth.local-locked" ? "LOCAL LOCKED" : "LOGOUT";
+          const eventOk = event.action === "auth.oidc-succeeded" || event.action === "auth.local-succeeded" || event.action === "auth.session-logout";
+          return <tr key={event.id}><td><strong>{authAccountNames.get(event.resourceId) ?? c(locale, "User account", "Kullanıcı hesabı")}</strong></td><td><State ok={eventOk} label={eventLabel}/></td><td>{event.purpose ?? "—"}</td><td>{fmt(locale, event.occurredAt)}</td></tr>;
+        }) : <tr><td colSpan={4} className="settings-live-empty">{c(locale, "No authentication or session events have been recorded yet.", "Henüz kimlik doğrulama veya oturum olayı kaydedilmedi.")}</td></tr>}
       </tbody></table></div>
-      <p className="settings-live-footnote">{c(locale, "Only the latest 50 tenant-scoped local authentication events are shown here; the full immutable history remains available in Audit.", "Burada yalnızca tenant kapsamındaki son 50 yerel kimlik doğrulama olayı gösterilir; tam değiştirilemez geçmiş Audit alanında kalır.")}</p>
+      <p className="settings-live-footnote">{c(locale, "Only the latest 50 tenant-scoped authentication events are shown here; the full immutable history remains available in Audit.", "Burada yalnızca tenant kapsamındaki son 50 kimlik doğrulama olayı gösterilir; tam değiştirilemez geçmiş Audit alanında kalır.")}</p>
     </section>
 
     {canWrite ? <><SessionRevocationAdmin/><LocalAccountAdmin/><ScimRoleMappingAdmin/><AccessScopeAdmin/>
