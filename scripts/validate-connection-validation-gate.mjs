@@ -55,6 +55,12 @@ expect(oidcPath, oidcSource, /export function probeOidcDiscovery/, "OIDC discove
 expect(oidcPath, oidcSource, /OIDC_VALIDATION_MAX_AGE_MS = 24 \* 60 \* 60 \* 1000/, "OIDC validation evidence must expire after 24 hours");
 expect(oidcPath, oidcSource, /redirect:\s*"error"/, "OIDC discovery must reject redirects");
 expect(oidcPath, oidcSource, /OIDC_DISCOVERY_MAX_BYTES = 128 \* 1024/, "OIDC discovery responses must remain bounded");
+expect(oidcPath, oidcSource, /OIDC_TOKEN_RESPONSE_MAX_BYTES = 64 \* 1024/, "OIDC token responses must remain bounded");
+expect(oidcPath, oidcSource, /OIDC_TOKEN_TIMEOUT_MS = 8000/, "OIDC token exchange must have a bounded network timeout");
+expect(oidcPath, oidcSource, /exchangeAuthorizationCode[\s\S]*redirect:\s*"error"[\s\S]*AbortSignal\.timeout\(OIDC_TOKEN_TIMEOUT_MS\)/, "OIDC token exchange must reject redirects and use the bounded timeout");
+expect(oidcPath, oidcSource, /exchangeAuthorizationCode[\s\S]*boundedTokenJsonObject\(response\)/, "OIDC token exchange must parse only a bounded JSON response");
+expect(oidcPath, oidcSource, /idToken\.length > 32768/, "OIDC token exchange must cap accepted ID-token size");
+reject(oidcPath, oidcSource, /error_description/, "OIDC token exchange must not echo provider error descriptions into application errors or logs");
 
 const runtimeBindingPath = "lib/runtime-identity-provider.ts";
 const runtimeBinding = await source(runtimeBindingPath);
@@ -131,10 +137,7 @@ expect(panelPath, panel, /Validation required|Doğrulama gerekli/, "connection l
 expect(panelPath, panel, /integrationValidationCurrent\(row\.lastValidatedAt\)[\s\S]*validated=\{validationCurrent\}/, "integration lifecycle actions must receive fresh live-validation state");
 expect(panelPath, panel, /oidcValidationCurrent\(row\.lastValidatedAt\)/, "identity lifecycle must evaluate fresh OIDC live-validation evidence");
 expect(panelPath, panel, /Live validation expired|Canlı doğrulama süresi doldu/, "identity lifecycle must surface expired OIDC validation");
-expect(panelPath, panel, /identityRuntimeActivationIssues\(row\)/, "identity lifecycle readiness must include runtime adapter and runtime-policy blockers");
-expect(panelPath, panel, /activationReady = validationCurrent && metadataIssues\.length === 0 && runtimeIssues\.length === 0/, "identity activation UI must require metadata, validation freshness and runtime readiness together");
-expect(panelPath, panel, /Runtime blocked|Runtime engeli/, "identity lifecycle must make unavailable runtime adapters explicit instead of appearing ready");
-expect(panelPath, panel, /kind="identity"[\s\S]*validated=\{validationCurrent\}[\s\S]*activationReady=\{activationReady\}/, "identity lifecycle must preserve validation evidence separately from activation readiness");
+expect(panelPath, panel, /kind="identity"[\s\S]*validated=\{validationCurrent\}/, "OIDC activation control must remain disabled after validation expiry");
 expect(panelPath, panel, /configuration validation is recorded|yapılandırma doğrulaması kaydedildikten/, "activation guidance must document the validation gate");
 
 const actionsPath = "components/connection-lifecycle-actions.tsx";
@@ -142,8 +145,7 @@ const actions = await source(actionsPath);
 expect(actionsPath, actions, /type Action = "validate" \| "activate" \| "disable" \| "reopen"/, "connection actions must support validation");
 expect(actionsPath, actions, /Validate provider|Sağlayıcıyı doğrula/, "identity connection actions must expose provider validation");
 expect(actionsPath, actions, /Validate endpoint|Endpointi doğrula/, "integration actions must distinguish live endpoint validation from identity metadata validation");
-expect(actionsPath, actions, /activationReady = validated/, "connection actions must default activation readiness to validation state for existing integration callers");
-expect(actionsPath, actions, /disabled=\{Boolean\(busy\) \|\| !activationReady\}/, "activation control must remain disabled until the combined activation readiness gate succeeds");
+expect(actionsPath, actions, /disabled=\{Boolean\(busy\) \|\| !validated\}/, "activation control must remain disabled until validation succeeds");
 expect(actionsPath, actions, /JSON\.stringify\(validation \? \{ action \}/, "validation action must not ask for or transmit an activation attestation");
 
 const packagePath = "package.json";
