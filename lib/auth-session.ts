@@ -30,11 +30,13 @@ export type SessionClaims = {
 };
 
 export type OidcTransaction = {
-  v: 1;
+  v: 2;
   state: string;
   nonce: string;
   verifier: string;
   returnTo: string;
+  identityProviderId?: string;
+  identityProviderVersion?: number;
   exp: number;
 };
 
@@ -158,11 +160,26 @@ export function clearSessionCookie() {
   return cookieBase(SESSION_COOKIE, "", 0);
 }
 
+function validOidcTransaction(transaction: OidcTransaction | null): transaction is OidcTransaction {
+  if (!transaction || transaction.v !== 2) return false;
+  if (!/^[A-Za-z0-9_-]{20,128}$/.test(transaction.state)) return false;
+  if (!/^[A-Za-z0-9_-]{20,128}$/.test(transaction.nonce)) return false;
+  if (!/^[A-Za-z0-9_-]{43,256}$/.test(transaction.verifier)) return false;
+  if (typeof transaction.returnTo !== "string" || !transaction.returnTo.startsWith("/") ||
+      transaction.returnTo.startsWith("//") || transaction.returnTo.length > 2048) return false;
+  if (transaction.identityProviderId !== undefined &&
+      (typeof transaction.identityProviderId !== "string" || !/^[A-Za-z0-9._-]{3,191}$/.test(transaction.identityProviderId))) return false;
+  if (transaction.identityProviderVersion !== undefined &&
+      (!Number.isSafeInteger(transaction.identityProviderVersion) || transaction.identityProviderVersion < 1)) return false;
+  if ((transaction.identityProviderId === undefined) !== (transaction.identityProviderVersion === undefined)) return false;
+  return true;
+}
+
 export function createOidcTransactionCookie(transaction: Omit<OidcTransaction, "v" | "exp">) {
   const secret = sessionSecret();
   if (!secret) throw new Error("HRBP_SESSION_SECRET must contain at least 32 characters.");
   const exp = Math.floor(Date.now() / 1000) + 10 * 60;
-  return cookieBase(OIDC_TRANSACTION_COOKIE, encodeSignedPayload({ ...transaction, v: 1, exp } satisfies OidcTransaction, secret), 10 * 60);
+  return cookieBase(OIDC_TRANSACTION_COOKIE, encodeSignedPayload({ ...transaction, v: 2, exp } satisfies OidcTransaction, secret), 10 * 60);
 }
 
 export function readOidcTransaction(request: Request): OidcTransaction | null {
@@ -170,7 +187,7 @@ export function readOidcTransaction(request: Request): OidcTransaction | null {
   if (!secret) return null;
   const cookies = parseCookies(request.headers.get("cookie"));
   const transaction = decodeSignedPayload<OidcTransaction>(cookies[OIDC_TRANSACTION_COOKIE], secret);
-  return transaction?.v === 1 ? transaction : null;
+  return validOidcTransaction(transaction) ? transaction : null;
 }
 
 export function clearOidcTransactionCookie() {
