@@ -12,6 +12,8 @@ export type OidcMetadata = {
 const metadataCache = new Map<string, Promise<OidcMetadata>>();
 const OIDC_DISCOVERY_MAX_BYTES = 128 * 1024;
 const OIDC_DISCOVERY_TIMEOUT_MS = 5000;
+const OIDC_TOKEN_RESPONSE_MAX_BYTES = 64 * 1024;
+const OIDC_TOKEN_TIMEOUT_MS = 8000;
 export const OIDC_VALIDATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const OIDC_VALIDATION_CLOCK_SKEW_MS = 60 * 1000;
 
@@ -72,8 +74,52 @@ async function boundedJsonObject(response: Response) {
   }
 }
 
+async function boundedTokenJsonObject(response: Response) {
+  const contentLength = Number(response.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > OIDC_TOKEN_RESPONSE_MAX_BYTES) {
+    try { await response.body?.cancel(); } catch {}
+    throw new Error("OIDC token exchange response is too large.");
+  }
+  if (!response.body) throw new Error("OIDC token exchange response body is missing.");
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let total = 0;
+  let source = "";
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > OIDC_TOKEN_RESPONSE_MAX_BYTES) {
+        await reader.cancel();
+        throw new Error("OIDC token exchange response is too large.");
+      }
+      source += decoder.decode(value, { stream: true });
+    }
+    source += decoder.decode();
+    const parsed: unknown = JSON.parse(source);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("OIDC token exchange response must be a JSON object.");
+    }
+    return parsed as Record<string, unknown>;
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("OIDC token exchange response")) throw error;
+    throw new Error("OIDC token exchange response is not valid JSON.");
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function safeOidcTokenError(value: Record<string, unknown>) {
+  const code = typeof value.error === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(value.error)
+    ? value.error
+    : null;
+  return code ? `OIDC token exchange failed (${code}).` : null;
+}
+
 function validatedOidcMetadata(expectedIssuer: string, value: Record<string, unknown>): OidcMetadata {
-  const issuer = typeof value.issuer === "string" ? normalizedIssuer(value.issuer) : null;
+  const issuer = typeof value.issuer === "string" ? normalizeOidcIssuer(value.issuer) : null;
   if (!issuer || issuer !== expectedIssuer) throw new Error("OIDC provider issuer does not match configured issuer.");
 
   const httpsRequired = expectedIssuer.startsWith("https://");
@@ -145,13 +191,15 @@ export async function exchangeAuthorizationCode({
   metadata,
   code,
   verifier,
-  redirectUri
+  redirectUri,
+  fetchImpl = fetch
 }: {
   config: OidcConfig;
   metadata: OidcMetadata;
   code: string;
   verifier: string;
   redirectUri: string;
+  fetchImpl?: typeof fetch;
 }) {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
@@ -162,17 +210,23 @@ export async function exchangeAuthorizationCode({
   });
   if (config.clientSecret) body.set("client_secret", config.clientSecret);
 
-  const response = await fetch(metadata.token_endpoint, {
+  const response = await fetchImpl(metadata.token_endpoint, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
     body,
-    cache: "no-store"
+    cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(OIDC_TOKEN_TIMEOUT_MS)
   });
-  const value = await response.json() as { id_token?: string; access_token?: string; error?: string; error_description?: string };
-  if (!response.ok || !value.id_token) {
-    throw new Error(value.error_description || value.error || `OIDC token exchange failed with HTTP ${response.status}.`);
+  const value = await boundedTokenJsonObject(response);
+  if (!response.ok) {
+    throw new Error(safeOidcTokenError(value) ?? `OIDC token exchange failed with HTTP ${response.status}.`);
   }
-  return value;
+  const idToken = typeof value.id_token === "string" ? value.id_token : "";
+  if (!idToken || idToken.length > 32768) {
+    throw new Error("OIDC token exchange did not return a valid bounded ID token.");
+  }
+  return value as { id_token: string; access_token?: string };
 }
 
 export async function verifyIdToken({
