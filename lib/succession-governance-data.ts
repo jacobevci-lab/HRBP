@@ -31,6 +31,10 @@ export type SuccessionCandidateOperation = {
   employeeNumber: string;
   position: string;
   readiness: string;
+  readinessReason: string | null;
+  readinessReviewedAt: string | null;
+  readinessReviewedBy: string | null;
+  updatedAt: string;
   rank: number | null;
   developmentGap: string | null;
   latestTalent: SuccessionTalentSignal | null;
@@ -115,6 +119,10 @@ export async function getSuccessionGovernanceData(
             id: true,
             employmentId: true,
             readiness: true,
+            readinessReason: true,
+            readinessReviewedAt: true,
+            readinessReviewedById: true,
+            updatedAt: true,
             rank: true,
             developmentGap: true,
             learningAssignments: {
@@ -146,7 +154,10 @@ export async function getSuccessionGovernanceData(
     const positionIds = [...new Set(orderedPlans.map((plan) => plan.positionId))];
     const employmentIds = [...new Set(orderedPlans.flatMap((plan) => plan.candidates.map((candidate) => candidate.employmentId)))];
     const linkedSkillIds = [...new Set(orderedPlans.flatMap((plan) => plan.candidates.flatMap((candidate) => candidate.learningAssignments.flatMap((assignment) => assignment.developmentSkillId ? [assignment.developmentSkillId] : []))))];
-    const reviewerIds = [...new Set(orderedPlans.flatMap((plan) => plan.lastReviewedById ? [plan.lastReviewedById] : []))];
+    const reviewerIds = [...new Set(orderedPlans.flatMap((plan) => [
+      ...(plan.lastReviewedById ? [plan.lastReviewedById] : []),
+      ...plan.candidates.flatMap((candidate) => candidate.readinessReviewedById ? [candidate.readinessReviewedById] : [])
+    ]))];
 
     const [positions, employments, talentAssessments, employmentSkills, courses, skills, reviewers] = await Promise.all([
       positionIds.length ? db.position.findMany({
@@ -228,6 +239,10 @@ export async function getSuccessionGovernanceData(
               employeeNumber: employment?.person.employeeNumber ?? "—",
               position: employment?.position?.title ?? "Unassigned",
               readiness: candidate.readiness,
+              readinessReason: candidate.readinessReason,
+              readinessReviewedAt: candidate.readinessReviewedAt?.toISOString() ?? null,
+              readinessReviewedBy: candidate.readinessReviewedById ? reviewerMap.get(candidate.readinessReviewedById) ?? candidate.readinessReviewedById : null,
+              updatedAt: candidate.updatedAt.toISOString(),
               rank: candidate.rank,
               developmentGap: candidate.developmentGap,
               latestTalent: latestTalent ? {
