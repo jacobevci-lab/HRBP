@@ -161,7 +161,7 @@ Claim names are bounded to simple top-level names and accepted-value lists are b
 
 If a tenant explicitly requires MFA or device trust, optional local password authentication is rejected because it cannot provide OIDC assurance evidence. Existing signed sessions are also checked against the current tenant policy on every request, so tightening the policy takes effect without waiting for cookie expiry. Assurance controls are explicit tenant policy choices: before enabling one, the administrator must already be signed in with a session that demonstrates the corresponding evidence. This avoids locking the tenant out with an unproven claim mapping.
 
-## SCIM 2.0 user provisioning
+## SCIM 2.0 user and group provisioning
 
 HRBP can expose a tenant-scoped SCIM 2.0 user provisioning surface for enterprise identity providers. It is disabled by default and is independent from interactive OIDC sign-in.
 
@@ -172,12 +172,13 @@ HRBP_SCIM_ENABLED=true
 HRBP_SCIM_TOKEN=<32-plus-character-random-secret>
 # Optional temporary overlap during credential rotation:
 HRBP_SCIM_TOKEN_PREVIOUS=
+HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT=
 HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION=false
 ```
 
-The SCIM bearer token is a privileged service credential. It must not be reused as the session, maintenance, metrics, malware-scanner, database, object-storage, OIDC or SMTP secret. The install/upgrade preflight enforces minimum length, whitespace rejection and privileged-secret separation. For zero-downtime rotation, place the retiring credential temporarily in `HRBP_SCIM_TOKEN_PREVIOUS`, move the identity provider to `HRBP_SCIM_TOKEN`, verify provisioning, then remove the previous token. The two values must be distinct; postflight and the secret-free health endpoint expose only whether an overlap window is active.
+The SCIM bearer token is a privileged service credential. It must not be reused as the session, maintenance, metrics, malware-scanner, database, object-storage, OIDC or SMTP secret. The install/upgrade preflight enforces minimum length, whitespace rejection and privileged-secret separation. For zero-downtime rotation, place the retiring credential temporarily in `HRBP_SCIM_TOKEN_PREVIOUS` and set `HRBP_SCIM_TOKEN_PREVIOUS_EXPIRES_AT` to an RFC3339 UTC timestamp no more than seven days in the future. Move the identity provider to `HRBP_SCIM_TOKEN`, verify provisioning, then remove both previous-token settings. An expired, missing-expiry or overlong overlap token is never accepted; the current token remains available. Postflight and the secret-free health endpoint expose only overlap/expiry posture, never token material.
 
-The current release supports the SCIM `User` resource with bounded `userName`, `displayName`, `externalId` and `active` attributes, plus `GET/POST /Users`, `GET/PUT/PATCH/DELETE /Users/{id}`, ServiceProviderConfig, Schemas and ResourceTypes discovery. Group provisioning and bulk operations are explicitly unsupported. SCIM cannot assign HRBP roles: newly provisioned accounts are always created as `EMPLOYEE`.
+The current release supports bounded SCIM `User` and `Group` resources, collection/resource CRUD, PATCH semantics, ServiceProviderConfig, Schemas and ResourceTypes discovery. Bulk operations remain unsupported. Directory groups do not grant privileged application roles directly: optional governed group-to-workforce-role mappings are restricted to the bounded workforce allowlist, while administrative, payroll, compensation, privacy, legal and security roles remain human-governed.
 
 All SCIM resources are scoped to `HRBP_AUTH_TENANT_ID` and to the configured allowed email domains. Mutating operations are serialized per tenant so concurrent identity-provider retries converge instead of creating a provisioning fork. Deactivation and DELETE are soft deprovisioning operations: the account is disabled and its application session version is advanced so previously issued HRBP sessions stop working on their next verified request.
 
