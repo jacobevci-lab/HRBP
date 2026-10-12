@@ -8,6 +8,10 @@ function reject(path, text, pattern, message) { if (pattern.test(text)) failures
 const schemaPath = "prisma/platform.prisma";
 const schema = await source(schemaPath);
 expect(schemaPath, schema, /model IntegrationConnection[\s\S]*lastValidatedAt\s+DateTime\?/, "integration connections must persist configuration validation evidence");
+expect(schemaPath, schema, /model IdentityProviderConnection[\s\S]*runtimeVersion\s+Int\s+@default\(1\)/, "identity providers must persist a monotonic runtime generation");
+const runtimeVersionMigrationPath = "prisma/migrations/20261012090000_identity_provider_runtime_version/migration.sql";
+const runtimeVersionMigration = await source(runtimeVersionMigrationPath);
+expect(runtimeVersionMigrationPath, runtimeVersionMigration, /ADD COLUMN "runtimeVersion" INTEGER NOT NULL DEFAULT 1/, "identity-provider runtime generation must be versioned");
 
 const tenantSchemaPath = "prisma/schema.prisma";
 const tenantSchema = await source(tenantSchemaPath);
@@ -30,6 +34,9 @@ expect(identityPath, identity, /status: ConnectionStatus\.DRAFT,[\s\S]*updatedAt
 expect(identityPath, identity, /status: ConnectionStatus\.DRAFT, lastValidatedAt: null/, "reopening identity configuration must invalidate prior validation");
 expect(identityPath, identity, /TransactionIsolationLevel\.Serializable/, "identity lifecycle mutations must use serializable transactions");
 expect(identityPath, identity, /P2034[\s\S]*state changed concurrently/, "serializable identity conflicts must surface as bounded retryable conflicts");
+expect(identityPath, identity, /status: ConnectionStatus\.ACTIVE, runtimeVersion: \{ increment: 1 \}/, "activation must rotate the provider runtime generation");
+expect(identityPath, identity, /status: ConnectionStatus\.DISABLED, runtimeVersion: \{ increment: 1 \}/, "disable must rotate the provider runtime generation");
+expect(identityPath, identity, /status: ConnectionStatus\.DRAFT, lastValidatedAt: null, runtimeVersion: \{ increment: 1 \}/, "reopen must rotate the provider runtime generation");
 expect(identityPath, identity, /isOidcRuntimeProvider\(current\.type\)[\s\S]*identityGovernanceAdoptedAt:\s*null[\s\S]*settings\.identity-governance-adopted/, "first governed OIDC activation must persist and audit tenant adoption");
 
 const lifecycleLockPath = "lib/identity-provider-lifecycle.ts";
@@ -50,6 +57,8 @@ expect(runtimeBindingPath, runtimeBinding, /connection\.scimEnabled && !scimRunt
 expect(runtimeBindingPath, runtimeBinding, /connection\.type === IdentityProviderType\.LOCAL[\s\S]*connection\.scimEnabled[\s\S]*SCIM requires federated identity provider/, "local identity providers must not activate governed SCIM");
 expect(runtimeBindingPath, runtimeBinding, /jitEnabled:\s*true[\s\S]*mfaRequired:\s*true[\s\S]*scimEnabled:\s*true/, "managed runtime binding must load provider JIT, MFA and SCIM policy flags");
 expect(runtimeBindingPath, runtimeBinding, /scimEnabled:\s*connection\.scimEnabled/, "managed runtime binding must return provider SCIM policy");
+expect(runtimeBindingPath, runtimeBinding, /runtimeVersion:\s*true/, "managed runtime binding must load provider lifecycle generation");
+expect(runtimeBindingPath, runtimeBinding, /bindingVersion:\s*connection\.runtimeVersion/, "managed runtime binding must expose the provider lifecycle generation");
 expect(runtimeBindingPath, runtimeBinding, /active\.length === 0[\s\S]*client\.tenant\.findUnique[\s\S]*identityGovernanceAdoptedAt[\s\S]*IDENTITY_PROVIDER_INACTIVE/, "adopted tenants with no active provider must fail OIDC closed instead of restoring legacy fallback");
 
 const loginPath = "app/api/auth/login/route.ts";
@@ -64,16 +73,21 @@ expect(callbackPath, callback, /IDENTITY_PROVIDER_AMBIGUOUS[\s\S]*IDENTITY_PROVI
 expect(callbackPath, callback, /runtimeBinding\.managed && runtimeBinding\.mfaRequired && !assurance\.mfaSatisfied[\s\S]*MFA_REQUIRED/, "active provider MFA policy must be enforced before account provisioning");
 expect(callbackPath, callback, /jitEnabled = runtimeBinding\.managed \? runtimeBinding\.jitEnabled : config\.jitProvisioning/, "managed provider JIT policy must override the legacy environment toggle while preserving unmanaged compatibility");
 expect(callbackPath, callback, /identityProviderId:\s*runtimeBinding\.managed \? runtimeBinding\.connectionId : undefined/, "managed OIDC sessions must be stamped with the active governed provider id");
+expect(callbackPath, callback, /identityProviderVersion:\s*runtimeBinding\.managed \? runtimeBinding\.bindingVersion : undefined/, "managed OIDC sessions must carry the active provider generation");
 
 const authSessionPath = "lib/auth-session.ts";
 const authSession = await source(authSessionPath);
 expect(authSessionPath, authSession, /identityProviderId\?:\s*string/, "OIDC session claims must carry optional governed provider identity");
-expect(authSessionPath, authSession, /authMethod === "local"[\s\S]*identityProviderId !== undefined/, "local sessions must reject governed provider identity claims");
+expect(authSessionPath, authSession, /identityProviderVersion\?:\s*number/, "OIDC session claims must carry optional governed provider generation");
+expect(authSessionPath, authSession, /identityProviderId === undefined\) !== \(claims\.identityProviderVersion === undefined/, "provider id and generation must be accepted only as a complete pair");
+expect(authSessionPath, authSession, /authMethod === "local"[\s\S]*identityProviderId !== undefined[\s\S]*identityProviderVersion !== undefined/, "local sessions must reject governed provider identity and generation claims");
 
 const verifiedSessionPath = "lib/verified-session.ts";
 const verifiedSession = await source(verifiedSessionPath);
 expect(verifiedSessionPath, verifiedSession, /claims\.authMethod === "oidc"[\s\S]*enforceOidcRuntimeBinding\(db, oidc\)/, "OIDC sessions must revalidate the governed provider on every request");
 expect(verifiedSessionPath, verifiedSession, /runtimeBinding\.managed[\s\S]*claims\.identityProviderId !== runtimeBinding\.connectionId/, "managed OIDC sessions must be invalidated when the active provider changes");
+expect(verifiedSessionPath, verifiedSession, /claims\.identityProviderVersion !== runtimeBinding\.bindingVersion/, "managed OIDC sessions must be invalidated when provider lifecycle generation changes");
+expect(verifiedSessionPath, verifiedSession, /runtimeBinding\.mfaRequired && claims\.mfaSatisfied !== true/, "provider MFA policy must remain effective for existing sessions");
 expect(verifiedSessionPath, verifiedSession, /runtimeBinding\.managed[\s\S]*else if \(claims\.identityProviderId !== undefined\)/, "legacy runtime must reject sessions stamped by a no-longer-managed provider");
 
 const integrationPath = "app/api/settings/integrations/[id]/route.ts";
