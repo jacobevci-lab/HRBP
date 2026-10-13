@@ -28,6 +28,12 @@ expect(talentCreatePath, talentCreate, /talent-assessment\.recorded/, "initial t
 expect(talentCreatePath, talentCreate, /Initial human talent assessment[\s\S]*performance=\$\{performance\}[\s\S]*potential=\$\{potential\}/, "initial talent audit must capture decision shape without copying notes");
 expectAbsent(talentCreatePath, talentCreate, /talentAssessment\.upsert\(/, "talent creation endpoint must not bypass correction governance with an upsert");
 
+const growthOperationsPath = "components/growth-operations-console.tsx";
+const growthOperations = await source(growthOperationsPath);
+expect(growthOperationsPath, growthOperations, /Create-only human decision|Yalnızca ilk insan kararı/, "talent creation UI must disclose that existing employee-cycle decisions use correction governance");
+expect(growthOperationsPath, growthOperations, /name="cycleLabel"[\s\S]*maxLength=\{160\}/, "talent creation UI must mirror the bounded cycle-label contract");
+expect(growthOperationsPath, growthOperations, /name="notes"[\s\S]*maxLength=\{4000\}/, "talent creation UI must mirror the bounded notes contract");
+
 const talentPatchPath = "app/api/talent/assessments/[id]/route.ts";
 const talentPatch = await source(talentPatchPath);
 expect(talentPatchPath, talentPatch, /can\(ctx,\s*"talent:write"\)/, "talent corrections must require talent:write");
