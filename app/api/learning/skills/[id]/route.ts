@@ -50,7 +50,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const changed = await tx.skill.updateMany({
         where: { id, tenantId: ctx.tenantId, updatedAt: skill.updatedAt },
         data: {
-          ...(hasName ? { name } : {}),
+          ...(hasName ? { name: name! } : {}),
           ...(hasCategory ? { category: category ?? null } : {}),
           ...(hasCritical ? { critical: body.critical as boolean } : {}),
           ...(hasActive ? { active: body.active as boolean } : {})
