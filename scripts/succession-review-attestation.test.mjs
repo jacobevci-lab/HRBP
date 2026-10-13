@@ -30,8 +30,7 @@ function fixture({
         id: "plan-1",
         positionId: "position-1",
         active,
-        updatedAt,
-        _count: { candidates: 3 }
+        updatedAt
       }),
       updateMany: async ({ where, data }) => {
         calls.updates.push({ where, data });
@@ -45,6 +44,14 @@ function fixture({
         updatedAt: new Date(),
         ...(calls.updates.at(-1)?.data ?? {})
       })
+    },
+    successionCandidate: {
+      count: async ({ where }) => {
+        assert.equal(where.tenantId, "tenant-1");
+        assert.equal(where.planId, "plan-1");
+        assert.equal(where.active, true);
+        return 3;
+      }
     },
     employment: {
       findFirst: async () => {
