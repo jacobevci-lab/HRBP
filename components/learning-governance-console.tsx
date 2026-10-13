@@ -62,7 +62,7 @@ export function LearningGovernanceConsole({ courses, skills, employmentSkills }:
 
     <div className="performance-ops-panel">
       <div className="performance-panel-title"><BookOpenCheck size={16}/><div><strong>{c("Learning course catalog", "Eğitim kataloğu")}</strong><small>{c(`${courses.length} courses including inactive history`, `Pasif geçmiş dahil ${courses.length} eğitim`)}</small></div></div>
-      <div className="growth-lifecycle-list">{courses.length ? courses.map((course) => <form className="growth-lifecycle-row" key={course.id} onSubmit={(event) => {
+      <div className="growth-lifecycle-list">{courses.length ? courses.map((course) => <form className="growth-lifecycle-row" key={`${course.id}:${course.updatedAt}`} onSubmit={(event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
         void patch(`course-${course.id}`, `/api/learning/courses/${course.id}`, {
@@ -81,7 +81,7 @@ export function LearningGovernanceConsole({ courses, skills, employmentSkills }:
 
     <div className="performance-ops-panel">
       <div className="performance-panel-title"><Sparkles size={16}/><div><strong>{c("Skill catalog", "Yetkinlik kataloğu")}</strong><small>{c(`${skills.length} skills including inactive history`, `Pasif geçmiş dahil ${skills.length} yetkinlik`)}</small></div></div>
-      <div className="growth-lifecycle-list">{skills.length ? skills.map((skill) => <form className="growth-lifecycle-row" key={skill.id} onSubmit={(event) => {
+      <div className="growth-lifecycle-list">{skills.length ? skills.map((skill) => <form className="growth-lifecycle-row" key={`${skill.id}:${skill.updatedAt}`} onSubmit={(event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
         void patch(`skill-${skill.id}`, `/api/learning/skills/${skill.id}`, {
