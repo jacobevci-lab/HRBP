@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 async function source(path) { return readFile(path, "utf8"); }
 const failures = [];
 function expect(path, text, pattern, message) { if (!pattern.test(text)) failures.push(`${path}: ${message}`); }
+function expectAbsent(path, text, pattern, message) { if (pattern.test(text)) failures.push(`${path}: ${message}`); }
 
 const modulePath = "components/growth-module-page.tsx";
 const modulePage = await source(modulePath);
@@ -10,6 +11,28 @@ expect(modulePath, modulePage, /TalentGovernanceConsole/, "talent write users mu
 expect(modulePath, modulePage, /getTalentGovernanceData\(ctx\)/, "talent governance data must load from the signed request context");
 expect(modulePath, modulePage, /LearningGovernanceConsole/, "learning write users must receive catalog and proficiency governance controls");
 expect(modulePath, modulePage, /getLearningGovernanceData\(ctx\)/, "learning governance data must load from the signed request context");
+
+const talentCreatePath = "app/api/talent/assessments/route.ts";
+const talentCreate = await source(talentCreatePath);
+expect(talentCreatePath, talentCreate, /can\(ctx,\s*"talent:write"\)/, "talent creation must require talent:write");
+expect(talentCreatePath, talentCreate, /canActOnEmployment/, "talent creation must remain relationship scoped");
+expect(talentCreatePath, talentCreate, /asIdentifier\(body\.employmentId\)/, "talent creation must validate employment identifiers");
+expect(talentCreatePath, talentCreate, /asText\(body\.cycleLabel, 160\)/, "talent cycle labels must be bounded");
+expect(talentCreatePath, talentCreate, /asOptionalText\(body\.notes, 4000\)/, "initial talent notes must be bounded without silent truncation");
+expect(talentCreatePath, talentCreate, /typeof criticalTalent !== "boolean"/, "critical-talent input must remain explicitly boolean");
+expect(talentCreatePath, talentCreate, /talentAssessment\.findUnique/, "talent creation must detect an existing employee-cycle record before writing");
+expect(talentCreatePath, talentCreate, /ASSESSMENT_EXISTS/, "existing talent records must be routed to governed correction instead of overwritten");
+expect(talentCreatePath, talentCreate, /talentAssessment\.create\(/, "initial talent assessment must use create-only persistence");
+expect(talentCreatePath, talentCreate, /P2002/, "concurrent duplicate assessment creation must collapse to a bounded conflict");
+expect(talentCreatePath, talentCreate, /talent-assessment\.recorded/, "initial talent assessment must emit explicit audit evidence");
+expect(talentCreatePath, talentCreate, /Initial human talent assessment[\s\S]*performance=\$\{performance\}[\s\S]*potential=\$\{potential\}/, "initial talent audit must capture decision shape without copying notes");
+expectAbsent(talentCreatePath, talentCreate, /talentAssessment\.upsert\(/, "talent creation endpoint must not bypass correction governance with an upsert");
+
+const growthOperationsPath = "components/growth-operations-console.tsx";
+const growthOperations = await source(growthOperationsPath);
+expect(growthOperationsPath, growthOperations, /Create-only human decision|Yalnızca ilk insan kararı/, "talent creation UI must disclose that existing employee-cycle decisions use correction governance");
+expect(growthOperationsPath, growthOperations, /name="cycleLabel"[\s\S]*maxLength=\{160\}/, "talent creation UI must mirror the bounded cycle-label contract");
+expect(growthOperationsPath, growthOperations, /name="notes"[\s\S]*maxLength=\{4000\}/, "talent creation UI must mirror the bounded notes contract");
 
 const talentPatchPath = "app/api/talent/assessments/[id]/route.ts";
 const talentPatch = await source(talentPatchPath);
