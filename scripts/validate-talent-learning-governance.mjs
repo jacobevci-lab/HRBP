@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 async function source(path) { return readFile(path, "utf8"); }
 const failures = [];
 function expect(path, text, pattern, message) { if (!pattern.test(text)) failures.push(`${path}: ${message}`); }
+function expectAbsent(path, text, pattern, message) { if (pattern.test(text)) failures.push(`${path}: ${message}`); }
 
 const modulePath = "components/growth-module-page.tsx";
 const modulePage = await source(modulePath);
@@ -10,6 +11,31 @@ expect(modulePath, modulePage, /TalentGovernanceConsole/, "talent write users mu
 expect(modulePath, modulePage, /getTalentGovernanceData\(ctx\)/, "talent governance data must load from the signed request context");
 expect(modulePath, modulePage, /LearningGovernanceConsole/, "learning write users must receive catalog and proficiency governance controls");
 expect(modulePath, modulePage, /getLearningGovernanceData\(ctx\)/, "learning governance data must load from the signed request context");
+
+const talentCreatePath = "app/api/talent/assessments/route.ts";
+const talentCreate = await source(talentCreatePath);
+expect(talentCreatePath, talentCreate, /can\(ctx,\s*"talent:write"\)/, "talent creation must require talent:write");
+expect(talentCreatePath, talentCreate, /canActOnEmployment/, "talent creation must remain relationship scoped");
+expect(talentCreatePath, talentCreate, /asIdentifier\(body\.employmentId\)/, "talent creation must validate employment identifiers");
+expect(talentCreatePath, talentCreate, /asText\(body\.cycleLabel, 160\)/, "talent cycle labels must be bounded");
+expect(talentCreatePath, talentCreate, /asOptionalText\(body\.notes, 4000\)/, "initial talent notes must be bounded without silent truncation");
+expect(talentCreatePath, talentCreate, /typeof criticalTalent !== "boolean"/, "critical-talent input must remain explicitly boolean");
+expect(talentCreatePath, talentCreate, /talentAssessment\.findUnique/, "talent creation must detect an existing employee-cycle record before writing");
+expect(talentCreatePath, talentCreate, /ASSESSMENT_EXISTS/, "existing talent records must be routed to governed correction instead of overwritten");
+expect(talentCreatePath, talentCreate, /talentAssessment\.create\(/, "initial talent assessment must use create-only persistence");
+expect(talentCreatePath, talentCreate, /P2002/, "concurrent duplicate assessment creation must collapse to a bounded conflict");
+expect(talentCreatePath, talentCreate, /talent-assessment\.recorded/, "initial talent assessment must emit explicit audit evidence");
+expect(talentCreatePath, talentCreate, /Initial human talent assessment[\s\S]*performance=\$\{performance\}[\s\S]*potential=\$\{potential\}/, "initial talent audit must capture decision shape without copying notes");
+expectAbsent(talentCreatePath, talentCreate, /talentAssessment\.upsert\(/, "talent creation endpoint must not bypass correction governance with an upsert");
+
+const growthOperationsPath = "components/growth-operations-console.tsx";
+const growthOperations = await source(growthOperationsPath);
+expect(growthOperationsPath, growthOperations, /Create-only human decision|Yalnızca ilk insan kararı/, "talent creation UI must disclose that existing employee-cycle decisions use correction governance");
+expect(growthOperationsPath, growthOperations, /name="cycleLabel"[\s\S]*maxLength=\{160\}/, "talent creation UI must mirror the bounded cycle-label contract");
+expect(growthOperationsPath, growthOperations, /name="notes"[\s\S]*maxLength=\{4000\}/, "talent creation UI must mirror the bounded notes contract");
+expect(growthOperationsPath, growthOperations, /Create-only human decision|Yalnızca ilk insan kararı/, "talent creation UI must disclose that existing employee-cycle decisions use correction governance");
+expect(growthOperationsPath, growthOperations, /name="cycleLabel"[\s\S]*maxLength=\{160\}/, "talent creation UI must mirror the bounded cycle-label contract");
+expect(growthOperationsPath, growthOperations, /name="notes"[\s\S]*maxLength=\{4000\}/, "talent creation UI must mirror the bounded notes contract");
 
 const talentPatchPath = "app/api/talent/assessments/[id]/route.ts";
 const talentPatch = await source(talentPatchPath);
@@ -51,12 +77,34 @@ const talentMigrationPath = "prisma/migrations/20261012160000_talent_assessment_
 const talentMigration = await source(talentMigrationPath);
 expect(talentMigrationPath, talentMigration, /ALTER TABLE "TalentAssessment"[\s\S]*ADD COLUMN "correctionReason" TEXT/, "talent correction rationale must be delivered through a versioned migration");
 
+const employeeSkillSchemaPath = "prisma/growth.prisma";
+const employeeSkillSchema = await source(employeeSkillSchemaPath);
+expect(employeeSkillSchemaPath, employeeSkillSchema, /model EmploymentSkill[\s\S]*assessmentReason\s+String\?[\s\S]*assessedById\s+String\?[\s\S]*updatedAt\s+DateTime\s+@updatedAt/, "employee skill assessments must persist rationale, assessor provenance and update state");
+const employeeSkillMigrationPath = "prisma/migrations/20261013083000_employment_skill_assessment_governance/migration.sql";
+const employeeSkillMigration = await source(employeeSkillMigrationPath);
+expect(employeeSkillMigrationPath, employeeSkillMigration, /ADD COLUMN "assessmentReason"[\s\S]*ADD COLUMN "assessedById"[\s\S]*ADD COLUMN "updatedAt"/, "employee skill assessment governance must be delivered through a versioned migration");
+expect(employeeSkillMigrationPath, employeeSkillMigration, /UPDATE "EmploymentSkill"[\s\S]*SET "updatedAt" = "assessedAt"[\s\S]*ALTER COLUMN "updatedAt" SET NOT NULL/, "employee skill assessment migration must safely backfill concurrency state");
+
 const coursePath = "app/api/learning/courses/[id]/route.ts";
 const course = await source(coursePath);
 expect(coursePath, course, /can\(ctx,\s*"learning:write"\)/, "course catalog maintenance must require learning:write");
 expect(coursePath, course, /validityMonths must be between 1 and 120 or blank/, "course validity must be bounded");
 expect(coursePath, course, /learning-course\.deactivated/, "course catalog must support auditable deactivation");
 expect(coursePath, course, /learning-course\.reactivated/, "course catalog must support auditable reactivation");
+
+const skillCreatePath = "app/api/learning/skills/route.ts";
+const skillCreate = await source(skillCreatePath);
+expect(skillCreatePath, skillCreate, /employeeAssessmentRequested/, "employee-skill creation must explicitly distinguish assessment writes from skill catalog creation");
+expect(skillCreatePath, skillCreate, /asIdentifier\(body\.employmentId\)/, "employee-skill creation must validate employment identifiers");
+expect(skillCreatePath, skillCreate, /asIdentifier\(body\.skillId\)/, "employee-skill creation must validate skill identifiers");
+expect(skillCreatePath, skillCreate, /asOptionalText\(body\.source, 500\)/, "initial proficiency evidence source must be bounded");
+expect(skillCreatePath, skillCreate, /employmentSkill\.findUnique/, "initial proficiency assessment must detect existing employee-skill records");
+expect(skillCreatePath, skillCreate, /ASSESSMENT_EXISTS/, "existing employee-skill records must be routed to governed reassessment");
+expect(skillCreatePath, skillCreate, /employmentSkill\.create\(/, "initial proficiency assessment must use create-only persistence");
+expect(skillCreatePath, skillCreate, /assessedById:\s*ctx\.actorId/, "initial proficiency assessment must persist the human assessor identity");
+expect(skillCreatePath, skillCreate, /employee-skill\.assessed/, "initial proficiency assessment must emit explicit audit evidence");
+expect(skillCreatePath, skillCreate, /P2002/, "concurrent duplicate employee-skill creation must collapse to a bounded conflict");
+expectAbsent(skillCreatePath, skillCreate, /employmentSkill\.upsert\(/, "employee-skill create endpoint must not bypass reassessment governance with an upsert");
 
 const skillPath = "app/api/learning/skills/[id]/route.ts";
 const skill = await source(skillPath);
@@ -70,12 +118,25 @@ expect(employmentSkillPath, employmentSkill, /can\(ctx,\s*"learning:write"\)/, "
 expect(employmentSkillPath, employmentSkill, /canActOnEmployment/, "employee proficiency reassessment must enforce relationship scope");
 expect(employmentSkillPath, employmentSkill, /Object\.values\(SkillProficiency\)/, "employee proficiency reassessment must validate proficiency enums");
 expect(employmentSkillPath, employmentSkill, /employee-skill\.reassessed/, "employee proficiency reassessment must emit explicit audit evidence");
+expect(employmentSkillPath, employmentSkill, /expectedAssessedAt/, "employee proficiency reassessment must require optimistic concurrency evidence");
+expect(employmentSkillPath, employmentSkill, /asOptionalText\(body\.source, 500\)/, "employee proficiency evidence source must be bounded without silent truncation");
+expect(employmentSkillPath, employmentSkill, /asOptionalText\(body\.assessmentReason, 2000\)/, "proficiency reassessment rationale must be bounded");
+expect(employmentSkillPath, employmentSkill, /proficiencyChanged[\s\S]*assessmentReason\.length < 12/, "proficiency changes must require meaningful human rationale");
+expect(employmentSkillPath, employmentSkill, /updateMany\([\s\S]*assessedAt:\s*record\.assessedAt/, "proficiency reassessment must use state-aware optimistic concurrency");
+expect(employmentSkillPath, employmentSkill, /assessedById:\s*ctx\.actorId[\s\S]*assessedAt:\s*reassessedAt/, "proficiency reassessment must refresh human assessor provenance");
+expect(employmentSkillPath, employmentSkill, /previous=\$\{record\.proficiency\}; next=\$\{nextProficiency\}[\s\S]*reasonRecorded=\$\{Boolean\(proficiencyChanged && assessmentReason\)\}/, "proficiency audit evidence must capture decision shape without copying rationale text");
+expect(employmentSkillPath, employmentSkill, /STALE_STATE/, "concurrent proficiency reassessments must surface a bounded stale-state conflict");
 
 const learningDataPath = "lib/learning-governance-data.ts";
 const learningData = await source(learningDataPath);
 expect(learningDataPath, learningData, /resolveEmploymentScope/, "learning governance reads must resolve relationship scope");
 expect(learningDataPath, learningData, /employmentIdFilter\(scope\)/, "learning governance reads must filter employee-scoped assignments and skills");
 expect(learningDataPath, learningData, /active:\s*"desc"/, "learning governance must preserve inactive catalog history after active records");
+expect(learningDataPath, learningData, /assessmentReason:\s*true/, "learning governance data must load persisted proficiency rationale");
+expect(learningDataPath, learningData, /assessedById:\s*true/, "learning governance data must load human assessor identity");
+expect(learningDataPath, learningData, /userAccount\.findMany/, "learning governance data must resolve proficiency assessor display names tenant-locally");
+expect(learningDataPath, learningData, /assessmentReason:\s*row\.assessmentReason/, "learning governance UI must receive proficiency rationale");
+expect(learningDataPath, learningData, /assessedBy:[\s\S]*assessorMap\.get\(row\.assessedById\)/, "learning governance UI must receive resolved human assessor identity");
 
 const learningConsolePath = "components/learning-governance-console.tsx";
 const learningConsole = await source(learningConsolePath);
@@ -84,6 +145,16 @@ expect(learningConsolePath, learningConsole, /\/api\/learning\/skills\/\$\{skill
 expect(learningConsolePath, learningConsole, /\/api\/learning\/employment-skills\/\$\{record\.id\}/, "learning governance console must reassess employee proficiency through governed endpoints");
 expect(learningConsolePath, learningConsole, /Deactivate|Pasife al/, "learning catalog governance must expose non-destructive deactivation");
 expect(learningConsolePath, learningConsole, /Reassess|Yeniden değerlendir/, "employee proficiency governance must expose explicit human reassessment");
+expect(learningConsolePath, learningConsole, /assessmentReason:\s*data\.get\("assessmentReason"\)/, "proficiency reassessment UI must submit human rationale");
+expect(learningConsolePath, learningConsole, /expectedAssessedAt:\s*record\.assessedAt/, "proficiency reassessment UI must submit optimistic concurrency evidence");
+expect(learningConsolePath, learningConsole, /name="assessmentReason"[\s\S]*maxLength=\{2000\}/, "proficiency rationale input must mirror the bounded backend contract");
+expect(learningConsolePath, learningConsole, /record\.assessedBy/, "proficiency register must surface human assessor identity");
+expect(learningConsolePath, learningConsole, /record\.assessmentReason/, "proficiency register must surface last decision rationale");
+
+const growthOperationsPath = "components/growth-operations-console.tsx";
+const growthOperations = await source(growthOperationsPath);
+expect(growthOperationsPath, growthOperations, /Create-only initial assessment|Yalnızca ilk değerlendirme/, "initial employee-skill UI must disclose create-only behavior");
+expect(growthOperationsPath, growthOperations, /name="source"[\s\S]*maxLength=\{500\}/, "initial proficiency source input must mirror backend bounds");
 
 if (failures.length) {
   console.error("Talent and learning governance contract validation failed:\n");
