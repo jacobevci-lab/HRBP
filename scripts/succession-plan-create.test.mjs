@@ -20,11 +20,14 @@ function futureIso(days = 60) {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
-function fixture({ existing = null, scope = null, scopedIncumbent = { id: "employment-1" }, createError = null } = {}) {
-  const calls = { creates: [], audits: [], existingLookups: 0, scopeLookups: 0 };
+function fixture({ existing = null, scope = null, scopedIncumbent = { id: "employment-1" }, createError = null, positionAvailable = true } = {}) {
+  const calls = { creates: [], audits: [], existingLookups: 0, scopeLookups: 0, positionWhere: null, planReads: [] };
   const tx = {
     position: {
-      findFirst: async () => ({ id: "position-1" })
+      findFirst: async ({ where }) => {
+        calls.positionWhere = where;
+        return positionAvailable ? { id: "position-1" } : null;
+      }
     },
     employment: {
       findFirst: async () => {
@@ -33,6 +36,13 @@ function fixture({ existing = null, scope = null, scopedIncumbent = { id: "emplo
       }
     },
     successionPlan: {
+      findMany: async (options) => {
+        calls.planReads.push(options);
+        return [{ id: "plan-1", candidates: [
+          { id: "active-candidate", active: true },
+          { id: "removed-candidate", active: false }
+        ].filter((candidate) => !options.include.candidates.where.active || candidate.active) }];
+      },
       findUnique: async () => {
         calls.existingLookups += 1;
         return existing;
@@ -62,9 +72,10 @@ function fixture({ existing = null, scope = null, scopedIncumbent = { id: "emplo
     },
     "@prisma/client": {
       DataClassification: { CONFIDENTIAL: "CONFIDENTIAL" },
-      EmploymentStatus: { TERMINATED: "TERMINATED" }
+      EmploymentStatus: { TERMINATED: "TERMINATED" },
+      PositionStatus: { CLOSED: "CLOSED" }
     },
-    "@/lib/db": { db: { $transaction: async (operation) => operation(tx) } },
+    "@/lib/db": { db: { $transaction: async (operation) => operation(tx), successionPlan: tx.successionPlan, employment: tx.employment } },
     "@/lib/authorization": {
       can: () => true,
       forbidden: (message = "Forbidden.") => Response.json({ error: message }, { status: 403 })
@@ -169,4 +180,36 @@ test("succession plan creation remains relationship scoped", async () => {
   assert.equal(response.status, 403);
   assert.equal(calls.scopeLookups, 1);
   assert.equal(calls.creates.length, 0);
+});
+
+
+test("succession creation refuses historical or closed positions at the API boundary", async () => {
+  const { route, calls } = fixture({ positionAvailable: false });
+  const response = await post(route, {
+    positionId: "position-1",
+    reviewDueAt: futureIso(30)
+  });
+  assert.equal(response.status, 404);
+  assert.deepEqual(calls.positionWhere, {
+    id: "position-1",
+    tenantId: "tenant-1",
+    validTo: null,
+    status: { not: "CLOSED" }
+  });
+  assert.equal(calls.creates.length, 0);
+});
+
+test("succession read API is tenant scoped, bounded, uncached and hides removed candidates", async () => {
+  const { route, calls } = fixture();
+  const response = await route.GET(new Request("https://hrbp.example.test/api/succession/plans"));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  const payload = await response.json();
+  assert.equal(payload.data.length, 1);
+  assert.equal(payload.data[0].candidates.length, 1);
+  assert.equal(payload.data[0].candidates[0].id, "active-candidate");
+  const query = calls.planReads.at(-1);
+  assert.equal(query.where.tenantId, "tenant-1");
+  assert.equal(query.include.candidates.where.active, true);
+  assert.equal(query.take, 200);
 });
