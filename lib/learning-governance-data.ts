@@ -10,6 +10,7 @@ export type LearningGovernanceCourse = {
   mandatory: boolean;
   validityMonths: number | null;
   active: boolean;
+  updatedAt: string;
   assignments: number;
 };
 
@@ -20,6 +21,7 @@ export type LearningGovernanceSkill = {
   category: string | null;
   critical: boolean;
   active: boolean;
+  updatedAt: string;
   assessed: number;
 };
 
@@ -61,6 +63,7 @@ export async function getLearningGovernanceData(ctx: RequestContext): Promise<Le
           mandatory: true,
           validityMonths: true,
           active: true,
+          updatedAt: true,
           _count: { select: { assignments: { where: { ...employmentIdFilter(scope) } } } }
         }
       }),
@@ -75,6 +78,7 @@ export async function getLearningGovernanceData(ctx: RequestContext): Promise<Le
           category: true,
           critical: true,
           active: true,
+          updatedAt: true,
           _count: { select: { employments: { where: { ...employmentIdFilter(scope) } } } }
         }
       }),
@@ -120,6 +124,7 @@ export async function getLearningGovernanceData(ctx: RequestContext): Promise<Le
         mandatory: course.mandatory,
         validityMonths: course.validityMonths,
         active: course.active,
+        updatedAt: course.updatedAt.toISOString(),
         assignments: course._count.assignments
       })),
       skills: skills.map((skill) => ({
@@ -129,6 +134,7 @@ export async function getLearningGovernanceData(ctx: RequestContext): Promise<Le
         category: skill.category,
         critical: skill.critical,
         active: skill.active,
+        updatedAt: skill.updatedAt.toISOString(),
         assessed: skill._count.employments
       })),
       employmentSkills: employmentSkills.map((row) => {
