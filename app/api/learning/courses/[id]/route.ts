@@ -64,7 +64,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const changed = await tx.learningCourse.updateMany({
         where: { id, tenantId: ctx.tenantId, updatedAt: course.updatedAt },
         data: {
-          ...(hasTitle ? { title } : {}),
+          ...(hasTitle ? { title: title! } : {}),
           ...(hasProvider ? { provider: provider ?? null } : {}),
           ...(hasMandatory ? { mandatory: body.mandatory as boolean } : {}),
           ...(hasValidity ? { validityMonths } : {}),
