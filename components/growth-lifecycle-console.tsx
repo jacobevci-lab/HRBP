@@ -97,7 +97,9 @@ export function GrowthLifecycleConsole(props: Props) {
   }
 
   function LearningQueue({ rows }: { rows: LearningAssignmentOperation[] }) {
-    return <div className="growth-lifecycle-list">{rows.length ? rows.map((row) => <article className="growth-lifecycle-row" key={row.id}>
+    const actionable = rows.filter((row) => ["ASSIGNED", "IN_PROGRESS", "OVERDUE"].includes(row.status));
+    const history = rows.filter((row) => ["COMPLETED", "WAIVED"].includes(row.status));
+    return <><div className="growth-lifecycle-list">{actionable.length ? actionable.map((row) => <article className="growth-lifecycle-row" key={row.id}>
       <div className="growth-lifecycle-icon"><GraduationCap size={16}/></div>
       <div className="growth-lifecycle-copy"><strong>{row.person}</strong><small>{row.employeeNumber} · {row.courseCode} · {row.course}</small><span>{row.mandatory ? c("Mandatory", "Zorunlu") : c("Development", "Gelişim")} · <Clock3 size={11}/> {c("Due", "Son tarih")} {dateOnly(row.dueAt)}</span>{row.developmentPlanTitle && row.developmentSkillName ? <span><Sparkles size={11}/> {c("Development plan", "Gelişim planı")}: {row.developmentPlanTitle} · {row.developmentSkillCode} · {row.developmentSkillName}{row.targetProficiency ? ` → ${label(row.targetProficiency, locale)}` : ""}{row.successionCandidateId ? ` · ${c("succession-linked", "yedeklemeye bağlı")}` : ""}</span> : row.successionCandidateId && row.developmentSkillName ? <span><Sparkles size={11}/> {c("Succession development", "Yedekleme gelişimi")} · {row.developmentSkillCode} · {row.developmentSkillName}{row.targetProficiency ? ` → ${label(row.targetProficiency, locale)}` : ""}</span> : null}</div>
       <em className={`growth-pill ${row.status.toLowerCase().replaceAll("_", "-")}`}>{label(row.status, locale)}</em>
@@ -125,6 +127,25 @@ export function GrowthLifecycleConsole(props: Props) {
           <button className="secondary-button" disabled={pending !== null}>{pending === `learning-${row.id}-WAIVED` ? "…" : c("Waive with reason", "Gerekçeyle muaf tut")}</button>
         </form> : null}
       </div>
-    </article>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No open learning assignments require action.", "Aksiyon gerektiren açık eğitim ataması yok.")}</span></div>}</div>;
+    </article>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No open learning assignments require action.", "Aksiyon gerektiren açık eğitim ataması yok.")}</span></div>}</div>
+
+    <div className="performance-ops-panel">
+      <div className="performance-panel-title"><GraduationCap size={16}/><div><strong>{c("Learning decision history", "Eğitim karar geçmişi")}</strong><small>{c("Latest 100 completed or waived assignments by assignment date; read-only evidence.", "Atanma tarihine göre son 100 tamamlanmış veya muaf eğitim; salt-okunur kanıt.")}</small></div></div>
+      <div className="growth-lifecycle-list">{history.length ? history.map((row) => <article className="growth-lifecycle-row" key={row.id}>
+        <div className="growth-lifecycle-icon"><GraduationCap size={16}/></div>
+        <div className="growth-lifecycle-copy">
+          <strong>{row.person}</strong>
+          <small>{row.employeeNumber} · {row.courseCode} · {row.course}</small>
+          <span>{c("Assigned", "Atandı")}: {dateOnly(row.assignedAt)} · {c("Due", "Son tarih")}: {dateOnly(row.dueAt)}</span>
+          {row.status === "COMPLETED" ? <span><CheckCircle2 size={12}/> {c("Completed", "Tamamlandı")}: {dateOnly(row.completedAt)}{row.score !== null ? ` · ${c("Score", "Puan")}: ${row.score}/100` : ""}</span> : <span><ShieldCheck size={12}/> {c("Waived", "Muaf")}: {dateOnly(row.waivedAt)}</span>}
+          {row.certificateReference ? <span>{c("Certificate / evidence reference", "Sertifika / kanıt referansı")}: {row.certificateReference}</span> : null}
+          {row.status === "WAIVED" && row.waiverReason ? <span>{c("Waiver decision reason", "Muafiyet karar gerekçesi")}: {row.waiverReason}</span> : null}
+          {row.status === "WAIVED" && row.waivedById ? <span>{c("Reviewer identifier", "Kararı veren kullanıcı ID")}: {row.waivedById}</span> : null}
+          {row.developmentPlanTitle ? <span><Sparkles size={11}/> {c("Development plan", "Gelişim planı")}: {row.developmentPlanTitle}</span> : null}
+          {row.successionCandidateId ? <span><Sparkles size={11}/> {c("Succession-linked", "Yedekleme bağlantılı")}</span> : null}
+        </div>
+        <em className={`growth-pill ${row.status.toLowerCase()}`}>{label(row.status, locale)}</em>
+      </article>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No completed or waived learning records in the authorized scope.", "Yetkili kapsamda tamamlanmış veya muaf eğitim kaydı yok.")}</span></div>}</div>
+    </div></>;
   }
 }
