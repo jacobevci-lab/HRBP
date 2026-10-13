@@ -36,9 +36,16 @@ for (const transitionPath of [
   expect(transitionPath, transition, /successionCandidate/, "reassessment must require succession candidate provenance");
   expect(transitionPath, transition, /developmentSkill/, "reassessment must require a structured development skill");
   expect(transitionPath, transition, /targetProficiency/, "reassessment must require a governed target proficiency");
-  expect(transitionPath, transition, /successionCandidate\?\.active/, "succession reassessment notifications must only target active candidate records");
+  expect(transitionPath, transition, /reassessment\.succession/, "succession notifications must use the shared eligibility policy");
   expect(transitionPath, transition, /updateMany/, "learning transitions must remain state-aware");
 }
+
+const eligibilityPath = "lib/learning-reassessment-eligibility.ts";
+const eligibility = await source(eligibilityPath);
+expect(eligibilityPath, eligibility, /successionCandidate\?\.active/, "succession reassessment only for active candidates");
+expect(eligibilityPath, eligibility, /successionCandidate\.plan\.active/, "reassessment must exclude inactive succession plans");
+expect(eligibilityPath, eligibility, /developmentPlan\.status === DevelopmentPlanStatus\.ACTIVE/, "development plan reassessment requires active plans");
+expect(eligibilityPath, eligibility, /successionCandidate\.employmentId === employmentId/, "successor candidate must belong to the same learner");
 
 const notificationPath = "lib/succession-development-notifications.ts";
 const notification = await source(notificationPath);
