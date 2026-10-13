@@ -116,7 +116,7 @@ expect(successionCandidatePath, successionCandidate, /STALE_STATE/, "concurrent 
 const successionPlanPath = "app/api/succession/plans/route.ts";
 const successionPlan = await source(successionPlanPath);
 expect(successionPlanPath, successionPlan, /ownerId:\s*ctx\.actorId/, "new succession plans must bind ownership to the signed actor");
-expect(successionPlanPath, successionPlan, /reviewDueAt must be a valid date/, "succession plan review dates must be validated");
+expect(successionPlanPath, successionPlan, /reviewDueAt must be a future date within 730 days/, "succession plan creation must require a bounded future review date");
 expect(successionPlanPath, successionPlan, /succession-plan\.created/, "new succession plans must emit explicit audit evidence");
 expect(successionPlanPath, successionPlan, /asIdentifier\(body\.positionId\)/, "succession plan creation must validate position identifiers");
 expect(successionPlanPath, successionPlan, /asOptionalText\(body\.name, 180\)/, "succession plan names must be bounded without silent truncation");
