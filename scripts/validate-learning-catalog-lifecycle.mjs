@@ -67,6 +67,8 @@ expect(data, /updatedAt:\s*skill\.updatedAt\.toISOString\(\)/, "skill concurrenc
 const ui = "components/learning-governance-console.tsx";
 expect(ui, /expectedUpdatedAt:\s*course\.updatedAt/, "course edits must submit server state version");
 expect(ui, /expectedUpdatedAt:\s*skill\.updatedAt/, "skill edits must submit server state version");
+expect(ui, /key=\{`\$\{course\.id\}:\$\{course\.updatedAt\}`\}/, "course editing controls must remount after version refresh");
+expect(ui, /key=\{`\$\{skill\.id\}:\$\{skill\.updatedAt\}`\}/, "skill editing controls must remount after version refresh");
 expect(ui, /name="name"[^>]*maxLength=\{180\}/, "skill name bounds must match API");
 expect(ui, /name="category"[^>]*maxLength=\{120\}/, "skill category bounds must match API");
 
