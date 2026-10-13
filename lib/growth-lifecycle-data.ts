@@ -1,5 +1,6 @@
 import { BenefitEnrollmentStatus, LearningAssignmentStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
+import { can } from "@/lib/authorization";
 import { employmentIdFilter, resolveEmploymentScope } from "@/lib/employment-scope";
 import type { RequestContext } from "@/lib/request-context";
 
@@ -33,6 +34,11 @@ export type LearningAssignmentOperation = {
   dueAt: string | null;
   completedAt: string | null;
   score: string | null;
+  certificateReference: string | null;
+  waivedAt: string | null;
+  waivedById: string | null;
+  waiverReason: string | null;
+  assignedAt: string;
   successionCandidateId: string | null;
   developmentPlanId: string | null;
   developmentPlanTitle: string | null;
@@ -118,32 +124,53 @@ export async function getBenefitEnrollmentOperationsData(ctx: RequestContext, fo
 }
 
 export async function getLearningAssignmentOperationsData(ctx: RequestContext): Promise<LearningAssignmentOperation[]> {
+  if (!can(ctx, "learning:write")) return [];
   const rows = await withDb(async (db) => {
     const scope = await resolveEmploymentScope(db, ctx);
-    return db.learningAssignment.findMany({
-      where: {
-        tenantId: ctx.tenantId,
-        status: { in: [LearningAssignmentStatus.ASSIGNED, LearningAssignmentStatus.IN_PROGRESS, LearningAssignmentStatus.OVERDUE] },
-        ...employmentIdFilter(scope)
-      },
-      orderBy: [{ dueAt: "asc" }, { assignedAt: "desc" }],
-      take: 200,
-      select: {
-        id: true,
-        employmentId: true,
-        status: true,
-        dueAt: true,
-        completedAt: true,
-        score: true,
-        successionCandidateId: true,
-        developmentPlanId: true,
-        developmentPlan: { select: { title: true } },
-        targetProficiency: true,
-        developmentSkill: { select: { code: true, name: true } },
-        course: { select: { code: true, title: true, mandatory: true } }
-      }
-    });
+    const visibleWhere = { tenantId: ctx.tenantId, ...employmentIdFilter(scope) };
+    const assignmentSelect = {
+      id: true,
+      employmentId: true,
+      status: true,
+      assignedAt: true,
+      dueAt: true,
+      completedAt: true,
+      score: true,
+      certificateReference: true,
+      waivedAt: true,
+      waivedById: true,
+      waiverReason: true,
+      successionCandidateId: true,
+      developmentPlanId: true,
+      developmentPlan: { select: { title: true } },
+      targetProficiency: true,
+      developmentSkill: { select: { code: true, name: true } },
+      course: { select: { code: true, title: true, mandatory: true } }
+    } as const;
+
+    const [active, historical] = await Promise.all([
+      db.learningAssignment.findMany({
+        where: {
+          ...visibleWhere,
+          status: { in: [LearningAssignmentStatus.ASSIGNED, LearningAssignmentStatus.IN_PROGRESS, LearningAssignmentStatus.OVERDUE] }
+        },
+        orderBy: [{ dueAt: "asc" }, { assignedAt: "desc" }],
+        take: 200,
+        select: assignmentSelect
+      }),
+      db.learningAssignment.findMany({
+        where: {
+          ...visibleWhere,
+          status: { in: [LearningAssignmentStatus.COMPLETED, LearningAssignmentStatus.WAIVED] }
+        },
+        orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
+        take: 100,
+        select: assignmentSelect
+      })
+    ]);
+    return [...active, ...historical];
   });
+
   const names = await employmentNames(ctx, [...new Set(rows.map((row) => row.employmentId))]);
   return rows.map((row) => ({
     id: row.id,
@@ -154,9 +181,14 @@ export async function getLearningAssignmentOperationsData(ctx: RequestContext): 
     courseCode: row.course.code,
     mandatory: row.course.mandatory,
     status: row.status,
+    assignedAt: row.assignedAt.toISOString(),
     dueAt: row.dueAt?.toISOString() ?? null,
     completedAt: row.completedAt?.toISOString() ?? null,
     score: row.score?.toString() ?? null,
+    certificateReference: row.certificateReference,
+    waivedAt: row.waivedAt?.toISOString() ?? null,
+    waivedById: row.waivedById,
+    waiverReason: row.waiverReason,
     successionCandidateId: row.successionCandidateId,
     developmentPlanId: row.developmentPlanId,
     developmentPlanTitle: row.developmentPlan?.title ?? null,

@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
 const files = Object.fromEntries(await Promise.all([
   "prisma/growth.prisma",
@@ -7,6 +8,8 @@ const files = Object.fromEntries(await Promise.all([
   "app/api/learning/courses/[id]/route.ts",
   "app/api/learning/skills/[id]/route.ts",
   "lib/learning-governance-data.ts",
+  "components/growth-lifecycle-console.tsx",
+  "lib/growth-lifecycle-data.ts",
   "components/learning-governance-console.tsx",
   "components/growth-operations-console.tsx",
   "package.json"
@@ -80,8 +83,24 @@ const pkg = "package.json";
 expect(pkg, /learning-catalog:validate/, "catalog gate must be registered in scripts and prebuild");
 expect(pkg, /scripts\/learning-catalog-lifecycle\.test\.mjs/, "catalog behavior tests must run in the production prebuild");
 
+const adminHistoryData = "lib/growth-lifecycle-data.ts";
+expect(adminHistoryData, /can\(ctx,\s*"learning:write"\)/, "historical decision evidence must require learning:write");
+expect(adminHistoryData, /LearningAssignmentStatus\.COMPLETED[\s\S]*LearningAssignmentStatus\.WAIVED/, "both completed and waived decisions must remain accessible");
+expect(adminHistoryData, /waiverReason:\s*true/, "authorized audit readers must receive waiver justification");
+expect(adminHistoryData, /certificateReference:\s*true/, "authorized audit readers must receive completion evidence");
+expect(adminHistoryData, /take:\s*100/, "historical audit view must stay bounded");
+
+const adminHistoryUi = "components/growth-lifecycle-console.tsx";
+expect(adminHistoryUi, /history\.length\s*\?\s*history\.map\(\(row\) => <article/, "closed learning decisions must be read only");
+expect(adminHistoryUi, /row\.waiverReason/, "admin history must show waiver rationale");
+expect(adminHistoryUi, /row\.certificateReference/, "admin history must show certificate evidence");
+
+
 if (failures.length) {
   console.error("Learning catalog lifecycle governance validation failed:\n- " + failures.join("\n- "));
   process.exit(1);
 }
+const historyTests = spawnSync(process.execPath, ["--test", "scripts/learning-admin-history.test.mjs"], { stdio: "inherit" });
+if (historyTests.error || historyTests.status !== 0) process.exit(1);
+
 console.log("Learning catalog lifecycle governance passed.");
