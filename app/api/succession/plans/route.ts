@@ -1,5 +1,5 @@
 import { asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
-import { DataClassification, EmploymentStatus } from "@prisma/client";
+import { DataClassification, EmploymentStatus, PositionStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
@@ -31,9 +31,10 @@ export async function GET(request: Request) {
       ...(scope === null ? {} : { positionId: { in: scopedPositionIds ?? [] } })
     },
     orderBy: [{ active: "desc" }, { reviewDueAt: "asc" }],
-    include: { candidates: { where: { ...employmentIdFilter(scope) }, orderBy: [{ rank: "asc" }, { addedAt: "asc" }] } }
+    take: 200,
+    include: { candidates: { where: { active: true, ...employmentIdFilter(scope) }, orderBy: [{ rank: "asc" }, { addedAt: "asc" }] } }
   });
-  return Response.json({ data });
+  return Response.json({ data }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
     const data = await db.$transaction(async (tx) => {
       const scope = await resolveEmploymentScope(tx, ctx);
       const position = await tx.position.findFirst({
-        where: { id: positionId, tenantId: ctx.tenantId },
+        where: { id: positionId, tenantId: ctx.tenantId, validTo: null, status: { not: PositionStatus.CLOSED } },
         select: { id: true }
       });
       if (!position) throw new Error("NOT_FOUND");
