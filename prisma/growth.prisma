@@ -256,6 +256,7 @@ model Skill {
   category               String?
   critical               Boolean @default(false)
   active                 Boolean @default(true)
+  updatedAt              DateTime @updatedAt
   employments            EmploymentSkill[]
   developmentAssignments LearningAssignment[] @relation("LearningDevelopmentSkill")
   developmentPlans       DevelopmentPlan[] @relation("DevelopmentPlanFocusSkill")
@@ -292,6 +293,7 @@ model LearningCourse {
   validityMonths Int?
   active         Boolean @default(true)
   createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
   assignments    LearningAssignment[]
 
   @@unique([tenantId, code])
