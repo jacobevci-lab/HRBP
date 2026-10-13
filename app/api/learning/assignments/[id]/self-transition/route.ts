@@ -1,4 +1,4 @@
-import { readJsonObject } from "@/lib/input-validation";
+import { asDecimalInput, asEnumValue, asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
 import { DataClassification, LearningAssignmentStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -22,14 +22,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!can(ctx, "learning:self-progress")) return forbidden();
   if (!ctx.employmentId) return forbidden("An employment-bound identity is required for learning progress.");
 
-  const { id } = await params;
-  const body = await readJsonObject(request) as Record<string, unknown>;
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid assignment id is required." }, { status: 400 });
+  const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
-  const next = String(body.status ?? "") as LearningAssignmentStatus;
-  if (!Object.values(LearningAssignmentStatus).includes(next)) return Response.json({ error: "A valid learning assignment status is required." }, { status: 400 });
-  const score = body.score === undefined || body.score === "" ? undefined : Number(body.score);
-  if (score !== undefined && (!Number.isFinite(score) || score < 0 || score > 100)) return Response.json({ error: "score must be between 0 and 100." }, { status: 400 });
-  const certificateReference = body.certificateReference ? String(body.certificateReference).trim().slice(0, 500) : undefined;
+  const next = asEnumValue(body.status, Object.values(LearningAssignmentStatus));
+  if (!next) return Response.json({ error: "A valid learning assignment status is required." }, { status: 400 });
+
+  const scoreProvided = body.score !== undefined && body.score !== null && body.score !== "";
+  const parsedScore = scoreProvided ? asDecimalInput(body.score, 3, 2) : undefined;
+  if (parsedScore === null) return Response.json({ error: "score must be a decimal with no more than two fractional digits." }, { status: 400 });
+  const score = parsedScore === undefined ? undefined : Number(parsedScore);
+  if (score !== undefined && (score < 0 || score > 100)) return Response.json({ error: "score must be between 0 and 100." }, { status: 400 });
+
+  const certificateReference = asOptionalText(body.certificateReference, 500);
+  if (certificateReference === null) return Response.json({ error: "certificateReference must be text up to 500 characters." }, { status: 400 });
+  if (next !== LearningAssignmentStatus.COMPLETED && (scoreProvided || certificateReference !== undefined)) {
+    return Response.json({ error: "Completion evidence can only be recorded when completing an assignment." }, { status: 400 });
+  }
+  if (body.waiverReason !== undefined) return Response.json({ error: "Participants cannot make waiver decisions." }, { status: 400 });
 
   try {
     const data = await db.$transaction(async (tx) => {
