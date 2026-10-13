@@ -1,4 +1,4 @@
-import { readJsonObject } from "@/lib/input-validation";
+import { asDecimalInput, asEnumValue, asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
 import { DataClassification, LearningAssignmentStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -22,13 +22,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "learning:write")) return forbidden();
 
-  const { id } = await params;
-  const body = await readJsonObject(request) as Record<string, unknown>;
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid assignment id is required." }, { status: 400 });
+  const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
-  const next = String(body.status ?? "") as LearningAssignmentStatus;
-  if (!Object.values(LearningAssignmentStatus).includes(next)) return Response.json({ error: "A valid learning assignment status is required." }, { status: 400 });
-  const score = body.score === undefined || body.score === "" ? undefined : Number(body.score);
-  if (score !== undefined && (!Number.isFinite(score) || score < 0 || score > 100)) return Response.json({ error: "score must be between 0 and 100." }, { status: 400 });
+  const next = asEnumValue(body.status, Object.values(LearningAssignmentStatus));
+  if (!next) return Response.json({ error: "A valid learning assignment status is required." }, { status: 400 });
+
+  const scoreProvided = body.score !== undefined && body.score !== null && body.score !== "";
+  const parsedScore = scoreProvided ? asDecimalInput(body.score, 3, 2) : undefined;
+  if (parsedScore === null) return Response.json({ error: "score must be a decimal with no more than two fractional digits." }, { status: 400 });
+  const score = parsedScore === undefined ? undefined : Number(parsedScore);
+  if (score !== undefined && (score < 0 || score > 100)) return Response.json({ error: "score must be between 0 and 100." }, { status: 400 });
+
+  const certificateReference = asOptionalText(body.certificateReference, 500);
+  if (certificateReference === null) return Response.json({ error: "certificateReference must be text up to 500 characters." }, { status: 400 });
+  if (next !== LearningAssignmentStatus.COMPLETED && (scoreProvided || certificateReference !== undefined)) {
+    return Response.json({ error: "Completion evidence can only be recorded when completing an assignment." }, { status: 400 });
+  }
+
+  const waiverReason = asOptionalText(body.waiverReason, 2000);
+  if (waiverReason === null || (next === LearningAssignmentStatus.WAIVED && (!waiverReason || waiverReason.length < 12))) {
+    return Response.json({ error: "Waiving a learning assignment requires a reason between 12 and 2000 characters." }, { status: 400 });
+  }
+  if (next !== LearningAssignmentStatus.WAIVED && waiverReason !== undefined) {
+    return Response.json({ error: "A waiver reason is only accepted for a waiver decision." }, { status: 400 });
+  }
 
   try {
     const data = await db.$transaction(async (tx) => {
@@ -59,7 +78,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           status: next,
           completedAt: next === LearningAssignmentStatus.COMPLETED ? new Date() : assignment.completedAt,
           score: next === LearningAssignmentStatus.COMPLETED ? score : undefined,
-          certificateReference: next === LearningAssignmentStatus.COMPLETED && body.certificateReference ? String(body.certificateReference).trim().slice(0, 500) : undefined
+          certificateReference: next === LearningAssignmentStatus.COMPLETED ? certificateReference : undefined,
+          waivedAt: next === LearningAssignmentStatus.WAIVED ? new Date() : undefined,
+          waivedById: next === LearningAssignmentStatus.WAIVED ? ctx.actorId : undefined,
+          waiverReason: next === LearningAssignmentStatus.WAIVED ? waiverReason : undefined
         }
       });
       if (changed.count !== 1) throw new Error("STALE_STATE");

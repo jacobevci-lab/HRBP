@@ -344,6 +344,9 @@ model LearningAssignment {
   completedAt           DateTime?
   score                 Decimal? @db.Decimal(5,2)
   certificateReference  String?
+  waivedAt              DateTime?
+  waivedById            String?
+  waiverReason          String?
   course                LearningCourse @relation(fields: [courseId], references: [id], onDelete: Restrict)
   successionCandidate   SuccessionCandidate? @relation("SuccessionCandidateDevelopment", fields: [successionCandidateId], references: [id], onDelete: SetNull)
   developmentPlan       DevelopmentPlan? @relation("DevelopmentPlanLearning", fields: [developmentPlanId], references: [id], onDelete: SetNull)

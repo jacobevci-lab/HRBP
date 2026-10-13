@@ -101,7 +101,30 @@ export function GrowthLifecycleConsole(props: Props) {
       <div className="growth-lifecycle-icon"><GraduationCap size={16}/></div>
       <div className="growth-lifecycle-copy"><strong>{row.person}</strong><small>{row.employeeNumber} · {row.courseCode} · {row.course}</small><span>{row.mandatory ? c("Mandatory", "Zorunlu") : c("Development", "Gelişim")} · <Clock3 size={11}/> {c("Due", "Son tarih")} {dateOnly(row.dueAt)}</span>{row.developmentPlanTitle && row.developmentSkillName ? <span><Sparkles size={11}/> {c("Development plan", "Gelişim planı")}: {row.developmentPlanTitle} · {row.developmentSkillCode} · {row.developmentSkillName}{row.targetProficiency ? ` → ${label(row.targetProficiency, locale)}` : ""}{row.successionCandidateId ? ` · ${c("succession-linked", "yedeklemeye bağlı")}` : ""}</span> : row.successionCandidateId && row.developmentSkillName ? <span><Sparkles size={11}/> {c("Succession development", "Yedekleme gelişimi")} · {row.developmentSkillCode} · {row.developmentSkillName}{row.targetProficiency ? ` → ${label(row.targetProficiency, locale)}` : ""}</span> : null}</div>
       <em className={`growth-pill ${row.status.toLowerCase().replaceAll("_", "-")}`}>{label(row.status, locale)}</em>
-      <div className="growth-lifecycle-actions">{(learningTransitions[row.status] ?? []).map((next) => <button className="secondary-button" type="button" key={next} disabled={pending !== null} onClick={() => void request(`learning-${row.id}-${next}`, `/api/learning/assignments/${row.id}/transition`, "POST", { status: next })}>{pending === `learning-${row.id}-${next}` ? "…" : label(next, locale)}</button>)}</div>
+      <div className="growth-lifecycle-actions">
+        {(learningTransitions[row.status] ?? []).filter((next) => next !== "WAIVED" && next !== "COMPLETED").map((next) => <button className="secondary-button" type="button" key={next} disabled={pending !== null} onClick={() => void request(`learning-${row.id}-${next}`, `/api/learning/assignments/${row.id}/transition`, "POST", { status: next })}>{pending === `learning-${row.id}-${next}` ? "…" : label(next, locale)}</button>)}
+        {(learningTransitions[row.status] ?? []).includes("COMPLETED") ? <form className="performance-review-controls" onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          void request(`learning-${row.id}-COMPLETED`, `/api/learning/assignments/${row.id}/transition`, "POST", {
+            status: "COMPLETED", score: data.get("score") || undefined, certificateReference: data.get("certificateReference") || undefined
+          });
+        }}>
+          <input name="score" type="number" min="0" max="100" step="0.01" placeholder={c("Score", "Puan")}/>
+          <input name="certificateReference" maxLength={500} placeholder={c("Certificate / evidence reference", "Sertifika / kanıt referansı")}/>
+          <button className="secondary-button" disabled={pending !== null}>{pending === `learning-${row.id}-COMPLETED` ? "…" : c("Complete", "Tamamla")}</button>
+        </form> : null}
+        {(learningTransitions[row.status] ?? []).includes("WAIVED") ? <form className="performance-review-controls" onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          void request(`learning-${row.id}-WAIVED`, `/api/learning/assignments/${row.id}/transition`, "POST", {
+            status: "WAIVED", waiverReason: data.get("waiverReason")
+          });
+        }}>
+          <textarea name="waiverReason" required minLength={12} maxLength={2000} placeholder={c("Waiver reason (12–2000 characters)", "Muafiyet gerekçesi (12–2000 karakter)")}/>
+          <button className="secondary-button" disabled={pending !== null}>{pending === `learning-${row.id}-WAIVED` ? "…" : c("Waive with reason", "Gerekçeyle muaf tut")}</button>
+        </form> : null}
+      </div>
     </article>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No open learning assignments require action.", "Aksiyon gerektiren açık eğitim ataması yok.")}</span></div>}</div>;
   }
 }
