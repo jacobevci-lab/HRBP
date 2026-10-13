@@ -34,6 +34,8 @@ export type EmploymentSkillGovernance = {
   skillCode: string;
   proficiency: string;
   source: string | null;
+  assessmentReason: string | null;
+  assessedBy: string | null;
   assessedAt: string;
 };
 
@@ -80,13 +82,14 @@ export async function getLearningGovernanceData(ctx: RequestContext): Promise<Le
         where: { tenantId: ctx.tenantId, ...employmentIdFilter(scope) },
         orderBy: { assessedAt: "desc" },
         take: 500,
-        select: { id: true, employmentId: true, skillId: true, proficiency: true, source: true, assessedAt: true }
+        select: { id: true, employmentId: true, skillId: true, proficiency: true, source: true, assessmentReason: true, assessedById: true, assessedAt: true }
       })
     ]);
 
     const employmentIds = [...new Set(employmentSkills.map((row) => row.employmentId))];
     const skillIds = [...new Set(employmentSkills.map((row) => row.skillId))];
-    const [employments, assessedSkills] = await Promise.all([
+    const assessorIds = [...new Set(employmentSkills.flatMap((row) => row.assessedById ? [row.assessedById] : []))];
+    const [employments, assessedSkills, assessors] = await Promise.all([
       employmentIds.length ? db.employment.findMany({
         where: { tenantId: ctx.tenantId, id: { in: employmentIds } },
         select: {
@@ -98,10 +101,15 @@ export async function getLearningGovernanceData(ctx: RequestContext): Promise<Le
       skillIds.length ? db.skill.findMany({
         where: { tenantId: ctx.tenantId, id: { in: skillIds } },
         select: { id: true, code: true, name: true }
+      }) : [],
+      assessorIds.length ? db.userAccount.findMany({
+        where: { tenantId: ctx.tenantId, id: { in: assessorIds } },
+        select: { id: true, displayName: true, subject: true }
       }) : []
     ]);
     const employmentMap = new Map(employments.map((employment) => [employment.id, employment]));
     const skillMap = new Map(assessedSkills.map((skill) => [skill.id, skill]));
+    const assessorMap = new Map(assessors.map((assessor) => [assessor.id, assessor.displayName || assessor.subject]));
 
     return {
       courses: courses.map((course) => ({
@@ -137,6 +145,8 @@ export async function getLearningGovernanceData(ctx: RequestContext): Promise<Le
           skillCode: skill?.code ?? "—",
           proficiency: row.proficiency,
           source: row.source,
+          assessmentReason: row.assessmentReason,
+          assessedBy: row.assessedById ? assessorMap.get(row.assessedById) ?? row.assessedById : null,
           assessedAt: row.assessedAt.toISOString()
         };
       })
