@@ -49,13 +49,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           id: true,
           positionId: true,
           active: true,
-          updatedAt: true,
-          _count: { select: { candidates: true } }
+          updatedAt: true
         }
       });
       if (!plan) throw new Error("NOT_FOUND");
       if (!plan.active) throw new Error("PLAN_INACTIVE");
       if (plan.updatedAt.getTime() !== expectedUpdatedAt.getTime()) throw new Error("STALE_STATE");
+
+      const activeCandidateCount = await tx.successionCandidate.count({
+        where: { tenantId: ctx.tenantId, planId: id, active: true }
+      });
 
       const scope = await resolveEmploymentScope(tx, ctx);
       if (scope !== null) {
@@ -93,7 +96,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         resourceType: "SuccessionPlan",
         resourceId: id,
         classification: DataClassification.CONFIDENTIAL,
-        purpose: `Human succession review attested; candidates=${plan._count.candidates}; nextReview=${reviewDueAt.toISOString()}; summaryRecorded=true`
+        purpose: `Human succession review attested; candidates=${activeCandidateCount}; nextReview=${reviewDueAt.toISOString()}; summaryRecorded=true`
       });
 
       const updated = await tx.successionPlan.findUnique({ where: { id } });

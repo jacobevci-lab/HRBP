@@ -1,4 +1,4 @@
-import { readJsonObject } from "@/lib/input-validation";
+import { asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
 import { DataClassification, EmploymentStatus, SuccessionReadiness } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -20,13 +20,17 @@ export async function POST(request: Request) {
   if (!can(ctx, "succession:write")) return forbidden();
   const body = await readJsonObject(request) as Record<string, unknown>;
   if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
-  const planId = String(body.planId ?? "").trim();
-  const employmentId = String(body.employmentId ?? "").trim();
+  const planId = asIdentifier(body.planId);
+  const employmentId = asIdentifier(body.employmentId);
   const readiness = String(body.readiness ?? "") as SuccessionReadiness;
+  const readinessReason = asOptionalText(body.readinessReason, 2000);
   const rank = parseRank(body.rank);
-  const developmentGap = body.developmentGap ? String(body.developmentGap).trim().slice(0, 2000) : null;
+  const parsedGap = asOptionalText(body.developmentGap, 2000);
+  const developmentGap = parsedGap ?? null;
   if (!planId || !employmentId || !Object.values(SuccessionReadiness).includes(readiness)) return Response.json({ error: "planId, employmentId and valid readiness are required." }, { status: 400 });
+  if (!readinessReason || readinessReason.length < 12) return Response.json({ error: "A human readiness reason of at least 12 characters is required." }, { status: 400 });
   if (rank === undefined) return Response.json({ error: "rank must be an integer from 1 to 99 or blank." }, { status: 400 });
+  if (parsedGap === null) return Response.json({ error: "developmentGap must not exceed 2000 characters." }, { status: 400 });
 
   try {
     const data = await db.$transaction(async (tx) => {
@@ -35,7 +39,7 @@ export async function POST(request: Request) {
       const [plan, employment, existing] = await Promise.all([
         tx.successionPlan.findFirst({ where: { id: planId, tenantId: ctx.tenantId }, select: { id: true, positionId: true, active: true } }),
         tx.employment.findFirst({ where: { id: employmentId, tenantId: ctx.tenantId, status: { not: EmploymentStatus.TERMINATED } }, select: { id: true } }),
-        tx.successionCandidate.findUnique({ where: { planId_employmentId: { planId, employmentId } }, select: { id: true } })
+        tx.successionCandidate.findUnique({ where: { planId_employmentId: { planId, employmentId } }, select: { id: true, active: true, updatedAt: true } })
       ]);
       if (!plan || !employment) throw new Error("NOT_FOUND");
       if (!plan.active) throw new Error("PLAN_INACTIVE");
@@ -56,6 +60,7 @@ export async function POST(request: Request) {
           where: {
             tenantId: ctx.tenantId,
             planId,
+            active: true,
             rank,
             ...(existing ? { id: { not: existing.id } } : {})
           },
@@ -64,12 +69,42 @@ export async function POST(request: Request) {
         if (collision) throw new Error("RANK_CONFLICT");
       }
 
+      const reviewedAt = new Date();
       const candidate = await tx.successionCandidate.upsert({
         where: { planId_employmentId: { planId, employmentId } },
-        update: { readiness, rank, developmentGap },
-        create: { tenantId: ctx.tenantId, planId, employmentId, readiness, rank, developmentGap }
+        update: {
+          active: true,
+          removedAt: null,
+          removedById: null,
+          removalReason: null,
+          readiness,
+          readinessReason,
+          readinessReviewedAt: reviewedAt,
+          readinessReviewedById: ctx.actorId,
+          rank,
+          developmentGap
+        },
+        create: {
+          tenantId: ctx.tenantId,
+          planId,
+          employmentId,
+          active: true,
+          readiness,
+          readinessReason,
+          readinessReviewedAt: reviewedAt,
+          readinessReviewedById: ctx.actorId,
+          rank,
+          developmentGap
+        }
       });
-      await appendAudit(tx, ctx, { action: existing ? "succession-candidate.updated" : "succession-candidate.added", resourceType: "SuccessionCandidate", resourceId: candidate.id, classification: DataClassification.CONFIDENTIAL });
+      const action = existing ? existing.active ? "succession-candidate.updated" : "succession-candidate.reactivated" : "succession-candidate.added";
+      await appendAudit(tx, ctx, {
+        action,
+        resourceType: "SuccessionCandidate",
+        resourceId: candidate.id,
+        classification: DataClassification.CONFIDENTIAL,
+        purpose: `Human readiness decision recorded; readiness=${readiness}; reasonRecorded=true`
+      });
       return candidate;
     });
     return Response.json({ data }, { status: 201 });

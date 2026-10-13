@@ -16,7 +16,7 @@
     "staging:validate": "node scripts/validate-public-staging.mjs",
     "local-auth:validate": "node scripts/validate-local-auth.mjs",
     "performance:validate": "node scripts/validate-performance-governance.mjs",
-    "growth:validate": "node scripts/validate-growth-governance.mjs && node --test scripts/succession-review-attestation.test.mjs scripts/succession-readiness-decision.test.mjs",
+    "growth:validate": "node scripts/validate-growth-governance.mjs && node --test scripts/succession-review-attestation.test.mjs scripts/succession-readiness-decision.test.mjs scripts/succession-candidate-lifecycle.test.mjs",
     "growth-automation:validate": "node scripts/validate-growth-automation.mjs",
     "talent-learning:validate": "node scripts/validate-talent-learning-governance.mjs && node --test scripts/talent-assessment-correction.test.mjs",
     "benefits:validate": "node scripts/validate-benefits-governance.mjs",

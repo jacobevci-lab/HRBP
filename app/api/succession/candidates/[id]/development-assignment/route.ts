@@ -49,10 +49,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           id: true,
           employmentId: true,
           developmentGap: true,
+          active: true,
           plan: { select: { id: true, positionId: true, active: true, ownerId: true } }
         }
       });
       if (!candidate) throw new Error("NOT_FOUND");
+      if (!candidate.active) throw new Error("CANDIDATE_INACTIVE");
       if (!candidate.plan.active) throw new Error("PLAN_INACTIVE");
 
       const scope = await resolveEmploymentScope(tx, ctx);
@@ -219,6 +221,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
     if (code === "NOT_FOUND") return Response.json({ error: "Succession candidate not found in tenant." }, { status: 404 });
+    if (code === "CANDIDATE_INACTIVE") return Response.json({ error: "Development assignments cannot be added to a removed succession candidate." }, { status: 409 });
     if (code === "PLAN_INACTIVE") return Response.json({ error: "Development assignments cannot be added to an inactive succession plan." }, { status: 409 });
     if (code === "OUT_OF_SCOPE") return forbidden("Candidate employment is outside your authorized relationship scope.");
     if (code === "PLAN_OUT_OF_SCOPE") return forbidden("Succession target position is outside your authorized relationship scope.");
