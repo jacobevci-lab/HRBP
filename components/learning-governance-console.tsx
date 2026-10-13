@@ -100,11 +100,16 @@ export function LearningGovernanceConsole({ courses, skills, employmentSkills }:
       <div className="growth-lifecycle-list">{employmentSkills.length ? employmentSkills.map((record) => <form className="growth-lifecycle-row" key={record.id} onSubmit={(event) => {
         event.preventDefault();
         const data = new FormData(event.currentTarget);
-        void patch(`proficiency-${record.id}`, `/api/learning/employment-skills/${record.id}`, { proficiency: data.get("proficiency"), source: data.get("source") || null });
+        void patch(`proficiency-${record.id}`, `/api/learning/employment-skills/${record.id}`, {
+          proficiency: data.get("proficiency"),
+          source: data.get("source") || null,
+          assessmentReason: data.get("assessmentReason") || undefined,
+          expectedAssessedAt: record.assessedAt
+        });
       }}>
         <div className="growth-lifecycle-icon"><ShieldCheck size={16}/></div>
-        <div className="growth-lifecycle-copy"><strong>{record.person} · {record.skill}</strong><small>{record.employeeNumber} · {record.skillCode} · {record.position}</small><span>{record.organization} · {c("Assessed", "Değerlendirildi")} {dateOnly(record.assessedAt, locale)}</span></div>
-        <div className="performance-review-controls"><select name="proficiency" defaultValue={record.proficiency}>{proficiencies.map((value) => <option key={value} value={value}>{label(value, locale)}</option>)}</select><input name="source" maxLength={500} defaultValue={record.source ?? ""} placeholder={c("Evidence / assessment source", "Kanıt / değerlendirme kaynağı")}/><button className="secondary-button" disabled={pending !== null}>{pending === `proficiency-${record.id}` ? "…" : c("Reassess", "Yeniden değerlendir")}</button></div>
+        <div className="growth-lifecycle-copy"><strong>{record.person} · {record.skill}</strong><small>{record.employeeNumber} · {record.skillCode} · {record.position}</small><span>{record.organization} · {c("Assessed", "Değerlendirildi")} {dateOnly(record.assessedAt, locale)}{record.assessedBy ? ` · ${c("by", "değerlendiren")} ${record.assessedBy}` : ""}</span>{record.assessmentReason ? <span>{c("Last proficiency decision reason", "Son yetkinlik karar gerekçesi")}: {record.assessmentReason}</span> : null}</div>
+        <div className="performance-review-controls"><select name="proficiency" defaultValue={record.proficiency}>{proficiencies.map((value) => <option key={value} value={value}>{label(value, locale)}</option>)}</select><input name="source" maxLength={500} defaultValue={record.source ?? ""} placeholder={c("Evidence / assessment source", "Kanıt / değerlendirme kaynağı")}/><textarea name="assessmentReason" maxLength={2000} placeholder={c("Reason required when changing proficiency (12+ characters)", "Yetkinlik seviyesi değişiyorsa gerekçe zorunlu (12+ karakter)")}/><button className="secondary-button" disabled={pending !== null}>{pending === `proficiency-${record.id}` ? "…" : c("Reassess", "Yeniden değerlendir")}</button></div>
       </form>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No employee skill assessments are available in your authorized scope.", "Yetkili kapsamınızda çalışan yetkinlik değerlendirmesi yok.")}</span></div>}</div>
     </div>
   </section>;
