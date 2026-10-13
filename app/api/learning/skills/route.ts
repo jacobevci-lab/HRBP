@@ -1,4 +1,4 @@
-import { asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
+import { asIdentifier, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
 import { DataClassification, SkillProficiency } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -14,9 +14,10 @@ export async function GET(request: Request) {
   const data = await db.skill.findMany({
     where: { tenantId: ctx.tenantId, active: true },
     orderBy: [{ critical: "desc" }, { name: "asc" }],
+    take: 300,
     include: { _count: { select: { employments: { where: { ...employmentIdFilter(scope) } } } } }
   });
-  return Response.json({ data });
+  return Response.json({ data }, { headers: { "cache-control": "no-store" } });
 }
 
 export async function POST(request: Request) {
@@ -100,26 +101,40 @@ export async function POST(request: Request) {
     }
   }
 
-  const code = String(body.code ?? "").trim().toUpperCase();
-  const name = String(body.name ?? "").trim();
-  if (!code || !name) return Response.json({ error: "code and name are required." }, { status: 400 });
-  const data = await db.$transaction(async (tx) => {
-    const skill = await tx.skill.create({
-      data: {
-        tenantId: ctx.tenantId,
-        code,
-        name,
-        category: body.category ? String(body.category) : undefined,
-        critical: Boolean(body.critical)
-      }
+  const rawCode = asText(body.code, 64);
+  const code = rawCode?.toUpperCase() ?? null;
+  const name = asText(body.name, 180);
+  const category = asOptionalText(body.category, 120);
+  const critical = body.critical === undefined ? false : body.critical;
+  if (!code || !/^[A-Z0-9._-]{1,64}$/.test(code) || !name) {
+    return Response.json({ error: "code must be 1–64 letters, numbers, dots, underscores or hyphens, and name must be 1–180 characters." }, { status: 400 });
+  }
+  if (category === null) return Response.json({ error: "category must not exceed 120 characters." }, { status: 400 });
+  if (typeof critical !== "boolean") return Response.json({ error: "critical must be a boolean." }, { status: 400 });
+
+  try {
+    const data = await db.$transaction(async (tx) => {
+      const skill = await tx.skill.create({
+        data: {
+          tenantId: ctx.tenantId,
+          code,
+          name,
+          category: category ?? null,
+          critical
+        }
+      });
+      await appendAudit(tx, ctx, {
+        action: "skill.created",
+        resourceType: "Skill",
+        resourceId: skill.id,
+        classification: DataClassification.INTERNAL
+      });
+      return skill;
     });
-    await appendAudit(tx, ctx, {
-      action: "skill.created",
-      resourceType: "Skill",
-      resourceId: skill.id,
-      classification: DataClassification.INTERNAL
-    });
-    return skill;
-  });
-  return Response.json({ data }, { status: 201 });
+    return Response.json({ data }, { status: 201 });
+  } catch (error) {
+    const prismaCode = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+    if (prismaCode === "P2002") return Response.json({ error: "A skill with this code already exists in the tenant." }, { status: 409 });
+    throw error;
+  }
 }
