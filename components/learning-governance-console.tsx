@@ -69,12 +69,13 @@ export function LearningGovernanceConsole({ courses, skills, employmentSkills }:
           title: data.get("title"),
           provider: data.get("provider") || null,
           mandatory: data.get("mandatory") === "on",
-          validityMonths: data.get("validityMonths") || null
+          validityMonths: data.get("validityMonths") || null,
+          expectedUpdatedAt: course.updatedAt
         });
       }}>
         <div className="growth-lifecycle-icon"><GraduationCap size={16}/></div>
         <div className="growth-lifecycle-copy"><strong>{course.code}</strong><small>{course.assignments} {c("scoped assignments", "kapsamlı atama")} · {course.active ? c("Active", "Aktif") : c("Inactive", "Pasif")}</small><span>{course.validityMonths ? c(`Validity ${course.validityMonths} months`, `Geçerlilik ${course.validityMonths} ay`) : c("No certificate expiry rule", "Sertifika süre sonu kuralı yok")}</span></div>
-        <div className="performance-review-controls"><input name="title" defaultValue={course.title} maxLength={250}/><input name="provider" defaultValue={course.provider ?? ""} maxLength={250} placeholder={c("Provider", "Sağlayıcı")}/><input name="validityMonths" type="number" min="1" max="120" defaultValue={course.validityMonths ?? ""} placeholder={c("Validity months", "Geçerlilik ayı")}/><label className="growth-check"><input name="mandatory" type="checkbox" defaultChecked={course.mandatory}/> {c("Mandatory", "Zorunlu")}</label><button className="secondary-button" disabled={pending !== null}>{pending === `course-${course.id}` ? "…" : c("Save", "Kaydet")}</button><button className="secondary-button" type="button" disabled={pending !== null} onClick={() => void patch(`course-state-${course.id}`, `/api/learning/courses/${course.id}`, { active: !course.active })}>{pending === `course-state-${course.id}` ? "…" : course.active ? c("Deactivate", "Pasife al") : c("Reactivate", "Etkinleştir")}</button></div>
+        <div className="performance-review-controls"><input name="title" defaultValue={course.title} maxLength={250}/><input name="provider" defaultValue={course.provider ?? ""} maxLength={250} placeholder={c("Provider", "Sağlayıcı")}/><input name="validityMonths" type="number" min="1" max="120" defaultValue={course.validityMonths ?? ""} placeholder={c("Validity months", "Geçerlilik ayı")}/><label className="growth-check"><input name="mandatory" type="checkbox" defaultChecked={course.mandatory}/> {c("Mandatory", "Zorunlu")}</label><button className="secondary-button" disabled={pending !== null}>{pending === `course-${course.id}` ? "…" : c("Save", "Kaydet")}</button><button className="secondary-button" type="button" disabled={pending !== null} onClick={() => void patch(`course-state-${course.id}`, `/api/learning/courses/${course.id}`, { active: !course.active, expectedUpdatedAt: course.updatedAt })}>{pending === `course-state-${course.id}` ? "…" : course.active ? c("Deactivate", "Pasife al") : c("Reactivate", "Etkinleştir")}</button></div>
       </form>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No learning courses are configured.", "Eğitim kaydı yapılandırılmamış.")}</span></div>}</div>
     </div>
 
@@ -86,12 +87,13 @@ export function LearningGovernanceConsole({ courses, skills, employmentSkills }:
         void patch(`skill-${skill.id}`, `/api/learning/skills/${skill.id}`, {
           name: data.get("name"),
           category: data.get("category") || null,
-          critical: data.get("critical") === "on"
+          critical: data.get("critical") === "on",
+          expectedUpdatedAt: skill.updatedAt
         });
       }}>
         <div className="growth-lifecycle-icon"><Sparkles size={16}/></div>
         <div className="growth-lifecycle-copy"><strong>{skill.code}</strong><small>{skill.assessed} {c("assessed employments", "değerlendirilmiş istihdam")} · {skill.active ? c("Active", "Aktif") : c("Inactive", "Pasif")}</small><span>{skill.critical ? c("Critical capability", "Kritik yetkinlik") : c("Standard capability", "Standart yetkinlik")}</span></div>
-        <div className="performance-review-controls"><input name="name" defaultValue={skill.name} maxLength={250}/><input name="category" defaultValue={skill.category ?? ""} maxLength={250} placeholder={c("Category", "Kategori")}/><label className="growth-check"><input name="critical" type="checkbox" defaultChecked={skill.critical}/> {c("Critical", "Kritik")}</label><button className="secondary-button" disabled={pending !== null}>{pending === `skill-${skill.id}` ? "…" : c("Save", "Kaydet")}</button><button className="secondary-button" type="button" disabled={pending !== null} onClick={() => void patch(`skill-state-${skill.id}`, `/api/learning/skills/${skill.id}`, { active: !skill.active })}>{pending === `skill-state-${skill.id}` ? "…" : skill.active ? c("Deactivate", "Pasife al") : c("Reactivate", "Etkinleştir")}</button></div>
+        <div className="performance-review-controls"><input name="name" defaultValue={skill.name} maxLength={180}/><input name="category" defaultValue={skill.category ?? ""} maxLength={120} placeholder={c("Category", "Kategori")}/><label className="growth-check"><input name="critical" type="checkbox" defaultChecked={skill.critical}/> {c("Critical", "Kritik")}</label><button className="secondary-button" disabled={pending !== null}>{pending === `skill-${skill.id}` ? "…" : c("Save", "Kaydet")}</button><button className="secondary-button" type="button" disabled={pending !== null} onClick={() => void patch(`skill-state-${skill.id}`, `/api/learning/skills/${skill.id}`, { active: !skill.active, expectedUpdatedAt: skill.updatedAt })}>{pending === `skill-state-${skill.id}` ? "…" : skill.active ? c("Deactivate", "Pasife al") : c("Reactivate", "Etkinleştir")}</button></div>
       </form>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No skills are configured.", "Yetkinlik kaydı yapılandırılmamış.")}</span></div>}</div>
     </div>
 
