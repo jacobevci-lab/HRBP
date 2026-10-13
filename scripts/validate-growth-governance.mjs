@@ -127,8 +127,16 @@ expectAbsent(successionCandidatePath, successionCandidate, /successionCandidate\
 const successionPlanPath = "app/api/succession/plans/route.ts";
 const successionPlan = await source(successionPlanPath);
 expect(successionPlanPath, successionPlan, /ownerId:\s*ctx\.actorId/, "new succession plans must bind ownership to the signed actor");
-expect(successionPlanPath, successionPlan, /reviewDueAt must be a valid date/, "succession plan review dates must be validated");
+expect(successionPlanPath, successionPlan, /reviewDueAt must be a future date within 730 days/, "succession plan creation must require a bounded future review date");
 expect(successionPlanPath, successionPlan, /succession-plan\.created/, "new succession plans must emit explicit audit evidence");
+expect(successionPlanPath, successionPlan, /asIdentifier\(body\.positionId\)/, "succession plan creation must validate position identifiers");
+expect(successionPlanPath, successionPlan, /asOptionalText\(body\.name, 180\)/, "succession plan names must be bounded without silent truncation");
+expect(successionPlanPath, successionPlan, /730 \* 24 \* 60 \* 60 \* 1000/, "initial succession review date must be bounded to two years");
+expect(successionPlanPath, successionPlan, /successionPlan\.findUnique/, "succession creation must detect an existing position plan before writing");
+expect(successionPlanPath, successionPlan, /PLAN_EXISTS/, "existing succession plans must use governed maintenance instead of silent reactivation");
+expect(successionPlanPath, successionPlan, /successionPlan\.create\(/, "initial succession plan must use create-only persistence");
+expect(successionPlanPath, successionPlan, /P2002/, "concurrent duplicate creation must become a bounded conflict");
+expectAbsent(successionPlanPath, successionPlan, /successionPlan\.upsert\(/, "succession creation must not bypass lifecycle governance");
 
 const successionPlanUpdatePath = "app/api/succession/plans/[id]/route.ts";
 const successionPlanUpdate = await source(successionPlanUpdatePath);
@@ -210,6 +218,9 @@ const growthOperationsPath = "components/growth-operations-console.tsx";
 const growthOperations = await source(growthOperationsPath);
 expect(growthOperationsPath, growthOperations, /readinessReason:\s*data\.get\("readinessReason"\)/, "candidate creation UI must submit human readiness rationale");
 expect(growthOperationsPath, growthOperations, /name="readinessReason"[\s\S]*required[\s\S]*minLength=\{12\}[\s\S]*maxLength=\{2000\}/, "candidate creation UI must mirror bounded readiness-rationale requirements");
+expect(growthOperationsPath, growthOperations, /Create-only continuity record|Yalnızca ilk süreklilik kaydı/, "succession creation UI must disclose create-only behavior");
+expect(growthOperationsPath, growthOperations, /name="name"[\s\S]*maxLength=\{180\}/, "succession plan name UI must mirror the bound");
+expect(growthOperationsPath, growthOperations, /name="reviewDueAt"[\s\S]*type="date"[\s\S]*required/, "succession plan creation must require an initial review date");
 
 const growthLivePath = "lib/growth-live-data.ts";
 const growthLive = await source(growthLivePath);
