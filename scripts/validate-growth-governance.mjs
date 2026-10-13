@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 async function source(path) { return readFile(path, "utf8"); }
 const failures = [];
 function expect(path, text, pattern, message) { if (!pattern.test(text)) failures.push(`${path}: ${message}`); }
+function expectAbsent(path, text, pattern, message) { if (pattern.test(text)) failures.push(`${path}: ${message}`); }
 
 const modulePath = "components/growth-module-page.tsx";
 const modulePage = await source(modulePath);
@@ -117,6 +118,14 @@ const successionPlan = await source(successionPlanPath);
 expect(successionPlanPath, successionPlan, /ownerId:\s*ctx\.actorId/, "new succession plans must bind ownership to the signed actor");
 expect(successionPlanPath, successionPlan, /reviewDueAt must be a valid date/, "succession plan review dates must be validated");
 expect(successionPlanPath, successionPlan, /succession-plan\.created/, "new succession plans must emit explicit audit evidence");
+expect(successionPlanPath, successionPlan, /asIdentifier\(body\.positionId\)/, "succession plan creation must validate position identifiers");
+expect(successionPlanPath, successionPlan, /asOptionalText\(body\.name, 180\)/, "succession plan names must be bounded without silent truncation");
+expect(successionPlanPath, successionPlan, /730 \* 24 \* 60 \* 60 \* 1000/, "initial succession review date must be bounded to two years");
+expect(successionPlanPath, successionPlan, /successionPlan\.findUnique/, "succession creation must detect an existing position plan before writing");
+expect(successionPlanPath, successionPlan, /PLAN_EXISTS/, "existing succession plans must be routed to governed maintenance instead of silently reactivated");
+expect(successionPlanPath, successionPlan, /successionPlan\.create\(/, "initial succession plan must use create-only persistence");
+expect(successionPlanPath, successionPlan, /P2002/, "concurrent duplicate succession creation must collapse to a bounded conflict");
+expectAbsent(successionPlanPath, successionPlan, /successionPlan\.upsert\(/, "succession creation endpoint must not bypass plan lifecycle governance with an upsert");
 
 const successionPlanUpdatePath = "app/api/succession/plans/[id]/route.ts";
 const successionPlanUpdate = await source(successionPlanUpdatePath);
@@ -168,6 +177,12 @@ expect(successionDataPath, successionData, /readinessReviewedAt:\s*true/, "succe
 expect(successionDataPath, successionData, /readinessReviewedById:\s*true/, "succession governance data must load readiness reviewer identity");
 expect(successionDataPath, successionData, /updatedAt:\s*candidate\.updatedAt\.toISOString\(\)/, "candidate UI must receive optimistic concurrency evidence");
 expect(successionDataPath, successionData, /readinessReviewedBy:[\s\S]*reviewerMap\.get\(candidate\.readinessReviewedById\)/, "readiness reviewer identity must resolve tenant-locally for the governance UI");
+
+const growthOperationsPath = "components/growth-operations-console.tsx";
+const growthOperations = await source(growthOperationsPath);
+expect(growthOperationsPath, growthOperations, /Create-only continuity record|Yalnızca ilk süreklilik kaydı/, "succession creation UI must disclose create-only behavior");
+expect(growthOperationsPath, growthOperations, /name="name"[\s\S]*maxLength=\{180\}/, "succession plan name input must mirror the bounded backend contract");
+expect(growthOperationsPath, growthOperations, /name="reviewDueAt"[\s\S]*type="date"[\s\S]*required/, "succession creation UI must require an initial review date");
 
 const successionConsolePath = "components/succession-governance-console.tsx";
 const successionConsole = await source(successionConsolePath);
