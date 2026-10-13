@@ -137,6 +137,11 @@ expect(successionPlanPath, successionPlan, /PLAN_EXISTS/, "existing succession p
 expect(successionPlanPath, successionPlan, /successionPlan\.create\(/, "initial succession plan must use create-only persistence");
 expect(successionPlanPath, successionPlan, /P2002/, "concurrent duplicate creation must become a bounded conflict");
 expectAbsent(successionPlanPath, successionPlan, /successionPlan\.upsert\(/, "succession creation must not bypass lifecycle governance");
+expect(successionPlanPath, successionPlan, /status:\s*\{\s*not:\s*PositionStatus\.CLOSED\s*\}/, "succession creation must reject closed positions");
+expect(successionPlanPath, successionPlan, /validTo:\s*null/, "succession creation must require current positions");
+expect(successionPlanPath, successionPlan, /take:\s*200/, "succession read API must remain bounded");
+expect(successionPlanPath, successionPlan, /candidates:\s*\{\s*where:\s*\{\s*active:\s*true,/, "succession read API must exclude removed candidates");
+expect(successionPlanPath, successionPlan, /"cache-control":\s*"no-store"/, "succession read API must not cache confidential candidate records");
 
 const successionPlanUpdatePath = "app/api/succession/plans/[id]/route.ts";
 const successionPlanUpdate = await source(successionPlanUpdatePath);
