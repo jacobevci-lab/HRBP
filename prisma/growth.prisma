@@ -265,14 +265,17 @@ model Skill {
 }
 
 model EmploymentSkill {
-  id           String @id @default(cuid())
-  tenantId     String
-  employmentId String
-  skillId      String
-  proficiency  SkillProficiency
-  source       String?
-  assessedAt   DateTime @default(now())
-  skill        Skill @relation(fields: [skillId], references: [id], onDelete: Restrict)
+  id               String @id @default(cuid())
+  tenantId         String
+  employmentId     String
+  skillId          String
+  proficiency      SkillProficiency
+  source           String?
+  assessmentReason String?
+  assessedById     String?
+  assessedAt       DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  skill            Skill @relation(fields: [skillId], references: [id], onDelete: Restrict)
 
   @@unique([employmentId, skillId])
   @@index([tenantId, employmentId])

@@ -41,6 +41,8 @@ expectAbsent(operationsConsolePath, operationsConsole, /name="managerEmploymentI
 expectAbsent(operationsConsolePath, operationsConsole, /data\.get\("managerEmploymentId"\)/, "review creation payload must not accept a manually selected manager");
 expect(operationsConsolePath, operationsConsole, /Manager is assigned automatically from the governed employment relationship/, "review creation UI must disclose governed manager assignment");
 expect(operationsConsolePath, operationsConsole, /review\.status\s*===\s*"SELF_REVIEW"\s*\|\|\s*review\.status\s*===\s*"MANAGER_REVIEW"/, "administration console must render participant-owned phases as waiting states");
+expect(operationsConsolePath, operationsConsole, /Justification required if final rating differs from manager rating|Nihai puan yönetici puanından farklıysa gerekçe zorunludur/, "calibration UI must disclose when justification becomes mandatory");
+expect(operationsConsolePath, operationsConsole, /maxLength=\{4000\}/, "calibration note input must mirror the bounded backend contract");
 
 const notificationPath = "lib/performance-notifications.ts";
 const notifications = await source(notificationPath);
@@ -92,6 +94,13 @@ expect(reviewPath, reviewRoute, /MANAGER_REVIEW:\s*\[\]/, "governance must not i
 expect(reviewPath, reviewRoute, /ReviewCycleStatus\.OPEN/, "opening self review must require an open review cycle");
 expect(reviewPath, reviewRoute, /ReviewCycleStatus\.CALIBRATION/, "final review decisions must require calibration cycle phase");
 expect(reviewPath, reviewRoute, /FINAL_RATING_REQUIRED/, "final rating must be explicitly human-entered before finalization");
+expect(reviewPath, reviewRoute, /ratingOverride[\s\S]*finalRating !== review\.managerRating/, "calibration must explicitly detect rating overrides against the submitted manager rating");
+expect(reviewPath, reviewRoute, /CALIBRATION_OVERRIDE_REASON_REQUIRED/, "rating overrides must require an explicit calibration justification");
+expect(reviewPath, reviewRoute, /calibrationNotes\.length > 4000/, "calibration justification must remain bounded");
+expect(reviewPath, reviewRoute, /calibrationNotes\.length < 12/, "rating overrides must require a meaningful minimum-length justification");
+expect(reviewPath, reviewRoute, /updateMany\([\s\S]*status:\s*review\.status[\s\S]*updatedAt:\s*review\.updatedAt/, "calibration finalization must use optimistic state evidence to reject concurrent overwrite");
+expect(reviewPath, reviewRoute, /STALE_STATE/, "concurrent calibration decisions must surface a bounded retryable conflict");
+expect(reviewPath, reviewRoute, /purpose:[\s\S]*manager=\$\{review\.managerRating\}[\s\S]*final=\$\{finalRating\}[\s\S]*override=\$\{ratingOverride\}[\s\S]*justificationRecorded=\$\{Boolean\(calibrationNotes\)\}/, "calibration audit evidence must capture the rating decision shape without copying justification text");
 expect(reviewPath, reviewRoute, /canActOnEmployment/, "review governance transitions must enforce relationship scope");
 expect(reviewPath, reviewRoute, /appendAudit/, "review governance transitions must emit audit evidence");
 expect(reviewPath, reviewRoute, /PERFORMANCE_SELF_REVIEW_READY/, "opening self review must enqueue an identity-resolved employee notification");
