@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
 async function source(path) { return readFile(path, "utf8"); }
 const failures = [];
@@ -7,11 +8,12 @@ function expect(path, text, pattern, message) { if (!pattern.test(text)) failure
 const learningMaintenancePath = "lib/learning-maintenance.ts";
 const learningMaintenance = await source(learningMaintenancePath);
 expect(learningMaintenancePath, learningMaintenance, /LearningAssignmentStatus\.ASSIGNED[\s\S]*LearningAssignmentStatus\.IN_PROGRESS/, "scheduled lifecycle must scan only mutable learning states");
-expect(learningMaintenancePath, learningMaintenance, /dueAt:\s*\{\s*not:\s*null,\s*lt:\s*now\s*\}/, "scheduled lifecycle must only select past-due assignments");
+expect(learningMaintenancePath, learningMaintenance, /dueAt:\s*\{\s*not:\s*null,\s*lt:\s*overdueBefore\s*\}/, "scheduled lifecycle must only select past-due assignments");
 expect(learningMaintenancePath, learningMaintenance, /updateMany/, "automatic overdue transition must use a state-aware write");
 expect(learningMaintenancePath, learningMaintenance, /status:\s*LearningAssignmentStatus\.OVERDUE/, "past-due learning must transition to overdue");
 expect(learningMaintenancePath, learningMaintenance, /learning-assignment\.auto-overdue/, "automatic overdue transition must emit audit evidence");
 expect(learningMaintenancePath, learningMaintenance, /system:learning-maintenance/, "automatic lifecycle audit must identify the system actor");
+expect(learningMaintenancePath, learningMaintenance, /learningDueDayStartUtc\(now\)/, "overdue transitions must wait until the calendar due day ends");
 
 const learningReminderPath = "lib/learning-reminders.ts";
 const learningReminders = await source(learningReminderPath);
@@ -23,6 +25,9 @@ expect(learningReminderPath, learningReminders, /LEARNING_ASSIGNMENT_DUE_SOON/, 
 expect(learningReminderPath, learningReminders, /LEARNING_ASSIGNMENT_OVERDUE/, "learning reminders must create overdue events");
 expect(learningReminderPath, learningReminders, /enqueueNotificationOutbox/, "learning reminders must use the durable notification outbox");
 expect(learningReminderPath, learningReminders, /dedupeKey:[\s\S]*assignment\.dueAt/, "learning reminder dedupe must include the effective due date");
+expect(learningReminderPath, learningReminders, /learningDueSoonExclusiveUtc\(now, warningDays\)/, "due-soon window must include the whole last calendar day");
+expect(learningReminderPath, learningReminders, /dueAt:\s*\{\s*not:\s*null,\s*lt:\s*dueSoonBefore\s*\}/, "due-soon query must use the exclusive next-day cutoff");
+expect(learningReminderPath, learningReminders, /assignment\.dueAt\s*<\s*overdueBefore/, "reminders must not mark due-today assignments overdue");
 
 const successionReminderPath = "lib/succession-reminders.ts";
 const successionReminders = await source(successionReminderPath);
@@ -60,5 +65,8 @@ if (failures.length) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
+
+const calendarTests = spawnSync(process.execPath, ["--test", "scripts/learning-calendar-due-date.test.mjs"], { stdio: "inherit" });
+if (calendarTests.error || calendarTests.status !== 0) process.exit(1);
 
 console.log("Validated growth automation contract: learning lifecycle normalization, identity-resolved reminders, succession review reminders, durable delivery and notification deep links are enforced.");
