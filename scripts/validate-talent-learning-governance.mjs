@@ -96,6 +96,13 @@ expect(skillCreatePath, skillCreate, /assessedById:\s*ctx\.actorId/, "initial pr
 expect(skillCreatePath, skillCreate, /employee-skill\.assessed/, "initial proficiency assessment must emit explicit audit evidence");
 expect(skillCreatePath, skillCreate, /P2002/, "concurrent duplicate employee-skill creation must collapse to a bounded conflict");
 expectAbsent(skillCreatePath, skillCreate, /employmentSkill\.upsert\(/, "employee-skill create endpoint must not bypass reassessment governance with an upsert");
+expect(skillCreatePath, skillCreate, /asText\(body\.code, 64\)/, "skill catalog codes must be bounded");
+expect(skillCreatePath, skillCreate, /asText\(body\.name, 180\)/, "skill catalog names must be bounded");
+expect(skillCreatePath, skillCreate, /asOptionalText\(body\.category, 120\)/, "skill catalog categories must be bounded");
+expect(skillCreatePath, skillCreate, /typeof critical !== "boolean"/, "skill catalog critical flag must reject string coercion");
+expect(skillCreatePath, skillCreate, /prismaCode === "P2002"/, "duplicate skill catalog creation must return a bounded conflict");
+expect(skillCreatePath, skillCreate, /take:\s*300/, "skill catalog reads must have bounded cardinality");
+expect(skillCreatePath, skillCreate, /"cache-control":\s*"no-store"/, "skill catalog response must not be cached");
 
 const skillPath = "app/api/learning/skills/[id]/route.ts";
 const skill = await source(skillPath);
@@ -146,6 +153,9 @@ const growthOperationsPath = "components/growth-operations-console.tsx";
 const growthOperations = await source(growthOperationsPath);
 expect(growthOperationsPath, growthOperations, /Create-only initial assessment|Yalnızca ilk değerlendirme/, "initial employee-skill UI must disclose create-only behavior");
 expect(growthOperationsPath, growthOperations, /name="source"[\s\S]*maxLength=\{500\}/, "initial proficiency source input must mirror backend bounds");
+expect(growthOperationsPath, growthOperations, /name="code"[\s\S]*maxLength=\{64\}/, "skill code input must mirror bounds");
+expect(growthOperationsPath, growthOperations, /name="category"[\s\S]*maxLength=\{120\}/, "skill category input must mirror bounds");
+expect(growthOperationsPath, growthOperations, /name="name"[\s\S]*maxLength=\{180\}/, "skill name input must mirror bounds");
 expect(growthOperationsPath, growthOperations, /Create-only human decision|Yalnızca ilk insan kararı/, "initial talent decisions must use a create-only UI");
 expect(growthOperationsPath, growthOperations, /name="cycleLabel"[\s\S]*maxLength=\{160\}/, "talent cycle input must mirror backend bounds");
 expect(growthOperationsPath, growthOperations, /name="notes"[\s\S]*maxLength=\{4000\}/, "talent notes input must mirror backend bounds");
