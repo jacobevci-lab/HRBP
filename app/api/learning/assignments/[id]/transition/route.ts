@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { appendAudit } from "@/lib/audit";
 import { enqueueDevelopmentPlanReassessment } from "@/lib/development-plan-notifications";
+import { learningReassessmentEligibility } from "@/lib/learning-reassessment-eligibility";
 import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { enqueueSuccessionDevelopmentReassessment } from "@/lib/succession-development-notifications";
@@ -60,10 +61,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           completedAt: true,
           targetProficiency: true,
           course: { select: { code: true, title: true } },
-          developmentSkill: { select: { code: true, name: true } },
-          developmentPlan: { select: { id: true, title: true, ownerId: true } },
+          developmentSkill: { select: { code: true, name: true, tenantId: true } },
+          developmentPlan: { select: { id: true, title: true, ownerId: true, tenantId: true, employmentId: true, status: true } },
           successionCandidate: {
-            select: { id: true, active: true, plan: { select: { ownerId: true, positionId: true } } }
+            select: { id: true, active: true, tenantId: true, employmentId: true, plan: { select: { ownerId: true, positionId: true, tenantId: true, active: true } } }
           }
         }
       });
@@ -95,7 +96,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         classification: DataClassification.CONFIDENTIAL
       });
 
-      if (next === LearningAssignmentStatus.COMPLETED && assignment.developmentPlan && assignment.developmentSkill && assignment.targetProficiency) {
+      const reassessment = learningReassessmentEligibility({
+        tenantId: ctx.tenantId,
+        employmentId: assignment.employmentId,
+        hasSkillEvidence: Boolean(assignment.developmentSkill?.tenantId === ctx.tenantId && assignment.targetProficiency),
+        developmentPlan: assignment.developmentPlan,
+        successionCandidate: assignment.successionCandidate
+      });
+
+      if (next === LearningAssignmentStatus.COMPLETED && reassessment.developmentPlan && assignment.developmentPlan && assignment.developmentSkill && assignment.targetProficiency) {
         const activeOwner = await tx.userAccount.findFirst({
           where: { id: assignment.developmentPlan.ownerId, tenantId: ctx.tenantId, active: true },
           select: { id: true }
@@ -114,7 +123,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         });
       }
 
-      if (next === LearningAssignmentStatus.COMPLETED && assignment.successionCandidate?.active && assignment.developmentSkill && assignment.targetProficiency) {
+      if (next === LearningAssignmentStatus.COMPLETED && reassessment.succession && assignment.successionCandidate && assignment.developmentSkill && assignment.targetProficiency) {
         const [position, activeOwner] = await Promise.all([
           tx.position.findFirst({
             where: { id: assignment.successionCandidate.plan.positionId, tenantId: ctx.tenantId },

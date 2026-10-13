@@ -17,6 +17,10 @@ function load(path, mocks) {
   return module.exports;
 }
 
+const { learningReassessmentEligibility } = load("lib/learning-reassessment-eligibility.ts", {
+  "@prisma/client": { DevelopmentPlanStatus: { ACTIVE: "ACTIVE" } }
+});
+
 function fixture({ participant = false, status = "ASSIGNED", allowed = true, ownEmployment = true, stale = false } = {}) {
   const calls = { writes: [], audits: [], transactions: 0 };
   const assignment = {
@@ -61,6 +65,7 @@ function fixture({ participant = false, status = "ASSIGNED", allowed = true, own
       forbidden: (message) => Response.json({ error: message ?? "Forbidden" }, { status: 403 })
     },
     "@/lib/audit": { appendAudit: async (_tx, _ctx, audit) => { calls.audits.push(audit); } },
+    "@/lib/learning-reassessment-eligibility": { learningReassessmentEligibility },
     "@/lib/employment-scope": { resolveEmploymentScope: async () => null, canActOnEmployment: () => allowed },
     "@/lib/request-context": {
       getRequestContext: async () => ({
