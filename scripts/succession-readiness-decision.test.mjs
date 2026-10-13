@@ -35,6 +35,7 @@ function fixture({ updateCount = 1, currentReadiness = "READY_1_2_YEARS" } = {})
     planId: "plan-1",
     employmentId: "employment-1",
     readiness: currentReadiness,
+    active: true,
     updatedAt,
     plan: { positionId: "position-1", active: true }
   };
@@ -121,6 +122,7 @@ test("readiness change requires human reason and records reviewer provenance", a
   assert.deepEqual(calls.updates[0].where, {
     id: "candidate-1",
     tenantId: "tenant-1",
+    active: true,
     updatedAt
   });
   assert.equal(calls.updates[0].data.readiness, "READY_LT_1_YEAR");
