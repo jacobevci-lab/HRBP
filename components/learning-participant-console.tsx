@@ -8,7 +8,7 @@ import type { LearningParticipantAssignment } from "@/lib/learning-participant-d
 
 function label(value: string, locale: "en" | "tr") {
   const tr: Record<string, string> = {
-    ASSIGNED: "Atandı", IN_PROGRESS: "Devam ediyor", OVERDUE: "Gecikmiş", COMPLETED: "Tamamlandı",
+    ASSIGNED: "Atandı", IN_PROGRESS: "Devam ediyor", OVERDUE: "Gecikmiş", COMPLETED: "Tamamlandı", WAIVED: "Muaf",
     AWARENESS: "Farkındalık", FOUNDATION: "Temel", PRACTITIONER: "Uygulayıcı", ADVANCED: "İleri", EXPERT: "Uzman"
   };
   if (locale === "tr" && tr[value]) return tr[value];
@@ -40,6 +40,9 @@ export function LearningParticipantConsole({ assignments }: { assignments: Learn
   useEffect(() => {
     document.querySelector<HTMLElement>(".growth-lifecycle-row.focused")?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, []);
+
+  const actionable = assignments.filter((assignment) => ["ASSIGNED", "IN_PROGRESS", "OVERDUE"].includes(assignment.status));
+  const history = assignments.filter((assignment) => ["COMPLETED", "WAIVED"].includes(assignment.status));
 
   if (!assignments.length) return null;
 
@@ -74,7 +77,7 @@ export function LearningParticipantConsole({ assignments }: { assignments: Learn
 
     {notice ? <div className={`performance-notice ${notice.tone}`}><span>{notice.tone === "ok" ? <CheckCircle2 size={15}/> : <CircleAlert size={15}/>}</span>{notice.text}</div> : null}
 
-    <div className="growth-lifecycle-list">{assignments.map((assignment) => <form id={`learning-assignment-${assignment.id}`} className={`growth-lifecycle-row${assignment.focused ? " focused" : ""}`} key={assignment.id} onSubmit={(event) => {
+    <div className="growth-lifecycle-list">{actionable.length ? actionable.map((assignment) => <form id={`learning-assignment-${assignment.id}`} className={`growth-lifecycle-row${assignment.focused ? " focused" : ""}`} key={assignment.id} onSubmit={(event) => {
       event.preventDefault();
       const data = new FormData(event.currentTarget);
       const next = assignment.status === "ASSIGNED" ? "IN_PROGRESS" : "COMPLETED";
@@ -88,6 +91,23 @@ export function LearningParticipantConsole({ assignments }: { assignments: Learn
       <div className="growth-lifecycle-copy"><strong>{assignment.course}</strong><small>{assignment.courseCode} · {assignment.provider}</small><span>{assignment.mandatory ? c("Mandatory", "Zorunlu") : c("Development", "Gelişim")} · <Clock3 size={11}/> {c("Due", "Son tarih")} {dateOnly(assignment.dueAt)}</span>{assignment.developmentPlanTitle && assignment.developmentSkillName ? <span><Sparkles size={11}/> {c("Development plan", "Gelişim planı")}: {assignment.developmentPlanTitle} · {assignment.developmentSkillCode} · {assignment.developmentSkillName}{assignment.targetProficiency ? ` → ${label(assignment.targetProficiency, locale)}` : ""}{assignment.successionCandidateId ? ` · ${c("succession-linked", "yedeklemeye bağlı")}` : ""}</span> : assignment.successionCandidateId && assignment.developmentSkillName ? <span><Sparkles size={11}/> {c("Succession development", "Yedekleme gelişimi")} · {assignment.developmentSkillCode} · {assignment.developmentSkillName}{assignment.targetProficiency ? ` → ${label(assignment.targetProficiency, locale)}` : ""}</span> : null}</div>
       <em className={`growth-pill ${assignment.status.toLowerCase().replaceAll("_", "-")}`}>{label(assignment.status, locale)}</em>
       <div className="performance-review-controls">{assignment.status !== "ASSIGNED" ? <><input name="score" type="number" min="0" max="100" step="0.01" placeholder={c("Score", "Puan")}/><input name="certificateReference" maxLength={500} placeholder={c("Certificate / evidence reference", "Sertifika / kanıt referansı")}/></> : null}<button className="secondary-button" disabled={pending !== null}>{pending === `learning-self-${assignment.id}` ? "…" : assignment.status === "ASSIGNED" ? c("Start", "Başlat") : c("Complete", "Tamamla")}</button></div>
-    </form>)}</div>
+    </form>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No active learning assignments.", "Aktif eğitim atamanız yok.")}</span></div>}</div>
+
+    <div className="performance-ops-panel">
+      <div className="performance-panel-title"><BookOpenCheck size={16}/><div><strong>{c("Learning history", "Eğitim geçmişim")}</strong><small>{c("Up to 100 recently assigned completed or waived records; no changes can be made here.", "Son atanmış en fazla 100 tamamlanmış veya muaf kayıt; burada değişiklik yapılamaz.")}</small></div></div>
+      <div className="growth-lifecycle-list">{history.length ? history.map((assignment) => <article id={`learning-assignment-${assignment.id}`} className={`growth-lifecycle-row${assignment.focused ? " focused" : ""}`} key={assignment.id}>
+        <div className="growth-lifecycle-icon"><BookOpenCheck size={16}/></div>
+        <div className="growth-lifecycle-copy">
+          <strong>{assignment.course}</strong>
+          <small>{assignment.courseCode} · {assignment.provider}</small>
+          <span>{assignment.mandatory ? c("Mandatory", "Zorunlu") : c("Development", "Gelişim")} · {c("Assigned", "Atandı")}: {dateOnly(assignment.assignedAt)} · {c("Due", "Son tarih")}: {dateOnly(assignment.dueAt)}</span>
+          {assignment.status === "COMPLETED" ? <span><CheckCircle2 size={12}/> {c("Completed", "Tamamlandı")}: {dateOnly(assignment.completedAt)}{assignment.score !== null ? ` · ${c("Score", "Puan")}: ${assignment.score}/100` : ""}</span> : <span><ShieldCheck size={12}/> {c("Waived", "Muaf")}: {dateOnly(assignment.waivedAt)}</span>}
+          {assignment.certificateReference ? <span>{c("Certificate / evidence reference", "Sertifika / kanıt referansı")}: {assignment.certificateReference}</span> : null}
+          {assignment.developmentPlanTitle ? <span><Sparkles size={12}/> {c("Development plan", "Gelişim planı")}: {assignment.developmentPlanTitle}</span> : null}
+          {assignment.successionCandidateId ? <span><Sparkles size={12}/> {c("Succession-linked", "Yedekleme bağlantılı")}</span> : null}
+        </div>
+        <em className={`growth-pill ${assignment.status.toLowerCase()}`}>{label(assignment.status, locale)}</em>
+      </article>) : <div className="growth-lifecycle-empty"><CheckCircle2 size={18}/><span>{c("No completed or waived learning history yet.", "Henüz tamamlanmış veya muaf eğitim geçmişiniz yok.")}</span></div>}</div>
+    </div>
   </section>;
 }
