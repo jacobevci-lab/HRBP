@@ -56,7 +56,12 @@ const learningParticipantDataPath = "lib/learning-participant-data.ts";
 const learningParticipantData = await source(learningParticipantDataPath);
 expect(learningParticipantDataPath, learningParticipantData, /can\(ctx,\s*"learning:self-progress"\)/, "learning participant data must require the self-progress capability");
 expect(learningParticipantDataPath, learningParticipantData, /employmentId:\s*ctx\.employmentId/, "learning participant data must be bound to the signed employment identity");
-expect(learningParticipantDataPath, learningParticipantData, /LearningAssignmentStatus\.ASSIGNED[\s\S]*LearningAssignmentStatus\.IN_PROGRESS[\s\S]*LearningAssignmentStatus\.OVERDUE/, "learning participant inbox must expose only actionable employee states");
+expect(learningParticipantDataPath, learningParticipantData, /LearningAssignmentStatus\.ASSIGNED[\s\S]*LearningAssignmentStatus\.IN_PROGRESS[\s\S]*LearningAssignmentStatus\.OVERDUE/, "learning participant inbox must keep actionable states");
+expect(learningParticipantDataPath, learningParticipantData, /LearningAssignmentStatus\.COMPLETED[\s\S]*LearningAssignmentStatus\.WAIVED/, "learning history must include completed and waived records");
+expect(learningParticipantDataPath, learningParticipantData, /status:\s*\{\s*in:\s*historicalStatuses\s*\}/, "closed learning records must load from a separate scoped read");
+expect(learningParticipantDataPath, learningParticipantData, /orderBy:\s*\[\{ assignedAt: "desc" \}, \{ id: "desc" \}\]/, "learning history order must be stable");
+expect(learningParticipantDataPath, learningParticipantData, /score:\s*true[\s\S]*certificateReference:\s*true[\s\S]*waivedAt:\s*true/, "learning history must select completion and waiver evidence");
+expect(learningParticipantDataPath, learningParticipantData, /take:\s*100/, "learning participant reads must remain bounded");
 
 const learningSelfPath = "app/api/learning/assignments/[id]/self-transition/route.ts";
 const learningSelf = await source(learningSelfPath);
@@ -88,6 +93,10 @@ const learningParticipantConsole = await source(learningParticipantConsolePath);
 expect(learningParticipantConsolePath, learningParticipantConsole, /\/self-transition/, "employee learning console must use the identity-bound endpoint");
 expect(learningParticipantConsolePath, learningParticipantConsole, /status:\s*next/, "employee learning console must submit an explicit next state");
 expect(learningParticipantConsolePath, learningParticipantConsole, /certificateReference/, "employee learning console must support completion evidence reference");
+expect(learningParticipantConsolePath, learningParticipantConsole, /const actionable = assignments\.filter/, "participant UI must distinguish active actions");
+expect(learningParticipantConsolePath, learningParticipantConsole, /const history = assignments\.filter/, "participant UI must distinguish closed learning records");
+expect(learningParticipantConsolePath, learningParticipantConsole, /history\.map\(\(assignment\) => <article/, "closed learning history must remain read-only");
+expect(learningParticipantConsolePath, learningParticipantConsole, /assignment\.certificateReference/, "completed learning evidence must be visible to its employee");
 
 const learningNotificationPath = "lib/learning-notifications.ts";
 const learningNotifications = await source(learningNotificationPath);
@@ -293,7 +302,7 @@ if (failures.length) {
   process.exit(1);
 }
 
-const tests = spawnSync(process.execPath, ["--test", "scripts/learning-assignment-creation.test.mjs", "scripts/learning-assignment-transitions.test.mjs"], { stdio: "inherit" });
+const tests = spawnSync(process.execPath, ["--test", "scripts/learning-assignment-creation.test.mjs", "scripts/learning-assignment-transitions.test.mjs", "scripts/learning-participant-history.test.mjs"], { stdio: "inherit" });
 if (tests.error || tests.status !== 0) process.exit(1);
 
 console.log("Validated growth governance contract: write capabilities, relationship scope, employee-owned learning progress, succession plan ownership, candidate rank integrity, reminder delivery, explicit lifecycle transitions and audit evidence are enforced.");

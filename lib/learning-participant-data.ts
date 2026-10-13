@@ -12,6 +12,10 @@ export type LearningParticipantAssignment = {
   status: string;
   dueAt: string | null;
   assignedAt: string;
+  completedAt: string | null;
+  score: string | null;
+  certificateReference: string | null;
+  waivedAt: string | null;
   successionCandidateId: string | null;
   developmentPlanId: string | null;
   developmentPlanTitle: string | null;
@@ -27,11 +31,16 @@ export async function getLearningParticipantData(ctx: RequestContext, focusId?: 
   return withDb(async (db) => {
     const boundedFocusId = focusId?.trim().slice(0, 160) || undefined;
     const actionableStatuses = [LearningAssignmentStatus.ASSIGNED, LearningAssignmentStatus.IN_PROGRESS, LearningAssignmentStatus.OVERDUE];
+    const historicalStatuses = [LearningAssignmentStatus.COMPLETED, LearningAssignmentStatus.WAIVED];
     const assignmentSelect = {
       id: true,
       status: true,
       dueAt: true,
       assignedAt: true,
+      completedAt: true,
+      score: true,
+      certificateReference: true,
+      waivedAt: true,
       successionCandidateId: true,
       developmentPlanId: true,
       developmentPlan: { select: { title: true } },
@@ -40,7 +49,7 @@ export async function getLearningParticipantData(ctx: RequestContext, focusId?: 
       course: { select: { code: true, title: true, provider: true, mandatory: true } }
     } as const;
 
-    const [rows, focusedAssignment] = await Promise.all([
+    const [actionableRows, historicalRows, focusedAssignment] = await Promise.all([
       db.learningAssignment.findMany({
         where: {
           tenantId: ctx.tenantId,
@@ -51,17 +60,28 @@ export async function getLearningParticipantData(ctx: RequestContext, focusId?: 
         take: 100,
         select: assignmentSelect
       }),
+      db.learningAssignment.findMany({
+        where: {
+          tenantId: ctx.tenantId,
+          employmentId: ctx.employmentId,
+          status: { in: historicalStatuses }
+        },
+        orderBy: [{ assignedAt: "desc" }, { id: "desc" }],
+        take: 100,
+        select: assignmentSelect
+      }),
       boundedFocusId ? db.learningAssignment.findFirst({
         where: {
           id: boundedFocusId,
           tenantId: ctx.tenantId,
           employmentId: ctx.employmentId,
-          status: { in: actionableStatuses }
+          status: { in: [...actionableStatuses, ...historicalStatuses] }
         },
         select: assignmentSelect
       }) : Promise.resolve(null)
     ]);
 
+    const rows = [...actionableRows, ...historicalRows];
     const visibleRows = focusedAssignment && !rows.some((row) => row.id === focusedAssignment.id)
       ? [focusedAssignment, ...rows]
       : rows;
@@ -75,6 +95,10 @@ export async function getLearningParticipantData(ctx: RequestContext, focusId?: 
       status: row.status,
       dueAt: row.dueAt?.toISOString() ?? null,
       assignedAt: row.assignedAt.toISOString(),
+      completedAt: row.completedAt?.toISOString() ?? null,
+      score: row.score?.toString() ?? null,
+      certificateReference: row.certificateReference,
+      waivedAt: row.waivedAt?.toISOString() ?? null,
       successionCandidateId: row.successionCandidateId,
       developmentPlanId: row.developmentPlanId,
       developmentPlanTitle: row.developmentPlan?.title ?? null,
