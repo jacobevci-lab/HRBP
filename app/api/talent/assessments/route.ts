@@ -1,4 +1,4 @@
-import { readJsonObject } from "@/lib/input-validation";
+import { asIdentifier, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
 import { DataClassification, PerformanceBand, PotentialBand } from "@prisma/client";
 import { db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -20,27 +20,76 @@ export async function POST(request: Request) {
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
   if (!can(ctx, "talent:write")) return forbidden();
+
   const body = await readJsonObject(request) as Record<string, unknown>;
   if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
-  const employmentId = String(body.employmentId ?? "");
-  const cycleLabel = String(body.cycleLabel ?? "").trim();
+
+  const employmentId = asIdentifier(body.employmentId);
+  const cycleLabel = asText(body.cycleLabel, 160);
   const performance = String(body.performance ?? "") as PerformanceBand;
   const potential = String(body.potential ?? "") as PotentialBand;
-  if (!employmentId || !cycleLabel || !Object.values(PerformanceBand).includes(performance) || !Object.values(PotentialBand).includes(potential)) return Response.json({ error: "employmentId, cycleLabel, performance and potential are required." }, { status: 400 });
-  const data = await db.$transaction(async (tx) => {
-    const scope = await resolveEmploymentScope(tx, ctx);
-    if (!canActOnEmployment(scope, employmentId)) throw new Error("OUT_OF_SCOPE");
-    const employment = await tx.employment.findFirst({ where: { id: employmentId, tenantId: ctx.tenantId }, select: { id: true } });
-    if (!employment) throw new Error("NOT_FOUND");
-    const assessment = await tx.talentAssessment.upsert({
-      where: { tenantId_employmentId_cycleLabel: { tenantId: ctx.tenantId, employmentId, cycleLabel } },
-      update: { performance, potential, criticalTalent: Boolean(body.criticalTalent), notes: body.notes ? String(body.notes) : undefined, assessedById: ctx.actorId, assessedAt: new Date() },
-      create: { tenantId: ctx.tenantId, employmentId, cycleLabel, performance, potential, criticalTalent: Boolean(body.criticalTalent), notes: body.notes ? String(body.notes) : undefined, assessedById: ctx.actorId }
+  const criticalTalent = body.criticalTalent === undefined ? false : body.criticalTalent;
+  const notes = asOptionalText(body.notes, 4000);
+
+  if (!employmentId || !cycleLabel || !Object.values(PerformanceBand).includes(performance) || !Object.values(PotentialBand).includes(potential)) {
+    return Response.json({ error: "employmentId, a cycleLabel up to 160 characters, performance and potential are required." }, { status: 400 });
+  }
+  if (typeof criticalTalent !== "boolean") {
+    return Response.json({ error: "criticalTalent must be a boolean when provided." }, { status: 400 });
+  }
+  if (notes === null) {
+    return Response.json({ error: "notes must not exceed 4000 characters." }, { status: 400 });
+  }
+
+  try {
+    const data = await db.$transaction(async (tx) => {
+      const scope = await resolveEmploymentScope(tx, ctx);
+      if (!canActOnEmployment(scope, employmentId)) throw new Error("OUT_OF_SCOPE");
+
+      const employment = await tx.employment.findFirst({
+        where: { id: employmentId, tenantId: ctx.tenantId },
+        select: { id: true }
+      });
+      if (!employment) throw new Error("NOT_FOUND");
+
+      const existing = await tx.talentAssessment.findUnique({
+        where: { tenantId_employmentId_cycleLabel: { tenantId: ctx.tenantId, employmentId, cycleLabel } },
+        select: { id: true }
+      });
+      if (existing) throw new Error("ASSESSMENT_EXISTS");
+
+      const assessment = await tx.talentAssessment.create({
+        data: {
+          tenantId: ctx.tenantId,
+          employmentId,
+          cycleLabel,
+          performance,
+          potential,
+          criticalTalent,
+          notes: notes ?? null,
+          assessedById: ctx.actorId
+        }
+      });
+
+      await appendAudit(tx, ctx, {
+        action: "talent-assessment.recorded",
+        resourceType: "TalentAssessment",
+        resourceId: assessment.id,
+        classification: DataClassification.CONFIDENTIAL,
+        purpose: `Initial human talent assessment; cycle=${cycleLabel}; performance=${performance}; potential=${potential}; criticalTalent=${criticalTalent}`
+      });
+      return assessment;
     });
-    await appendAudit(tx, ctx, { action: "talent-assessment.recorded", resourceType: "TalentAssessment", resourceId: assessment.id, classification: DataClassification.CONFIDENTIAL });
-    return assessment;
-  }).catch((error) => error instanceof Error && ["NOT_FOUND", "OUT_OF_SCOPE"].includes(error.message) ? error.message : Promise.reject(error));
-  if (data === "OUT_OF_SCOPE") return forbidden("Employment is outside your authorized relationship scope.");
-  if (data === "NOT_FOUND") return Response.json({ error: "Employment not found in tenant." }, { status: 404 });
-  return Response.json({ data }, { status: 201 });
+
+    return Response.json({ data }, { status: 201 });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    const prismaCode = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+    if (code === "OUT_OF_SCOPE") return forbidden("Employment is outside your authorized relationship scope.");
+    if (code === "NOT_FOUND") return Response.json({ error: "Employment not found in tenant." }, { status: 404 });
+    if (code === "ASSESSMENT_EXISTS" || prismaCode === "P2002") {
+      return Response.json({ error: "A talent assessment already exists for this employee and cycle. Use the governed correction workflow instead of overwriting the original decision." }, { status: 409 });
+    }
+    throw error;
+  }
 }
