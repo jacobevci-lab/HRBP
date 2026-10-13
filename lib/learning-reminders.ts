@@ -1,18 +1,20 @@
 import { DataClassification, LearningAssignmentStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { learningDueDayStartUtc, learningDueSoonExclusiveUtc } from "@/lib/learning-due-date";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { runtimeNumber } from "@/lib/runtime-env";
 
 export async function queueLearningReminders() {
   const now = new Date();
   const warningDays = Math.min(90, Math.max(1, Math.floor(runtimeNumber("HRBP_LEARNING_DUE_SOON_DAYS", 7))));
-  const dueSoonAt = new Date(now.getTime() + warningDays * 86_400_000);
+  const overdueBefore = learningDueDayStartUtc(now);
+  const dueSoonBefore = learningDueSoonExclusiveUtc(now, warningDays);
   const maxBatch = Math.min(1000, Math.max(25, Math.floor(runtimeNumber("HRBP_LEARNING_REMINDER_BATCH_SIZE", 500))));
 
   const assignments = await db.learningAssignment.findMany({
     where: {
       status: { in: [LearningAssignmentStatus.ASSIGNED, LearningAssignmentStatus.IN_PROGRESS, LearningAssignmentStatus.OVERDUE] },
-      dueAt: { not: null, lte: dueSoonAt }
+      dueAt: { not: null, lt: dueSoonBefore }
     },
     orderBy: { dueAt: "asc" },
     take: maxBatch,
@@ -85,7 +87,7 @@ export async function queueLearningReminders() {
       continue;
     }
 
-    const isOverdue = assignment.dueAt < now || assignment.status === LearningAssignmentStatus.OVERDUE;
+    const isOverdue = assignment.dueAt < overdueBefore || assignment.status === LearningAssignmentStatus.OVERDUE;
     const eventType = isOverdue ? "LEARNING_ASSIGNMENT_OVERDUE" : "LEARNING_ASSIGNMENT_DUE_SOON";
     const reminderKey = isOverdue ? "overdue" : "due-soon";
 
