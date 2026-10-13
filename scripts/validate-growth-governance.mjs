@@ -45,6 +45,12 @@ expect(learningPath, learning, /canActOnEmployment/, "learning transitions must 
 expect(learningPath, learning, /COMPLETED:\s*\[\]/, "completed learning assignments must be terminal");
 expect(learningPath, learning, /score\s*<\s*0\s*\|\|\s*score\s*>\s*100/, "learning completion scores must be bounded");
 expect(learningPath, learning, /appendAudit/, "learning transitions must emit audit evidence");
+expect(learningPath, learning, /asIdentifier\(\(await params\)\.id\)/, "learning decisions must validate their record id");
+expect(learningPath, learning, /asDecimalInput\(body\.score, 3, 2\)/, "learning completion scores must preserve decimal precision");
+expect(learningPath, learning, /asOptionalText\(body\.certificateReference, 500\)/, "completion references must reject unbounded and coerced values");
+expect(learningPath, learning, /asOptionalText\(body\.waiverReason, 2000\)/, "waiver reason must have an explicit hard input bound");
+expect(learningPath, learning, /waivedById:.*ctx\.actorId/, "learning waivers must record reviewer identity");
+expect(learningPath, learning, /waivedAt:.*new Date\(\)/, "learning waivers must retain decision time");
 
 const learningParticipantDataPath = "lib/learning-participant-data.ts";
 const learningParticipantData = await source(learningParticipantDataPath);
@@ -62,6 +68,20 @@ expect(learningSelfPath, learningSelf, /WAIVED:\s*\[\]/, "employees must not sel
 expect(learningSelfPath, learningSelf, /updateMany/, "employee learning transitions must use a state-aware write");
 expect(learningSelfPath, learningSelf, /score\s*<\s*0\s*\|\|\s*score\s*>\s*100/, "employee completion score must be bounded");
 expect(learningSelfPath, learningSelf, /learning-assignment\.self-transition/, "employee learning transitions must emit explicit audit evidence");
+expect(learningSelfPath, learningSelf, /asDecimalInput\(body\.score, 3, 2\)/, "employee completion scores must reject unexpected coercion and precision");
+expect(learningSelfPath, learningSelf, /asOptionalText\(body\.certificateReference, 500\)/, "employee evidence must reject oversized references");
+expect(learningSelfPath, learningSelf, /Participants cannot make waiver decisions/, "self-progress must reject waiver provenance submissions");
+
+const learningWaiverSchemaPath = "prisma/growth.prisma";
+const learningWaiverSchema = await source(learningWaiverSchemaPath);
+expect(learningWaiverSchemaPath, learningWaiverSchema, /model LearningAssignment \{[\s\S]*waivedAt\s+DateTime\?[\s\S]*waivedById\s+String\?[\s\S]*waiverReason\s+String\?/, "waived learning decisions must retain nullable historical provenance");
+const learningWaiverMigrationPath = "prisma/migrations/20261013143000_learning_waiver_provenance/migration.sql";
+const learningWaiverMigration = await source(learningWaiverMigrationPath);
+expect(learningWaiverMigrationPath, learningWaiverMigration, /ADD COLUMN "waivedAt"[\s\S]*ADD COLUMN "waivedById"[\s\S]*ADD COLUMN "waiverReason"/, "waiver metadata migration must preserve existing rows");
+const growthLifecycleUiPath = "components/growth-lifecycle-console.tsx";
+const growthLifecycleUi = await source(growthLifecycleUiPath);
+expect(growthLifecycleUiPath, growthLifecycleUi, /name="waiverReason" required minLength=\{12\} maxLength=\{2000\}/, "admin waiver form must require bounded human justification");
+expect(growthLifecycleUiPath, growthLifecycleUi, /certificateReference.*maxLength=\{500\}/, "admin completion UI must collect bounded evidence references");
 
 const learningParticipantConsolePath = "components/learning-participant-console.tsx";
 const learningParticipantConsole = await source(learningParticipantConsolePath);
@@ -273,7 +293,7 @@ if (failures.length) {
   process.exit(1);
 }
 
-const tests = spawnSync(process.execPath, ["--test", "scripts/learning-assignment-creation.test.mjs"], { stdio: "inherit" });
+const tests = spawnSync(process.execPath, ["--test", "scripts/learning-assignment-creation.test.mjs", "scripts/learning-assignment-transitions.test.mjs"], { stdio: "inherit" });
 if (tests.error || tests.status !== 0) process.exit(1);
 
 console.log("Validated growth governance contract: write capabilities, relationship scope, employee-owned learning progress, succession plan ownership, candidate rank integrity, reminder delivery, explicit lifecycle transitions and audit evidence are enforced.");
