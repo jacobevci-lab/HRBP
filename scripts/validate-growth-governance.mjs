@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 
 async function source(path) { return readFile(path, "utf8"); }
@@ -81,6 +82,15 @@ const learningCreate = await source(learningCreatePath);
 expect(learningCreatePath, learningCreate, /enqueueLearningAssignmentNotification/, "learning assignment creation must notify the employee identity");
 expect(learningCreatePath, learningCreate, /dueAt must be a valid date/, "learning assignment due dates must be validated");
 expect(learningCreatePath, learningCreate, /appendAudit/, "learning assignment creation must emit audit evidence");
+expect(learningCreatePath, learningCreate, /asIdentifier\(body\.employmentId\)/, "learning assignment targets must use bounded identifiers");
+expect(learningCreatePath, learningCreate, /asIdentifier\(body\.courseId\)/, "learning course references must use bounded identifiers");
+expect(learningCreatePath, learningCreate, /EmploymentStatus\.TERMINATED/, "terminated employees must not receive new learning assignments");
+expect(learningCreatePath, learningCreate, /dueAt cannot be in the past/, "learning due dates must never be scheduled in the past");
+expect(learningCreatePath, learningCreate, /existingOpenAssignment/, "creation must inspect existing open employee-course obligations");
+expect(learningCreatePath, learningCreate, /LearningAssignmentStatus\.ASSIGNED[\s\S]*LearningAssignmentStatus\.IN_PROGRESS[\s\S]*LearningAssignmentStatus\.OVERDUE/, "duplicate detection must include all open lifecycle states");
+expect(learningCreatePath, learningCreate, /TransactionIsolationLevel\.Serializable/, "creation and duplicate check must share a serializable transaction");
+expect(learningCreatePath, learningCreate, /prismaCode === "P2034"/, "serializable write conflicts must return a bounded conflict response");
+expect(learningCreatePath, learningCreate, /"cache-control":\s*"no-store"/, "assignment reads must not be cached");
 
 const talentPath = "app/api/talent/assessments/route.ts";
 const talent = await source(talentPath);
@@ -262,5 +272,8 @@ if (failures.length) {
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
+
+const tests = spawnSync(process.execPath, ["--test", "scripts/learning-assignment-creation.test.mjs"], { stdio: "inherit" });
+if (tests.error || tests.status !== 0) process.exit(1);
 
 console.log("Validated growth governance contract: write capabilities, relationship scope, employee-owned learning progress, succession plan ownership, candidate rank integrity, reminder delivery, explicit lifecycle transitions and audit evidence are enforced.");
