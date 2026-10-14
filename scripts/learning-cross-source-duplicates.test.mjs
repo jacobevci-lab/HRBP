@@ -44,7 +44,7 @@ const routes = [
     path: "app/api/succession/candidates/[id]/development-assignment/route.ts",
     recordId: "candidate-1",
     duplicateAction: "DUPLICATE_OPEN_PLAN",
-    auditCount: 3
+    auditCount: 4
   }
 ];
 
