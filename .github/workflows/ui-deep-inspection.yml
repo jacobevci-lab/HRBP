@@ -3,6 +3,12 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - app/module/people/new/**
+      - app/module/positions/new/**
+      - components/engagement-*
+      - lib/engagement-authoring-copy.ts
+      - scripts/create-page-authorization.test.mjs
+      - scripts/engagement-authoring-ui.test.mjs
       - scripts/ui-deep-audit.mjs
       - .github/workflows/ui-deep-inspection.yml
   workflow_dispatch:
@@ -21,7 +27,6 @@ jobs:
       HRBP_DISPOSABLE_AUDIT: "true"
       HRBP_LOCAL_AUTH_ENABLED: "true"
       HRBP_AUTH_TENANT_ID: tenant-acme-global
-      HRBP_UI_PUBLIC_PROBE: "true"
       NEXT_TELEMETRY_DISABLED: 1
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +51,8 @@ jobs:
           npm ci > .audit/install.log 2>&1
           npm install --no-save --package-lock=false playwright@1.56.1 > .audit/playwright-install.log 2>&1
           npx playwright install --with-deps chromium > .audit/browser-install.log 2>&1
+      - name: Authorization and authoring component regression tests
+        run: node --test scripts/create-page-authorization.test.mjs scripts/engagement-authoring-ui.test.mjs
       - name: Migrate and seed isolated product domains
         run: |
           npx prisma generate > .audit/schema.log 2>&1

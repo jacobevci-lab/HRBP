@@ -1,0 +1,23 @@
+.root { display: grid; gap: 8px; min-width: 0; max-width: 100%; }
+.panel { box-sizing: border-box; display: grid; gap: 12px; padding: 12px; width: 100%; min-width: 0; max-width: 900px; }
+.fields { border: 0; margin: 0; padding: 0; display: grid; gap: 12px; min-width: 0; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; min-width: 0; }
+.questionGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; min-width: 0; }
+.full { grid-column: 1 / -1; }
+.panel label { display: grid; gap: 5px; min-width: 0; overflow-wrap: anywhere; }
+.panel input:not([type="checkbox"]), .panel select, .panel textarea { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; }
+.check { display: flex !important; align-items: flex-start; gap: 7px !important; }
+.header, .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.header { justify-content: space-between; }
+.header > div { min-width: 0; overflow-wrap: anywhere; }
+.header > span { overflow-wrap: anywhere; }
+.box { padding: 10px; display: grid; gap: 10px; min-width: 0; }
+.scroll { min-width: 0; max-width: 100%; overflow-x: auto; }
+.scroll table { min-width: 620px; }
+.choices { display: grid; gap: 6px; max-height: 160px; overflow: auto; min-width: 0; }
+.error { display: grid; gap: 8px; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .root, .panel { width: 100%; max-width: 100%; }
+  .grid, .questionGrid { grid-template-columns: minmax(0, 1fr); }
+  .actions > button { min-height: 34px; }
+}
