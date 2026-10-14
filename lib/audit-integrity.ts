@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { computeAuditHash } from "@/lib/audit";
 
@@ -14,12 +15,18 @@ export type AuditIntegrityResult = {
 
 export async function verifyAuditIntegrity(tenantId: string, requestedLimit = 1000): Promise<AuditIntegrityResult> {
   const limit = Math.min(5000, Math.max(10, Math.floor(requestedLimit)));
-  const [state, rows] = await Promise.all([
-    db.auditLedgerState.findUnique({
+  // Read the ledger tail state and event rows in one PostgreSQL MVCC
+  // snapshot. Independent read-committed statements can otherwise straddle
+  // a concurrent append and falsely report corruption for a healthy ledger.
+  // The database compatibility layer creates a separate client for every
+  // top-level delegate call. Use the transaction-scoped tx delegates, never
+  // a Prisma batch of eagerly executed db.<delegate> promises.
+  const [state, rows] = await db.$transaction(async (tx) => {
+    const state = await tx.auditLedgerState.findUnique({
       where: { tenantId },
       select: { tailHash: true, eventCount: true }
-    }),
-    db.auditEvent.findMany({
+    });
+    const rows = await tx.auditEvent.findMany({
       where: { tenantId },
       orderBy: [{ ledgerSequence: "desc" }],
       take: limit + 1,
@@ -38,8 +45,9 @@ export async function verifyAuditIntegrity(tenantId: string, requestedLimit = 10
         hash: true,
         previousHash: true
       }
-    })
-  ]);
+    });
+    return [state, rows] as const;
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
 
   if (!rows.length) {
     const emptyStateValid = !state || (state.eventCount === BigInt(0) && state.tailHash === null);
