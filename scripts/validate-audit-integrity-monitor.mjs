@@ -23,10 +23,19 @@ expect(monitor, /recipientRole: PlatformRole\.TENANT_ADMIN/, "integrity alerts m
 expect(monitor, /classification: DataClassification\.RESTRICTED/,
   "integrity alerts must retain the restricted classification");
 expect(monitor, /quarterHourSlot: batch\.quarterHourSlot/, "operational telemetry must expose a bounded selection slot");
-expect(monitor, /auditVerificationProgress\.upsert/, "every checked tenant must have a durable outcome receipt");
-expect(monitor, /lastVerifiedSequence: confirmedSequence/, "successful checks must persist the MVCC-verified ledger sequence");
-expect(monitor, /lastResult: "INVALID"/, "failed checks must preserve a distinct durable failure receipt");
-expect(monitor, /consecutiveFailures: \{ increment: 1 \}/, "repeat integrity failures must remain visible");
+expect(monitor, /INSERT INTO "AuditVerificationProgress" AS progress/, "every checked tenant must have a durable outcome receipt");
+expect(monitor, /\$\{confirmedSequence\}/, "successful checks must bind the MVCC-verified ledger sequence");
+expect(monitor, /"lastResult" = 'INVALID'/, "failed checks must preserve a distinct durable failure receipt");
+expect(monitor, /LEAST\(progress\."consecutiveFailures"::bigint \+ 1, 2147483647\)::integer/,
+  "repeat integrity failures must remain visible without overflowing their counter");
+expect(monitor, /progress\."lastAttemptAt" < EXCLUDED\."lastAttemptAt"/,
+  "older success receipts must be rejected inside the atomic database update");
+expect(monitor, /progress\."lastVerifiedSequence" <= EXCLUDED\."lastVerifiedSequence"/,
+  "a success receipt must never regress its existing sequence watermark");
+expect(monitor, /AUDIT_VERIFICATION_PROGRESS_CONFLICT/, "rejected success receipts must not produce green maintenance runs");
+expect(monitor, /await tx\.\$executeRaw`/, "failure receipts must use the notification transaction's client");
+reject(monitor, /\$executeRawUnsafe|\$queryRawUnsafe|Prisma\.raw\(/,
+  "receipt SQL must use bound tagged templates, never unsafe SQL construction");
 expect(monitor, /staleOrUnverified24h/, "missing or overdue tenant coverage must remain visible as an aggregate");
 expect("prisma/schema.prisma", /model AuditVerificationProgress/, "audit coverage must have a migrated tenant-owned table");
 expect(".github/workflows/ci.yml", /scripts\/audit-verification-progress\.postgres\.test\.mjs/, "real PostgreSQL coverage regression must be in CI");
@@ -42,9 +51,9 @@ for (const path of [".env.example", ".env.onprem.example"]) {
     "on-prem and standard examples must choose the new bounded default");
 }
 const pkg = "package.json";
-expect(pkg, /"audit-integrity:validate": "node scripts\/validate-audit-integrity-monitor\.mjs && node --test scripts\/audit-integrity-monitoring\.test\.mjs/, 
+expect(pkg, /"audit-integrity:validate": "node scripts\/validate-audit-integrity-monitor\.mjs && node --test scripts\/audit-integrity-monitoring\.test\.mjs/,
   "bounded audit monitoring behavioral test must stay registered");
-expect(pkg, /"audit-integrity:validate":[^\n]*scripts\/audit-full-history-verification\.test\.mjs/, 
+expect(pkg, /"audit-integrity:validate":[^\n]*scripts\/audit-full-history-verification\.test\.mjs/,
   "operator-only genesis-to-tail verification behavioral tests must also run in the audit gate");
 expect(pkg, /npm run maintenance:validate && npm run audit-integrity:validate && npm run hire:validate/,
   "audit integrity verification must gate production builds");

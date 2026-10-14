@@ -8,6 +8,17 @@ A successful record preserves the exact audit-ledger sequence obtained from the 
 
 The internal maintenance job also returns aggregate-only `verifiedWithin24h` and `staleOrUnverified24h` counts. Unchecked tenants, including newly created tenants with no receipt, **and tenants whose most recent attempt is INVALID**, are counted as stale/unverified rather than silently excluded. This is a descriptive 24-hour freshness window, **not** a guaranteed enterprise coverage SLA: when many tenants exist, the batch cycle can legitimately exceed 24 hours.
 
+## Overlapping, delayed and repeated invocations
+
+Receipt updates are conditional PostgreSQL `INSERT ... ON CONFLICT DO UPDATE` statements with bound values. Ordering checks run atomically against the conflicting receipt, not through a separate read followed by an unconditional write.
+
+- An older success cannot overwrite a newer attempt, and no success can lower the persisted last-known-good sequence. Rejection raises `AUDIT_VERIFICATION_PROGRESS_CONFLICT`; the invocation is not green and the existing receipt remains unchanged.
+- At equal invocation timestamps, an invalid result takes precedence over a valid result. Repeated delivery of that same invalid attempt does not increment the failure counter again. Counters saturate at the PostgreSQL integer maximum rather than overflowing and rolling back the alert.
+- A delayed failure does not replace a newer recovery receipt, but it still goes through the restricted notification outbox and makes its own invocation fail. Alert errors still roll back receipt changes within the same transaction.
+- Ordering uses the internally supplied invocation-start timestamp, not an authenticated historical trust anchor. Keep deployment clocks synchronized. A progress conflict is an operational ordering/regression signal, **not by itself proof of malicious ledger modification**. Investigate overlapping invocations, clock changes or a restored database; allow a fresh normally scheduled check after the cause is understood. Never replay maintenance POST requests blindly or rewrite evidence to remove the conflict.
+
+These guards do not supply a durable tenant-selection cursor, a cross-run full-history scanner, exactly-once job execution, or independently trusted audit checkpoints.
+
 ## Security and operation
 
 - The table is owned by each tenant through `tenantId` and deletes along with the tenant. It contains no employee event body, certificate, credential, or copy of the audit chain.
@@ -26,4 +37,4 @@ The P0 intermittent maintenance HTTP 503 root-cause investigation is separately 
 
 ## Acceptance evidence
 
-The build gate checks schema parity and unit-tested first success, invalid ledger, invalid EMPTY ledger, stale tenant counts and preserved good watermarks. Disposable PostgreSQL integration verifies that successful receipts persist, failures survive a RED maintenance result, receipt and alert roll back together on a simulated notification failure, and subsequent success resets consecutive failures. None of these tests claims customer environment UAT has passed.
+The build gate checks schema parity and unit-tested first success, invalid ledger, invalid EMPTY ledger, stale tenant counts and preserved good watermarks. Disposable PostgreSQL integration verifies that successful receipts persist, failures survive a RED maintenance result, receipt and alert roll back together on a simulated notification failure, and subsequent success resets consecutive failures. It also exercises stale and regressing successes, equal-time precedence, delayed completion, simultaneous first-receipt writers, duplicate failures and counter saturation. None of these tests claims customer environment UAT has passed.

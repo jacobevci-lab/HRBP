@@ -24,17 +24,38 @@ const now = new Date("2026-10-14T13:00:00.000Z");
 function fixture({ tenantCount = 1, tenantBatch = 4, verificationLimit = 1500, verifyResult = null } = {}) {
   const calls = { count: 0, list: [], integrity: [], transactions: 0, notifications: [], checkpoints: [], coverageReads: 0 };
   const progress = new Map();
+  // Model the atomic receipt policy, not PostgreSQL's SQL engine. The real
+  // conditional INSERT/UPDATE and transaction races are exercised in CI's
+  // disposable audit-verification-progress.postgres.test.mjs.
+  const executeReceipt = async (strings, ...values) => {
+    assert.ok(Array.isArray(strings.raw), "receipt values must use a tagged, bound SQL template");
+    const sql = strings.join("?");
+    assert.match(sql, /ON CONFLICT \("tenantId"\) DO UPDATE/);
+    assert.match(sql, /WHERE .*progress\."lastAttemptAt"/s);
+    const [tenantId, at, outcomeAt] = values;
+    assert.equal(at.getTime(), outcomeAt.getTime());
+    calls.checkpoints.push({ sql, values });
+    const current = progress.get(tenantId);
+    if (values.length === 6) {
+      const [, , , sequence, scope, checked] = values;
+      if (current && (current.lastAttemptAt > at ||
+          (current.lastAttemptAt.getTime() === at.getTime() && current.lastResult !== "VALID") ||
+          (current.lastVerifiedSequence != null && current.lastVerifiedSequence > sequence))) return 0;
+      progress.set(tenantId, { ...current, tenantId, lastAttemptAt: at, lastSuccessAt: at,
+        lastVerifiedSequence: sequence, lastVerifiedScope: scope, lastResult: "VALID",
+        checkedEvents: checked, consecutiveFailures: 0 });
+    } else {
+      assert.equal(values.length, 4);
+      assert.match(sql, /'INVALID'/);
+      if (current && current.lastAttemptAt > at) return 0;
+      const duplicate = current?.lastAttemptAt.getTime() === at.getTime() && current?.lastResult === "INVALID";
+      progress.set(tenantId, { ...current, tenantId, lastAttemptAt: at, lastFailureAt: at,
+        lastResult: "INVALID", checkedEvents: values[3], consecutiveFailures: duplicate
+          ? current.consecutiveFailures : Math.min(2147483647, (current?.consecutiveFailures ?? 0) + 1) });
+    }
+    return 1;
+  };
   const progressDelegate = {
-    upsert: async args => {
-      calls.checkpoints.push(args);
-      const current = progress.get(args.where.tenantId);
-      const values = current ? { ...current, ...args.update } : { ...args.create };
-      if (current && typeof args.update.consecutiveFailures === "object") {
-        values.consecutiveFailures = current.consecutiveFailures + args.update.consecutiveFailures.increment;
-      }
-      progress.set(args.where.tenantId, values);
-      return values;
-    },
     count: async args => {
       calls.coverageReads++;
       const cutoff = args.where.lastSuccessAt.gte;
@@ -44,6 +65,7 @@ function fixture({ tenantCount = 1, tenantBatch = 4, verificationLimit = 1500, v
     }
   };
   const db = {
+    $executeRaw: executeReceipt,
     auditVerificationProgress: progressDelegate,
     tenant: {
       count: async () => { calls.count++; return tenantCount; },
@@ -60,7 +82,7 @@ function fixture({ tenantCount = 1, tenantBatch = 4, verificationLimit = 1500, v
     },
     $transaction: async fn => {
       calls.transactions++;
-      return fn({ auditVerificationProgress: progressDelegate });
+      return fn({ $executeRaw: executeReceipt });
     }
   };
   const mocks = {
@@ -74,7 +96,7 @@ function fixture({ tenantCount = 1, tenantBatch = 4, verificationLimit = 1500, v
     "@/lib/audit-integrity": {
       verifyAuditIntegrity: async (tenantId, limit) => {
         calls.integrity.push({ tenantId, limit });
-        const result = verifyResult ? verifyResult(tenantId) : {
+        const result = verifyResult ? await verifyResult(tenantId) : {
           valid: true, scope: "GENESIS", brokenEventId: null,
           checked: 1, verifiedThroughSequence: "1", reason: null, generatedAt: now.toISOString()
         };
@@ -280,4 +302,84 @@ test("static monitoring contract keeps a fail-closed invalid-empty branch", () =
   assert.match(source, /AUDIT_INTEGRITY_FAILURE/);
   assert.match(source, /db\.tenant\.count\(\)/);
   assert.doesNotMatch(source, /take:\s*10_000/);
+});
+
+test("a delayed success cannot erase a newer invalid receipt", async () => {
+  let result = { valid: false, scope: "TAIL", checked: 1, brokenEventId: "broken" };
+  const f = fixture({ verifyResult: () => result });
+  const later = new Date(now.getTime() + 60_000);
+  await assert.rejects(f.run(later), error => error.code === "AUDIT_INTEGRITY_FAILURE");
+  const invalid = { ...f.progress.get("tenant-0") };
+  result = { valid: true, scope: "TAIL", checked: 2, verifiedThroughSequence: "10" };
+  await assert.rejects(f.run(now), error => error.code === "AUDIT_VERIFICATION_PROGRESS_CONFLICT");
+  assert.deepEqual(f.progress.get("tenant-0"), invalid);
+});
+
+test("a success cannot move an existing sequence watermark backward", async () => {
+  let sequence = "10";
+  const f = fixture({ verifyResult: () => ({ valid: true, scope: "TAIL", checked: 2,
+    verifiedThroughSequence: sequence }) });
+  await f.run(now);
+  const saved = { ...f.progress.get("tenant-0") };
+  sequence = "9";
+  await assert.rejects(f.run(new Date(now.getTime() + 60_000)),
+    error => error.code === "AUDIT_VERIFICATION_PROGRESS_CONFLICT");
+  assert.deepEqual(f.progress.get("tenant-0"), saved);
+});
+
+test("an older failure cannot replace a newer recovery but still alerts and fails its invocation", async () => {
+  let result = { valid: true, scope: "TAIL", checked: 2, verifiedThroughSequence: "10" };
+  const f = fixture({ verifyResult: () => result });
+  const later = new Date(now.getTime() + 60_000);
+  await f.run(later);
+  const recovered = { ...f.progress.get("tenant-0") };
+  result = { valid: false, scope: "TAIL", checked: 1, brokenEventId: "old-broken" };
+  await assert.rejects(f.run(now), error => error.code === "AUDIT_INTEGRITY_FAILURE");
+  assert.deepEqual(f.progress.get("tenant-0"), recovered);
+  assert.equal(f.calls.notifications.length, 1);
+});
+
+test("equal-time failure wins and duplicate failure delivery does not inflate its count", async () => {
+  let result = { valid: true, scope: "GENESIS", checked: 2, verifiedThroughSequence: "2" };
+  const f = fixture({ verifyResult: () => result });
+  await f.run(now);
+  result = { valid: false, scope: "TAIL", checked: 1, brokenEventId: "equal-time-broken" };
+  for (let i = 0; i < 2; i++) {
+    await assert.rejects(f.run(now), error => error.code === "AUDIT_INTEGRITY_FAILURE");
+  }
+  assert.equal(f.progress.get("tenant-0").consecutiveFailures, 1);
+  assert.equal(f.progress.get("tenant-0").lastVerifiedSequence, 2n);
+  result = { valid: true, scope: "TAIL", checked: 2, verifiedThroughSequence: "3" };
+  await assert.rejects(f.run(now), error => error.code === "AUDIT_VERIFICATION_PROGRESS_CONFLICT");
+  await f.run(new Date(now.getTime() + 1));
+  assert.equal(f.progress.get("tenant-0").lastResult, "VALID");
+});
+
+test("overlapping invocations finishing out of order preserve the newer invalid outcome", async () => {
+  let releaseOlder;
+  let signalEntered;
+  const entered = new Promise(resolve => { signalEntered = resolve; });
+  const oldResult = new Promise(resolve => { releaseOlder = resolve; });
+  let count = 0;
+  const f = fixture({ verifyResult: async () => {
+    if (++count === 1) { signalEntered(); return oldResult; }
+    return { valid: false, scope: "TAIL", checked: 1, brokenEventId: "new-broken" };
+  } });
+  const older = f.run(now);
+  await entered;
+  await assert.rejects(f.run(new Date(now.getTime() + 60_000)),
+    error => error.code === "AUDIT_INTEGRITY_FAILURE");
+  const rejected = assert.rejects(older, error => error.code === "AUDIT_VERIFICATION_PROGRESS_CONFLICT");
+  releaseOlder({ valid: true, scope: "TAIL", checked: 2, verifiedThroughSequence: "10" });
+  await rejected;
+  assert.equal(f.progress.get("tenant-0").lastResult, "INVALID");
+  assert.equal(f.progress.get("tenant-0").consecutiveFailures, 1);
+});
+
+test("failure counters saturate instead of overflowing the PostgreSQL integer column", async () => {
+  const f = fixture({ verifyResult: () => ({ valid: false, scope: "TAIL", checked: 1, brokenEventId: "broken" }) });
+  await assert.rejects(f.run(now), error => error.code === "AUDIT_INTEGRITY_FAILURE");
+  f.progress.get("tenant-0").consecutiveFailures = 2147483647;
+  await assert.rejects(f.run(new Date(now.getTime() + 1)), error => error.code === "AUDIT_INTEGRITY_FAILURE");
+  assert.equal(f.progress.get("tenant-0").consecutiveFailures, 2147483647);
 });

@@ -25,28 +25,37 @@ async function recordSuccessfulAuditVerification(
   result: { verifiedThroughSequence: string | null; scope: "GENESIS" | "TAIL" | "EMPTY"; checked: number }
 ) {
   const confirmedSequence = verifiedLedgerWatermark(result.verifiedThroughSequence);
-  await db.auditVerificationProgress.upsert({
-    where: { tenantId },
-    create: {
-      tenantId,
-      lastAttemptAt: now,
-      lastSuccessAt: now,
-      lastVerifiedSequence: confirmedSequence,
-      lastVerifiedScope: result.scope,
-      lastResult: "VALID",
-      checkedEvents: result.checked,
-      consecutiveFailures: 0
-    },
-    update: {
-      lastAttemptAt: now,
-      lastSuccessAt: now,
-      lastVerifiedSequence: confirmedSequence,
-      lastVerifiedScope: result.scope,
-      lastResult: "VALID",
-      checkedEvents: result.checked,
-      consecutiveFailures: 0
-    }
-  });
+  // A read-then-upsert guard races under overlapping invocations. PostgreSQL
+  // evaluates this conditional update while holding the conflicting row lock.
+  // Values are bound parameters; no employee data or SQL identifiers are interpolated.
+  const recorded = await db.$executeRaw`
+    INSERT INTO "AuditVerificationProgress" AS progress
+      ("tenantId", "lastAttemptAt", "lastSuccessAt", "lastVerifiedSequence",
+       "lastVerifiedScope", "lastResult", "checkedEvents", "consecutiveFailures")
+    VALUES (${tenantId}, ${now}, ${now}, ${confirmedSequence},
+            ${result.scope}, 'VALID', ${result.checked}, 0)
+    ON CONFLICT ("tenantId") DO UPDATE SET
+      "lastAttemptAt" = EXCLUDED."lastAttemptAt",
+      "lastSuccessAt" = EXCLUDED."lastSuccessAt",
+      "lastVerifiedSequence" = EXCLUDED."lastVerifiedSequence",
+      "lastVerifiedScope" = EXCLUDED."lastVerifiedScope",
+      "lastResult" = 'VALID',
+      "checkedEvents" = EXCLUDED."checkedEvents",
+      "consecutiveFailures" = 0
+    WHERE (progress."lastAttemptAt" < EXCLUDED."lastAttemptAt"
+      OR (progress."lastAttemptAt" = EXCLUDED."lastAttemptAt"
+          AND progress."lastResult" = 'VALID'))
+      AND (progress."lastVerifiedSequence" IS NULL
+           OR progress."lastVerifiedSequence" <= EXCLUDED."lastVerifiedSequence")
+  `;
+  if (recorded !== 1) {
+    // Never mark an invocation green when its receipt was rejected. A delayed
+    // snapshot is not proof of tampering; report a bounded operational conflict,
+    // preserve the newer receipt and require a fresh, normally scheduled check.
+    throw Object.assign(new Error("Audit verification progress rejected a stale or regressing success."), {
+      code: "AUDIT_VERIFICATION_PROGRESS_CONFLICT"
+    });
+  }
 }
 
 export async function monitorAuditIntegrity(now = new Date()) {
@@ -92,26 +101,28 @@ export async function monitorAuditIntegrity(now = new Date()) {
     failed += 1;
     const brokenEventId = result.brokenEventId ?? "unknown";
     const queued = await db.$transaction(async (tx) => {
-      // Alert and failure receipt must commit together. If the scheduler then
-      // returns HTTP 500, existing receipts survive and success is never forged.
-      await tx.auditVerificationProgress.upsert({
-        where: { tenantId: tenant.id },
-        create: {
-          tenantId: tenant.id,
-          lastAttemptAt: now,
-          lastFailureAt: now,
-          lastResult: "INVALID",
-          checkedEvents: result.checked,
-          consecutiveFailures: 1
-        },
-        update: {
-          lastAttemptAt: now,
-          lastFailureAt: now,
-          lastResult: "INVALID",
-          checkedEvents: result.checked,
-          consecutiveFailures: { increment: 1 }
-        }
-      });
+      // Keep failure receipt and restricted alert in the same transaction.
+      // An old failure cannot undo a newer recovery, but still alerts and fails
+      // this invocation. At equal timestamps INVALID wins over VALID; repeated
+      // delivery of that same failure does not inflate consecutiveFailures.
+      await tx.$executeRaw`
+        INSERT INTO "AuditVerificationProgress" AS progress
+          ("tenantId", "lastAttemptAt", "lastFailureAt", "lastResult",
+           "checkedEvents", "consecutiveFailures")
+        VALUES (${tenant.id}, ${now}, ${now}, 'INVALID', ${result.checked}, 1)
+        ON CONFLICT ("tenantId") DO UPDATE SET
+          "lastAttemptAt" = EXCLUDED."lastAttemptAt",
+          "lastFailureAt" = EXCLUDED."lastFailureAt",
+          "lastResult" = 'INVALID',
+          "checkedEvents" = EXCLUDED."checkedEvents",
+          "consecutiveFailures" = CASE
+            WHEN progress."lastAttemptAt" = EXCLUDED."lastAttemptAt"
+              AND progress."lastResult" = 'INVALID'
+            THEN progress."consecutiveFailures"
+            ELSE LEAST(progress."consecutiveFailures"::bigint + 1, 2147483647)::integer
+          END
+        WHERE progress."lastAttemptAt" <= EXCLUDED."lastAttemptAt"
+      `;
       const notification = await enqueueNotificationOutbox(tx, {
         tenantId: tenant.id,
         eventType: "AUDIT_INTEGRITY_FAILURE",
