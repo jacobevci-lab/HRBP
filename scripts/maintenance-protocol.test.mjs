@@ -189,6 +189,50 @@ test("unclassified 503 on audit integrity stops safely with a bounded diagnostic
   }
 });
 
+test("503 emits only allowlisted CF-Ray and never untrusted provider headers", async () => {
+  const valid = "a1b2c3d4e5f60718-IST";
+  const privateValue = "customer-credential-private-value";
+  const scenarios = [
+    { headers: { "cf-ray": valid, "x-request-id": privateValue }, expected: valid },
+    { headers: { "cf-ray": "INVALID-" + privateValue, "x-request-id": privateValue }, expected: null },
+    { headers: { "cf-ray": privateValue, "x-request-id": valid }, expected: null },
+    { headers: { "x-request-id": privateValue }, expected: null }
+  ];
+  for (const scenario of scenarios) {
+    const transport = fakeTransport(job => job === "audit-integrity"
+      ? new Response("upstream details " + privateValue, { status: 503, headers: scenario.headers })
+      : Response.json(result(job)));
+    const recorded = [];
+    const report = await runMaintenance({ ...config, fetchImpl: transport.fetchImpl,
+      log: entry => recorded.push(entry) });
+    const failure = report.results.at(-1);
+    assert.equal(failure.job, "audit-integrity");
+    assert.equal(failure.code, "HTTP_503_UNCLASSIFIED_STOPPED");
+    assert.equal(failure.cfRay ?? null, scenario.expected);
+    assert.equal(report.stopped, true);
+    assert.equal(transport.calls.filter(x => x.job === "audit-integrity").length, 1);
+    assert.ok(!JSON.stringify(report).includes(privateValue));
+    assert.ok(!JSON.stringify(recorded).includes(privateValue));
+    const summary = markdownSummary(report);
+    assert.ok(!summary.includes(privateValue));
+    assert.ok(!summary.includes(config.token));
+    if (scenario.expected) assert.ok(summary.includes(valid));
+  }
+});
+
+test("confirmed Worker 1102 keeps its classification and safe correlation reference", async () => {
+  const cfRay = "0123456789abcdef-FRA";
+  const transport = fakeTransport(job => job === "learning-lifecycle"
+    ? new Response("error code: 1102", { status: 503, headers: { "cf-ray": cfRay } })
+    : Response.json(result(job)));
+  const report = await runMaintenance({ ...config, fetchImpl: transport.fetchImpl });
+  assert.equal(report.stopped, false);
+  assert.equal(report.success, false);
+  assert.equal(report.results[1].code, "WORKER_RESOURCE_LIMIT_1102");
+  assert.equal(report.results[1].cfRay, cfRay);
+  assert.equal(transport.calls.filter(x => x.job === "learning-lifecycle").length, 1);
+});
+
 for (const variant of ["html", "unauthorized", "all-mode", "wrong-job", "missing-data", "bad-duration", "failed-with-200", "unexpected-failures"]) {
   test(`unsafe response stops subsequent jobs: ${variant}`, async () => {
     const transport = fakeTransport((job) => {
