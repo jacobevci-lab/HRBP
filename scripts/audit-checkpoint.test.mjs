@@ -217,7 +217,9 @@ test("artifact publication uses restrictive permissions and never overwrites exi
       assert.deepEqual(parseAuditCheckpoint(readFileSync(fd, "utf8")), value);
     } finally { closeSync(fd); }
     assert.throws(() => writeCheckpointFile(f.out, value));
-    assert.equal(readFileSync(f.out, "utf8"), encodeAuditCheckpoint(value));
+    // Re-open through the bounded no-follow reader, which rechecks the actual
+    // opened descriptor; never reuse an earlier permission check for a path read.
+    assert.equal(readCheckpointFile(f.out).toString("utf8"), encodeAuditCheckpoint(value));
     const link = join(f.dir, "link.json"); symlinkSync(f.out, link);
     assert.throws(() => writeCheckpointFile(link, value));
     assert.throws(() => readCheckpointFile(link));
