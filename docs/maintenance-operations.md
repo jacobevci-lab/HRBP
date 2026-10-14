@@ -122,3 +122,7 @@ re-evaluated on the next pass rather than overwriting a newer assignment.
 Fourteen additional tests cover boundary conditions, candidate-selection
 consistency, saturated batches and the stale-write query contract. These are
 unit/query-wiring tests, not a production concurrency or load test.
+
+## Integrity failure is a failed maintenance run
+
+If the audit verifier detects an invalid chain, it must enqueue the existing tenant-scoped administrator notification and **fail** the selected audit-integrity job after that alert is committed. A successful notification is not evidence the ledger is valid. The maintenance endpoint must return its bounded `AUDIT_INTEGRITY_FAILURE` diagnostic (HTTP 500 in the protocol), so the scheduler stays red without automatic POST retries. An invalid or contradictory summary fails closed with `AUDIT_INTEGRITY_RESULT_INVALID`. Do not reset ledger state, disable verification, or mark such a run as successful.
