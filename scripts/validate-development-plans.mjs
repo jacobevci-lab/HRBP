@@ -42,6 +42,9 @@ expect(assignmentPath, assignment, /can\(ctx,\s*"talent:write"\)[\s\S]*can\(ctx,
 expect(assignmentPath, assignment, /canActOnEmployment/, "development-plan learning assignment must enforce relationship scope");
 expect(assignmentPath, assignment, /dueAt\s*>\s*plan\.targetAt/, "learning action due dates must remain within the development plan target");
 expect(assignmentPath, assignment, /developmentPlanId:\s*plan\.id/, "learning action must be linked to its development plan");
+expect(assignmentPath, assignment, /employmentId:\s*plan\.employmentId,\s*courseId,\s*status:/, "plan learning must block all open employee-course obligations across sources");
+expect(assignmentPath, assignment, /TransactionIsolationLevel\.Serializable/, "plan learning creation must protect the duplicate check with serializable transactions");
+expect(assignmentPath, assignment, /prismaCode === "P2034"/, "plan learning must return bounded conflicts for concurrent writes");
 expect(assignmentPath, assignment, /enqueueLearningAssignmentNotification/, "new plan learning actions must notify the employee");
 expect(assignmentPath, assignment, /development-plan\.learning-assignment-created/, "plan learning linkage must emit audit evidence");
 
