@@ -57,4 +57,8 @@ if (failures.length) {
 // without changing the workflow permissions or weakening any existing checks.
 const tests = spawnSync(process.execPath, ["--test", "scripts/audit-verification-schedule.test.mjs"], { stdio: "inherit" });
 if (tests.error || tests.status !== 0) process.exit(1);
+// Operator evidence crypto, filesystem and offline/anchored verification are
+// exercised without a production database or signing credentials.
+const checkpointTests = spawnSync(process.execPath, ["--test", "scripts/audit-checkpoint.test.mjs"], { stdio: "inherit" });
+if (checkpointTests.error || checkpointTests.status !== 0) process.exit(1);
 console.log("Audit integrity monitoring uses bounded, fenced, durable tenant coverage.");
