@@ -1,0 +1,77 @@
+name: UI Deep Inspection
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - scripts/ui-deep-audit.mjs
+      - .github/workflows/ui-deep-inspection.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ui-deep-inspection-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: postgresql://hrbp:disposable-ui-only@127.0.0.1:5432/hrbp_audit
+      CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://hrbp:disposable-ui-only@127.0.0.1:5432/hrbp_audit
+      HRBP_DISPOSABLE_AUDIT: "true"
+      HRBP_LOCAL_AUTH_ENABLED: "true"
+      HRBP_AUTH_TENANT_ID: tenant-acme-global
+      HRBP_UI_PUBLIC_PROBE: "true"
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Initialize disposable database and ephemeral local secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .audit
+          sudo systemctl start postgresql
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE hrbp LOGIN PASSWORD 'disposable-ui-only' CREATEDB"
+          sudo -u postgres createdb -O hrbp hrbp_audit
+          for name in HRBP_SESSION_SECRET HRBP_TEST_ADMIN_PASSWORD HRBP_ENGAGEMENT_RESPONSE_SECRET; do
+            value=$(openssl rand -hex 48)
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+      - name: Install application and Chromium
+        run: |
+          npm ci > .audit/install.log 2>&1
+          npm install --no-save --package-lock=false playwright@1.56.1 > .audit/playwright-install.log 2>&1
+          npx playwright install --with-deps chromium > .audit/browser-install.log 2>&1
+      - name: Migrate and seed isolated product domains
+        run: |
+          npx prisma generate > .audit/schema.log 2>&1
+          npm run db:migrate:upgrade >> .audit/schema.log 2>&1
+          for script in seed-staging seed-work-pay-staging seed-access-staging seed-growth-staging seed-connected-growth-staging seed-services-staging seed-service-governance-staging seed-governance-planning-staging; do
+            node "scripts/$script.mjs" >> .audit/seed.log 2>&1 || { tail -40 .audit/seed.log; exit 1; }
+          done
+      - name: Build actual production application
+        run: npx next build > .audit/build.log 2>&1 || { tail -80 .audit/build.log; exit 1; }
+      - name: Inspect six UI variants, internal links and named valid CRUD workflows
+        run: |
+          node node_modules/next/dist/bin/next start --hostname localhost --port 3100 > .audit/server.log 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          ready=0
+          for i in {1..30}; do
+            if curl --fail --silent http://localhost:3100/api/health/runtime >/dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1 || { tail -60 .audit/server.log; exit 1; }
+          node scripts/ui-deep-audit.mjs
+      - name: Preserve report and synthetic screenshots even on findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hrbp-ui-deep-inspection
+          path: .audit/
+          include-hidden-files: true
+          retention-days: 7
