@@ -299,6 +299,7 @@ export function notificationResourceHref(resourceType: string, resourceId?: stri
   if (resourceType === "SuccessionCandidate") return id ? `/module/succession?candidate=${encodeURIComponent(id)}` : "/module/succession";
   if (resourceType === "DevelopmentPlan") return id ? `/module/talent?developmentPlan=${encodeURIComponent(id)}` : "/module/talent";
   if (resourceType === "DevelopmentPlanParticipant") return id ? `/module/learning?developmentPlan=${encodeURIComponent(id)}` : "/module/learning";
+  if (resourceType === "BenefitEnrollment") return id ? `/module/benefits?enrollment=${encodeURIComponent(id)}` : "/module/benefits";
   if (resourceType === "BenefitPlan") return id ? `/module/benefits?plan=${encodeURIComponent(id)}` : "/module/benefits";
   if (resourceType === "AuditEvent") return id ? `/module/audit?q=${encodeURIComponent(id)}` : "/module/audit";
   return "/";

@@ -1,4 +1,5 @@
 import { readdir } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 
 const appDir = path.resolve("app");
@@ -54,4 +55,7 @@ if (conflicts.length) {
   process.exit(1);
 }
 
-console.log(`Validated ${routeFiles.length} Next.js route/page files: dynamic segment names are consistent.`);
+const focusTests = spawnSync(process.execPath, ["--test", "scripts/growth-notification-focus.test.mjs"], { stdio: "inherit" });
+if (focusTests.error || focusTests.status !== 0) process.exit(1);
+
+console.log(`Validated ${routeFiles.length} Next.js route/page files: dynamic segment names and governed Growth notification deep links are consistent.`);

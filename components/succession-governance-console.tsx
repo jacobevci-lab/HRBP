@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, BookOpenCheck, CheckCircle2, CircleAlert, Clock3, ShieldCheck, Sparkles, Trash2, UsersRound } from "lucide-react";
 import { useLocale } from "@/components/locale-provider";
@@ -46,6 +46,13 @@ export function SuccessionGovernanceConsole({ plans, courses, skills, allowLearn
   const c = (en: string, tr: string) => locale === "tr" ? tr : en;
   const [pending, setPending] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const focusCandidateId = plans.flatMap((plan) => plan.candidates).find((candidate) => candidate.focused)?.id;
+
+  useEffect(() => {
+    if (!focusCandidateId) return;
+    document.getElementById(`succession-candidate-${focusCandidateId}`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [focusCandidateId]);
 
   async function mutate(key: string, url: string, method: "POST" | "PATCH" | "DELETE", payload?: Record<string, unknown>) {
     setPending(key);
@@ -120,7 +127,7 @@ export function SuccessionGovernanceConsole({ plans, courses, skills, allowLearn
       </form>
 
       {plan.active && plan.candidates.length ? <div className="growth-lifecycle-list">{plan.candidates.map((candidate) => <Fragment key={candidate.id}>
-        <form className="growth-lifecycle-row" onSubmit={(event) => {
+        <form id={`succession-candidate-${candidate.id}`} className={`growth-lifecycle-row${candidate.focused ? " focused" : ""}`} onSubmit={(event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
           void mutate(`candidate-${candidate.id}`, `/api/succession/candidates/${candidate.id}`, "PATCH", {

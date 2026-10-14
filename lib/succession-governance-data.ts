@@ -1,5 +1,6 @@
 import { EmploymentStatus } from "@prisma/client";
 import { withDb } from "@/lib/db";
+import { isOwnedSuccessionFocus } from "@/lib/succession-focus";
 import { employmentIdFilter, employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
 import type { RequestContext } from "@/lib/request-context";
 
@@ -26,6 +27,7 @@ export type SuccessionDevelopmentAssignment = {
 
 export type SuccessionCandidateOperation = {
   id: string;
+  focused: boolean;
   employmentId: string;
   person: string;
   employeeNumber: string;
@@ -146,9 +148,11 @@ export async function getSuccessionGovernanceData(
 
     // Action Center succession focus is owner-bound. Keep normal relationship-scoped
     // data visible, but never honor a manipulated focus id owned by another actor.
-    const focusVisible = !focusId || plans.some((plan) => plan.id === focusId && plan.ownerId === ctx.actorId);
+    const focusVisible = !focusId || plans.some((plan) => isOwnedSuccessionFocus(plan, focusId, ctx.actorId));
     const orderedPlans = focusId && focusVisible
-      ? [...plans].sort((left, right) => left.id === focusId ? -1 : right.id === focusId ? 1 : 0)
+      ? [...plans].sort((left, right) =>
+          Number(isOwnedSuccessionFocus(right, focusId, ctx.actorId)) -
+          Number(isOwnedSuccessionFocus(left, focusId, ctx.actorId)))
       : plans;
 
     const positionIds = [...new Set(orderedPlans.map((plan) => plan.positionId))];
@@ -234,6 +238,7 @@ export async function getSuccessionGovernanceData(
             const latestTalent = latestTalentMap.get(candidate.employmentId);
             return {
               id: candidate.id,
+              focused: candidate.id === focusId && plan.ownerId === ctx.actorId,
               employmentId: candidate.employmentId,
               person: employment ? `${employment.person.givenName} ${employment.person.familyName}` : candidate.employmentId,
               employeeNumber: employment?.person.employeeNumber ?? "—",
