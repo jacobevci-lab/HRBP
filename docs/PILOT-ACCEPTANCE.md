@@ -101,7 +101,7 @@ The customer may explicitly mark optional modules NOT IN PILOT, with a named own
 | OPS-02 | Approved upgrade with test data | Pre-upgrade snapshot, checksummed backup, migration state and verified postflight |
 | OPS-03 | Disposable backup/restore rehearsal | Database and private objects restored to exact earlier state; no real production erase |
 | OPS-04 | Scheduler partial failure/503 | Failure stays RED; unclassified 503 stops later jobs; no automatic POST retry; operator investigates before targeted rerun |
-| OPS-05 | Audit ledger verification | Tail consistency and immutable evidence; any suspected failure investigated, never ignored |
+| OPS-05 | Audit ledger verification | Tail consistency, invalid-empty ledger alerts, bounded rotating tenant batches; any suspected failure investigated, never ignored, with actual customer coverage evidence |
 | OPS-06 | Identity and SCIM integration | Create/deactivate/rotate with exact tenant mapping and positive/negative tests |
 | OPS-07 | SMTP/notification routing (if enabled) | Provider TLS, recipient role, retry, dead letter and no sensitive email leakage |
 | OPS-08 | Capacity, outage and recovery | Customer-agreed peak throughput, resource limits, RPO/RTO and outage recovery measured on representative fixture load |
