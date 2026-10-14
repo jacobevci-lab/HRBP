@@ -19,6 +19,15 @@ for (const job of MAINTENANCE_JOBS) {
 const declaration = await readFile("lib/maintenance-protocol.d.mts", "utf8");
 for (const job of MAINTENANCE_JOBS) expect("maintenance-protocol.d.mts", declaration, new RegExp(`"${job}"`), "runtime and TypeScript job manifests must agree");
 
+const integrityPath = "lib/audit-integrity.ts";
+const integrity = await readFile(integrityPath, "utf8");
+expect(integrityPath, integrity, /db\.\$transaction\(async \(tx\) =>/, "audit state and event rows must share one callback-scoped transaction");
+expect(integrityPath, integrity, /await tx\.auditLedgerState\.findUnique/, "audit ledger state must be read on transaction client");
+expect(integrityPath, integrity, /await tx\.auditEvent\.findMany/, "audit event rows must be read on the same transaction client");
+reject(integrityPath, integrity, /db\.auditEvent\.findMany/, "audit event reads must not escape the callback transaction");
+expect(integrityPath, integrity, /isolationLevel: Prisma\.TransactionIsolationLevel\.RepeatableRead/, "audit verification must use one consistent MVCC snapshot");
+reject(integrityPath, integrity, /const \[state, rows\] = await Promise\.all/, "independent committed snapshots can cause false integrity alerts");
+
 const workflowPath = ".github/workflows/operational-maintenance.yml";
 const workflow = await readFile(workflowPath, "utf8");
 expect(workflowPath, workflow, /node scripts\/run-operational-maintenance\.mjs/, "scheduler must use the protocol-aware single-job runner");
@@ -33,6 +42,6 @@ if (failures.length) {
   process.exit(1);
 }
 // These execute production orchestration/runner code, not source-text approximations of behavior.
-const behavior = spawnSync(process.execPath, ["--test", "scripts/maintenance-protocol.test.mjs", "scripts/service-sla-policy.test.mjs"], { stdio: "inherit" });
+const behavior = spawnSync(process.execPath, ["--test", "scripts/maintenance-protocol.test.mjs", "scripts/service-sla-policy.test.mjs", "scripts/audit-integrity-snapshot.test.mjs"], { stdio: "inherit" });
 if (behavior.error || behavior.status !== 0) process.exit(1);
 console.log("Maintenance resilience contract and behavioral validation passed.");
