@@ -52,6 +52,7 @@ The runner never automatically retries a POST:
 | --- | --- |
 | `JOB_FAILED` | A structured domain failure was returned. Later domains continue; the overall workflow stays failed. Inspect domain diagnostics before a targeted rerun. |
 | `WORKER_RESOURCE_LIMIT_1102` | The selected Worker invocation returned 503/1102. Later domains continue. Profile the named domain; splitting the dispatcher cannot cure an oversized individual job. |
+| `HTTP_503_UNCLASSIFIED_STOPPED` | The selected job returned HTTP 503 without a confirmed 1102 signature. Stop subsequent jobs and do not auto-retry; determine whether the deployment/edge rejected the request or the handler may have run, then inspect audit, outbox and database outcomes. |
 | `OUTCOME_UNKNOWN_CHECK_BEFORE_RETRY` | Transport failure, timeout or unreadable/oversized response. Stop the sequence. Check audit/outbox/state before retrying because a transaction may already have committed. |
 | `PROTOCOL_UNAVAILABLE_DEPLOY_REQUIRED` | The capability probe failed or the deployment is incompatible. No POST is sent. Verify the Worker release and credentials. |
 | `UNEXPECTED_RESPONSE_STOPPED` | Authentication failure, malformed response or changed deployment contract after preflight. Stop safely and investigate. |
@@ -62,6 +63,12 @@ Credentials are never sent across redirects. Response reads are bounded at
 HTTP code, elapsed wall time and bounded diagnostic identifiers—not raw
 response bodies, SQL, employee records or bearer tokens. Wall time is not CPU
 time. An incomplete run remains failed; it is not reported as successful.
+
+## 14 October audit-integrity incident evidence
+
+One scheduled invocation (14 October 2026, 00:29 UTC, GitHub run `38490439003`) returned HTTP 503 for `audit-integrity` after prior maintenance domains succeeded. The existing safe runner reported `UNEXPECTED_RESPONSE_STOPPED`. The response did **not** contain a confirmed Cloudflare 1102 signature. A later scheduled invocation (`38515821818`) returned HTTP 200 for the audit-integrity job. This does not establish the root cause and is not evidence of a ledger compromise.
+
+For another unclassified 503: preserve the failing run ID, selected job and timestamp, inspect the exact deployed Worker/edge logs and database connection health in the same time window, confirm the audit ledger and notification outbox state, and verify the last completed job before deciding whether to manually trigger **only** the affected maintenance job. Do not replay `all`, infer that 503 guarantees rollback, or disable audit verification to turn the workflow green. Escalate repeated 503 events to a load/resource and edge availability investigation with tenant-safe diagnostics.
 
 ## Deployment order
 

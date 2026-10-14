@@ -121,9 +121,13 @@ export async function runMaintenance({ url, token, job = "all", localSmoke = fal
       response.body.execution.jobs[0].status === "failed" && Array.isArray(failures) &&
       failures.length === 1 && failures[0]?.job === selectedJob;
     const resourceLimit = response.status === 503 && response.resourceLimit;
+    // HTTP 503 without a confirmed Worker 1102 signature is an unknown outcome.
+    // Keep the stop/no-retry boundary and identify it without exposing upstream content.
+    const unclassified503 = response.status === 503 && !resourceLimit;
     const result = { job: selectedJob, status: success ? "success" : "failed", httpStatus: response.status,
       durationMs: Date.now() - startedAt,
       ...(success ? {} : { code: resourceLimit ? "WORKER_RESOURCE_LIMIT_1102" :
+        unclassified503 ? "HTTP_503_UNCLASSIFIED_STOPPED" :
         knownJobFailure ? "JOB_FAILED" : "UNEXPECTED_RESPONSE_STOPPED" }) };
     report.results.push(result);
     log(result);

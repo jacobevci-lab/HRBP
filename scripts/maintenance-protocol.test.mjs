@@ -160,6 +160,35 @@ test("Cloudflare 1102 is attributed to its domain without retrying it or suppres
   assert.equal(report.results.at(-1).status, "success");
 });
 
+test("unclassified 503 on audit integrity stops safely with a bounded diagnostic and no blind retry", async () => {
+  const privateResponse = "upstream unavailable: " + token;
+  for (const responseFactory of [
+    () => new Response(privateResponse, { status: 503 }),
+    () => Response.json({ error: privateResponse }, { status: 503 })
+  ]) {
+    const reports = [];
+    const transport = fakeTransport((job) => job === "audit-integrity"
+      ? responseFactory() : Response.json(result(job)));
+    const report = await runMaintenance({ ...config, fetchImpl: transport.fetchImpl, log: entry => reports.push(entry) });
+    assert.equal(report.success, false);
+    assert.equal(report.stopped, true);
+    assert.deepEqual(report.results.at(-1), {
+      job: "audit-integrity",
+      status: "failed",
+      httpStatus: 503,
+      durationMs: report.results.at(-1).durationMs,
+      code: "HTTP_503_UNCLASSIFIED_STOPPED"
+    });
+    assert.equal(transport.calls.filter(call => call.job === "audit-integrity").length, 1);
+    assert.equal(transport.calls.some(call => call.job === "operational-maintenance"), false);
+    assert.ok(!JSON.stringify(report).includes(token));
+    assert.ok(!JSON.stringify(reports).includes(token));
+    const summary = markdownSummary(report);
+    assert.match(summary, /HTTP_503_UNCLASSIFIED_STOPPED/);
+    assert.ok(!summary.includes(privateResponse));
+  }
+});
+
 for (const variant of ["html", "unauthorized", "all-mode", "wrong-job", "missing-data", "bad-duration", "failed-with-200", "unexpected-failures"]) {
   test(`unsafe response stops subsequent jobs: ${variant}`, async () => {
     const transport = fakeTransport((job) => {
