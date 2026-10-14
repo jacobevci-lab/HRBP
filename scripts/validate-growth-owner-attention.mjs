@@ -26,7 +26,7 @@ reject(growthPath, growth, /start-learning-assignment[\s\S]*COMPLETED/, "Action 
 
 const pagePath = "app/module/[slug]/page.tsx";
 const page = await source(pagePath);
-expect(pagePath, page, /pickGrowthFocus\(slug, search\)/, "module routing must use the bounded domain-specific growth focus parser");
+expect(pagePath, page, /pickGrowthFocus\(slug as GrowthSlug,\s*search\)/, "module routing must use the bounded domain-specific growth focus parser");
 const growthFocusPath = "lib/growth-route-focus.ts";
 const growthFocus = await source(growthFocusPath);
 expect(growthFocusPath, growthFocus, /talent: \["developmentPlan"\]/, "talent focus accepts development-plan notification targets");

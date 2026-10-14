@@ -1,5 +1,5 @@
 import { readJsonObject } from "@/lib/input-validation";
-import { DataClassification, DevelopmentPlanStatus, LearningAssignmentStatus } from "@prisma/client";
+import { DataClassification, DevelopmentPlanStatus, LearningAssignmentStatus, Prisma } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
@@ -64,7 +64,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         tx.learningAssignment.findFirst({
           where: {
             tenantId: ctx.tenantId,
-            developmentPlanId: plan.id,
+            employmentId: plan.employmentId,
             courseId,
             status: { in: [LearningAssignmentStatus.ASSIGNED, LearningAssignmentStatus.IN_PROGRESS, LearningAssignmentStatus.OVERDUE] }
           },
@@ -115,17 +115,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         course: { code: course.code, title: course.title },
         skill: { code: skill.code, name: skill.name }
       };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return Response.json({ data }, { status: 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
+    const prismaCode = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
     if (code === "NOT_FOUND") return Response.json({ error: "Development plan not found in tenant." }, { status: 404 });
     if (code === "PLAN_LOCKED") return Response.json({ error: "Learning actions can only be added to draft or active development plans." }, { status: 409 });
     if (code === "SKILL_TARGET_REQUIRED") return Response.json({ error: "A focus skill and target proficiency are required before adding learning actions." }, { status: 409 });
     if (code === "DUE_AFTER_PLAN_TARGET") return Response.json({ error: "Learning due date cannot be after the development plan target date." }, { status: 400 });
     if (code === "OUT_OF_SCOPE") return forbidden("Development plan employee is outside your authorized relationship scope.");
     if (code === "REFERENCE_NOT_FOUND") return Response.json({ error: "Active course or focus skill was not found in tenant." }, { status: 404 });
-    if (code === "DUPLICATE_OPEN_ASSIGNMENT") return Response.json({ error: "This course is already open on the development plan." }, { status: 409 });
+    if (code === "DUPLICATE_OPEN_ASSIGNMENT") return Response.json({ error: "An open learning assignment already exists for this employee and course." }, { status: 409 });
+    if (prismaCode === "P2034" || prismaCode === "P2002") return Response.json({ error: "A concurrent learning assignment conflict occurred. Refresh the employee's learning register before retrying." }, { status: 409 });
     throw error;
   }
 }

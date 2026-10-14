@@ -21,7 +21,10 @@ expect(createPath, create, /employmentPrimaryKeyFilter\(scope\)/, "target succes
 expect(createPath, create, /PLAN_INACTIVE/, "inactive succession plans must reject development assignments");
 expect(createPath, create, /CANDIDATE_INACTIVE/, "removed succession candidates must reject new development assignments");
 expect(createPath, create, /active:\s*true/, "development assignments must use active catalog records");
-expect(createPath, create, /DUPLICATE_OPEN_PLAN/, "duplicate open candidate-course-skill plans must be rejected");
+expect(createPath, create, /DUPLICATE_OPEN_PLAN/, "duplicate open employee-course obligations must be rejected for succession assignments");
+expect(createPath, create, /employmentId:\s*candidate\.employmentId,\s*courseId,\s*status:/, "succession assignments must reject open obligations created by any other workflow");
+expect(createPath, create, /TransactionIsolationLevel\.Serializable/, "succession learning must protect concurrent duplicate creation");
+expect(createPath, create, /prismaCode === "P2034"/, "succession learning must return bounded conflicts for concurrent writes");
 expect(createPath, create, /TARGET_NOT_ABOVE_CURRENT/, "target proficiency must be above current human-assessed proficiency");
 expect(createPath, create, /learning-assignment\.created-from-succession/, "learning-side audit evidence must be written");
 expect(createPath, create, /succession-candidate\.development-assignment-created/, "succession-side audit evidence must be written");

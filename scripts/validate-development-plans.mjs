@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
 async function source(path) { return readFile(path, "utf8"); }
 const failures = [];
@@ -42,6 +43,9 @@ expect(assignmentPath, assignment, /can\(ctx,\s*"talent:write"\)[\s\S]*can\(ctx,
 expect(assignmentPath, assignment, /canActOnEmployment/, "development-plan learning assignment must enforce relationship scope");
 expect(assignmentPath, assignment, /dueAt\s*>\s*plan\.targetAt/, "learning action due dates must remain within the development plan target");
 expect(assignmentPath, assignment, /developmentPlanId:\s*plan\.id/, "learning action must be linked to its development plan");
+expect(assignmentPath, assignment, /employmentId:\s*plan\.employmentId,\s*courseId,\s*status:/, "plan learning must block all open employee-course obligations across sources");
+expect(assignmentPath, assignment, /TransactionIsolationLevel\.Serializable/, "plan learning creation must protect the duplicate check with serializable transactions");
+expect(assignmentPath, assignment, /prismaCode === "P2034"/, "plan learning must return bounded conflicts for concurrent writes");
 expect(assignmentPath, assignment, /enqueueLearningAssignmentNotification/, "new plan learning actions must notify the employee");
 expect(assignmentPath, assignment, /development-plan\.learning-assignment-created/, "plan learning linkage must emit audit evidence");
 
@@ -169,10 +173,21 @@ expect(seedPath, seed, /developmentPlan\.upsert/, "staging seed must create dete
 expect(seedPath, seed, /developmentPlanId:\s*developmentPlan\.id/, "staging learning records must link to seeded development plans");
 expect(seedPath, seed, /connectedDevelopmentPlans/, "staging seed must verify development plan coverage");
 
+const closurePath = "app/api/talent/development-plans/[id]/route.ts";
+const closure = await source(closurePath);
+expect(closurePath, closure, /latestCompletedLearning/, "plan closure must consider most recent completed learning evidence");
+expect(closurePath, closure, /assessedAt: true, assessedById: true/, "closure must require named and time-stamped human proficiency reassessment");
+expect(closurePath, closure, /current\.assessedAt <= latestCompletedLearning\.completedAt/, "skill reassessment must occur after the latest completed learning");
+expect(closurePath, closure, /TransactionIsolationLevel\.Serializable/, "plan closure must use serializable decision transactions");
+expect(closurePath, closure, /POST_LEARNING_REASSESSMENT_REQUIRED/, "stale human assessment must block closure without losing learning history");
+
 if (failures.length) {
   console.error("Development plan governance validation failed:\n");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
+
+const recentLearningTests = spawnSync(process.execPath, ["--test", "scripts/development-plan-post-learning-attestation.test.mjs"], { stdio: "inherit" });
+if (recentLearningTests.error || recentLearningTests.status !== 0) process.exit(1);
 
 console.log("Validated development plan contract: talent provenance, employee self-service, activation/due reminders, relationship scope, learning evidence, human skill reassessment and auditable lifecycle governance are enforced.");
