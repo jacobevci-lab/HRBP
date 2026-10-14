@@ -37,7 +37,7 @@ expect(scheduler, /FOR UPDATE/, "fence ownership within a short row-locked trans
 expect(scheduler, /clock_timestamp\(\)/, "lease validity must use the database clock");
 expect(scheduler, /const LEASE_MS = 120_000/, "keep lease duration bounded");
 expect(scheduler, /const TRANSACTION = \{ maxWait: 2_000, timeout: 5_000 \}/, "short transaction budgets are required");
-expect(scheduler, /const value = await persist\(tx\);\s*await fence\(tx, lease\)/, "expiry after callback work must roll back receipts too");
+expect(scheduler, /const value = await persist\(tx\);\s*await fence\(tx, checkpointLease\)/, "expiry after callback work must roll back receipts too");
 expect(scheduler, /AUDIT_SCHEDULE_VERSION_UNSUPPORTED/, "unknown schedule versions must never silently reset");
 for (const path of [monitor, scheduler]) reject(path, /\$executeRawUnsafe|\$queryRawUnsafe|Prisma\.raw\(/, "use parameter-bound queries only");
 expect("prisma/schema.prisma", /model AuditVerificationProgress/, "retain the tenant-owned receipt model");

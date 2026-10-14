@@ -221,3 +221,15 @@ test("queries remain parameter bound, short-transaction based and payload-free",
   assert.match(source, /take: take \+ 1/);
   assert.doesNotMatch(source, /setInterval|setTimeout|skip:/);
 });
+
+test("duplicate concurrent checkpoints on one lease cannot skip the next unprocessed tenant", async () => {
+  const f = fixture(3);
+  const lease = await f.scheduler.start(2);
+  const tenant = lease.tenants[0];
+  const outcomes = await Promise.allSettled([f.checkpoint(lease, tenant), f.checkpoint(lease, tenant)]);
+  assert.equal(outcomes.filter(r => r.status === "fulfilled").length, 1);
+  assert.equal(outcomes.find(r => r.status === "rejected").reason.code, "AUDIT_SCHEDULE_LEASE_LOST");
+  assert.equal(lease.nextIndex, 1);
+  assert.equal(f.receipts.get("tenant-0"), 1);
+  await assert.rejects(f.scheduler.finish(lease), e => e.code === "AUDIT_SCHEDULE_INCOMPLETE");
+});

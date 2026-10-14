@@ -122,10 +122,13 @@ export function createAuditVerificationScheduler(database: PrismaClient, key = "
     async checkpoint<T>(lease: Lease, tenant: Position, persist: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
       const expected = lease.tenants[lease.nextIndex];
       if (!expected || !same(expected, tenant)) throw failure("AUDIT_SCHEDULE_ORDER_INVALID");
+      // Snapshot the expected cursor BEFORE entering the transaction queue.
+      // Concurrent callbacks must not adopt another callback's mutated lease.
+      const checkpointLease = { ...lease };
       const result = await database.$transaction(async tx => {
-        owned(await lock(tx), lease);
+        owned(await lock(tx), checkpointLease);
         const value = await persist(tx);
-        await fence(tx, lease);
+        await fence(tx, checkpointLease);
         await tx.auditVerificationSchedule.update({ where: { id: key }, data: {
           cursorTenantId: tenant.id, cursorCreatedAt: tenant.createdAt
         } });
@@ -133,7 +136,7 @@ export function createAuditVerificationScheduler(database: PrismaClient, key = "
       }, TRANSACTION);
       // Move the in-memory cursor only after the receipt AND cursor committed.
       lease.cursor = tenant;
-      lease.nextIndex += 1;
+      lease.nextIndex = checkpointLease.nextIndex + 1;
       return result;
     },
 

@@ -163,6 +163,13 @@ test("durable audit scheduler and receipts survive interruption, overlap and pop
     assert.equal((await scheduler.finish(tail)).cycleCompleted, true);
     const next = await scheduler.start(25);
     assert.deepEqual(next.tenants.map(t => t.id), [prefix + "earlier", id(0), id(1), id(3), prefix + "later"]);
+    const sameLeaseRace = await Promise.allSettled([
+      scheduler.checkpoint(next, next.tenants[0], async () => undefined),
+      scheduler.checkpoint(next, next.tenants[0], async () => undefined)
+    ]);
+    assert.equal(sameLeaseRace.filter(r => r.status === "fulfilled").length, 1);
+    assert.equal(sameLeaseRace.find(r => r.status === "rejected").reason.code, "AUDIT_SCHEDULE_LEASE_LOST");
+    assert.equal(next.nextIndex, 1, "duplicate callbacks must not skip an unprocessed tenant");
     await scheduler.release(next);
 
     // Never downgrade/reset a scheduler from an unknown application version.
