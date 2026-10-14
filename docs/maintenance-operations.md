@@ -70,6 +70,14 @@ One scheduled invocation (14 October 2026, 00:29 UTC, GitHub run `38490439003`) 
 
 For another unclassified 503: preserve the failing run ID, selected job and timestamp, inspect the exact deployed Worker/edge logs and database connection health in the same time window, confirm the audit ledger and notification outbox state, and verify the last completed job before deciding whether to manually trigger **only** the affected maintenance job. Do not replay `all`, infer that 503 guarantees rollback, or disable audit verification to turn the workflow green. Escalate repeated 503 events to a load/resource and edge availability investigation with tenant-safe diagnostics.
 
+## Bounded rotating audit-integrity verification
+
+The audit-monitoring job checks the integrity verifier's `valid` flag **before** treating an `EMPTY` ledger as healthy. A tenant with a nonzero ledger state and zero matching audit events is therefore **not** quietly skipped: it generates the existing restricted `AUDIT_INTEGRITY_FAILURE` notification for the tenant's authorized administrators. Do not suppress that finding or reset the ledger state.
+
+Each invocation uses a count of the complete tenant universe, then reads only the selected tenant window in stable `createdAt, id` order. The window advances by 15-minute UTC slots (the intended scheduler cadence), not one batch per UTC day. The effective batch size is capped by a **10,000 verified-event** per-invocation budget (excluding one predecessor anchor per tenant), regardless of the configured tenant batch-size request. With the example settings (1,500 events, four tenants), one scheduled job verifies at most 6,000 events plus anchors. All limits are enforced server-side. The `HRBP_AUDIT_INTEGRITY_TENANT_BATCH_SIZE` example default is 4; values above 25 are clamped, and large per-tenant verification limits further reduce the effective batch. No tenant IDs or event payloads are added to maintenance telemetry.
+
+**Important limits:** this is bounded best-effort rotation, not a persisted verification checkpoint, a proof of full-ledger verification, or a guarantee of coverage after skipped GitHub schedules. A tenant count change between count and selection can shift the ordered window; reconcile coverage through operational monitoring and a separately governed full-ledger verification process. Do not infer that a clean tail verifies older events outside that tail. The 14 October intermittent 503 still requires the separate root-cause investigation in issue #209.
+
 ## Deployment order
 
 Deploy the updated Worker route **before** relying on the new scheduler.

@@ -1,18 +1,28 @@
 import { DataClassification, PlatformRole } from "@prisma/client";
 import { db } from "@/lib/db";
+import { selectAuditIntegrityBatch } from "@/lib/audit-integrity-batching.mjs";
 import { verifyAuditIntegrity } from "@/lib/audit-integrity";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { runtimeNumber } from "@/lib/runtime-env";
 
 export async function monitorAuditIntegrity(now = new Date()) {
   const limit = Math.min(5000, Math.max(100, Math.floor(runtimeNumber("HRBP_AUDIT_INTEGRITY_CHECK_LIMIT", 1500))));
-  const tenantBatchSize = Math.min(1000, Math.max(10, Math.floor(runtimeNumber("HRBP_AUDIT_INTEGRITY_TENANT_BATCH_SIZE", 100))));
-  const tenantUniverse = await db.tenant.findMany({ orderBy: { createdAt: "asc" }, select: { id: true }, take: 10_000 });
-  const batchCount = Math.max(1, Math.ceil(tenantUniverse.length / tenantBatchSize));
-  const utcDay = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86_400_000);
-  const batchIndex = utcDay % batchCount;
-  const batchStart = batchIndex * tenantBatchSize;
-  const tenants = tenantUniverse.slice(batchStart, batchStart + tenantBatchSize);
+  // Count the entire tenant population; never silently stop at 10,000 IDs.
+  // Rotate a small 15-minute window instead of hashing up to 150,000 audit
+  // events per invocation or repeating one selected window all day.
+  const tenantUniverse = await db.tenant.count();
+  const batch = selectAuditIntegrityBatch({
+    now,
+    tenantCount: tenantUniverse,
+    requestedTenantBatchSize: runtimeNumber("HRBP_AUDIT_INTEGRITY_TENANT_BATCH_SIZE", 4),
+    verificationLimit: limit
+  });
+  const tenants = await db.tenant.findMany({
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    skip: batch.skip,
+    take: batch.take,
+    select: { id: true }
+  });
 
   let verified = 0;
   let empty = 0;
@@ -21,7 +31,10 @@ export async function monitorAuditIntegrity(now = new Date()) {
 
   for (const tenant of tenants) {
     const result = await verifyAuditIntegrity(tenant.id, limit);
-    if (result.scope === "EMPTY") {
+    // The integrity verifier can report scope EMPTY with valid=false when
+    // ledger state claims events but no matching audit rows exist. Never
+    // classify that corruption as a normal empty tenant.
+    if (result.valid && result.scope === "EMPTY") {
       empty += 1;
       continue;
     }
@@ -56,10 +69,12 @@ export async function monitorAuditIntegrity(now = new Date()) {
   }
 
   return {
-    tenantUniverse: tenantUniverse.length,
-    tenantBatchSize,
-    batchIndex,
-    batchCount,
+    tenantUniverse,
+    tenantBatchSize: batch.tenantBatchSize,
+    batchIndex: batch.batchIndex,
+    batchCount: batch.batchCount,
+    quarterHourSlot: batch.quarterHourSlot,
+    maxVerificationEvents: batch.maxVerificationEvents,
     tenantsChecked: tenants.length,
     verified,
     empty,
