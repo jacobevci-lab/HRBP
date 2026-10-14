@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
 async function source(path) { return readFile(path, "utf8"); }
 const failures = [];
@@ -172,10 +173,21 @@ expect(seedPath, seed, /developmentPlan\.upsert/, "staging seed must create dete
 expect(seedPath, seed, /developmentPlanId:\s*developmentPlan\.id/, "staging learning records must link to seeded development plans");
 expect(seedPath, seed, /connectedDevelopmentPlans/, "staging seed must verify development plan coverage");
 
+const closurePath = "app/api/talent/development-plans/[id]/route.ts";
+const closure = await source(closurePath);
+expect(closurePath, closure, /latestCompletedLearning/, "plan closure must consider most recent completed learning evidence");
+expect(closurePath, closure, /assessedAt: true, assessedById: true/, "closure must require named and time-stamped human proficiency reassessment");
+expect(closurePath, closure, /current\.assessedAt <= latestCompletedLearning\.completedAt/, "skill reassessment must occur after the latest completed learning");
+expect(closurePath, closure, /TransactionIsolationLevel\.Serializable/, "plan closure must use serializable decision transactions");
+expect(closurePath, closure, /POST_LEARNING_REASSESSMENT_REQUIRED/, "stale human assessment must block closure without losing learning history");
+
 if (failures.length) {
   console.error("Development plan governance validation failed:\n");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
+
+const recentLearningTests = spawnSync(process.execPath, ["--test", "scripts/development-plan-post-learning-attestation.test.mjs"], { stdio: "inherit" });
+if (recentLearningTests.error || recentLearningTests.status !== 0) process.exit(1);
 
 console.log("Validated development plan contract: talent provenance, employee self-service, activation/due reminders, relationship scope, learning evidence, human skill reassessment and auditable lifecycle governance are enforced.");
