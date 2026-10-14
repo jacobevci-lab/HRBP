@@ -123,29 +123,29 @@ try {
     await scenario('positions: empty required fields block POST', page, async () => {
       await ready(page, '/module/positions/new'); let writes = 0;
       const listener = r => { if (r.method() === 'POST' && new URL(r.url()).pathname === '/api/positions') writes++; }; page.on('request', listener);
-      try { await page.locator('button[type=submit]').click(); assert.ok(await page.locator('input:invalid,select:invalid').count()); assert.equal(writes, 0); } finally { page.off('request', listener); }
+      try { await page.locator('.record-form button[type=submit]').click(); assert.ok(await page.locator('input:invalid,select:invalid').count()); assert.equal(writes, 0); } finally { page.off('request', listener); }
     });
     await scenario('positions: create through UI and verify register + persisted row', page, async () => {
       await ready(page, '/module/positions/new'); await fillPosition();
-      const response = await mutation(page, '/api/positions', 'POST', () => page.locator('button[type=submit]').click()); assert.equal(response.status(), 201); positionId = (await response.json()).data.id;
+      const response = await mutation(page, '/api/positions', 'POST', () => page.locator('.record-form button[type=submit]').click()); assert.equal(response.status(), 201); positionId = (await response.json()).data.id;
       await page.waitForURL('**/module/positions'); await page.locator('.app-shell[data-session-loading="false"]').waitFor();
       assert.ok((await page.locator('.page-content').innerText()).includes(marker)); assert.equal((await db.position.findUnique({ where: { id: positionId } })).positionCode, marker);
       return { screenshot: await screenshot(page, 'position-created') };
     });
     await scenario('positions: duplicate conflict preserves draft and one stored row', page, async () => {
       assert.ok(positionId); await ready(page, '/module/positions/new'); await fillPosition();
-      const response = await mutation(page, '/api/positions', 'POST', () => page.locator('button[type=submit]').click()); assert.equal(response.status(), 409); await page.locator('.form-error').waitFor();
+      const response = await mutation(page, '/api/positions', 'POST', () => page.locator('.record-form button[type=submit]').click()); assert.equal(response.status(), 409); await page.locator('.form-error').waitFor();
       assert.equal(await page.locator('#positionCode').inputValue(), marker); assert.equal(await db.position.count({ where: { positionCode: marker } }), 1);
     });
     await scenario('positions: aborted transport preserves entered fields', page, async () => {
       await ready(page, '/module/positions/new'); await fillPosition(marker + '-NET'); await page.route('**/api/positions', r => r.abort());
-      try { await page.locator('button[type=submit]').click(); await page.locator('.form-error').waitFor(); assert.equal(await page.locator('#positionCode').inputValue(), marker + '-NET'); assert.equal(await db.position.count({ where: { positionCode: marker + '-NET' } }), 0); } finally { await page.unroute('**/api/positions'); }
+      try { await page.locator('.record-form button[type=submit]').click(); await page.locator('.form-error').waitFor(); assert.equal(await page.locator('#positionCode').inputValue(), marker + '-NET'); assert.equal(await db.position.count({ where: { positionCode: marker + '-NET' } }), 0); } finally { await page.unroute('**/api/positions'); }
     });
     await scenario('people: create through UI; 360, assignment and onboarding persist', page, async () => {
       assert.ok(positionId); await ready(page, '/module/people/new');
       for (const [id, value] of [['employeeNumber', marker], ['givenName', 'Synthetic'], ['familyName', marker], ['workEmail', marker.toLowerCase() + '@example.test'], ['startDate', new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)]]) await page.locator('#' + id).fill(value);
       await page.locator('#positionId').selectOption(positionId);
-      const response = await mutation(page, '/api/people', 'POST', () => page.locator('button[type=submit]').click()); assert.equal(response.status(), 201); personId = (await response.json()).data.person.id;
+      const response = await mutation(page, '/api/people', 'POST', () => page.locator('.record-form button[type=submit]').click()); assert.equal(response.status(), 201); personId = (await response.json()).data.person.id;
       await page.waitForURL('**/module/employee-360?person=*'); await page.reload({ waitUntil: 'load' }); await page.locator('.app-shell[data-session-loading="false"]').waitFor();
       assert.ok((await page.locator('.page-content').innerText()).includes(marker)); assert.ok(await db.employment.findFirst({ where: { personId, positionId } })); assert.ok(await db.onboardingPlan.findFirst({ where: { personId } }));
       return { screenshot: await screenshot(page, 'employee-created') };
@@ -154,7 +154,7 @@ try {
       const denied = await contextFor('en', 'light', 1440, identifier), deniedPage = await denied.newPage();
       try { for (const kind of ['people', 'positions']) await scenario(`${identifier ? 'employee' : 'anonymous'}: direct ${kind} create cannot expose choices`, deniedPage, async () => {
         await deniedPage.goto(`${origin}/module/${kind}/new`, { waitUntil: 'load' });
-        if (!identifier) assert.equal(new URL(deniedPage.url()).pathname, '/auth/sign-in');
+        if (!identifier) await deniedPage.waitForURL(u => u.pathname === '/auth/sign-in', { waitUntil: 'load', timeout: 15000 });
         else await deniedPage.locator('[data-record-create-state="restricted"]').waitFor();
         assert.equal(await deniedPage.locator('#positionId option,#orgUnitId option').count(), 0);
       }); } finally { await denied.close(); }
