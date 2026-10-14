@@ -1,5 +1,5 @@
 import { readJsonObject } from "@/lib/input-validation";
-import { DataClassification, DevelopmentPlanStatus, LearningAssignmentStatus, SkillProficiency } from "@prisma/client";
+import { DataClassification, DevelopmentPlanStatus, LearningAssignmentStatus, Prisma, SkillProficiency } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
@@ -85,12 +85,31 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         if (!outcomeNotes) throw new Error("OUTCOME_NOTES_REQUIRED");
 
         if (plan.focusSkillId && plan.targetProficiency) {
-          const current = await tx.employmentSkill.findFirst({
-            where: { tenantId: ctx.tenantId, employmentId: plan.employmentId, skillId: plan.focusSkillId },
-            select: { proficiency: true }
-          });
+          const [current, latestCompletedLearning] = await Promise.all([
+            tx.employmentSkill.findFirst({
+              where: { tenantId: ctx.tenantId, employmentId: plan.employmentId, skillId: plan.focusSkillId },
+              select: { proficiency: true, assessedAt: true, assessedById: true }
+            }),
+            tx.learningAssignment.findFirst({
+              where: {
+                tenantId: ctx.tenantId,
+                developmentPlanId: id,
+                developmentSkillId: plan.focusSkillId,
+                status: LearningAssignmentStatus.COMPLETED,
+                completedAt: { not: null }
+              },
+              orderBy: [{ completedAt: "desc" }, { assignedAt: "desc" }],
+              select: { completedAt: true }
+            })
+          ]);
           if (!current || proficiencyOrder.indexOf(current.proficiency) < proficiencyOrder.indexOf(plan.targetProficiency)) {
             throw new Error("TARGET_NOT_REASSESSED");
+          }
+          // Learning completion is evidence, never the human proficiency decision itself.
+          // Closing a plan requires a named human reassessment after its latest completed learning.
+          if (latestCompletedLearning?.completedAt &&
+              (!current.assessedById || current.assessedAt <= latestCompletedLearning.completedAt)) {
+            throw new Error("POST_LEARNING_REASSESSMENT_REQUIRED");
           }
         }
       }
@@ -134,10 +153,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         });
       }
       return updated;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return Response.json({ data });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
+    const prismaCode = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
     if (code === "NOT_FOUND") return Response.json({ error: "Development plan not found in tenant." }, { status: 404 });
     if (code === "OUT_OF_SCOPE") return forbidden("Development plan employee is outside your authorized relationship scope.");
     if (code === "PLAN_LOCKED") return Response.json({ error: "Completed or cancelled development plans are immutable." }, { status: 409 });
@@ -146,6 +166,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (code.startsWith("OPEN_ASSIGNMENTS:")) return Response.json({ error: `${code.split(":")[1]} learning actions remain open; complete or waive them before closing the development plan.` }, { status: 409 });
     if (code === "OUTCOME_NOTES_REQUIRED") return Response.json({ error: "Human-entered outcome notes are required before completing the development plan." }, { status: 400 });
     if (code === "TARGET_NOT_REASSESSED") return Response.json({ error: "The target skill proficiency has not yet been confirmed by a human assessment." }, { status: 409 });
+    if (code === "POST_LEARNING_REASSESSMENT_REQUIRED") return Response.json({ error: "The target skill requires a new human reassessment after the most recent completed learning action before closing this plan." }, { status: 409 });
+    if (prismaCode === "P2034") return Response.json({ error: "The development plan or linked evidence changed concurrently. Refresh before retrying." }, { status: 409 });
     throw error;
   }
 }

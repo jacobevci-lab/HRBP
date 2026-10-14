@@ -153,7 +153,7 @@ export function DevelopmentPlanConsole({
             event.preventDefault();
             const data = new FormData(event.currentTarget);
             void request(`complete-${plan.id}`, `/api/talent/development-plans/${plan.id}`, "PATCH", { status: "COMPLETED", outcomeNotes: data.get("outcomeNotes") }, c("Development plan completed with human-confirmed outcome evidence.", "Gelişim planı insan doğrulamalı sonuç kanıtıyla tamamlandı."));
-          }}><input name="outcomeNotes" required maxLength={4000} placeholder={c("Human outcome / reassessment notes", "İnsan sonucu / yeniden değerlendirme notu")}/><button className="secondary-button" disabled={pending !== null}>{pending === `complete-${plan.id}` ? "…" : c("Complete plan", "Planı tamamla")}</button></form> : null}
+          }}><input name="outcomeNotes" required maxLength={4000} placeholder={c("Human outcome after the last learning reassessment", "Son eğitim sonrası yeniden değerlendirme sonucu")}/><button className="secondary-button" disabled={pending !== null}>{pending === `complete-${plan.id}` ? "…" : c("Complete plan", "Planı tamamla")}</button></form> : null}
           <button className="secondary-button" type="button" disabled={pending !== null} onClick={() => void request(`cancel-${plan.id}`, `/api/talent/development-plans/${plan.id}`, "PATCH", { status: "CANCELLED" }, c("Development plan cancelled with history preserved.", "Gelişim planı geçmiş korunarak iptal edildi."))}>{pending === `cancel-${plan.id}` ? "…" : c("Cancel", "İptal")}</button>
         </div> : plan.outcomeNotes ? <div className="growth-lifecycle-copy"><span>{c("Outcome", "Sonuç")}: {plan.outcomeNotes}</span></div> : null}
       </article>;
