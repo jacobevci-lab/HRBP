@@ -50,3 +50,7 @@ The GitHub Actions CI validates route structure, UI localization/theme rules, Pr
 A separate Security Assurance gate runs dependency audits, CodeQL JavaScript/TypeScript analysis and release-evidence generation. Every reviewed revision produces a production CycloneDX SBOM, deterministic source archive, migration/deployment input hashes and checksum manifest; successful pushes to main add repository-backed provenance and SBOM attestations. See `docs/RELEASE-SUPPLY-CHAIN.md`.
 
 Staging schema synchronization is intentionally a manually dispatched workflow. It applies Prisma schema changes, seeds each vertical slice—including connected succession-development assignments—and verifies minimum domain counts before granting the runtime database role.
+
+## Customer pilot acceptance
+
+The required on-prem customer UAT roles, workflow tests, negative security controls, operations game-day evidence and GO/NO-GO rules are tracked in [docs/PILOT-ACCEPTANCE.md](docs/PILOT-ACCEPTANCE.md). This is a test contract, not proof that an external pilot or production deployment has been accepted.
