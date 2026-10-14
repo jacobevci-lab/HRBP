@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 import { selectAuditIntegrityBatch } from "../lib/audit-integrity-batching.mjs";
+import { assertAuditIntegrityRun } from "../lib/audit-integrity-outcome.mjs";
 
 function loadMonitor(mocks) {
   const path = "lib/audit-monitoring.ts";
@@ -47,6 +48,7 @@ function fixture({ tenantCount = 1, tenantBatch = 4, verificationLimit = 1500, v
       PlatformRole: { TENANT_ADMIN: "TENANT_ADMIN" }
     },
     "@/lib/db": { db },
+    "@/lib/audit-integrity-outcome.mjs": { assertAuditIntegrityRun },
     "@/lib/audit-integrity-batching.mjs": { selectAuditIntegrityBatch },
     "@/lib/audit-integrity": {
       verifyAuditIntegrity: async (tenantId, limit) => {
@@ -80,11 +82,7 @@ test("invalid EMPTY is an integrity alert, never counted as an innocuous empty t
     reason: "Audit ledger state is non-empty while no audit events exist.",
     generatedAt: now.toISOString()
   }) });
-  const report = await f.run();
-  assert.equal(report.failed, 1);
-  assert.equal(report.empty, 0);
-  assert.equal(report.verified, 0);
-  assert.equal(report.notificationsQueued, 1);
+  await assert.rejects(f.run(), error => error.code === "AUDIT_INTEGRITY_FAILURE");
   assert.equal(f.calls.transactions, 1);
   assert.deepEqual(f.calls.notifications.map(x => ({
     tenant: x.tenantId, event: x.eventType, recipientRole: x.recipientRole,
@@ -121,10 +119,8 @@ test("valid GENESIS/TAIL records and corrupted chains preserve distinct audit ou
         generatedAt: now.toISOString()
       }
   });
-  const report = await f.run();
-  assert.equal(report.verified, 2);
-  assert.equal(report.failed, 1);
-  assert.equal(report.empty, 0);
+  await assert.rejects(f.run(), error => error.code === "AUDIT_INTEGRITY_FAILURE");
+  assert.equal(f.calls.integrity.length, 3);
   assert.equal(f.calls.notifications.length, 1);
   assert.equal(f.calls.notifications[0].resourceId, "event-3");
   assert.equal(f.calls.notifications[0].payload.reason, "hash mismatch");

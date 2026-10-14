@@ -28,6 +28,11 @@ reject(integrityPath, integrity, /db\.auditEvent\.findMany/, "audit event reads 
 expect(integrityPath, integrity, /isolationLevel: Prisma\.TransactionIsolationLevel\.RepeatableRead/, "audit verification must use one consistent MVCC snapshot");
 reject(integrityPath, integrity, /const \[state, rows\] = await Promise\.all/, "independent committed snapshots can cause false integrity alerts");
 
+const auditMonitoringPath = "lib/audit-monitoring.ts";
+const auditMonitoring = await readFile(auditMonitoringPath, "utf8");
+expect(auditMonitoringPath, auditMonitoring, /return assertAuditIntegrityRun\(\{/, "invalid audit chains must fail the maintenance job after alert creation");
+expect(auditMonitoringPath, auditMonitoring, /enqueueNotificationOutbox\(tx,/, "audit alerts must be queued before the job reports failure");
+
 const workflowPath = ".github/workflows/operational-maintenance.yml";
 const workflow = await readFile(workflowPath, "utf8");
 expect(workflowPath, workflow, /node scripts\/run-operational-maintenance\.mjs/, "scheduler must use the protocol-aware single-job runner");
@@ -42,6 +47,6 @@ if (failures.length) {
   process.exit(1);
 }
 // These execute production orchestration/runner code, not source-text approximations of behavior.
-const behavior = spawnSync(process.execPath, ["--test", "scripts/maintenance-protocol.test.mjs", "scripts/service-sla-policy.test.mjs", "scripts/audit-integrity-snapshot.test.mjs"], { stdio: "inherit" });
+const behavior = spawnSync(process.execPath, ["--test", "scripts/maintenance-protocol.test.mjs", "scripts/service-sla-policy.test.mjs", "scripts/audit-integrity-snapshot.test.mjs", "scripts/audit-integrity-outcome.test.mjs"], { stdio: "inherit" });
 if (behavior.error || behavior.status !== 0) process.exit(1);
 console.log("Maintenance resilience contract and behavioral validation passed.");

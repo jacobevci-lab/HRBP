@@ -1,5 +1,6 @@
 import { DataClassification, PlatformRole } from "@prisma/client";
 import { db } from "@/lib/db";
+import { assertAuditIntegrityRun } from "@/lib/audit-integrity-outcome.mjs";
 import { selectAuditIntegrityBatch } from "@/lib/audit-integrity-batching.mjs";
 import { verifyAuditIntegrity } from "@/lib/audit-integrity";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
@@ -68,7 +69,7 @@ export async function monitorAuditIntegrity(now = new Date()) {
     if (queued) notificationsQueued += 1;
   }
 
-  return {
+  return assertAuditIntegrityRun({
     tenantUniverse,
     tenantBatchSize: batch.tenantBatchSize,
     batchIndex: batch.batchIndex,
@@ -81,5 +82,5 @@ export async function monitorAuditIntegrity(now = new Date()) {
     failed,
     notificationsQueued,
     verificationLimit: limit
-  };
+  });
 }
