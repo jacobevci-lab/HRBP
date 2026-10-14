@@ -200,3 +200,29 @@ test('translated error copy is allowlisted and responsive rules remain scoped', 
   const css = readFileSync('components/engagement-authoring.module.css', 'utf8');
   assert.match(css, /@media \(max-width: 640px\)/); assert.match(css, /grid-template-columns: minmax\(0, 1fr\)/); assert.match(css, /overflow-x: auto/);
 });
+
+
+test('dynamic select and textarea content cannot change the field accessible name', async () => {
+  const h = harness('survey');
+  try {
+    await h.click('Survey authoring');
+    assert.equal(h.input('Survey').props['aria-label'], 'Survey');
+    assert.equal(h.input('Type').props['aria-label'], 'Type');
+    await h.click('Edit');
+    assert.equal(h.input('Prompt').props.value, 'Customer-authored question');
+    assert.equal(h.input('Prompt').props['aria-label'], 'Prompt');
+    h.locale('tr');
+    assert.equal(h.input('Soru metni').props['aria-label'], 'Soru metni');
+  } finally { h.close(); }
+  const campaign = harness('campaign', 'tr');
+  try { await campaign.click('Yeni kampanya'); assert.equal(campaign.input('Anket').props['aria-label'], 'Anket'); }
+  finally { campaign.close(); }
+});
+
+test('narrow dashboard brief puts its action below the content without hiding overflow', () => {
+  const css = readFileSync('components/dashboard-responsive.module.css', 'utf8');
+  assert.match(css, /grid-template-columns: auto minmax\(0, 1fr\)/);
+  assert.match(css, /grid-column: 1 \/ -1/);
+  assert.doesNotMatch(css, /overflow:\s*hidden|display:\s*none/);
+  assert.match(readFileSync('app/page.tsx', 'utf8'), /className=\{styles.dashboard\}/);
+});

@@ -21,3 +21,10 @@
   .grid, .questionGrid { grid-template-columns: minmax(0, 1fr); }
   .actions > button { min-height: 34px; }
 }
+
+/* Keep the expandable editor below the heading, rather than centering the
+   heading beside an entire form. The hashed root confines this to authoring. */
+:global(.gov-panel-head):has(.root) { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 12px; }
+:global(.gov-panel-head):has(.root) > div { min-width: 0; max-width: 100%; }
+:global(.gov-panel-head):has(.root) > div:has(> .root) { display: grid !important; grid-template-columns: minmax(0, 1fr); width: 100%; }
+.root > button { justify-self: start; max-width: 100%; }

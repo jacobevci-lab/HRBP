@@ -1,0 +1,18 @@
+.dashboard { min-width: 0; max-width: 100%; }
+
+/* At phone widths the action belongs below the brief, not in a third fixed
+   column that forces the complete document wider than the viewport. */
+@media (max-width: 480px) {
+  .dashboard :global(.ai-brief) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+  }
+  .dashboard :global(.ai-copy) { min-width: 0; overflow-wrap: anywhere; }
+  .dashboard :global(.ai-brief) > a {
+    grid-column: 1 / -1;
+    justify-self: start;
+    max-width: 100%;
+    white-space: normal;
+  }
+}

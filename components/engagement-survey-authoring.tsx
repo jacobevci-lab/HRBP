@@ -105,10 +105,10 @@ export function EngagementSurveyAuthoring({ surveys, canWrite }: { surveys: Surv
         <div className={styles.grid}>
           <label><small>{c("Survey code")}</small><input value={surveyForm.code} maxLength={40} onChange={event => setSurveyForm(value => ({ ...value, code: event.target.value }))}/></label>
           <label><small>{c("Survey name")}</small><input value={surveyForm.name} maxLength={160} onChange={event => setSurveyForm(value => ({ ...value, name: event.target.value }))}/></label>
-          <label className={styles.full}><small>{c("Description")}</small><textarea rows={2} maxLength={2000} value={surveyForm.description} onChange={event => setSurveyForm(value => ({ ...value, description: event.target.value }))}/></label>
+          <label className={styles.full}><small>{c("Description")}</small><textarea aria-label={c("Description")} rows={2} maxLength={2000} value={surveyForm.description} onChange={event => setSurveyForm(value => ({ ...value, description: event.target.value }))}/></label>
         </div>
         <button type="button" className="mini-action approve" onClick={() => void createSurvey()}><Save size={13}/>{c("Create survey")}</button>
-        <label><small>{c("Survey")}</small><select value={selectedSurveyId} onChange={event => { setSelectedSurveyId(event.target.value); setQuestion(emptyQuestion); setEditingSurvey(false); setError(null); }}>
+        <label><small>{c("Survey")}</small><select aria-label={c("Survey")} value={selectedSurveyId} onChange={event => { setSelectedSurveyId(event.target.value); setQuestion(emptyQuestion); setEditingSurvey(false); setError(null); }}>
           <option value="">{c("Select survey…")}</option>{surveys.map(survey => <option key={survey.id} value={survey.id}>{survey.code} · {survey.name}</option>)}
         </select></label>
         {selectedSurvey ? <>
@@ -123,7 +123,7 @@ export function EngagementSurveyAuthoring({ surveys, canWrite }: { surveys: Surv
             {editingSurvey && canEditSelected ? <div className={styles.grid}>
               <label><small>{c("Code")}</small><input value={surveyEdit.code} maxLength={40} onChange={event => setSurveyEdit(value => ({ ...value, code: event.target.value }))}/></label>
               <label><small>{c("Name")}</small><input value={surveyEdit.name} maxLength={160} onChange={event => setSurveyEdit(value => ({ ...value, name: event.target.value }))}/></label>
-              <label className={styles.full}><small>{c("Description")}</small><textarea rows={2} maxLength={2000} value={surveyEdit.description} onChange={event => setSurveyEdit(value => ({ ...value, description: event.target.value }))}/></label>
+              <label className={styles.full}><small>{c("Description")}</small><textarea aria-label={c("Description")} rows={2} maxLength={2000} value={surveyEdit.description} onChange={event => setSurveyEdit(value => ({ ...value, description: event.target.value }))}/></label>
               <div className={`${styles.actions} ${styles.full}`}><button type="button" className="mini-action approve" onClick={() => void saveSurveyMetadata()}><Save size={12}/>{c("Save survey")}</button><button type="button" className="mini-action reject" onClick={() => setEditingSurvey(false)}><X size={12}/>{c("Cancel")}</button></div>
             </div> : null}
           </div>
@@ -142,11 +142,11 @@ export function EngagementSurveyAuthoring({ surveys, canWrite }: { surveys: Surv
           {canEditSelected ? <>
             <div className={styles.questionGrid}>
               <label><small>{c("Question key")}</small><input value={question.questionKey} maxLength={80} onChange={event => setQuestion(value => ({ ...value, questionKey: event.target.value }))}/></label>
-              <label><small>{c("Type")}</small><select value={question.type} onChange={event => setQuestion(value => ({ ...value, type: event.target.value }))}>
+              <label><small>{c("Type")}</small><select aria-label={c("Type")} value={question.type} onChange={event => setQuestion(value => ({ ...value, type: event.target.value }))}>
                 <option value="SCALE">{c("Scale")}</option><option value="SINGLE_CHOICE">{c("Single choice")}</option><option value="MULTI_CHOICE">{c("Multi choice")}</option><option value="TEXT">{c("Text")}</option><option value="ENPS">{c("eNPS")}</option>
               </select></label>
               <label><small>{c("Dimension")}</small><input value={question.dimension} maxLength={120} onChange={event => setQuestion(value => ({ ...value, dimension: event.target.value }))}/></label>
-              <label className={styles.full}><small>{c("Prompt")}</small><textarea rows={2} maxLength={1000} value={question.prompt} onChange={event => setQuestion(value => ({ ...value, prompt: event.target.value }))}/></label>
+              <label className={styles.full}><small>{c("Prompt")}</small><textarea aria-label={c("Prompt")} rows={2} maxLength={1000} value={question.prompt} onChange={event => setQuestion(value => ({ ...value, prompt: event.target.value }))}/></label>
               {["SINGLE_CHOICE", "MULTI_CHOICE"].includes(question.type) ? <label className={styles.full}><small>{c("Options (comma separated)")}</small><input value={question.options} onChange={event => setQuestion(value => ({ ...value, options: event.target.value }))}/></label> : null}
               <label className={styles.check}><input type="checkbox" checked={question.required} onChange={event => setQuestion(value => ({ ...value, required: event.target.checked }))}/><small>{c("Required")}</small></label>
             </div>

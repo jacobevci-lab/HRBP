@@ -87,7 +87,7 @@ export function EngagementCampaignCreateForm({ surveys, canWrite }: { surveys: S
     <button type="button" className="secondary-button" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(value => !value)}>{open ? <X size={13}/> : <Plus size={13}/>} {c(open ? "Close campaign form" : "New campaign")}</button>
     {open ? <div id={panelId} className={`card ${styles.panel}`}>
       <fieldset className={styles.fields} disabled={busy} aria-busy={saving || refreshing}>
-        <label><small>{c("Survey")}</small><select value={form.surveyId} onChange={event => setForm(value => ({ ...value, surveyId: event.target.value }))}>
+        <label><small>{c("Survey")}</small><select aria-label={c("Survey")} value={form.surveyId} onChange={event => setForm(value => ({ ...value, surveyId: event.target.value }))}>
           <option value="">{c("Select authored survey…")}</option>{eligibleSurveys.map(survey => <option key={survey.id} value={survey.id}>{survey.code} · {survey.name}</option>)}
         </select></label>
         {!eligibleSurveys.length ? <small className="comp-decision-error">{c("Create a survey with at least one question before creating a campaign.")}</small> : null}
