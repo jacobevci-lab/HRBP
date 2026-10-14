@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { parseEnvText } from "./onprem-preflight-lib.mjs";
+import { postflightReleaseRequirement, verifyPostflightRelease } from "./onprem-pilot-release.mjs";
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
@@ -12,21 +13,28 @@ let envFile = ".env.onprem";
 let timeoutSeconds = 300;
 let mode = "post-deploy";
 let expectedRevision = null;
+let pilot = false;
 for (let index = 0; index < args.length; index += 1) {
   if (args[index] === "--env-file") envFile = args[++index];
   else if (args[index] === "--timeout-seconds") timeoutSeconds = Number(args[++index]);
   else if (args[index] === "--mode") mode = args[++index];
-  else if (args[index] === "--expected-revision") expectedRevision = args[++index];
+  else if (args[index] === "--expected-revision") {
+    if (!args[index + 1] || args[index + 1].startsWith("--")) fail("--expected-revision requires a full 40-character commit SHA.");
+    expectedRevision = args[++index];
+  }
+  else if (args[index] === "--pilot") pilot = true;
   else fail(`Unsupported argument: ${args[index]}`);
 }
 if (!Number.isInteger(timeoutSeconds) || timeoutSeconds < 30 || timeoutSeconds > 1800) {
   fail("--timeout-seconds must be between 30 and 1800.");
 }
 if (!["pre-upgrade", "post-deploy"].includes(mode)) fail("--mode must be pre-upgrade or post-deploy.");
-if (expectedRevision !== null && !/^[a-f0-9]{40}$/i.test(expectedRevision)) {
-  fail("--expected-revision must be a full 40-character commit SHA.");
+try {
+  const releaseRequirement = postflightReleaseRequirement({ mode, pilot, expectedRevision });
+  expectedRevision = releaseRequirement.expectedRevision;
+} catch {
+  fail("Pilot postflight requires post-deploy and an exact approved 40-character commit SHA.");
 }
-if (expectedRevision) expectedRevision = expectedRevision.toLowerCase();
 
 const env = parseEnvText(readFileSync(envFile, "utf8"));
 const port = env.HRBP_HTTP_PORT || "3000";
@@ -92,6 +100,20 @@ const runtime = await waitFor(
     (!expectedRevision || body?.release?.revision === expectedRevision),
   expectedRevision ? "Runtime/release identity" : "Runtime health"
 );
+// When an approved revision is supplied, a simple liveness/revision field
+// cannot pass acceptance: verify a fresh challenge response and release
+// protocol on the same loopback runtime before checking other subsystems.
+let approvedRevisionVerified = false;
+if (expectedRevision) {
+  let proof;
+  try {
+    proof = await verifyPostflightRelease({ origin, expectedRevision });
+  } catch {
+    fail("Approved release identity could not be verified.");
+  }
+  if (!proof.verified) fail(`Approved release identity failed verification (${proof.code}).`);
+  approvedRevisionVerified = true;
+}
 const database = await waitFor(
   "/api/health/db",
   (body) => body?.status === "ok" && body?.database === "postgresql",
@@ -226,7 +248,8 @@ console.log(JSON.stringify({
   verifiedAt: new Date().toISOString(),
   runtime: {
     revision: runtime?.release?.revision ?? null,
-    protocolVersion: runtime?.release?.protocolVersion ?? null
+    protocolVersion: runtime?.release?.protocolVersion ?? null,
+    approvedRevisionVerified
   },
   database: {
     transport: database?.transport ?? null,

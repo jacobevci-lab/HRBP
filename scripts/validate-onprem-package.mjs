@@ -258,6 +258,11 @@ for (const token of [
   '"lsd"'
 ]) assert.ok(postflight.includes(token), `On-prem postflight contract missing: ${token}`);
 assert.ok(postflight.includes("HRBP_ENV_FILE: envFile"), "Postflight Compose calls must propagate the selected env path.");
+assert.ok(postflight.includes("--pilot"), "Pilot postflight mode must require explicit approval.");
+assert.ok(postflight.includes("postflightReleaseRequirement"), "Pilot postflight must fail closed without an approved commit.");
+assert.ok(postflight.includes("verifyPostflightRelease({ origin, expectedRevision })"), "Approved release identity must use a fresh challenge rather than trusting the initial liveness response.");
+assert.ok(postflight.includes("approvedRevisionVerified"), "Postflight output must explicitly declare whether approved release identity was verified.");
+
 for (const token of [
   "--maintenance-window",
   "Building target release before downtime",
@@ -391,6 +396,8 @@ assert.equal(pkg.scripts?.["integration-live-validation:validate"], "node --test
 assert.ok(pkg.scripts?.prebuild?.includes("scim:validate"), "SCIM protocol validation must gate production builds.");
 assert.equal(pkg.scripts?.["onprem:preflight"], "node scripts/onprem-preflight.mjs --env-file .env.onprem --phase install");
 assert.equal(pkg.scripts?.["onprem:postflight"], "node scripts/onprem-postflight.mjs --env-file .env.onprem");
+assert.equal(pkg.scripts?.["onprem:pilot:postflight"], "node scripts/onprem-postflight.mjs --env-file .env.onprem --pilot");
+assert.ok(pkg.scripts?.["onprem:validate"]?.includes("scripts/onprem-pilot-release.test.mjs"), "Pilot release proof tests must run in the normal on-prem validation gate.");
 assert.equal(pkg.scripts?.["onprem:upgrade"], "bash scripts/onprem-upgrade.sh");
 
 for (const token of [

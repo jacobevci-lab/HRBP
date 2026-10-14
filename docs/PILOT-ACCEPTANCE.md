@@ -30,9 +30,11 @@ Useful release verification commands (run only in the environments permitted by 
 
     npm run onprem:validate
     npm run onprem:preflight
-    npm run onprem:postflight
+    npm run onprem:pilot:postflight -- --expected-revision <APPROVED_40_CHARACTER_COMMIT_SHA>
     npm run db:migrate:status
     npm run onprem:recovery:rehearsal
+
+The pilot postflight command is read-only on the approved running application and must fail closed if the SHA, release protocol or fresh nonce does not match. Its `runtime.approvedRevisionVerified=true` proves only local runtime identity, not end-user UAT. Plain `onprem:postflight` is not sufficient for signed pilot acceptance.
 
 The last command is an isolated, destructive disposable-project rehearsal. Production upgrades require an approved maintenance window using the guarded procedure; do not run an upgrade/restore automatically as part of a read-only assessment.
 

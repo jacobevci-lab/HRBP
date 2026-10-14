@@ -43,6 +43,18 @@ The bundled single-node object-store implementation is SeaweedFS. SeaweedFS is A
    Postflight waits for application runtime, PostgreSQL connectivity, configured authentication, notification-provider readiness, the authenticated operational-metrics surface, private object storage, clean Prisma migration status, a healthy document scanner and a healthy maintenance scheduler.
 7. Place the service behind the customer's HTTPS reverse proxy and restrict direct access to port 3000.
 
+### Mandatory approved-revision check for customer pilots
+
+For a customer pilot, **plain onprem:postflight is not enough**. Use an approved immutable 40-character Git commit SHA and the pilot command:
+
+```bash
+npm run onprem:pilot:postflight -- --expected-revision <APPROVED_40_CHARACTER_COMMIT_SHA>
+```
+
+The pilot mode refuses to run without a full approved SHA and cannot be used in pre-upgrade mode. After waiting for loopback liveness, it sends a fresh nonce to the local runtime and verifies the exact SHA, release protocol, response freshness and `Cache-Control: no-store` using the existing deployment verifier. It then runs the usual database, authentication, notification, SCIM, private metrics, object storage, migration, document-scanner and scheduler checks. The output sets `runtime.approvedRevisionVerified=true` only when that exact revision proof succeeds.
+
+This is a **local installed-release and service health check**, not customer workflow acceptance, legal compliance, penetration testing, a reverse-proxy TLS check or a guarantee of correct production business data. Preserve the sanitized output in customer-controlled evidence storage; never include the environment secret file. The regular `onprem:postflight` remains available for ordinary installation compatibility, but reports `approvedRevisionVerified=false` without an expected SHA.
+
 The `schema` one-shot service runs the guarded versioned migration runner only after PostgreSQL is healthy. Fresh databases are created with committed `prisma migrate deploy` history. Existing installations from the pre-migration releases are never marked automatically unless their live PostgreSQL schema exactly matches the committed Prisma datamodel. The application starts only after the schema job and object-store health check succeed.
 
 ## Versioned database migrations
