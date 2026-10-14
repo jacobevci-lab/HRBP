@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { generateKeyPairSync, createHash } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, chmodSync, symlinkSync, statSync, existsSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, chmodSync, symlinkSync, openSync, fstatSync, closeSync, existsSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -209,8 +209,13 @@ test("artifact publication uses restrictive permissions and never overwrites exi
   try {
     const value = await create();
     writeCheckpointFile(f.out, value);
-    assert.equal(statSync(f.out).mode & 0o777, 0o600);
-    assert.deepEqual(parseAuditCheckpoint(readCheckpointFile(f.out).toString()), value);
+    // Bind the permission assertion and contents to one opened inode; a
+    // pathname stat followed by a separate read is an avoidable TOCTOU pattern.
+    const fd = openSync(f.out, "r");
+    try {
+      assert.equal(fstatSync(fd).mode & 0o777, 0o600);
+      assert.deepEqual(parseAuditCheckpoint(readFileSync(fd, "utf8")), value);
+    } finally { closeSync(fd); }
     assert.throws(() => writeCheckpointFile(f.out, value));
     assert.equal(readFileSync(f.out, "utf8"), encodeAuditCheckpoint(value));
     const link = join(f.dir, "link.json"); symlinkSync(f.out, link);
