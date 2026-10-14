@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { parseEnvText } from "./onprem-preflight-lib.mjs";
 import { postflightReleaseRequirement, verifyPostflightRelease } from "./onprem-pilot-release.mjs";
+import { readBoundedPostflightBody } from "./onprem-bounded-health.mjs";
 
 function fail(message) {
   console.error(`ERROR: ${message}`);
@@ -51,10 +52,7 @@ async function boundedJson(pathname) {
     signal: AbortSignal.timeout(10_000),
     headers: { Accept: "application/json" }
   });
-  const length = Number(response.headers.get("content-length") || "0");
-  if (length > 64 * 1024) throw new Error("oversized health response");
-  const text = await response.text();
-  if (Buffer.byteLength(text) > 64 * 1024) throw new Error("oversized health response");
+  const text = await readBoundedPostflightBody(response);
   let body;
   try { body = JSON.parse(text); } catch { throw new Error("invalid JSON health response"); }
   return { response, body };
@@ -72,10 +70,7 @@ async function boundedMetrics() {
       Authorization: `Bearer ${token}`
     }
   });
-  const length = Number(response.headers.get("content-length") || "0");
-  if (length > 64 * 1024) throw new Error("oversized metrics response");
-  const text = await response.text();
-  if (Buffer.byteLength(text) > 64 * 1024) throw new Error("oversized metrics response");
+  const text = await readBoundedPostflightBody(response);
   return { response, text };
 }
 

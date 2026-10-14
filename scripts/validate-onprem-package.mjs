@@ -262,6 +262,8 @@ assert.ok(postflight.includes("--pilot"), "Pilot postflight mode must require ex
 assert.ok(postflight.includes("postflightReleaseRequirement"), "Pilot postflight must fail closed without an approved commit.");
 assert.ok(postflight.includes("verifyPostflightRelease({ origin, expectedRevision })"), "Approved release identity must use a fresh challenge rather than trusting the initial liveness response.");
 assert.ok(postflight.includes("approvedRevisionVerified"), "Postflight output must explicitly declare whether approved release identity was verified.");
+assert.ok(postflight.includes("readBoundedPostflightBody"), "Postflight health and private metrics must use stream-time response byte caps.");
+assert.ok(!postflight.includes("await response.text()"), "Postflight must not buffer an unbounded upstream body before checking its size.");
 
 for (const token of [
   "--maintenance-window",
@@ -398,6 +400,7 @@ assert.equal(pkg.scripts?.["onprem:preflight"], "node scripts/onprem-preflight.m
 assert.equal(pkg.scripts?.["onprem:postflight"], "node scripts/onprem-postflight.mjs --env-file .env.onprem");
 assert.equal(pkg.scripts?.["onprem:pilot:postflight"], "node scripts/onprem-postflight.mjs --env-file .env.onprem --pilot");
 assert.ok(pkg.scripts?.["onprem:validate"]?.includes("scripts/onprem-pilot-release.test.mjs"), "Pilot release proof tests must run in the normal on-prem validation gate.");
+assert.ok(pkg.scripts?.["onprem:validate"]?.includes("scripts/onprem-bounded-health.test.mjs"), "Streaming response limits must be validated during the on-prem build gate.");
 assert.equal(pkg.scripts?.["onprem:upgrade"], "bash scripts/onprem-upgrade.sh");
 
 for (const token of [
