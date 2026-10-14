@@ -137,7 +137,7 @@ export async function monitorAuditIntegrity(now = new Date()) {
   // Count *all* tenant receipts, not merely the selected rotation window:
   // missing/stale coverage stays visible after skipped scheduler runs.
   const verifiedWithin24h = await db.auditVerificationProgress.count({
-    where: { lastSuccessAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) } }
+    where: { lastResult: "VALID", lastSuccessAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) } }
   });
 
   return assertAuditIntegrityRun({

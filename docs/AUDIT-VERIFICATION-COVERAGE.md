@@ -6,7 +6,7 @@ Every selected tenant in the bounded, rotating `audit-integrity` maintenance job
 
 A successful record preserves the exact audit-ledger sequence obtained from the verifier's PostgreSQL repeatable-read snapshot, the scope (`EMPTY`, `GENESIS`, or `TAIL`), the checked-event count and the timestamp. `TAIL` is **not** evidence that the chain was checked from genesis. A failure updates last attempt, result, failure timestamp and consecutive failure count **without erasing** the previous good watermark.
 
-The internal maintenance job also returns aggregate-only `verifiedWithin24h` and `staleOrUnverified24h` counts. Unchecked tenants, including newly created tenants with no receipt, are counted as stale/unverified rather than silently excluded. This is a descriptive 24-hour freshness window, **not** a guaranteed enterprise coverage SLA: when many tenants exist, the batch cycle can legitimately exceed 24 hours.
+The internal maintenance job also returns aggregate-only `verifiedWithin24h` and `staleOrUnverified24h` counts. Unchecked tenants, including newly created tenants with no receipt, **and tenants whose most recent attempt is INVALID**, are counted as stale/unverified rather than silently excluded. This is a descriptive 24-hour freshness window, **not** a guaranteed enterprise coverage SLA: when many tenants exist, the batch cycle can legitimately exceed 24 hours.
 
 ## Security and operation
 

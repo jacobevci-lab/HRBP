@@ -39,6 +39,7 @@ function fixture({ tenantCount = 1, tenantBatch = 4, verificationLimit = 1500, v
       calls.coverageReads++;
       const cutoff = args.where.lastSuccessAt.gte;
       return [...progress.values()].filter(value =>
+        value.lastResult === args.where.lastResult &&
         value.lastSuccessAt instanceof Date && value.lastSuccessAt >= cutoff).length;
     }
   };
@@ -236,6 +237,7 @@ test("failed rereview retains last verified tenant watermark and resets only aft
   assert.equal(bad.consecutiveFailures, 1);
   assert.equal(bad.lastVerifiedSequence, 127n);
   assert.equal(bad.lastSuccessAt.getTime(), now.getTime());
+  assert.equal(await f.progress.size, 1);
   tampered = false;
   await f.run(new Date(now.getTime() + 120_000));
   assert.equal(f.progress.get("tenant-0").consecutiveFailures, 0);
