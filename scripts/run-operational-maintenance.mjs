@@ -45,6 +45,12 @@ async function readBounded(response) {
   return { body, resourceLimit: /error code:\s*1102\b/i.test(text) };
 }
 
+/** Only a narrowly formatted Cloudflare ray may enter machine diagnostics.
+ * Never accept generic response headers (which may contain secrets or PII). */
+function validatedCloudflareRay(value) {
+  return typeof value === "string" && /^[a-f0-9]{16,32}-[A-Z]{3}$/.test(value) ? value : null;
+}
+
 async function request(fetchImpl, endpoint, token, method, job, timeoutMs) {
   const target = new URL(endpoint);
   if (job) target.searchParams.set("job", job);
@@ -56,7 +62,9 @@ async function request(fetchImpl, endpoint, token, method, job, timeoutMs) {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }
     });
     const parsed = await readBounded(response);
-    return { status: response.status, ok: response.ok, ...parsed };
+    return { status: response.status, ok: response.ok,
+      cfRay: response.status === 503 ? validatedCloudflareRay(response.headers.get("cf-ray")) : null,
+      ...parsed };
   } finally { clearTimeout(timeout); }
 }
 
@@ -128,7 +136,8 @@ export async function runMaintenance({ url, token, job = "all", localSmoke = fal
       durationMs: Date.now() - startedAt,
       ...(success ? {} : { code: resourceLimit ? "WORKER_RESOURCE_LIMIT_1102" :
         unclassified503 ? "HTTP_503_UNCLASSIFIED_STOPPED" :
-        knownJobFailure ? "JOB_FAILED" : "UNEXPECTED_RESPONSE_STOPPED" }) };
+        knownJobFailure ? "JOB_FAILED" : "UNEXPECTED_RESPONSE_STOPPED",
+        ...(response.status === 503 && response.cfRay ? { cfRay: response.cfRay } : {}) }) };
     report.results.push(result);
     log(result);
     // A confirmed domain failure or terminated 1102 invocation must not suppress later jobs.
@@ -142,8 +151,8 @@ export async function runMaintenance({ url, token, job = "all", localSmoke = fal
 export function markdownSummary(report) {
   return ["## HRBP operational maintenance", "",
     `Result: **${report.success ? "success" : "failed"}**${report.stopped ? " (stopped safely)" : ""}.`, "",
-    "| Job | Status | HTTP | Wall time (ms) | Diagnostic |", "| --- | --- | --- | --- | --- |",
-    ...report.results.map((result) => `| ${result.job} | ${result.status} | ${result.httpStatus ?? "—"} | ${result.durationMs ?? "—"} | ${result.code ?? "—"} |`), "",
+    "| Job | Status | HTTP | Wall time (ms) | Diagnostic | CF-Ray |", "| --- | --- | --- | --- | --- | --- |",
+    ...report.results.map((result) => `| ${result.job} | ${result.status} | ${result.httpStatus ?? "—"} | ${result.durationMs ?? "—"} | ${result.code ?? "—"} | ${result.cfRay ?? "—"} |`), "",
     "No automatic POST retries. Inspect unknown outcomes before manually rerunning a selected job.", ""].join("\n");
 }
 
