@@ -35,8 +35,10 @@ for (const path of [".env.example", ".env.onprem.example"]) {
     "on-prem and standard examples must choose the new bounded default");
 }
 const pkg = "package.json";
-expect(pkg, /"audit-integrity:validate": "node scripts\/validate-audit-integrity-monitor\.mjs && node --test scripts\/audit-integrity-monitoring\.test\.mjs"/,
-  "behavioral test must be registered in package scripts");
+expect(pkg, /"audit-integrity:validate": "node scripts\/validate-audit-integrity-monitor\.mjs && node --test scripts\/audit-integrity-monitoring\.test\.mjs/, 
+  "bounded audit monitoring behavioral test must stay registered");
+expect(pkg, /"audit-integrity:validate":[^\n]*scripts\/audit-full-history-verification\.test\.mjs/, 
+  "operator-only genesis-to-tail verification behavioral tests must also run in the audit gate");
 expect(pkg, /npm run maintenance:validate && npm run audit-integrity:validate && npm run hire:validate/,
   "audit integrity verification must gate production builds");
 if (failures.length) {

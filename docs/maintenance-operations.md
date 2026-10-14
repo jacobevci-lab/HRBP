@@ -105,6 +105,21 @@ assertions still require exactly-once notification delivery and stale-read
 notification retention. Passing a local Worker test is not a measurement of
 production CPU or memory usage.
 
+## Explicit complete-history audit verification (manual only)
+
+The 15-minute `audit-integrity` maintenance job intentionally verifies a bounded **tail** of selected tenant ledgers, not all historical events. A customer-approved operator can additionally run:
+
+```bash
+docker compose --env-file .env.onprem -f docker-compose.onprem.yml run --rm --no-deps -T schema \
+  node scripts/audit-full-history-verification.mjs --tenant-id <TENANT_ID> --max-events 50000 --batch-size 250 --acknowledge-read-only-scan
+```
+
+This command uses the current built `schema` Compose tooling image (the stripped `app` image excludes maintenance scripts), so the private `DATABASE_URL` is available without exposing it to the host. Use `--no-deps` only while the on-prem PostgreSQL stack is already healthy; no service or migration is started by this command. An alternative bare-host `npm run audit:full:verify -- ...` requires an explicitly configured approved `DATABASE_URL`. The scan selects one tenant by a bound SQL parameter, and uses a PostgreSQL `REPEATABLE READ READ ONLY` transaction. It traverses events from genesis using a bounded keyset page and validates sequence, linkage, recomputed content hash and the persisted state tail. Default workload is limited to 50,000 events (maximum 1 million by explicit option), 250 events per query (max 1,000), 45 seconds elapsed and a per-statement timeout. It always rolls back the read-only transaction. A budget, timeout, missing tenant or inconsistent chain exits nonzero; it must never be recorded as a completed verification.
+
+Only aggregate status and sequence/count are printed; SQL errors, employee payloads, tenant IDs and connection strings are never logged. Run only on approved customer infrastructure, outside peak load. It is not part of scheduled maintenance and will not make a production deployment healthy by itself.
+
+**Trust boundary:** An internally hash-linked audit history is not an independently trusted, immutable archive or signed checkpoint. Persistent coverage progress, interruption recovery, historical checkpoint signing and independent verification remain open under #215. Do not delete/rewrite audit events to resolve an integrity error.
+
 ## HR service SLA correctness
 
 Candidate selection now filters for a genuinely higher escalation level in the

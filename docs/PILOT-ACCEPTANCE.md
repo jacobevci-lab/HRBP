@@ -93,6 +93,19 @@ The customer may explicitly mark optional modules NOT IN PILOT, with a named own
 - HR decisions: repeated submissions/concurrent updates yield bounded conflicts rather than silently overwriting historical decisions; notifications are deduplicated.
 - No raw secrets, employee information, exception SQL or credentials in audit exports, operational metrics, GitHub artifact summaries or browser errors.
 
+### Operator-authorized historical audit scan
+
+Where tenant data volume fits the approved cost/time budget, a qualified database operator can supplement the scheduled tail checks with an explicit **read-only full-history** verification in the customer-controlled environment:
+
+```bash
+docker compose --env-file .env.onprem -f docker-compose.onprem.yml run --rm --no-deps -T schema \
+  node scripts/audit-full-history-verification.mjs --tenant-id <APPROVED_TENANT_ID> --max-events 50000 --batch-size 250 --acknowledge-read-only-scan
+```
+
+Run this only after the approved on-prem application and PostgreSQL are healthy. The `schema` tooling image already includes the script and receives the private Compose `DATABASE_URL`; the stripped application runtime image does **not** contain this CLI. The `--no-deps` flag avoids starting/restarting customer services. If running outside Docker, `npm run audit:full:verify -- ...` requires an explicitly configured, approved `DATABASE_URL`. Never print the connection string. The tool reads a repeatable-read, read-only PostgreSQL snapshot in bounded keyset pages, verifies genesis-to-tail event hashes/sequence/previousHash and checks the persisted tail state. It emits only safe status codes, a checked-event count and a sequence watermark. **Any** time/capacity budget exhaustion, missing tenant/state or integrity error is a failed/incomplete result, not UAT acceptance. Use a maintenance/low-load window and customer approval for the read workload.
+
+This scan does not create an independently signed checkpoint, does not prove that past history could not have been consistently rewritten by a privileged database attacker, and does not persist interrupted-scan progress. Long-term rotation, durable progress and external trust anchors remain required under issue #215. No production audit evidence must be rewritten to obtain a green report.
+
 ## Operations/game-day gates
 
 | ID | Check | Evidence / acceptance |

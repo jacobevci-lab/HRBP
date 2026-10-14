@@ -74,10 +74,12 @@ jobs:
         run: npm run db:migrate:verify
       - name: Prepare CI database from committed migrations
         run: npm run db:migrate:upgrade
-      - name: Verify concurrent audit ledger serialization
+      - name: Verify concurrent audit ledger serialization and full history integrity
         env:
           HRBP_DISPOSABLE_AUDIT_LEDGER_TEST: "true"
-        run: node --test scripts/audit-ledger-concurrency.test.mjs
+        run: |
+          node --test scripts/audit-ledger-concurrency.test.mjs
+          node --test scripts/audit-full-history-postgres.test.mjs
       - name: Verify governed job-change preview on PostgreSQL
         run: node --test scripts/job-change-impact-preview.postgres.test.mjs
       - name: Verify scheduled job-change lifecycle on PostgreSQL
