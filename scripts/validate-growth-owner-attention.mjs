@@ -26,10 +26,13 @@ reject(growthPath, growth, /start-learning-assignment[\s\S]*COMPLETED/, "Action 
 
 const pagePath = "app/module/[slug]/page.tsx";
 const page = await source(pagePath);
-expect(pagePath, page, /search\.developmentPlan/, "module routing must accept exact development-plan focus");
-expect(pagePath, page, /search\.plan/, "module routing must accept exact succession-plan focus");
-expect(pagePath, page, /slug === "talent"[\s\S]*developmentPlanFocus/, "talent focus must remain domain-specific");
-expect(pagePath, page, /slug === "succession"[\s\S]*successionPlanFocus/, "succession focus must remain domain-specific");
+expect(pagePath, page, /pickGrowthFocus\(slug as GrowthSlug,\s*search\)/, "module routing must use the bounded domain-specific growth focus parser");
+const growthFocusPath = "lib/growth-route-focus.ts";
+const growthFocus = await source(growthFocusPath);
+expect(growthFocusPath, growthFocus, /talent: \["developmentPlan"\]/, "talent focus accepts development-plan notification targets");
+expect(growthFocusPath, growthFocus, /succession: \["plan", "candidate"\]/, "succession focus accepts owned plan and candidate notification targets");
+expect(growthFocusPath, growthFocus, /focusKeys\[slug\]/, "record focus key selection must remain domain-specific");
+expect(growthFocusPath, growthFocus, /typeof value !== "string"[\s\S]*value\.length > 128/, "invalid or oversized focus must fail closed");
 
 const growthModulePath = "components/growth-module-page.tsx";
 const growthModule = await source(growthModulePath);
@@ -51,8 +54,12 @@ const successionDataPath = "lib/succession-governance-data.ts";
 const successionData = await source(successionDataPath);
 expect(successionDataPath, successionData, /focusId\?\.trim\(\)\.slice\(0,\s*128\)/, "succession focus input must be bounded");
 expect(successionDataPath, successionData, /employmentPrimaryKeyFilter\(scope\)/, "succession focus must preserve relationship-scoped position authorization");
-expect(successionDataPath, successionData, /plan\.id\s*===\s*focusId\s*&&\s*plan\.ownerId\s*===\s*ctx\.actorId/, "succession focus must require signed owner identity");
-expect(successionDataPath, successionData, /orderedPlans[\s\S]*left\.id\s*===\s*focusId/, "authorized succession focus must be pinned without a second broad query");
+const successionFocusPath = "lib/succession-focus.ts";
+const successionFocus = await source(successionFocusPath);
+expect(successionDataPath, successionData, /isOwnedSuccessionFocus\(plan, focusId, ctx\.actorId\)/, "succession loader must use signed owner-bound focus inside scoped plans");
+expect(successionFocusPath, successionFocus, /plan\.ownerId === actorId/, "focus helper must enforce signed owner identity");
+expect(successionFocusPath, successionFocus, /plan\.id === focusId \|\| plan\.candidates\.some/, "focus helper must support owned plan and candidate IDs");
+expect(successionDataPath, successionData, /orderedPlans[\s\S]*isOwnedSuccessionFocus\(left, focusId, ctx\.actorId\)/, "authorized succession focus must be reordered inside the existing scoped collection");
 reject(successionDataPath, successionData, /findUnique\(|findFirst\(\{[\s\S]*id:\s*focusId/, "succession focus must not fall back to an unscoped primary-key lookup");
 
 const componentPath = "components/workflow-action-center.tsx";

@@ -29,8 +29,12 @@ reject(dataPath, data, /findUnique\(\{\s*where:\s*\{\s*id:\s*boundedFocusId/, "f
 
 const pagePath = "app/module/[slug]/page.tsx";
 const page = await source(pagePath);
-expect(pagePath, page, /search\.enrollment/, "module routing must parse exact benefit enrollment focus");
-expect(pagePath, page, /slug === "benefits"[\s\S]*enrollmentFocus/, "benefit focus must remain domain-specific");
+expect(pagePath, page, /pickGrowthFocus\(slug as GrowthSlug,\s*search\)/, "module routing must use a bounded shared growth focus parser");
+const focusPath = "lib/growth-route-focus.ts";
+const focus = await source(focusPath);
+expect(focusPath, focus, /benefits:\s*\["enrollment"\]/, "benefit focus must only accept the enrolled resource key");
+expect(focusPath, focus, /focusKeys\[slug\]/, "growth focus must remain module-specific");
+expect(focusPath, focus, /typeof value !== "string"[\s\S]*value\.length > 128/, "unsafe benefit focus values must fail closed");
 
 const modulePath = "components/growth-module-page.tsx";
 const modulePage = await source(modulePath);

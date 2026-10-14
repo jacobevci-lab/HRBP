@@ -7,6 +7,7 @@ import { ConnectionMetadataEditor } from "@/components/connection-metadata-edito
 import { EmployeeRelationsCaseLifecyclePanel } from "@/components/employee-relations-case-lifecycle-panel";
 import { GovernancePlanningModulePage } from "@/components/governance-planning-module-page";
 import { GrowthModulePage } from "@/components/growth-module-page";
+import { pickGrowthFocus } from "@/lib/growth-route-focus";
 import { HRServiceEscalationPanel } from "@/components/hr-service-escalation-panel";
 import { HRServiceLifecyclePanel } from "@/components/hr-service-lifecycle-panel";
 import { ModuleLanding } from "@/components/module-landing";
@@ -40,11 +41,6 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const entryFocus = typeof search.entry === "string" ? search.entry : "";
   const compensationFocus = typeof search.change === "string" ? search.change : "";
   const payrollFocus = typeof search.run === "string" ? search.run : "";
-  const enrollmentFocus = typeof search.enrollment === "string" ? search.enrollment : "";
-  const reviewFocus = typeof search.review === "string" ? search.review : "";
-  const assignmentFocus = typeof search.assignment === "string" ? search.assignment : "";
-  const developmentPlanFocus = typeof search.developmentPlan === "string" ? search.developmentPlan : "";
-  const successionPlanFocus = typeof search.plan === "string" ? search.plan : "";
   const personId = typeof search.person === "string" ? search.person : undefined;
   const documentFocus = typeof search.document === "string" ? search.document : undefined;
   const policyFocus = typeof search.policy === "string" ? search.policy : undefined;
@@ -76,17 +72,9 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
         : slug === "payroll"
           ? payrollFocus
           : undefined;
-  const growthFocus = slug === "benefits"
-    ? enrollmentFocus
-    : slug === "performance"
-      ? reviewFocus
-      : slug === "learning"
-        ? assignmentFocus
-        : slug === "talent"
-          ? developmentPlanFocus
-          : slug === "succession"
-            ? successionPlanFocus
-            : undefined;
+  const growthFocus = growthSlugs.has(slug as GrowthSlug)
+    ? pickGrowthFocus(slug as GrowthSlug, search)
+    : undefined;
 
   if (!ctx) return <AppShell><PublicModuleLanding slug={slug}/></AppShell>;
 

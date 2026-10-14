@@ -84,8 +84,11 @@ reject(componentPath, component, /fetch\("\/api\/action-center\?/, "Action Cente
 
 const modulePagePath = "app/module/[slug]/page.tsx";
 const modulePage = await source(modulePagePath);
-expect(modulePagePath, modulePage, /search\.review/, "module routing must accept exact performance-review focus");
-expect(modulePagePath, modulePage, /search\.assignment/, "module routing must accept exact learning-assignment focus");
+const growthFocusPath = "lib/growth-route-focus.ts";
+const growthFocus = await source(growthFocusPath);
+expect(growthFocusPath, growthFocus, /performance:\s*\["review"\]/, "module routing must accept exact performance-review focus");
+expect(growthFocusPath, growthFocus, /learning:\s*\["assignment"\]/, "module routing must accept exact learning-assignment focus");
+expect(modulePagePath, modulePage, /pickGrowthFocus\(slug as GrowthSlug, search\)/, "generic growth route must use the same strict focus parser as explicit modules");
 expect(modulePagePath, modulePage, /GrowthModulePage slug=\{slug as GrowthSlug\} focusId=\{growthFocus\}/, "growth modules must receive only their domain-specific focus identifier");
 
 const performanceDataPath = "lib/performance-participant-data.ts";

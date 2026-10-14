@@ -1,4 +1,9 @@
 import { GrowthModulePage } from "@/components/growth-module-page";
+import { pickGrowthFocus, type GrowthSearchParams } from "@/lib/growth-route-focus";
+
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-export default async function TalentPage(){return GrowthModulePage({slug:"talent"})}
+
+export default async function TalentPage({ searchParams }: { searchParams: GrowthSearchParams }) {
+  return GrowthModulePage({ slug: "talent", focusId: pickGrowthFocus("talent", await searchParams) });
+}
