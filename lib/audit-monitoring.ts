@@ -13,7 +13,7 @@ function verifiedLedgerWatermark(value: string | null): bigint {
     throw new Error("Audit verification did not return a bounded confirmed sequence.");
   }
   const sequence = BigInt(value);
-  if (sequence > 9223372036854775807n) {
+  if (sequence > BigInt("9223372036854775807")) {
     throw new Error("Audit verification sequence exceeds PostgreSQL bigint range.");
   }
   return sequence;
