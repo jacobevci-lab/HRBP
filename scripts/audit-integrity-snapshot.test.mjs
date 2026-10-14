@@ -100,6 +100,7 @@ test("genesis audit chain verifies using one repeatable-read snapshot, not indep
   assert.equal(outcome.valid, true);
   assert.equal(outcome.scope, "GENESIS");
   assert.equal(outcome.checked, 3);
+  assert.equal(outcome.verifiedThroughSequence, "3");
   assert.equal(outcome.brokenEventId, null);
   assert.equal(h.calls.transactions.length, 1);
   assert.equal(h.calls.ledgerQuery.length, 1);
@@ -118,6 +119,7 @@ test("valid tail verifies a predecessor anchor and exact persisted head", async 
   assert.equal(outcome.valid, true);
   assert.equal(outcome.scope, "TAIL");
   assert.equal(outcome.checked, 10);
+  assert.equal(outcome.verifiedThroughSequence, "12");
   assert.equal(outcome.firstEventId, "event-3");
   assert.equal(outcome.lastEventId, "event-12");
 });
@@ -142,6 +144,7 @@ test("empty ledger is only valid with empty ledger state", async () => {
     assert.equal(result.scope, "EMPTY");
     assert.equal(result.valid, true);
     assert.equal(result.checked, 0);
+    assert.equal(result.verifiedThroughSequence, "0");
   }
   const inconsistent = harness({
     state: { eventCount: BigInt(2), tailHash: "sha256-not-zero" },
@@ -150,6 +153,7 @@ test("empty ledger is only valid with empty ledger state", async () => {
   const result = await inconsistent.verify(TENANT);
   assert.equal(result.scope, "EMPTY");
   assert.equal(result.valid, false);
+  assert.equal(result.verifiedThroughSequence, null);
   assert.match(result.reason, /non-empty/);
 });
 
@@ -165,6 +169,7 @@ test("missing state, altered hashes and forged ledger tail are still detected", 
   const forgedHash = harness({ state: original.state, rows: forgedRows });
   const broken = await forgedHash.verify(TENANT);
   assert.equal(broken.valid, false);
+  assert.equal(broken.verifiedThroughSequence, null);
   assert.equal(broken.brokenEventId, "event-2");
 
   const forgedTail = harness({

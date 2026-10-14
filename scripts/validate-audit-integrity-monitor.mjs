@@ -23,6 +23,13 @@ expect(monitor, /recipientRole: PlatformRole\.TENANT_ADMIN/, "integrity alerts m
 expect(monitor, /classification: DataClassification\.RESTRICTED/,
   "integrity alerts must retain the restricted classification");
 expect(monitor, /quarterHourSlot: batch\.quarterHourSlot/, "operational telemetry must expose a bounded selection slot");
+expect(monitor, /auditVerificationProgress\.upsert/, "every checked tenant must have a durable outcome receipt");
+expect(monitor, /lastVerifiedSequence: confirmedSequence/, "successful checks must persist the MVCC-verified ledger sequence");
+expect(monitor, /lastResult: "INVALID"/, "failed checks must preserve a distinct durable failure receipt");
+expect(monitor, /consecutiveFailures: \{ increment: 1 \}/, "repeat integrity failures must remain visible");
+expect(monitor, /staleOrUnverified24h/, "missing or overdue tenant coverage must remain visible as an aggregate");
+expect("prisma/schema.prisma", /model AuditVerificationProgress/, "audit coverage must have a migrated tenant-owned table");
+expect(".github/workflows/ci.yml", /scripts\/audit-verification-progress\.postgres\.test\.mjs/, "real PostgreSQL coverage regression must be in CI");
 reject(monitor, /take:\s*10_000/, "never silently truncate the tenant universe");
 reject(monitor, /if \(result\.scope === "EMPTY"\)/,
   "invalid-empty ledger results must not short-circuit the validity flag");
