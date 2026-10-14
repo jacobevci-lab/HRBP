@@ -214,6 +214,7 @@ model Tenant {
   lifecycle           EmployeeLifecycleEvent[]
   audit               AuditEvent[]
   auditLedgerState    AuditLedgerState?
+  auditVerificationProgress AuditVerificationProgress?
   requisitions        Requisition[]
   candidates          Candidate[]
   applications        Application[]
@@ -860,4 +861,21 @@ model AuditLedgerState {
   eventCount BigInt @default(0)
   updatedAt  DateTime @updatedAt
   tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+// Operational verification coverage, not an independently trusted audit checkpoint.
+// A TAIL result confirms only its bounded recent window, never full genesis history.
+model AuditVerificationProgress {
+  tenantId             String @id
+  lastAttemptAt        DateTime
+  lastSuccessAt        DateTime?
+  lastFailureAt        DateTime?
+  lastVerifiedSequence BigInt?
+  lastVerifiedScope    String?
+  lastResult           String
+  checkedEvents        Int @default(0)
+  consecutiveFailures  Int @default(0)
+  tenant               Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([lastSuccessAt, tenantId])
 }
