@@ -1,5 +1,5 @@
 import { readJsonObject } from "@/lib/input-validation";
-import { DataClassification, DevelopmentPlanStatus, EmploymentStatus, LearningAssignmentStatus, SkillProficiency } from "@prisma/client";
+import { DataClassification, DevelopmentPlanStatus, EmploymentStatus, LearningAssignmentStatus, Prisma, SkillProficiency } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
@@ -93,9 +93,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         tx.learningAssignment.findFirst({
           where: {
             tenantId: ctx.tenantId,
-            successionCandidateId: candidate.id,
+            employmentId: candidate.employmentId,
             courseId,
-            developmentSkillId: skillId,
             status: { in: [LearningAssignmentStatus.ASSIGNED, LearningAssignmentStatus.IN_PROGRESS, LearningAssignmentStatus.OVERDUE] }
           },
           select: { id: true }
@@ -216,17 +215,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         currentProficiency: currentSkill?.proficiency ?? null,
         developmentPlanId
       };
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return Response.json({ data }, { status: 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
+    const prismaCode = typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
     if (code === "NOT_FOUND") return Response.json({ error: "Succession candidate not found in tenant." }, { status: 404 });
     if (code === "CANDIDATE_INACTIVE") return Response.json({ error: "Development assignments cannot be added to a removed succession candidate." }, { status: 409 });
     if (code === "PLAN_INACTIVE") return Response.json({ error: "Development assignments cannot be added to an inactive succession plan." }, { status: 409 });
     if (code === "OUT_OF_SCOPE") return forbidden("Candidate employment is outside your authorized relationship scope.");
     if (code === "PLAN_OUT_OF_SCOPE") return forbidden("Succession target position is outside your authorized relationship scope.");
     if (code === "DEVELOPMENT_REFERENCE_NOT_FOUND") return Response.json({ error: "Candidate employment, active course, active skill or target position was not found in tenant." }, { status: 404 });
-    if (code === "DUPLICATE_OPEN_PLAN") return Response.json({ error: "An open development assignment already links this candidate, course and skill." }, { status: 409 });
+    if (code === "DUPLICATE_OPEN_PLAN") return Response.json({ error: "An open learning assignment already exists for this employee and course." }, { status: 409 });
+    if (prismaCode === "P2034" || prismaCode === "P2002") return Response.json({ error: "A concurrent learning assignment conflict occurred. Refresh the employee's learning register before retrying." }, { status: 409 });
     if (code === "TARGET_NOT_ABOVE_CURRENT") return Response.json({ error: "Target proficiency must be above the employee's current assessed proficiency." }, { status: 409 });
     if (code === "TARGET_BELOW_PLAN") return Response.json({ error: "Target proficiency cannot be lower than the active development plan target." }, { status: 409 });
     throw error;

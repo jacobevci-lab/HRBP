@@ -22,7 +22,7 @@
     "talent-learning:validate": "node scripts/validate-talent-learning-governance.mjs && node --test scripts/talent-assessment-correction.test.mjs scripts/talent-assessment-create.test.mjs scripts/employee-skill-assessment-governance.test.mjs scripts/skill-catalog-input.test.mjs",
     "learning-catalog:validate": "node scripts/validate-learning-catalog-lifecycle.mjs && node --test scripts/learning-catalog-lifecycle.test.mjs",
     "benefits:validate": "node scripts/validate-benefits-governance.mjs",
-    "connected-growth:validate": "node scripts/validate-connected-growth.mjs",
+    "connected-growth:validate": "node scripts/validate-connected-growth.mjs && node --test scripts/learning-cross-source-duplicates.test.mjs",
     "development-plan:validate": "node scripts/validate-development-plans.mjs",
     "leave:validate": "node scripts/validate-leave-governance.mjs",
     "time:validate": "node scripts/validate-time-governance.mjs && node --test scripts/time-client-action.test.mjs",
