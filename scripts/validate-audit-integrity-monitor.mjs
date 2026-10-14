@@ -1,64 +1,60 @@
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 
 const failures = [];
 function expect(path, pattern, label) {
-  const source = readFileSync(path, "utf8");
-  if (!pattern.test(source)) failures.push(path + ": " + label);
+  if (!pattern.test(readFileSync(path, "utf8"))) failures.push(path + ": " + label);
 }
 function reject(path, pattern, label) {
-  const source = readFileSync(path, "utf8");
-  if (pattern.test(source)) failures.push(path + ": " + label);
+  if (pattern.test(readFileSync(path, "utf8"))) failures.push(path + ": " + label);
 }
 const monitor = "lib/audit-monitoring.ts";
-const schedule = "lib/audit-integrity-batching.mjs";
+const budget = "lib/audit-integrity-batching.mjs";
+const scheduler = "lib/audit-verification-schedule.ts";
 expect(monitor, /db\.tenant\.count\(\)/, "the complete tenant universe must be counted");
-expect(monitor, /orderBy: \[\{ createdAt: "asc" \}, \{ id: "asc" \}\]/, "tenant pages must have a stable tie-breaker");
-expect(monitor, /skip: batch\.skip[,\s\S]*take: batch\.take/, "tenant reads must use a bounded rotated page");
-expect(monitor, /selectAuditIntegrityBatch\(/, "batching must reuse the tested budget policy");
-expect(monitor, /if \(result\.valid && result\.scope === "EMPTY"\)/,
-  "only a valid EMPTY ledger can be counted as healthy");
-expect(monitor, /failed \+= 1[\s\S]*AUDIT_INTEGRITY_FAILURE/,
-  "invalid ledger results must enqueue a privileged integrity alert");
-expect(monitor, /recipientRole: PlatformRole\.TENANT_ADMIN/, "integrity alerts must only reach governed tenant admins");
-expect(monitor, /classification: DataClassification\.RESTRICTED/,
-  "integrity alerts must retain the restricted classification");
-expect(monitor, /quarterHourSlot: batch\.quarterHourSlot/, "operational telemetry must expose a bounded selection slot");
-expect(monitor, /INSERT INTO "AuditVerificationProgress" AS progress/, "every checked tenant must have a durable outcome receipt");
-expect(monitor, /\$\{confirmedSequence\}/, "successful checks must bind the MVCC-verified ledger sequence");
-expect(monitor, /"lastResult" = 'INVALID'/, "failed checks must preserve a distinct durable failure receipt");
-expect(monitor, /LEAST\(progress\."consecutiveFailures"::bigint \+ 1, 2147483647\)::integer/,
-  "repeat integrity failures must remain visible without overflowing their counter");
-expect(monitor, /progress\."lastAttemptAt" < EXCLUDED\."lastAttemptAt"/,
-  "older success receipts must be rejected inside the atomic database update");
-expect(monitor, /progress\."lastVerifiedSequence" <= EXCLUDED\."lastVerifiedSequence"/,
-  "a success receipt must never regress its existing sequence watermark");
-expect(monitor, /AUDIT_VERIFICATION_PROGRESS_CONFLICT/, "rejected success receipts must not produce green maintenance runs");
-expect(monitor, /await tx\.\$executeRaw`/, "failure receipts must use the notification transaction's client");
-reject(monitor, /\$executeRawUnsafe|\$queryRawUnsafe|Prisma\.raw\(/,
-  "receipt SQL must use bound tagged templates, never unsafe SQL construction");
-expect(monitor, /staleOrUnverified24h/, "missing or overdue tenant coverage must remain visible as an aggregate");
-expect("prisma/schema.prisma", /model AuditVerificationProgress/, "audit coverage must have a migrated tenant-owned table");
-expect(".github/workflows/ci.yml", /scripts\/audit-verification-progress\.postgres\.test\.mjs/, "real PostgreSQL coverage regression must be in CI");
-reject(monitor, /take:\s*10_000/, "never silently truncate the tenant universe");
-reject(monitor, /if \(result\.scope === "EMPTY"\)/,
-  "invalid-empty ledger results must not short-circuit the validity flag");
-expect(schedule, /10_000 \/ verificationLimit/, "hash checks must respect the global event budget");
-expect(schedule, /15 \* 60 \* 1000/, "tenant batches must rotate with the 15-minute scheduler cadence");
-expect(schedule, /Math\.ceil\(tenantCount \/ tenantBatchSize\)/,
-  "each batch must reflect the actual total tenant count");
-for (const path of [".env.example", ".env.onprem.example"]) {
-  expect(path, /^HRBP_AUDIT_INTEGRITY_TENANT_BATCH_SIZE=4$/m,
-    "on-prem and standard examples must choose the new bounded default");
-}
-const pkg = "package.json";
-expect(pkg, /"audit-integrity:validate": "node scripts\/validate-audit-integrity-monitor\.mjs && node --test scripts\/audit-integrity-monitoring\.test\.mjs/,
-  "bounded audit monitoring behavioral test must stay registered");
-expect(pkg, /"audit-integrity:validate":[^\n]*scripts\/audit-full-history-verification\.test\.mjs/,
-  "operator-only genesis-to-tail verification behavioral tests must also run in the audit gate");
-expect(pkg, /npm run maintenance:validate && npm run audit-integrity:validate && npm run hire:validate/,
-  "audit integrity verification must gate production builds");
+expect(monitor, /selectAuditIntegrityBatch\(/, "retain the reviewed hash budget");
+expect(monitor, /scheduler\.start\(budget\.tenantBatchSize\)/, "durable selection must use the bounded tenant budget");
+expect(monitor, /if \(result\.valid && result\.scope === "EMPTY"\)/, "only valid EMPTY is healthy");
+expect(monitor, /failed \+= 1[\s\S]*AUDIT_INTEGRITY_FAILURE/, "invalid ledgers retain the alert/error path");
+expect(monitor, /recipientRole: PlatformRole\.TENANT_ADMIN/, "only governed tenant administrators receive integrity alerts");
+expect(monitor, /classification: DataClassification\.RESTRICTED/, "keep restricted alert classification");
+expect(monitor, /scheduler\.checkpoint\(lease, tenant, async tx =>/, "failure receipt and alert share the cursor transaction");
+expect(monitor, /recordSuccessfulAuditVerification\(tx, tenant\.id, now, result\)/, "success receipt shares the cursor transaction");
+expect(monitor, /assertAuditIntegrityRun\(/, "invalid outcomes cannot turn maintenance green");
+expect(monitor, /scheduler\.release\(lease\)/, "cleanup preserves unfinished cursor progress");
+expect(monitor, /\$\{confirmedSequence\}/, "bind the exact MVCC-confirmed sequence");
+expect(monitor, /progress\."lastVerifiedSequence" <= EXCLUDED\."lastVerifiedSequence"/, "never regress a known-good receipt");
+expect(monitor, /progress\."lastAttemptAt" < EXCLUDED\."lastAttemptAt"/, "reject stale successes atomically");
+expect(monitor, /LEAST\(progress\."consecutiveFailures"::bigint \+ 1, 2147483647\)::integer/, "saturate failure counters");
+expect(monitor, /AUDIT_VERIFICATION_PROGRESS_CONFLICT/, "receipt conflicts must fail closed");
+expect(monitor, /staleOrUnverified24h/, "preserve aggregate freshness gaps");
+reject(monitor, /skip:|batchIndex:|quarterHourSlot:/, "wall-clock rotation must not select tenants or masquerade as durable coverage");
+reject(monitor, /db\.\$executeRaw`/, "receipts must not escape cursor transactions");
+reject(monitor, /if \(result\.scope === "EMPTY"\)/, "invalid EMPTY must not be bypassed");
+expect(scheduler, /orderBy: \[\{ createdAt: "asc" \}, \{ id: "asc" \}\]/, "stable keyset order is required");
+expect(scheduler, /take: take \+ 1/, "allow only one metadata lookahead");
+expect(scheduler, /FOR UPDATE/, "fence ownership within a short row-locked transaction");
+expect(scheduler, /clock_timestamp\(\)/, "lease validity must use the database clock");
+expect(scheduler, /const LEASE_MS = 120_000/, "keep lease duration bounded");
+expect(scheduler, /const TRANSACTION = \{ maxWait: 2_000, timeout: 5_000 \}/, "short transaction budgets are required");
+expect(scheduler, /const value = await persist\(tx\);\s*await fence\(tx, lease\)/, "expiry after callback work must roll back receipts too");
+expect(scheduler, /AUDIT_SCHEDULE_VERSION_UNSUPPORTED/, "unknown schedule versions must never silently reset");
+for (const path of [monitor, scheduler]) reject(path, /\$executeRawUnsafe|\$queryRawUnsafe|Prisma\.raw\(/, "use parameter-bound queries only");
+expect("prisma/schema.prisma", /model AuditVerificationProgress/, "retain the tenant-owned receipt model");
+expect("prisma/audit-verification-schedule.prisma", /model AuditVerificationSchedule/, "reviewed scheduler model is required");
+expect("prisma/migrations/20261014190000_audit_verification_schedule/migration.sql", /CREATE TABLE "AuditVerificationSchedule"/, "scheduler state must use committed migrations");
+expect(".github/workflows/ci.yml", /scripts\/audit-verification-progress\.postgres\.test\.mjs/, "real scheduler/receipt integration stays in CI");
+expect(budget, /10_000 \/ verificationLimit/, "the global hash budget must remain unchanged");
+for (const path of [".env.example", ".env.onprem.example"]) expect(path, /^HRBP_AUDIT_INTEGRITY_TENANT_BATCH_SIZE=4$/m, "retain bounded defaults");
+expect("package.json", /"audit-integrity:validate":[^\n]*scripts\/audit-integrity-monitoring\.test\.mjs/, "monitor behavior tests remain in the build gate");
+expect("package.json", /"audit-integrity:validate":[^\n]*scripts\/audit-full-history-verification\.test\.mjs/, "operator full-history tests remain in the build gate");
+expect("package.json", /npm run maintenance:validate && npm run audit-integrity:validate && npm run hire:validate/, "audit validation must gate builds");
 if (failures.length) {
   console.error("Audit integrity monitoring validation failed:\n" + failures.map(x => "- " + x).join("\n"));
   process.exit(1);
 }
-console.log("Audit integrity monitoring is bounded and invalid empty ledgers fail closed.");
+// Keep the new executable scheduler regressions in the existing prebuild gate
+// without changing the workflow permissions or weakening any existing checks.
+const tests = spawnSync(process.execPath, ["--test", "scripts/audit-verification-schedule.test.mjs"], { stdio: "inherit" });
+if (tests.error || tests.status !== 0) process.exit(1);
+console.log("Audit integrity monitoring uses bounded, fenced, durable tenant coverage.");

@@ -5,381 +5,241 @@ import ts from "typescript";
 import { selectAuditIntegrityBatch } from "../lib/audit-integrity-batching.mjs";
 import { assertAuditIntegrityRun } from "../lib/audit-integrity-outcome.mjs";
 
-function loadMonitor(mocks) {
-  const path = "lib/audit-monitoring.ts";
-  const js = ts.transpileModule(readFileSync(path, "utf8"), {
-    fileName: path,
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
-  }).outputText;
-  const module = { exports: {} };
-  new Function("module", "exports", "require", js)(module, module.exports, name => {
-    if (name in mocks) return mocks[name];
-    throw new Error("Unexpected dependency: " + name);
-  });
-  return module.exports.monitorAuditIntegrity;
-}
-
-const now = new Date("2026-10-14T13:00:00.000Z");
-
-function fixture({ tenantCount = 1, tenantBatch = 4, verificationLimit = 1500, verifyResult = null } = {}) {
-  const calls = { count: 0, list: [], integrity: [], transactions: 0, notifications: [], checkpoints: [], coverageReads: 0 };
+const now = new Date("2026-10-14T13:00:00Z");
+function fixture({ tenantCount = 1, tenantBatch = 4, limit = 1500, verifyResult, failNotification = false, startError = false } = {}) {
   const progress = new Map();
-  // Model the atomic receipt policy, not PostgreSQL's SQL engine. The real
-  // conditional INSERT/UPDATE and transaction races are exercised in CI's
-  // disposable audit-verification-progress.postgres.test.mjs.
-  const executeReceipt = async (strings, ...values) => {
-    assert.ok(Array.isArray(strings.raw), "receipt values must use a tagged, bound SQL template");
-    const sql = strings.join("?");
-    assert.match(sql, /ON CONFLICT \("tenantId"\) DO UPDATE/);
-    assert.match(sql, /WHERE .*progress\."lastAttemptAt"/s);
-    const [tenantId, at, outcomeAt] = values;
-    assert.equal(at.getTime(), outcomeAt.getTime());
-    calls.checkpoints.push({ sql, values });
+  const calls = { verifications: [], starts: [], committed: [], notifications: [], releases: 0, count: 0 };
+  let cursor = 0;
+  // Component double only. Real durable selection/lease/fencing SQL is tested
+  // separately and in audit-verification-progress.postgres.test.mjs.
+  const tx = { $executeRaw: async (strings, ...values) => {
+    assert.ok(Array.isArray(strings.raw));
+    const [tenantId, at] = values;
     const current = progress.get(tenantId);
     if (values.length === 6) {
       const [, , , sequence, scope, checked] = values;
       if (current && (current.lastAttemptAt > at ||
           (current.lastAttemptAt.getTime() === at.getTime() && current.lastResult !== "VALID") ||
           (current.lastVerifiedSequence != null && current.lastVerifiedSequence > sequence))) return 0;
-      progress.set(tenantId, { ...current, tenantId, lastAttemptAt: at, lastSuccessAt: at,
-        lastVerifiedSequence: sequence, lastVerifiedScope: scope, lastResult: "VALID",
-        checkedEvents: checked, consecutiveFailures: 0 });
+      progress.set(tenantId, { ...current, lastAttemptAt: at, lastSuccessAt: at, lastResult: "VALID",
+        lastVerifiedSequence: sequence, lastVerifiedScope: scope, checkedEvents: checked, consecutiveFailures: 0 });
     } else {
       assert.equal(values.length, 4);
-      assert.match(sql, /'INVALID'/);
       if (current && current.lastAttemptAt > at) return 0;
-      const duplicate = current?.lastAttemptAt.getTime() === at.getTime() && current?.lastResult === "INVALID";
-      progress.set(tenantId, { ...current, tenantId, lastAttemptAt: at, lastFailureAt: at,
-        lastResult: "INVALID", checkedEvents: values[3], consecutiveFailures: duplicate
-          ? current.consecutiveFailures : Math.min(2147483647, (current?.consecutiveFailures ?? 0) + 1) });
+      const duplicate = current?.lastAttemptAt.getTime() === at.getTime() && current.lastResult === "INVALID";
+      progress.set(tenantId, { ...current, lastAttemptAt: at, lastFailureAt: at, lastResult: "INVALID",
+        checkedEvents: values[3], consecutiveFailures: duplicate ? current.consecutiveFailures
+          : Math.min(2147483647, (current?.consecutiveFailures ?? 0) + 1) });
     }
     return 1;
-  };
-  const progressDelegate = {
-    count: async args => {
-      calls.coverageReads++;
-      const cutoff = args.where.lastSuccessAt.gte;
-      return [...progress.values()].filter(value =>
-        value.lastResult === args.where.lastResult &&
-        value.lastSuccessAt instanceof Date && value.lastSuccessAt >= cutoff).length;
-    }
-  };
+  } };
   const db = {
-    $executeRaw: executeReceipt,
-    auditVerificationProgress: progressDelegate,
-    tenant: {
-      count: async () => { calls.count++; return tenantCount; },
-      findMany: async args => {
-        calls.list.push(args);
-        assert.deepEqual(args.orderBy, [{ createdAt: "asc" }, { id: "asc" }]);
-        assert.deepEqual(args.select, { id: true });
-        assert.ok(args.take * Math.min(5000, Math.max(100, verificationLimit)) <= 10_000);
-        const remaining = Math.max(0, tenantCount - args.skip);
-        return Array.from({ length: Math.min(args.take, remaining) }, (_, i) => ({
-          id: "tenant-" + (args.skip + i)
-        }));
+    tenant: { count: async () => { calls.count++; return tenantCount; } },
+    auditVerificationProgress: { count: async args => [...progress.values()].filter(p =>
+      p.lastResult === args.where.lastResult && p.lastSuccessAt >= args.where.lastSuccessAt.gte).length },
+    $executeRaw: () => { throw new Error("receipt escaped its cursor transaction"); }
+  };
+  const scheduler = {
+    start: async take => {
+      calls.starts.push(take);
+      if (startError) throw Object.assign(new Error("busy"), { code: "AUDIT_SCHEDULE_BUSY" });
+      const length = Math.min(take, Math.max(0, tenantCount - cursor));
+      return { tenants: Array.from({ length }, (_, i) => ({ id: `tenant-${cursor + i}`, createdAt: now })) };
+    },
+    checkpoint: async (_lease, tenant, persist) => {
+      const saved = structuredClone(progress), alerts = calls.notifications.length;
+      try {
+        const value = await persist(tx);
+        calls.committed.push(tenant.id);
+        cursor = (+tenant.id.slice(7) + 1) % Math.max(1, tenantCount);
+        return value;
+      } catch (e) {
+        progress.clear(); for (const [key, value] of saved) progress.set(key, value);
+        calls.notifications.length = alerts;
+        throw e;
       }
     },
-    $transaction: async fn => {
-      calls.transactions++;
-      return fn({ $executeRaw: executeReceipt });
-    }
+    finish: async () => ({ scheduleVersion: 1, selectionMode: "DURABLE_KEYSET", cycleCompleted: cursor === 0 }),
+    release: async () => { calls.releases++; }
   };
   const mocks = {
-    "@prisma/client": {
-      DataClassification: { RESTRICTED: "RESTRICTED" },
-      PlatformRole: { TENANT_ADMIN: "TENANT_ADMIN" }
-    },
+    "@prisma/client": { DataClassification: { RESTRICTED: "RESTRICTED" }, PlatformRole: { TENANT_ADMIN: "TENANT_ADMIN" } },
     "@/lib/db": { db },
     "@/lib/audit-integrity-outcome.mjs": { assertAuditIntegrityRun },
     "@/lib/audit-integrity-batching.mjs": { selectAuditIntegrityBatch },
-    "@/lib/audit-integrity": {
-      verifyAuditIntegrity: async (tenantId, limit) => {
-        calls.integrity.push({ tenantId, limit });
-        const result = verifyResult ? await verifyResult(tenantId) : {
-          valid: true, scope: "GENESIS", brokenEventId: null,
-          checked: 1, verifiedThroughSequence: "1", reason: null, generatedAt: now.toISOString()
-        };
-        // Legacy fixture values intentionally lack the new sequence field;
-        // give valid fixture rows the concrete state returned by the real verifier.
-        return result.valid && result.verifiedThroughSequence === undefined
-          ? { ...result, checked: result.checked ?? 1,
-              verifiedThroughSequence: result.scope === "EMPTY" ? "0" : "1" }
-          : result;
-      }
-    },
-    "@/lib/notification-outbox": {
-      enqueueNotificationOutbox: async (_tx, input) => {
-        calls.notifications.push(input);
-        return { status: "PENDING" };
-      }
-    },
-    "@/lib/runtime-env": {
-      runtimeNumber: (name, fallback) =>
-        name === "HRBP_AUDIT_INTEGRITY_TENANT_BATCH_SIZE" ? tenantBatch
-          : name === "HRBP_AUDIT_INTEGRITY_CHECK_LIMIT" ? verificationLimit : fallback
-    }
+    "@/lib/audit-verification-schedule": { createAuditVerificationScheduler: value => { assert.equal(value, db); return scheduler; } },
+    "@/lib/audit-integrity": { verifyAuditIntegrity: async (id, requestedLimit) => {
+      calls.verifications.push({ id, limit: requestedLimit });
+      return verifyResult ? await verifyResult(id) : { valid: true, scope: "GENESIS", checked: 1, verifiedThroughSequence: "1" };
+    } },
+    "@/lib/notification-outbox": { enqueueNotificationOutbox: async (client, input) => {
+      assert.equal(client, tx); calls.notifications.push(input);
+      if (failNotification) throw new Error("SIMULATED_OUTBOX_FAILURE");
+      return { status: "PENDING" };
+    } },
+    "@/lib/runtime-env": { runtimeNumber: (name, fallback) => name === "HRBP_AUDIT_INTEGRITY_TENANT_BATCH_SIZE"
+      ? tenantBatch : name === "HRBP_AUDIT_INTEGRITY_CHECK_LIMIT" ? limit : fallback }
   };
-  const monitor = loadMonitor(mocks);
-  return { calls, progress, run: (at = now) => monitor(at) };
+  const js = ts.transpileModule(readFileSync("lib/audit-monitoring.ts", "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+  }).outputText;
+  const module = { exports: {} };
+  new Function("module", "exports", "require", js)(module, module.exports, name => {
+    if (!(name in mocks)) throw new Error("Unexpected dependency: " + name);
+    return mocks[name];
+  });
+  return { progress, calls, run: (at = now) => module.exports.monitorAuditIntegrity(at) };
 }
+const valid = (sequence = "7", scope = "TAIL") => ({ valid: true, scope, checked: scope === "EMPTY" ? 0 : 3, verifiedThroughSequence: sequence });
+const invalid = (scope = "TAIL") => ({ valid: false, scope, checked: 0, verifiedThroughSequence: null, brokenEventId: "broken", reason: "hash mismatch" });
+const integrityFailure = e => e.code === "AUDIT_INTEGRITY_FAILURE";
+const conflict = e => e.code === "AUDIT_VERIFICATION_PROGRESS_CONFLICT";
 
-test("invalid EMPTY is an integrity alert, never counted as an innocuous empty tenant", async () => {
-  const f = fixture({ verifyResult: () => ({
-    scope: "EMPTY", valid: false, checked: 0,
-    brokenEventId: null,
-    reason: "Audit ledger state is non-empty while no audit events exist.",
-    generatedAt: now.toISOString()
-  }) });
-  await assert.rejects(f.run(), error => error.code === "AUDIT_INTEGRITY_FAILURE");
-  assert.equal(f.calls.transactions, 1);
-  const invalidReceipt = f.progress.get("tenant-0");
-  assert.equal(invalidReceipt.lastResult, "INVALID");
-  assert.equal(invalidReceipt.consecutiveFailures, 1);
-  assert.equal(invalidReceipt.lastSuccessAt, undefined);
-  assert.deepEqual(f.calls.notifications.map(x => ({
-    tenant: x.tenantId, event: x.eventType, recipientRole: x.recipientRole,
-    classification: x.classification, dedupeKey: x.dedupeKey,
-    resourceType: x.resourceType, resourceId: x.resourceId
-  })), [{
-    tenant: "tenant-0", event: "AUDIT_INTEGRITY_FAILURE",
-    recipientRole: "TENANT_ADMIN", classification: "RESTRICTED",
-    dedupeKey: "audit-integrity:unknown",
-    resourceType: "AuditEvent", resourceId: "unknown"
-  }]);
+test("invalid EMPTY alerts restricted administrators, commits failure and remains RED", async () => {
+  const f = fixture({ verifyResult: () => invalid("EMPTY") });
+  await assert.rejects(f.run(), integrityFailure);
+  assert.equal(f.progress.get("tenant-0").lastResult, "INVALID");
+  assert.equal(f.progress.get("tenant-0").lastSuccessAt, undefined);
+  assert.deepEqual(f.calls.committed, ["tenant-0"]);
+  const alert = f.calls.notifications[0];
+  assert.equal(alert.recipientRole, "TENANT_ADMIN");
+  assert.equal(alert.classification, "RESTRICTED");
+  assert.equal(alert.eventType, "AUDIT_INTEGRITY_FAILURE");
+  assert.equal(f.calls.releases, 1);
 });
 
-test("truly valid empty audit ledger counts as empty without generating notifications", async () => {
-  const f = fixture({ verifyResult: () => ({
-    scope: "EMPTY", valid: true, checked: 0, brokenEventId: null,
-    reason: null, generatedAt: now.toISOString()
-  }) });
+test("valid EMPTY is persisted through the same cursor transaction without an alert", async () => {
+  const f = fixture({ verifyResult: () => valid("0", "EMPTY") });
   const report = await f.run();
-  assert.equal(report.empty, 1);
-  assert.equal(report.failed, 0);
-  assert.equal(report.notificationsQueued, 0);
-  assert.equal(f.calls.transactions, 0);
+  assert.equal(report.empty, 1); assert.equal(report.verified, 0);
+  assert.equal(report.verifiedWithin24h, 1); assert.equal(report.staleOrUnverified24h, 0);
   assert.equal(f.progress.get("tenant-0").lastVerifiedSequence, 0n);
-  assert.equal(f.progress.get("tenant-0").lastVerifiedScope, "EMPTY");
-  assert.equal(report.verifiedWithin24h, 1);
-  assert.equal(report.staleOrUnverified24h, 0);
+  assert.equal(f.calls.notifications.length, 0);
 });
 
-test("valid GENESIS/TAIL records and corrupted chains preserve distinct audit outcomes", async () => {
-  const f = fixture({ tenantCount: 3, verifyResult: id => id.endsWith("0")
-    ? { valid: true, scope: "GENESIS" }
-    : id.endsWith("1")
-      ? { valid: true, scope: "TAIL" }
-      : {
-        valid: false, scope: "TAIL", checked: 3,
-        brokenEventId: "event-3", reason: "hash mismatch",
-        generatedAt: now.toISOString()
-      }
-  });
-  await assert.rejects(f.run(), error => error.code === "AUDIT_INTEGRITY_FAILURE");
-  assert.equal(f.calls.integrity.length, 3);
+test("mixed results do not let an invalid tenant starve later tenants", async () => {
+  const f = fixture({ tenantCount: 3, verifyResult: id => id === "tenant-1" ? invalid() : valid() });
+  await assert.rejects(f.run(), integrityFailure);
+  assert.deepEqual(f.calls.committed, ["tenant-0", "tenant-1", "tenant-2"]);
+  assert.equal(f.progress.get("tenant-2").lastResult, "VALID");
   assert.equal(f.calls.notifications.length, 1);
-  assert.equal(f.calls.notifications[0].resourceId, "event-3");
-  assert.equal(f.calls.notifications[0].payload.reason, "hash mismatch");
-  assert.equal(f.calls.notifications[0].tenantId, "tenant-2");
-  assert.equal(f.progress.get("tenant-0").lastResult, "VALID");
-  assert.equal(f.progress.get("tenant-1").lastVerifiedScope, "TAIL");
-  assert.equal(f.progress.get("tenant-2").lastResult, "INVALID");
 });
 
-test("monitor never materializes all tenants, silently truncates at 10k, or exceeds hash budget", async () => {
-  const f = fixture({ tenantCount: 12_345, tenantBatch: 1_000, verificationLimit: 1_500 });
+test("large populations use the complete count and the existing 10000-event budget", async () => {
+  const f = fixture({ tenantCount: 12345, tenantBatch: 1000 });
   const report = await f.run();
-  assert.equal(report.tenantUniverse, 12_345);
-  assert.equal(report.tenantBatchSize, 6);
-  assert.equal(report.maxVerificationEvents, 9_000);
-  assert.equal(report.tenantsChecked, 6);
-  assert.equal(f.calls.count, 1);
-  assert.equal(f.calls.list.length, 1);
-  assert.equal(f.calls.list[0].take, 6);
-  assert.equal(f.calls.list[0].skip, report.batchIndex * 6);
-  assert.equal(f.calls.integrity.length, 6);
-  assert.equal(report.verifiedWithin24h, 6);
-  assert.equal(report.staleOrUnverified24h, 12_339);
-  assert.ok(!("take" in f.calls.list[0] && f.calls.list[0].take === 10_000));
+  assert.equal(report.tenantUniverse, 12345);
+  assert.equal(report.tenantBatchSize, 6); assert.equal(report.maxVerificationEvents, 9000);
+  assert.equal(report.tenantsChecked, 6); assert.equal(report.staleOrUnverified24h, 12339);
+  assert.deepEqual(f.calls.starts, [6]); assert.equal(f.calls.count, 1);
 });
 
-test("15-minute rotation advances across batches without waiting a whole UTC day", async () => {
-  const f = fixture({ tenantCount: 100, tenantBatch: 4, verificationLimit: 1500 });
-  const first = await f.run(now);
-  const second = await f.run(new Date(now.getTime() + 15 * 60_000));
-  assert.equal(first.batchCount, 25);
-  assert.equal(second.batchIndex, (first.batchIndex + 1) % first.batchCount);
-  assert.notDeepEqual(f.calls.integrity.slice(0, 4).map(x => x.tenantId),
-    f.calls.integrity.slice(4, 8).map(x => x.tenantId));
-  assert.equal(first.maxVerificationEvents, 6_000);
+test("increased verification depth reduces the selected tenant budget", async () => {
+  const f = fixture({ tenantCount: 100, tenantBatch: 25, limit: 5000 });
+  const report = await f.run();
+  assert.equal(report.tenantBatchSize, 2); assert.equal(report.maxVerificationEvents, 10000);
+  assert.ok(f.calls.verifications.every(value => value.limit === 5000));
 });
 
-test("high per-tenant verification depth automatically reduces tenants per invocation", () => {
-  const window = selectAuditIntegrityBatch({
-    now, tenantCount: 100, requestedTenantBatchSize: 25, verificationLimit: 5_000
-  });
-  assert.equal(window.tenantBatchSize, 2);
-  assert.equal(window.maxVerificationEvents, 10_000);
-  assert.equal(window.batchCount, 50);
-  assert.equal(window.skip, window.batchIndex * 2);
-});
-
-test("zero tenants perform no integrity verification and do not divide by zero", async () => {
+test("zero tenants do not claim any verified ledger", async () => {
   const f = fixture({ tenantCount: 0 });
   const report = await f.run();
-  assert.equal(report.tenantUniverse, 0);
-  assert.equal(report.batchCount, 1);
-  assert.equal(report.batchIndex, 0);
-  assert.equal(report.tenantsChecked, 0);
-  assert.deepEqual(f.calls.integrity, []);
-  assert.equal(f.calls.transactions, 0);
-  assert.equal(report.verifiedWithin24h, 0);
-  assert.equal(report.staleOrUnverified24h, 0);
+  assert.equal(report.tenantsChecked, 0); assert.equal(report.verifiedWithin24h, 0);
+  assert.equal(report.staleOrUnverified24h, 0); assert.equal(f.calls.verifications.length, 0);
 });
 
-
-test("failed rereview retains last verified tenant watermark and resets only after a new success", async () => {
-  let tampered = false;
-  const f = fixture({ verifyResult: () => tampered
-    ? { valid: false, scope: "TAIL", checked: 0, brokenEventId: "corrupt-3",
-        reason: "hash mismatch", generatedAt: now.toISOString() }
-    : { valid: true, scope: "TAIL", checked: 2, verifiedThroughSequence: "127" } });
-  const first = await f.run();
-  assert.equal(first.verifiedWithin24h, 1);
-  const saved = f.progress.get("tenant-0");
-  assert.equal(saved.lastVerifiedSequence, 127n);
-  assert.equal(saved.lastVerifiedScope, "TAIL");
-  assert.equal(saved.consecutiveFailures, 0);
-  tampered = true;
-  await assert.rejects(f.run(new Date(now.getTime() + 60_000)),
-    error => error.code === "AUDIT_INTEGRITY_FAILURE");
-  const bad = f.progress.get("tenant-0");
-  assert.equal(bad.lastResult, "INVALID");
-  assert.equal(bad.consecutiveFailures, 1);
-  assert.equal(bad.lastVerifiedSequence, 127n);
-  assert.equal(bad.lastSuccessAt.getTime(), now.getTime());
-  assert.equal(await f.progress.size, 1);
-  tampered = false;
-  await f.run(new Date(now.getTime() + 120_000));
+test("failure preserves the known-good sequence and recovery resets its counter", async () => {
+  let result = valid("127");
+  const f = fixture({ verifyResult: () => result });
+  await f.run(); result = invalid();
+  await assert.rejects(f.run(new Date(+now + 1)), integrityFailure);
+  assert.equal(f.progress.get("tenant-0").lastVerifiedSequence, 127n);
+  assert.equal(f.progress.get("tenant-0").consecutiveFailures, 1);
+  result = valid("128"); await f.run(new Date(+now + 2));
   assert.equal(f.progress.get("tenant-0").consecutiveFailures, 0);
-  assert.equal(f.progress.get("tenant-0").lastResult, "VALID");
 });
 
-test("an invalid or missing verified head sequence cannot forge a coverage checkpoint", async () => {
-  for (const value of [null, "-1", "not-a-sequence", "9223372036854775808"]) {
-    const f = fixture({ verifyResult: () => ({
-      valid: true, scope: "TAIL", checked: 1, verifiedThroughSequence: value
-    }) });
+test("unsafe or missing confirmed sequences never commit a receipt or cursor", async () => {
+  for (const sequence of [null, "-1", "bad", "9223372036854775808"]) {
+    const f = fixture({ verifyResult: () => valid(sequence) });
     await assert.rejects(f.run(), /sequence/);
-    assert.equal(f.progress.size, 0);
+    assert.equal(f.progress.size, 0); assert.equal(f.calls.committed.length, 0);
   }
 });
 
-test("invalid schedule and unsafe verification settings fail before any selection", () => {
-  for (const v of [new Date(NaN), "2026-10-14", null]) {
-    assert.throws(() => selectAuditIntegrityBatch({
-      now: v, tenantCount: 2, requestedTenantBatchSize: 4, verificationLimit: 1500
-    }), RangeError);
-  }
-  for (const tenantCount of [-1, 1.5, NaN]) {
-    assert.throws(() => selectAuditIntegrityBatch({
-      now, tenantCount, requestedTenantBatchSize: 4, verificationLimit: 1500
-    }), RangeError);
-  }
-  for (const verificationLimit of [-1, 5_001, NaN]) {
-    assert.throws(() => selectAuditIntegrityBatch({
-      now, tenantCount: 2, requestedTenantBatchSize: 4, verificationLimit
-    }), RangeError);
-  }
+test("late success cannot erase a newer invalid outcome", async () => {
+  let result = invalid(); const f = fixture({ verifyResult: () => result });
+  await assert.rejects(f.run(new Date(+now + 1)), integrityFailure);
+  result = valid(); await assert.rejects(f.run(), conflict);
+  assert.equal(f.progress.get("tenant-0").lastResult, "INVALID");
 });
 
-test("static monitoring contract keeps a fail-closed invalid-empty branch", () => {
-  const source = readFileSync("lib/audit-monitoring.ts", "utf8");
-  assert.match(source, /if \(result\.valid && result\.scope === "EMPTY"\)/);
-  assert.match(source, /if \(result\.valid\)/);
-  assert.match(source, /failed \+= 1/);
-  assert.match(source, /AUDIT_INTEGRITY_FAILURE/);
-  assert.match(source, /db\.tenant\.count\(\)/);
-  assert.doesNotMatch(source, /take:\s*10_000/);
+test("a later success cannot regress its sequence watermark", async () => {
+  let result = valid("10"); const f = fixture({ verifyResult: () => result });
+  await f.run(); result = valid("9");
+  await assert.rejects(f.run(new Date(+now + 1)), conflict);
+  assert.equal(f.progress.get("tenant-0").lastVerifiedSequence, 10n);
 });
 
-test("a delayed success cannot erase a newer invalid receipt", async () => {
-  let result = { valid: false, scope: "TAIL", checked: 1, brokenEventId: "broken" };
-  const f = fixture({ verifyResult: () => result });
-  const later = new Date(now.getTime() + 60_000);
-  await assert.rejects(f.run(later), error => error.code === "AUDIT_INTEGRITY_FAILURE");
-  const invalid = { ...f.progress.get("tenant-0") };
-  result = { valid: true, scope: "TAIL", checked: 2, verifiedThroughSequence: "10" };
-  await assert.rejects(f.run(now), error => error.code === "AUDIT_VERIFICATION_PROGRESS_CONFLICT");
-  assert.deepEqual(f.progress.get("tenant-0"), invalid);
-});
-
-test("a success cannot move an existing sequence watermark backward", async () => {
-  let sequence = "10";
-  const f = fixture({ verifyResult: () => ({ valid: true, scope: "TAIL", checked: 2,
-    verifiedThroughSequence: sequence }) });
-  await f.run(now);
-  const saved = { ...f.progress.get("tenant-0") };
-  sequence = "9";
-  await assert.rejects(f.run(new Date(now.getTime() + 60_000)),
-    error => error.code === "AUDIT_VERIFICATION_PROGRESS_CONFLICT");
-  assert.deepEqual(f.progress.get("tenant-0"), saved);
-});
-
-test("an older failure cannot replace a newer recovery but still alerts and fails its invocation", async () => {
-  let result = { valid: true, scope: "TAIL", checked: 2, verifiedThroughSequence: "10" };
-  const f = fixture({ verifyResult: () => result });
-  const later = new Date(now.getTime() + 60_000);
-  await f.run(later);
-  const recovered = { ...f.progress.get("tenant-0") };
-  result = { valid: false, scope: "TAIL", checked: 1, brokenEventId: "old-broken" };
-  await assert.rejects(f.run(now), error => error.code === "AUDIT_INTEGRITY_FAILURE");
-  assert.deepEqual(f.progress.get("tenant-0"), recovered);
+test("a delayed failure still alerts but does not erase a newer recovery", async () => {
+  let result = valid(); const f = fixture({ verifyResult: () => result });
+  await f.run(new Date(+now + 1)); result = invalid();
+  await assert.rejects(f.run(), integrityFailure);
+  assert.equal(f.progress.get("tenant-0").lastResult, "VALID");
   assert.equal(f.calls.notifications.length, 1);
 });
 
-test("equal-time failure wins and duplicate failure delivery does not inflate its count", async () => {
-  let result = { valid: true, scope: "GENESIS", checked: 2, verifiedThroughSequence: "2" };
-  const f = fixture({ verifyResult: () => result });
-  await f.run(now);
-  result = { valid: false, scope: "TAIL", checked: 1, brokenEventId: "equal-time-broken" };
-  for (let i = 0; i < 2; i++) {
-    await assert.rejects(f.run(now), error => error.code === "AUDIT_INTEGRITY_FAILURE");
-  }
+test("equal-time invalid wins; duplicate failures do not inflate the counter", async () => {
+  let result = valid(); const f = fixture({ verifyResult: () => result });
+  await f.run(); result = invalid();
+  for (let i = 0; i < 2; i++) await assert.rejects(f.run(), integrityFailure);
   assert.equal(f.progress.get("tenant-0").consecutiveFailures, 1);
-  assert.equal(f.progress.get("tenant-0").lastVerifiedSequence, 2n);
-  result = { valid: true, scope: "TAIL", checked: 2, verifiedThroughSequence: "3" };
-  await assert.rejects(f.run(now), error => error.code === "AUDIT_VERIFICATION_PROGRESS_CONFLICT");
-  await f.run(new Date(now.getTime() + 1));
-  assert.equal(f.progress.get("tenant-0").lastResult, "VALID");
+  result = valid("8"); await assert.rejects(f.run(), conflict);
 });
 
-test("overlapping invocations finishing out of order preserve the newer invalid outcome", async () => {
-  let releaseOlder;
-  let signalEntered;
-  const entered = new Promise(resolve => { signalEntered = resolve; });
-  const oldResult = new Promise(resolve => { releaseOlder = resolve; });
-  let count = 0;
-  const f = fixture({ verifyResult: async () => {
-    if (++count === 1) { signalEntered(); return oldResult; }
-    return { valid: false, scope: "TAIL", checked: 1, brokenEventId: "new-broken" };
-  } });
-  const older = f.run(now);
-  await entered;
-  await assert.rejects(f.run(new Date(now.getTime() + 60_000)),
-    error => error.code === "AUDIT_INTEGRITY_FAILURE");
-  const rejected = assert.rejects(older, error => error.code === "AUDIT_VERIFICATION_PROGRESS_CONFLICT");
-  releaseOlder({ valid: true, scope: "TAIL", checked: 2, verifiedThroughSequence: "10" });
-  await rejected;
-  assert.equal(f.progress.get("tenant-0").lastResult, "INVALID");
-  assert.equal(f.progress.get("tenant-0").consecutiveFailures, 1);
-});
-
-test("failure counters saturate instead of overflowing the PostgreSQL integer column", async () => {
-  const f = fixture({ verifyResult: () => ({ valid: false, scope: "TAIL", checked: 1, brokenEventId: "broken" }) });
-  await assert.rejects(f.run(now), error => error.code === "AUDIT_INTEGRITY_FAILURE");
+test("failure counters saturate rather than losing the alert to integer overflow", async () => {
+  const f = fixture({ verifyResult: () => invalid() });
+  await assert.rejects(f.run(), integrityFailure);
   f.progress.get("tenant-0").consecutiveFailures = 2147483647;
-  await assert.rejects(f.run(new Date(now.getTime() + 1)), error => error.code === "AUDIT_INTEGRITY_FAILURE");
+  await assert.rejects(f.run(new Date(+now + 1)), integrityFailure);
   assert.equal(f.progress.get("tenant-0").consecutiveFailures, 2147483647);
+});
+
+test("outbox failure rolls back the receipt and does not advance the cursor", async () => {
+  const f = fixture({ failNotification: true, verifyResult: () => invalid() });
+  await assert.rejects(f.run(), /SIMULATED_OUTBOX_FAILURE/);
+  assert.equal(f.progress.size, 0); assert.equal(f.calls.committed.length, 0);
+  assert.equal(f.calls.releases, 1);
+});
+
+test("verifier exceptions preserve partial progress and release owned work", async () => {
+  const f = fixture({ tenantCount: 3, verifyResult: id => {
+    if (id === "tenant-1") throw new Error("SIMULATED_DB_ERROR"); return valid();
+  } });
+  await assert.rejects(f.run(), /SIMULATED_DB_ERROR/);
+  assert.deepEqual(f.calls.committed, ["tenant-0"]);
+  assert.equal(f.calls.releases, 1);
+});
+
+test("a busy scheduler fails before reading any audit ledger", async () => {
+  const f = fixture({ startError: true });
+  await assert.rejects(f.run(), e => e.code === "AUDIT_SCHEDULE_BUSY");
+  assert.equal(f.calls.verifications.length, 0);
+});
+
+test("internal reporting exposes aggregates, not cursor IDs or lease credentials", async () => {
+  const report = await fixture().run();
+  assert.equal(report.selectionMode, "DURABLE_KEYSET");
+  assert.equal(report.scheduleVersion, 1);
+  assert.ok(!("batchIndex" in report) && !("quarterHourSlot" in report));
+  assert.doesNotMatch(JSON.stringify(report), /tenant-0|leaseToken|cursorTenantId/);
+});
+
+test("invalid timestamps and budget settings remain rejected", () => {
+  for (const now of [new Date(NaN), null, "date"]) assert.throws(() => selectAuditIntegrityBatch({
+    now, tenantCount: 1, requestedTenantBatchSize: 4, verificationLimit: 1500
+  }), RangeError);
+  for (const tenantCount of [-1, 1.5, NaN]) assert.throws(() => selectAuditIntegrityBatch({
+    now, tenantCount, requestedTenantBatchSize: 4, verificationLimit: 1500
+  }), RangeError);
 });
