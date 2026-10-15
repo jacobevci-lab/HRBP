@@ -156,14 +156,22 @@ try {
   });
   await test('queue: open EN/TR create and membership forms fit 320px and 390px', async () => {
     for (const lang of ['en', 'tr']) {
-      await page.locator('.locale-toggle button').filter({ hasText: lang.toUpperCase() }).click();
+      // LocaleToggle is one toggle, not a pair of language buttons. Mount a
+      // fresh page with matching cookie/storage and assert translated controls;
+      // observing only html.lang can race its previous value during a toggle.
+      await context.addCookies([{ name: 'hrbp-locale', value: lang, url: origin }]);
+      await page.evaluate(locale => localStorage.setItem('hrbp-locale', locale), lang);
+      await ready();
       await page.waitForFunction(v => document.documentElement.lang === v, lang);
+      await root.getByRole('button', { name: lang === 'tr' ? 'Kuyrukları yenile' : 'Refresh queues', exact: true }).waitFor();
+      await root.getByRole('button').filter({ hasText: name }).click();
       for (const details of await root.locator('details').all()) if (!(await details.getAttribute('open'))) {
         if (!(await details.evaluate(el => el.open))) await details.locator('summary').click();
       }
+      await root.getByLabel(lang === 'tr' ? 'Kuyruk anahtarı' : 'Queue key', { exact: true }).waitFor();
       for (const width of [390, 320]) {
         await page.setViewportSize({ width, height: 900 });
-        await page.evaluate(async () => { await document.fonts.ready; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); });
+        await page.evaluate(async () => { window.scrollTo(0, 0); await document.fonts.ready; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); });
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2));
         await page.screenshot({ path: `${out}/queue-form-${lang}-${width}.jpg`, type: 'jpeg', quality: 80, fullPage: true });
       }
