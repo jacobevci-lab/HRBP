@@ -6,10 +6,13 @@ on:
       - app/module/people/new/**
       - app/module/positions/new/**
       - components/engagement-*
+      - components/app-shell.tsx
+      - components/navigation-*
       - lib/engagement-authoring-copy.ts
       - scripts/create-page-authorization.test.mjs
       - scripts/engagement-authoring-ui.test.mjs
       - scripts/ui-deep-audit.mjs
+      - scripts/ui-navigation-regression.mjs
       - .github/workflows/ui-deep-inspection.yml
   workflow_dispatch:
 permissions:
@@ -62,7 +65,7 @@ jobs:
           done
       - name: Build actual production application
         run: npx next build > .audit/build.log 2>&1 || { tail -80 .audit/build.log; exit 1; }
-      - name: Inspect six UI variants, internal links and named valid CRUD workflows
+      - name: Inspect module views, valid CRUD and real navigation transitions
         run: |
           node node_modules/next/dist/bin/next start --hostname localhost --port 3100 > .audit/server.log 2>&1 &
           PID=$!
@@ -73,7 +76,10 @@ jobs:
             sleep 1
           done
           test "$ready" -eq 1 || { tail -60 .audit/server.log; exit 1; }
-          node scripts/ui-deep-audit.mjs
+          result=0
+          node scripts/ui-deep-audit.mjs || result=1
+          node scripts/ui-navigation-regression.mjs || result=1
+          exit "$result"
       - name: Preserve report and synthetic screenshots even on findings
         if: always()
         uses: actions/upload-artifact@v4
