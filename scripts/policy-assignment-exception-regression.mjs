@@ -86,8 +86,8 @@ try {
     const p=await policy(authorId), a=await employee(),b=await employee(),c=await employee();const dueAt=new Date(Date.now()+86400000);
     await db.policyAssignment.createMany({data:[{tenantId,policyId:p.id,employmentId:a.id,status:'ACKNOWLEDGED',dueAt},{tenantId,policyId:p.id,employmentId:b.id,status:'WAIVED',dueAt}]});
     const receipt=await db.policyAcknowledgement.create({data:{tenantId,policyId:p.id,employmentId:a.id,policyVersion:p.version,acknowledgedBy:authorId,ipAddress:'192.0.2.10'}});
-    const before=await assignments(p.id);const response=await assign(p,[c.id,b.id,a.id],{dueAt:new Date(Date.now()+2*86400000).toISOString()});
-    assert.equal(response.status,201);assert.deepEqual(response.body.data,{assigned:1,requested:3,skippedExisting:2});
+    const before=await assignments(p.id);const requestedDueAt=new Date(Date.now()+2*86400000).toISOString();const response=await assign(p,[c.id,b.id,a.id],{dueAt:requestedDueAt});
+    assert.equal(response.status,201);assert.deepEqual(response.body.data,{assigned:1,requested:3,skippedExisting:2,policyId:p.id,tenantId,request:{employmentIds:[a.id,b.id,c.id].sort(),dueAt:requestedDueAt}});
     const after=await assignments(p.id);for(const old of before) assert.deepEqual(after.find(x=>x.id===old.id),old);
     assert.deepEqual(await db.policyAcknowledgement.findUnique({where:{id:receipt.id}}),receipt);
     const repeated=await assign(p,[a.id,b.id,c.id]);assert.equal(repeated.body.data.assigned,0);assert.equal(await audits(p.id,'policy.assignments-created'),1);

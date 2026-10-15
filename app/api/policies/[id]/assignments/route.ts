@@ -83,7 +83,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       classification: DataClassification.INTERNAL,
       purpose: `Assigned policy to ${created.count} new employment records`
     });
-    return { assigned: created.count, requested: ids.length, skippedExisting: ids.length - created.count };
+    // Correlate the receipt with the validated batch and requested deadline.
+    // Existing skipped assignments keep their original deadlines and status.
+    return { assigned: created.count, requested: ids.length, skippedExisting: ids.length - created.count,
+      request: { employmentIds: ids, dueAt: dueAt?.toISOString() ?? null } };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted }).catch((error) => {
     if (error instanceof Error && ["NOT_FOUND", "OUT_OF_SCOPE", "EMPLOYMENT", "DUE_AT"].includes(error.message)) return error.message;
     if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2025", "P2034"].includes(error.code)) return "CONFLICT";
@@ -96,5 +99,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (data === "EMPLOYMENT") return Response.json({ error: "One or more employment records are unavailable, terminated, or outside this tenant." }, { status: 400 });
   if (data === "DUE_AT" || data === "CONFLICT") return Response.json({ error: "Assignment prerequisites changed. Reload current records before continuing." }, { status: 409 });
   if (typeof data === "string") return Response.json({ error: "Policy assignment is unavailable. Reload current records before retrying." }, { status: 503 });
-  return Response.json({ data }, { status: 201 });
+  return Response.json({ data: { ...data, policyId: id, tenantId: ctx.tenantId } }, { status: 201 });
 }

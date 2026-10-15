@@ -107,7 +107,7 @@ for (const employmentIds of [[], ['employee-a', 'employee-a'], ['bad\u0000id'], 
 test('assignment: invalid policy identity never reaches transaction', async () => { const h = harness('assign'); assert.equal((await h.post(bodies.assign, { id: 'bad\u0000id' })).status, 400); assert.equal(h.calls.transactions, 0); });
 for (const status of ['ACKNOWLEDGED', 'WAIVED', 'PENDING', 'OVERDUE']) test(`assignment: existing ${status} and due date survive replay without a new creation audit`, async () => {
   const h = harness('assign'); h.state.assignments[0].status = status; const before = structuredClone(h.state);
-  const result = await h.post({ ...bodies.assign, dueAt: '2027-02-01T00:00:00Z' }); assert.equal(result.status, 201); assert.deepEqual(result.body.data, { assigned: 0, requested: 1, skippedExisting: 1 }); assert.deepEqual(h.state, before);
+  const result = await h.post({ ...bodies.assign, dueAt: '2027-02-01T00:00:00Z' }); assert.equal(result.status, 201); assert.deepEqual(result.body.data, { assigned: 0, requested: 1, skippedExisting: 1, policyId: "policy-a", tenantId: "tenant-a", request: { employmentIds: ["employee-a"], dueAt: "2027-02-01T00:00:00.000Z" } }); assert.deepEqual(h.state, before);
 });
 test('assignment: actual inserted count, first audit and second no-op match', async () => {
   const h = harness('assign', { assignments: [] }); const first = await h.post(bodies.assign); const second = await h.post(bodies.assign);
@@ -153,4 +153,21 @@ test('locks: ordered parameter binding preserves tenant isolation, including sor
   const e=harness('request',{manage:false});await e.post(bodies.request);assert.match(e.calls.locks[0].sql,/"Employment"[\s\S]*FOR UPDATE/);assert.match(e.calls.locks[2].sql,/"PolicyAssignment"/);
   const d=harness('decision');await d.post(bodies.decision);assert.match(d.calls.locks[0].sql,/"PolicyException"[\s\S]*FOR UPDATE/);
   for(const h of [a,e,d]) for(const l of h.calls.locks) {assert.ok(l.values.includes('tenant-a'));assert.doesNotMatch(l.sql,/\b(?:tenant-a|employee-a|policy-a)\b/);}
+});
+
+
+test('assignment receipt: echoes normalized eligible IDs and UTC deadline without changing skipped records',async()=>{
+  const h=harness('assign');
+  h.state.employees.push({id:'employee-z',tenantId:'tenant-a',status:'ACTIVE'});
+  const existing=structuredClone(h.state.assignments[0]);
+  const result=await h.post({employmentIds:[' employee-z ','employee-a'],dueAt:'2027-02-01T03:00:00+03:00'});
+  assert.equal(result.status,201);
+  assert.deepEqual(result.body.data.request,{employmentIds:['employee-a','employee-z'],dueAt:'2027-02-01T00:00:00.000Z'});
+  assert.equal(result.body.data.assigned,1);assert.equal(result.body.data.skippedExisting,1);
+  assert.deepEqual(h.state.assignments.find(x=>x.id===existing.id),existing);
+});
+for(const dueAt of [undefined,null,''])test(`assignment receipt: absent deadline ${String(dueAt)} has explicit null without echoing an unvalidated field`,async()=>{
+  const h=harness('assign',{assignments:[]});
+  const r=await h.post({employmentIds:['employee-a'],dueAt,request:{employmentIds:['foreign'],dueAt:'untrusted'}});
+  assert.equal(r.status,201);assert.deepEqual(r.body.data.request,{employmentIds:['employee-a'],dueAt:null});
 });
