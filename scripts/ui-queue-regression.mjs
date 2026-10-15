@@ -25,7 +25,7 @@ const save = () => root.getByRole('button', { name: 'Save', exact: true });
 const post = (path, data) => context.request.post(origin + path, { headers: { origin, 'x-purpose': 'Synthetic service queue QA' }, data });
 const del = path => context.request.delete(origin + path, { headers: { origin, 'x-purpose': 'Synthetic service queue QA' } });
 async function login(ctx, identifier) {
-  const r = await ctx.request.post(origin + '/api/auth/local', { headers: { origin }, data: { identifier, password } });
+  const r = await ctx.request.post(origin + '/api/auth/local', { headers: { origin }, data: { identifier: identifier.toLowerCase(), password } });
   assert.equal(r.status(), 200);
 }
 async function ready() {
@@ -54,7 +54,7 @@ try {
   const admin = await db.userAccount.findUnique({ where: { id: 'user-local-test-admin' } });
   assert.ok(admin?.localPasswordHash);
   for (const [id, role] of [[owner, 'HR_OPERATIONS'], [agent, 'HR_OPERATIONS'], [reader, 'EMPLOYEE']]) {
-    await db.userAccount.create({ data: { id, tenantId: admin.tenantId, subject: id, role, displayName: id,
+    await db.userAccount.create({ data: { id, tenantId: admin.tenantId, subject: id.toLowerCase(), role, displayName: id,
       email: id.toLowerCase() + '@example.test', active: true, localAuthEnabled: true, localPasswordHash: admin.localPasswordHash } });
   }
   await login(context, 'local.admin'); await ready();

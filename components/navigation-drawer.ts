@@ -61,6 +61,11 @@ export function useNavigationDrawer(pathname: string) {
       element.getClientRects().length > 0 && getComputedStyle(element).visibility !== "hidden");
     const focusFirst = () => (sidebar.querySelector<HTMLButtonElement>(".mobile-close") ?? candidates()[0])?.focus({ preventScroll: true });
     focusFirst();
+    // An opening render can precede style/visibility settlement. Retry on the
+    // next frame only if focus has not entered the drawer; cancel on close.
+    const focusFrame = requestAnimationFrame(() => {
+      if (!sidebar.contains(document.activeElement)) focusFirst();
+    });
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault(); event.stopPropagation(); close(); return;
@@ -79,6 +84,7 @@ export function useNavigationDrawer(pathname: string) {
     document.addEventListener("keydown", onKeyDown, true);
     document.addEventListener("focusin", onFocus);
     return () => {
+      cancelAnimationFrame(focusFrame);
       document.removeEventListener("keydown", onKeyDown, true);
       document.removeEventListener("focusin", onFocus);
       document.body.style.overflow = previousOverflow;
