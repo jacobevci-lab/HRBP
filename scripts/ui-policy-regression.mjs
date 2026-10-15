@@ -171,6 +171,8 @@ try {
   await test('policy: Turkish waived assignment displays Muaf, not an acknowledgement or action', trPage, async () => {
     await ready(trPage); await trPage.waitForFunction(() => document.documentElement.lang === 'tr');
     const badge = row(trPage, waived).locator('[data-policy-ack-state="waived"]'); await badge.waitFor(); assert.match(await badge.innerText(), /Muaf/);
+    const acknowledgementMetric = trPage.locator('.services-metric').filter({ hasText: 'Onaylama oranı' });
+    assert.equal(await acknowledgementMetric.locator('strong').innerText(), '50%', 'one acknowledgement plus one waiver is not two acknowledgements');
     assert.equal(await row(trPage, waived).getByRole('button', { name: 'Okudum / Onayla', exact: true }).count(), 0);
     assert.equal(await db.policyAcknowledgement.count({ where: { policyId: waived.id, employmentId } }), 0);
     return { screenshot: await shot(trPage, 'waived-not-acknowledged-tr') };
