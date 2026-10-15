@@ -1,0 +1,16 @@
+.root { display: grid; gap: 10px; min-width: 0; }
+.heading, .member { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.heading > span, .member > span { min-width: 0; overflow-wrap: anywhere; }
+.heading > button, .member > button { flex: 0 0 auto; }
+.columns { display: grid; grid-template-columns: minmax(0,.8fr) minmax(0,1.2fr); gap: 10px; }
+.list { display: grid; align-content: start; gap: 6px; min-width: 0; }
+.list > button { height: auto; min-height: 36px; padding-block: 8px; justify-content: space-between; white-space: normal; }
+.list > button > span { min-width: 0; overflow-wrap: anywhere; }
+.detail { padding: 10px; display: grid; gap: 8px; }
+.member { font-size: 12px; }
+.form { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,160px),1fr)); align-items: end; gap: 8px; margin-top: 8px; }
+.form label { display: grid; gap: 4px; min-width: 0; font-size: 11px; }
+.form input, .form select { width: 100%; min-width: 0; }
+.root summary { cursor: pointer; font-size: 12px; }
+@media (max-width: 900px) { .columns { grid-template-columns: minmax(0,1fr); } }
+@media (max-width: 480px) { .form { grid-template-columns: minmax(0,1fr); } }

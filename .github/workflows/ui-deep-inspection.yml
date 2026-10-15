@@ -5,14 +5,17 @@ on:
     paths:
       - app/module/people/new/**
       - app/module/positions/new/**
+      - app/api/hr-service/queues/**
       - components/engagement-*
       - components/app-shell.tsx
       - components/navigation-*
+      - components/hr-service-queue-admin*
       - lib/engagement-authoring-copy.ts
       - scripts/create-page-authorization.test.mjs
       - scripts/engagement-authoring-ui.test.mjs
       - scripts/ui-deep-audit.mjs
       - scripts/ui-navigation-regression.mjs
+      - scripts/ui-queue-regression.mjs
       - .github/workflows/ui-deep-inspection.yml
   workflow_dispatch:
 permissions:
@@ -79,6 +82,7 @@ jobs:
           result=0
           node scripts/ui-deep-audit.mjs || result=1
           node scripts/ui-navigation-regression.mjs || result=1
+          node scripts/ui-queue-regression.mjs || result=1
           exit "$result"
       - name: Preserve report and synthetic screenshots even on findings
         if: always()

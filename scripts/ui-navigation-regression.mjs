@@ -109,6 +109,9 @@ try {
     });
     await scenario(locale, motion, 'closed drawer is excluded from keyboard focus', async page => {
       await closed(page); await page.locator('.mobile-menu').focus();
+      await page.keyboard.press('Shift+Tab');
+      assert.equal((await view(page)).focusedInSidebar, false, 'reverse tab entered off-screen drawer');
+      await page.locator('.mobile-menu').focus();
       for (let i = 0; i < 20; i++) {
         await page.keyboard.press('Tab');
         assert.equal((await view(page)).focusedInSidebar, false, 'keyboard entered the off-screen drawer');
@@ -122,8 +125,8 @@ try {
       assert.equal(await toggle.getAttribute('aria-expanded'), 'true');
       assert.equal(await page.locator('.sidebar').getAttribute('id'), controlledId);
       assert.equal((await view(page)).focusedInSidebar, true, 'opening must focus the drawer');
-      for (let i = 0; i < 38; i++) {
-        await page.keyboard.press(i % 2 ? 'Shift+Tab' : 'Tab');
+      for (let i = 0; i < 80; i++) {
+        await page.keyboard.press(i < 40 ? 'Tab' : 'Shift+Tab');
         assert.equal((await view(page)).focusedInSidebar, true, 'focus escaped the open drawer');
       }
       await page.keyboard.press('Escape'); await closed(page);
