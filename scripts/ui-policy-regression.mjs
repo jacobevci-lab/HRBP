@@ -16,7 +16,7 @@ const password = process.env.HRBP_TEST_ADMIN_PASSWORD; assert.ok(password);
 const out = '.audit/policy-ui'; await mkdir(out, { recursive: true });
 const report = { source: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), tests: [],
   scope: 'Production Next.js, Chromium, synthetic identities/policies on disposable PostgreSQL. No real provider/customer mutations.',
-  limitations: ['UI click/receipt guard is not backend idempotency.', 'No claim of version-locking against edits in another session.', 'Policy fixtures are authored through API, not a new create-policy form.'] };
+  limitations: ['Displayed content binding and replay are covered separately by the owning endpoint regression; no claim of human comprehension.', 'Policy fixtures are authored through API, not a new create-policy form.'] };
 const db = new PrismaClient(), browser = await chromium.launch();
 const marker = 'pui-' + randomUUID().slice(0, 8), contexts = [];
 const authorId = marker + '-author', reviewerId = marker + '-reviewer', employeeId = marker + '-employee';
@@ -119,7 +119,10 @@ try {
     const response = await employee.request.post(`${origin}/api/policies/${policy.id}/review`, { headers: { origin }, data: { action: 'APPROVE' } }); assert.equal(response.status(), 403);
   });
   await test('policy: cancelling acknowledgement creates no receipt', employeePage, async () => {
-    employeePage.once('dialog', d => d.dismiss()); await row(employeePage, policy).getByRole('button', { name: 'Acknowledge', exact: true }).click();
+    await row(employeePage, policy).getByRole('button', { name: 'Read policy', exact: true }).click();
+    await employeePage.getByRole('dialog').locator('[data-policy-content]').waitFor();
+    await employeePage.getByRole('dialog').getByRole('checkbox', { name: 'I have read this version', exact: true }).check();
+    employeePage.once('dialog', d => d.dismiss()); await employeePage.getByRole('dialog').getByRole('button', { name: 'Acknowledge', exact: true }).click();
     assert.equal(await db.policyAcknowledgement.count({ where: { policyId: policy.id, employmentId } }), 0);
   });
   await test('policy: double-click acknowledgement sends one request and persists one receipt', employeePage, async () => {
@@ -128,7 +131,7 @@ try {
     try {
       const [response] = await Promise.all([
         employeePage.waitForResponse(r => r.request().method() === 'POST' && new URL(r.url()).pathname === `/api/policies/${policy.id}/acknowledgements`),
-        row(employeePage, policy).getByRole('button', { name: 'Acknowledge', exact: true }).evaluate(button => { button.click(); button.click(); })
+        employeePage.getByRole('dialog').getByRole('button', { name: 'Acknowledge', exact: true }).evaluate(button => { button.click(); button.click(); })
       ]);
       assert.equal(response.status(), 201); assert.equal(writes, 1);
       const saved = await db.policyAcknowledgement.findMany({ where: { policyId: policy.id, employmentId } }); assert.equal(saved.length, 1); assert.equal(saved[0].policyVersion, policy.version);

@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 
-const path = 'app/api/policies/[id]/acknowledgements/route.ts';
+const path = process.env.POLICY_ROUTE_SOURCE || 'app/api/policies/[id]/acknowledgements/route.ts';
+const CONTENT = 'Synthetic policy content';
+const HASH = createHash('sha256').update(CONTENT).digest('hex');
+const auditPurpose = (version = '1.0', contentHash = HASH) => JSON.stringify({ schema: 'policy-ack-content/v1', version, contentHash });
 const NOW = new Date('2027-01-10T12:00:00.000Z');
 class Clock extends Date { constructor(...args) { super(...(args.length ? args : [NOW])); } static now() { return NOW.getTime(); } }
 class KnownError extends Error { constructor(code) { super('private database detail'); this.code = code; } }
@@ -24,16 +28,22 @@ function matches(row, where = {}) {
 function receipt(overrides = {}) { return { id: 'receipt-a', tenantId: 'tenant-a', policyId: 'policy-a', employmentId: 'employment-a', policyVersion: '1.0', acknowledgedBy: 'original-actor', acknowledgedAt: new Date('2027-01-01T12:00:00Z'), ipAddress: '192.0.2.10', ...overrides }; }
 function harness(options = {}) {
   let state = {
-    policies: [{ id: 'policy-a', tenantId: 'tenant-a', version: '1.0', status: 'PUBLISHED', effectiveFrom: new Date('2026-01-01Z'), effectiveTo: null, ...options.policy }],
+    policies: [{ id: 'policy-a', tenantId: 'tenant-a', version: '1.0', title: 'Synthetic policy', contentMarkdown: CONTENT, contentHash: HASH, status: 'PUBLISHED', effectiveFrom: new Date('2026-01-01Z'), effectiveTo: null, ...options.policy }],
     employments: [{ id: 'employment-a', tenantId: 'tenant-a', status: 'ACTIVE', ...options.employment }],
     assignments: options.noAssignment ? [] : [{ id: 'assignment-a', tenantId: 'tenant-a', policyId: 'policy-a', employmentId: 'employment-a', status: 'PENDING', ...options.assignment }],
-    receipts: options.receipts ?? [], audits: []
+    receipts: options.receipts ?? [], audits: options.audits ?? (options.receipts ?? []).map(r => ({ tenantId: r.tenantId, resourceType: 'PolicyAcknowledgement', resourceId: r.id, action: 'policy.acknowledged', purpose: auditPurpose(r.policyVersion) }))
   };
   const calls = { transactions: 0, writes: [], locks: [] };
   const ctx = options.anonymous ? null : { tenantId: 'tenant-a', actorId: 'actor-a', employmentId: 'employment-a', ipAddress: '192.0.2.20', ...options.ctx };
   function model(key) {
     return {
-      findFirst: async ({ where }) => structuredClone(state[key].find(row => matches(row, where)) ?? null),
+      findFirst: async ({ where }) => {
+        if (key === 'policies' && where.assignments) {
+          const { assignments, ...rest } = where;
+          return structuredClone(state[key].find(row => matches(row, rest) && state.assignments.some(a => a.policyId === row.id && matches(a, assignments.some))) ?? null);
+        }
+        return structuredClone(state[key].find(row => matches(row, where)) ?? null);
+      },
       findMany: async ({ where }) => structuredClone(state[key].filter(row => matches(row, where))),
       create: async ({ data }) => {
         calls.writes.push([key, 'create']);
@@ -53,7 +63,7 @@ function harness(options = {}) {
     };
   }
   const tx = {
-    policyRecord: model('policies'), employment: model('employments'), policyAssignment: model('assignments'), policyAcknowledgement: model('receipts'),
+    policyRecord: model('policies'), employment: model('employments'), policyAssignment: model('assignments'), policyAcknowledgement: model('receipts'), auditEvent: model('audits'),
     $queryRaw: async (strings, ...values) => {
       const sql = strings.join('?'); calls.locks.push({ sql, values });
       if (options.lockError) throw new KnownError(options.lockError);
@@ -62,17 +72,21 @@ function harness(options = {}) {
   };
   const mocks = {
     '@prisma/client': { DataClassification: enumOf(['CONFIDENTIAL']), EmploymentStatus: enumOf(['ACTIVE', 'TERMINATED']), PolicyStatus: enumOf(['PUBLISHED']), PolicyAssignmentStatus: enumOf(['PENDING', 'OVERDUE', 'ACKNOWLEDGED', 'WAIVED']), Prisma: { PrismaClientKnownRequestError: KnownError, TransactionIsolationLevel: { ReadCommitted: 'ReadCommitted' } } },
-    '@/lib/db': { db: { $transaction: async run => { calls.transactions++; const old = structuredClone(state); try { return await run(tx); } catch (error) { state = old; throw error; } } } },
+    'node:crypto': { createHash },
+    '@/lib/db': { db: { ...tx, $transaction: async run => { calls.transactions++; const old = structuredClone(state); try { return await run(tx); } catch (error) { state = old; throw error; } } } },
     '@/lib/authorization': { can: () => options.allowed !== false, forbidden: () => Response.json({ error: 'Denied.' }, { status: 403 }) },
-    '@/lib/audit': { appendAudit: async (_tx, _ctx, event) => { if (options.auditError) throw Error('private audit detail'); state.audits.push(event); } },
-    '@/lib/input-validation': { asIdentifier: value => typeof value === 'string' && value.trim() && value.trim().length <= 191 && !/[\u0000-\u001f\u007f]/.test(value) ? value.trim() : null },
+    '@/lib/audit': { appendAudit: async (_tx, _ctx, event) => { if (options.auditError) throw Error('private audit detail'); state.audits.push({ tenantId: ctx.tenantId, ...event }); } },
+    '@/lib/input-validation': { readJsonObject: async request => { try { const v = await request.json(); return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; } }, asIdentifier: value => typeof value === 'string' && value.trim() && value.trim().length <= 191 && !/[\u0000-\u001f\u007f]/.test(value) ? value.trim() : null },
     '@/lib/request-context': { getRequestContext: async () => ctx, mutationOriginAllowed: () => options.origin !== false, unauthorized: () => Response.json({ error: 'Unauthorized.' }, { status: 401 }) }
   };
   const js = ts.transpileModule(readFileSync(path, 'utf8'), { fileName: path, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const module = { exports: {} };
   new Function('module', 'exports', 'require', 'Date', js)(module, module.exports, name => { assert.ok(name in mocks, name); return mocks[name]; }, Clock);
-  return { calls, get state() { return state; }, async post(id = 'policy-a') {
-    const response = await module.exports.POST(new Request('https://hrbp.example/api/policies/' + id + '/acknowledgements', { method: 'POST' }), { params: Promise.resolve({ id }) });
+  return { calls, get state() { return state; }, async get(id = 'policy-a') {
+    const response = await module.exports.GET(new Request('https://hrbp.example/api/policies/' + id + '/acknowledgements'), { params: Promise.resolve({ id }) });
+    return { status: response.status, body: await response.json(), headers: response.headers };
+  }, async post(id = 'policy-a', body = { policyVersion: '1.0', contentHash: HASH }) {
+    const response = await module.exports.POST(new Request('https://hrbp.example/api/policies/' + id + '/acknowledgements', { method: 'POST', headers: { 'content-type': 'application/json' }, ...(body === null ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }) }), { params: Promise.resolve({ id }) });
     return { status: response.status, body: await response.json() };
   } };
 }
@@ -147,4 +161,53 @@ test('ack: row-lock parameters remain tenant scoped and parent locks precede ass
   assert.equal(locks.length, 3); assert.match(locks[0].sql, /"Employment"[\s\S]*FOR SHARE/);
   assert.match(locks[1].sql, /"PolicyRecord"[\s\S]*FOR SHARE/); assert.match(locks[2].sql, /"PolicyAssignment"[\s\S]*FOR UPDATE/);
   for (const lock of locks) { assert.ok(lock.values.includes('tenant-a')); assert.doesNotMatch(lock.sql, /\b(?:tenant-a|policy-a|employment-a)\b/); }
+});
+
+for (const [name, body] of [
+  ['absent body', null], ['old empty client', {}], ['array', []], ['invalid JSON', '{'],
+  ['wrong version type', { policyVersion: 1, contentHash: HASH }],
+  ['missing hash', { policyVersion: '1.0' }], ['wrong hash type', { policyVersion: '1.0', contentHash: {} }],
+  ['short hash', { policyVersion: '1.0', contentHash: 'abc' }], ['uppercase hash', { policyVersion: '1.0', contentHash: HASH.toUpperCase() }]
+]) test(`ack snapshot: ${name} is rejected before a transaction`, async () => {
+  const h = harness(); assert.equal((await h.post('policy-a', body)).status, 400); assert.equal(h.calls.transactions, 0);
+});
+for (const [name, options, body] of [
+  ['old version', {}, { policyVersion: '0.9', contentHash: HASH }],
+  ['same version edited content', { policy: { contentMarkdown: CONTENT + ' changed', contentHash: createHash('sha256').update(CONTENT + ' changed').digest('hex') } }, undefined],
+  ['stored hash not matching content bytes', { policy: { contentMarkdown: CONTENT + ' changed' } }, undefined],
+  ['empty content', { policy: { contentMarkdown: '', contentHash: createHash('sha256').update('').digest('hex') } }, undefined],
+  ['oversized content', { policy: { contentMarkdown: 'x'.repeat(65537), contentHash: createHash('sha256').update('x'.repeat(65537)).digest('hex') } }, undefined]
+]) test(`ack snapshot: ${name} never writes an acknowledgement`, async () => {
+  const h = harness(options), before = structuredClone(h.state);
+  assert.equal((await h.post('policy-a', body)).status, 409); assert.deepEqual(h.state, before); assert.equal(h.calls.writes.length, 0);
+});
+test('ack snapshot: new response is bound to content hash inside the original audit transaction', async () => {
+  const h = harness(); const r = await h.post(); assert.equal(r.status, 201);
+  assert.equal(r.body.data.policyContentHash, HASH); assert.equal(h.state.audits[0].purpose, auditPurpose());
+  const before = structuredClone(h.state); const replay = await h.post(); assert.equal(replay.body.meta.replayed, true);
+  assert.deepEqual(replay.body.data, r.body.data); assert.deepEqual(structuredClone(h.state), before);
+});
+for (const [name, audits] of [
+  ['legacy missing event', []], ['legacy unbound event', [{ purpose: 'Policy acknowledgement' }]],
+  ['different hash', [{ purpose: auditPurpose('1.0', '0'.repeat(64)) }]],
+  ['ambiguous duplicated events', [{ purpose: auditPurpose() }, { purpose: auditPurpose() }]]
+]) test(`ack snapshot: ${name} does not backfill evidence`, async () => {
+  const events = audits.map(a => ({ tenantId: 'tenant-a', resourceType: 'PolicyAcknowledgement', resourceId: 'receipt-a', action: 'policy.acknowledged', ...a }));
+  const h = harness({ assignment: { status: 'ACKNOWLEDGED' }, receipts: [receipt()], audits: events });
+  const before = structuredClone(h.state); assert.equal((await h.post()).status, 409); assert.deepEqual(h.state, before);
+});
+test('preview: returns displayed text, version and hash without any writes, with private caching', async () => {
+  const h = harness(), before = structuredClone(h.state); const r = await h.get(); assert.equal(r.status, 200);
+  assert.equal(r.body.data.contentMarkdown, CONTENT); assert.equal(r.body.data.contentHash, HASH); assert.equal(r.body.data.version, '1.0');
+  assert.equal(r.headers.get('cache-control'), 'private, no-store'); assert.equal(r.headers.get('vary'), 'Cookie');
+  assert.deepEqual(h.state, before); assert.equal(h.calls.transactions, 0);
+});
+for (const [name, options, expected] of [
+  ['anonymous', { anonymous: true }, 401], ['missing capability', { allowed: false }, 403],
+  ['missing employment', { ctx: { employmentId: null } }, 403], ['unassigned', { noAssignment: true }, 404],
+  ['waived', { assignment: { status: 'WAIVED' } }, 404], ['foreign assignment', { assignment: { tenantId: 'other' } }, 404],
+  ['future', { policy: { effectiveFrom: new Date(NOW.getTime() + 1) } }, 404], ['terminated', { employment: { status: 'TERMINATED' } }, 404],
+  ['corrupt hash', { policy: { contentHash: '0'.repeat(64) } }, 409]
+]) test(`preview: ${name} does not expose policy content`, async () => {
+  const h = harness(options), r = await h.get(); assert.equal(r.status, expected); assert.equal(r.body.data, undefined); assert.equal(h.calls.writes.length, 0);
 });

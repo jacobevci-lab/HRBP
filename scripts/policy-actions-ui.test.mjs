@@ -25,13 +25,14 @@ function text(n) {
 }
 const response = (status, data) => ({ status, ok: status >= 200 && status < 300, json: async () => data });
 const reviewReceipt = (status = 'APPROVED', id = 'policy-a') => response(200, { data: { id, status } });
-const ackReceipt = () => response(201, { data: { id: 'ack-a', policyId: 'policy-a', policyVersion: '1.0', acknowledgedAt: '2026-10-15T00:00:00.000Z' } });
+const snapshot = { id: 'policy-a', title: 'Test', version: '1.0', contentMarkdown: 'Test', contentHash: 'a'.repeat(64) };
+const ackReceipt = () => response(201, { data: { id: 'ack-a', policyId: 'policy-a', policyVersion: '1.0', policyContentHash: snapshot.contentHash, acknowledgedAt: '2026-10-15T00:00:00.000Z' } });
 
 /** Small executable component double; real React/SQL/browser behavior is
  * covered separately in the disposable UI workflow, not inferred here. */
 function harness(kind = 'review', language = 'en', initial = {}) {
   let props = kind === 'review' ? { policyId: 'policy-a', status: 'REVIEW', ownerId: 'owner-a', actorId: 'reviewer-a', canWrite: true, canApprove: true, ...initial }
-    : { policyId: 'policy-a', status: 'Pending', ...initial };
+    : { policyId: 'policy-a', status: 'Pending', snapshot, ...initial };
   const slots = []; let cursor = 0, effects = [], tree;
   let reply = async () => kind === 'review' ? reviewReceipt() : ackReceipt(), confirm = true, refreshThrows = false;
   const calls = { fetch: [], confirm: [], events: [], refresh: 0, reload: 0 };
@@ -51,6 +52,7 @@ function harness(kind = 'review', language = 'en', initial = {}) {
   };
   const jsx = (type, props) => ({ type, props });
   const common = { react, 'react/jsx-runtime': { jsx, jsxs: jsx },
+    '@/components/policy-acknowledgement-reader': { PolicyAcknowledgementReader: 'Reader' },
     'lucide-react': new Proxy({}, { get: (_, k) => String(k) }),
     'next/navigation': { useRouter: () => ({ refresh: () => { calls.refresh++; if (refreshThrows) throw Error('private-refresh-detail'); } }) },
     '@/components/locale-provider': { useLocale: () => ({ locale: language }) } };
@@ -62,7 +64,7 @@ function harness(kind = 'review', language = 'en', initial = {}) {
   });
   const file = kind === 'review' ? 'policy-review-actions' : 'policy-acknowledgement-action';
   const exported = compile(`components/${file}.tsx`, mocks);
-  const component = kind === 'review' ? exported.PolicyReviewActions : exported.PolicyAcknowledgementAction;
+  const component = kind === 'review' ? exported.PolicyReviewActions : exported.BoundPolicyAcknowledgementAction;
   function render() { cursor = 0; tree = component(props); const pending = effects; effects = []; pending.forEach(f => f()); return tree; }
   async function settle() { for (let i = 0; i < 5; i++) { await new Promise(r => setImmediate(r)); render(); } }
   function button(label) { const n = nodes(tree).find(n => n.type === 'button' && text(n).trim() === label); assert.ok(n, `Missing button: ${label}\n${text(tree)}`); return n; }
@@ -207,5 +209,18 @@ test('acknowledgement: same-turn duplicate callbacks cannot write twice', async 
   const h = harness('ack'); let finish;
   try { h.reply(() => new Promise(resolve => { finish = resolve; })); const click = h.button('Acknowledge').props.onClick; click(); click();
     assert.equal(h.calls.fetch.length, 1); finish(ackReceipt()); await h.settle(); assert.equal(h.calls.refresh, 1);
+  } finally { h.close(); }
+});
+
+test('acknowledgement: missing displayed snapshot disables and refuses to POST', async () => {
+  const h = harness('ack', 'en', { snapshot: undefined }); try {
+    assert.equal(h.button('Acknowledge').props.disabled, true); await h.click('Acknowledge'); assert.equal(h.calls.fetch.length, 0);
+  } finally { h.close(); }
+});
+test('acknowledgement: sends exact version/hash and rejects another content receipt', async () => {
+  const h = harness('ack'); try {
+    h.reply(async () => response(201, { data: { id: 'ack', policyId: 'policy-a', policyVersion: '1.0', policyContentHash: 'b'.repeat(64), acknowledgedAt: '2026-10-15T00:00:00Z' } }));
+    await h.click('Acknowledge'); assert.deepEqual(JSON.parse(h.calls.fetch[0].body), { policyVersion: snapshot.version, contentHash: snapshot.contentHash });
+    assert.equal(h.calls.refresh, 0); assert.equal(h.button('Acknowledge').props.disabled, true);
   } finally { h.close(); }
 });
