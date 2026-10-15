@@ -1,48 +1,32 @@
 "use client";
 
-import { CheckCircle2, LoaderCircle } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { CheckCircle2, LoaderCircle, ShieldCheck } from "lucide-react";
 import { useLocale } from "@/components/locale-provider";
+import { isRecord, policyActionMessage, usePolicyAction } from "@/components/policy-action-state";
 
 export function PolicyAcknowledgementAction({ policyId, status }: { policyId: string; status: string | null }) {
-  const router = useRouter();
   const { locale } = useLocale();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const c = (en: string, tr: string) => locale === "tr" ? tr : en;
+  const normalized = status?.toUpperCase();
+  const state = usePolicyAction(JSON.stringify([policyId, normalized]));
+  const message = policyActionMessage(state.phase, locale);
+  // A waiver is an exemption, not evidence that this employee acknowledged.
+  if (normalized === "WAIVED") return <span className="matrix-note" data-policy-ack-state="waived"><ShieldCheck size={12}/> {c("Waived", "Muaf")}</span>;
+  if (normalized === "ACKNOWLEDGED") return <span className="matrix-note" data-policy-ack-state="acknowledged"><CheckCircle2 size={12}/> {c("Acknowledged", "Onaylandı")}</span>;
 
-  if (status === "Acknowledged" || status === "Waived") {
-    return <span className="matrix-note"><CheckCircle2 size={12}/> {c("Acknowledged", "Onaylandı")}</span>;
+  function acknowledge() {
+    void state.run({ action: "ACKNOWLEDGE", confirmation: c("Confirm that you have read and acknowledge this policy?", "Bu politikayı okuduğunuzu ve onayladığınızı doğruluyor musunuz?"),
+      url: `/api/policies/${encodeURIComponent(policyId)}/acknowledgements`,
+      init: { method: "POST", headers: { "x-purpose": "Policy acknowledgement" } }, expectedStatus: 201, events: ["hrbp:lifecycle-actions-changed", "hrbp:notifications-changed"],
+      accepts: data => isRecord(data) && typeof data.id === "string" && data.id.length > 0 && data.policyId === policyId
+        && typeof data.policyVersion === "string" && data.policyVersion.trim().length > 0
+        && typeof data.acknowledgedAt === "string" && Number.isFinite(Date.parse(data.acknowledgedAt)) });
   }
-
-  async function acknowledge() {
-    setBusy(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/policies/${encodeURIComponent(policyId)}/acknowledgements`, {
-        method: "POST",
-        headers: { "x-purpose": "Policy acknowledgement" }
-      });
-      const value = await response.json() as { error?: string };
-      if (!response.ok) {
-        setError(value.error || c("Policy acknowledgement failed.", "Politika onayı başarısız oldu."));
-        return;
-      }
-      window.dispatchEvent(new Event("hrbp:lifecycle-actions-changed"));
-      window.dispatchEvent(new Event("hrbp:notifications-changed"));
-      router.refresh();
-    } catch {
-      setError(c("The policy service could not be reached.", "Politika servisine ulaşılamadı."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return <div className="comp-decision-wrap">
-    <button type="button" className="mini-action approve" disabled={busy} onClick={() => void acknowledge()}>
-      {busy ? <LoaderCircle size={13}/> : <CheckCircle2 size={13}/>} {c("Acknowledge", "Okudum / Onayla")}
+  return <div className="comp-decision-wrap" data-policy-acknowledgement={policyId} aria-busy={state.phase === "pending"}>
+    <button type="button" className="mini-action approve" disabled={state.blocked} onClick={acknowledge}>
+      {state.phase === "pending" ? <LoaderCircle size={13}/> : <CheckCircle2 size={13}/>} {c("Acknowledge", "Okudum / Onayla")}
     </button>
-    {error ? <small className="comp-decision-error">{error}</small> : null}
+    {message ? <><small role={state.phase === "saved" ? "status" : "alert"} className={state.phase === "saved" ? "matrix-note" : "comp-decision-error"}>{message}</small>
+      <button type="button" className="mini-action apply" onClick={state.reload}>{c("Reload current record", "Güncel kaydı yeniden yükle")}</button></> : null}
   </div>;
 }

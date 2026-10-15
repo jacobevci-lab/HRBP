@@ -6,16 +6,20 @@ on:
       - app/module/people/new/**
       - app/module/positions/new/**
       - app/api/hr-service/queues/**
+      - app/api/policies/**
       - components/engagement-*
+      - components/policy-*
       - components/app-shell.tsx
       - components/navigation-*
       - components/hr-service-queue-admin*
       - lib/engagement-authoring-copy.ts
       - scripts/create-page-authorization.test.mjs
       - scripts/engagement-authoring-ui.test.mjs
+      - scripts/policy-actions-ui.test.mjs
       - scripts/ui-deep-audit.mjs
       - scripts/ui-navigation-regression.mjs
       - scripts/ui-queue-regression.mjs
+      - scripts/ui-policy-regression.mjs
       - .github/workflows/ui-deep-inspection.yml
   workflow_dispatch:
 permissions:
@@ -57,8 +61,8 @@ jobs:
           npm ci > .audit/install.log 2>&1
           npm install --no-save --package-lock=false playwright@1.56.1 > .audit/playwright-install.log 2>&1
           npx playwright install --with-deps chromium > .audit/browser-install.log 2>&1
-      - name: Authorization and authoring component regression tests
-        run: node --test scripts/create-page-authorization.test.mjs scripts/engagement-authoring-ui.test.mjs
+      - name: Authorization, authoring and policy component regression tests
+        run: node --test scripts/create-page-authorization.test.mjs scripts/engagement-authoring-ui.test.mjs scripts/policy-actions-ui.test.mjs
       - name: Migrate and seed isolated product domains
         run: |
           npx prisma generate > .audit/schema.log 2>&1
@@ -83,6 +87,7 @@ jobs:
           node scripts/ui-deep-audit.mjs || result=1
           node scripts/ui-navigation-regression.mjs || result=1
           node scripts/ui-queue-regression.mjs || result=1
+          node scripts/ui-policy-regression.mjs || result=1
           exit "$result"
       - name: Preserve report and synthetic screenshots even on findings
         if: always()
