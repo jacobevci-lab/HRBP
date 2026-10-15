@@ -1,16 +1,15 @@
 .root { min-width: 0; }
-.dialog { color: var(--text-primary, #18212e); background: var(--surface, #fff); border: 1px solid var(--border, #dce2ea); border-radius: 16px; width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 24px; margin: auto; box-sizing: border-box; overflow: auto; text-align: left; white-space: normal; }
-.dialog::backdrop { background: rgb(10 18 31 / 65%); }
+.dialog { color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 16px; width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 24px; margin: auto; box-sizing: border-box; overflow: auto; text-align: left; white-space: normal; }
+.dialog::backdrop { background: rgb(18 28 26 / 65%); }
 .header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .header h3 { margin: 0; font-size: 18px; }
 .title { overflow-wrap: anywhere; margin: 20px 0 8px; font-size: 16px; }
 .meta { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
-.content { max-height: 48dvh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 14px; line-height: 1.7; padding: 16px; border: 1px solid var(--border, #dce2ea); border-radius: 8px; }
+.content { max-height: 48dvh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; font-size: 14px; line-height: 1.7; padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
 .note { font-size: 12px; line-height: 1.6; opacity: .8; }
 .consent { display: flex; gap: 10px; align-items: flex-start; margin: 16px 0; font-size: 14px; }
 .consent input { flex: 0 0 auto; margin-top: 3px; width: 16px; height: 16px; }
 .action { margin: 0; padding: 0; border: 0; min-width: 0; }
 .action:disabled { opacity: .55; }
-.dialog :focus-visible { outline: 2px solid var(--accent, #356de8); outline-offset: 3px; }
-:global(html[data-theme="dark"]) .dialog { color: #e5e9ef; background: #141b26; border-color: #354052; }
+.dialog :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 @media (max-width: 480px) { .dialog { padding: 16px; width: calc(100vw - 20px); } .content { padding: 12px; font-size: 13px; } }

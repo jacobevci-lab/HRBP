@@ -47,6 +47,7 @@ async function fixture({ policy: overrides = {}, assignmentStatus = 'PENDING', a
 const rows = id => db.policyAcknowledgement.findMany({ where: { policyId: id } });
 const assignment = id => db.policyAssignment.findUniqueOrThrow({ where: { policyId_employmentId: { policyId: id, employmentId } } });
 const auditCount = id => db.auditEvent.count({ where: { tenantId, resourceId: id, action: 'policy.acknowledged' } });
+const bindingCount = id => db.auditEvent.count({ where: { tenantId, resourceId: id, action: 'policy.acknowledgement-content-bound' } });
 async function test(name, run) {
   try { report.tests.push({ name, passed: true, ...await run() }); }
   catch (error) { report.tests.push({ name, passed: false, error: String(error.message).replaceAll(password, '[redacted]').slice(0, 700) }); }
@@ -117,12 +118,14 @@ try {
     assert.equal(await auditCount(before.id), 1); assert.equal((await assignment(p.id)).status, 'ACKNOWLEDGED');
     const event = await db.auditEvent.findFirstOrThrow({ where: { tenantId, resourceId: before.id, action: 'policy.acknowledged' } });
     assert.deepEqual(JSON.parse(event.purpose), { schema: 'policy-ack-content/v1', version: p.version, contentHash: p.contentHash });
+    const bound = await db.auditEvent.findFirstOrThrow({ where: { tenantId, resourceId: before.id, action: 'policy.acknowledgement-content-bound' } });
+    assert.equal(await bindingCount(before.id), 1); assert.equal(bound.purpose, event.purpose); assert.equal(bound.actorId, before.acknowledgedBy);
   });
   await test('ack API: eight concurrent requests produce one receipt and exactly one acknowledgement audit', async () => {
     const p = await fixture(), responses = await Promise.all(Array.from({ length: 8 }, () => post(p.id)));
     assert.ok(responses.every(v => v.status === 201)); assert.equal(responses.filter(v => v.body.meta.replayed === false).length, 1); assert.equal(responses.filter(v => v.body.meta.replayed === true).length, 7);
     for (const r of responses) assert.deepEqual(r.body.data, responses[0].body.data);
-    const saved = await rows(p.id); assert.equal(saved.length, 1); assert.equal(await auditCount(saved[0].id), 1); return { requests: 8, receipts: 1, acknowledgementAudits: 1 };
+    const saved = await rows(p.id); assert.equal(saved.length, 1); assert.equal(await auditCount(saved[0].id), 1); assert.equal(await bindingCount(saved[0].id), 1); return { requests: 8, receipts: 1, acknowledgementAudits: 1, contentBindingAudits: 1 };
   });
   await test('ack API: inconsistent pending assignment does not overwrite historical evidence', async () => {
     const p = await fixture(); assert.equal((await post(p.id)).status, 201); const before = (await rows(p.id))[0];
@@ -139,7 +142,7 @@ try {
   await test('preview API: private assigned snapshot is read-only and rejects unassigned/anonymous requests', async () => {
     const p = await fixture(), view = await preview(p.id); assert.equal(view.status, 200);
     assert.deepEqual(view.body.data, { id: p.id, title: p.title, version: p.version, contentHash: p.contentHash, contentMarkdown: p.contentMarkdown });
-    assert.equal(view.headers.get('cache-control'), 'private, no-store'); assert.equal(view.headers.get('vary'), 'Cookie');
+    assert.equal(view.headers.get('cache-control'), 'private, no-store'); assert.ok(view.headers.get('vary').split(',').map(v => v.trim().toLowerCase()).includes('cookie'), 'Next.js may add RSC Vary tokens; Cookie must remain present');
     assert.equal((await preview(p.id, true)).status, 401); assert.equal((await preview((await fixture({ assignmentStatus: null })).id)).status, 404); assert.equal((await rows(p.id)).length, 0);
   });
   await test('ack API: missing snapshot and stale version/hash fail before evidence creation', async () => {

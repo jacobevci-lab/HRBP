@@ -31,7 +31,7 @@ function harness(options = {}) {
     policies: [{ id: 'policy-a', tenantId: 'tenant-a', version: '1.0', title: 'Synthetic policy', contentMarkdown: CONTENT, contentHash: HASH, status: 'PUBLISHED', effectiveFrom: new Date('2026-01-01Z'), effectiveTo: null, ...options.policy }],
     employments: [{ id: 'employment-a', tenantId: 'tenant-a', status: 'ACTIVE', ...options.employment }],
     assignments: options.noAssignment ? [] : [{ id: 'assignment-a', tenantId: 'tenant-a', policyId: 'policy-a', employmentId: 'employment-a', status: 'PENDING', ...options.assignment }],
-    receipts: options.receipts ?? [], audits: options.audits ?? (options.receipts ?? []).map(r => ({ tenantId: r.tenantId, resourceType: 'PolicyAcknowledgement', resourceId: r.id, action: 'policy.acknowledged', purpose: auditPurpose(r.policyVersion) }))
+    receipts: options.receipts ?? [], audits: options.audits ?? (options.receipts ?? []).flatMap(r => ['policy.acknowledged', 'policy.acknowledgement-content-bound'].map(action => ({ tenantId: r.tenantId, resourceType: 'PolicyAcknowledgement', resourceId: r.id, actorId: r.acknowledgedBy, action, purpose: auditPurpose(r.policyVersion) })))
   };
   const calls = { transactions: 0, writes: [], locks: [] };
   const ctx = options.anonymous ? null : { tenantId: 'tenant-a', actorId: 'actor-a', employmentId: 'employment-a', ipAddress: '192.0.2.20', ...options.ctx };
@@ -75,7 +75,7 @@ function harness(options = {}) {
     'node:crypto': { createHash },
     '@/lib/db': { db: { ...tx, $transaction: async run => { calls.transactions++; const old = structuredClone(state); try { return await run(tx); } catch (error) { state = old; throw error; } } } },
     '@/lib/authorization': { can: () => options.allowed !== false, forbidden: () => Response.json({ error: 'Denied.' }, { status: 403 }) },
-    '@/lib/audit': { appendAudit: async (_tx, _ctx, event) => { if (options.auditError) throw Error('private audit detail'); state.audits.push({ tenantId: ctx.tenantId, ...event }); } },
+    '@/lib/audit': { appendAudit: async (_tx, _ctx, event) => { if (options.auditError || (options.bindingAuditError && event.action === 'policy.acknowledgement-content-bound')) throw Error('private audit detail'); state.audits.push({ tenantId: ctx.tenantId, actorId: ctx.actorId, ...event }); } },
     '@/lib/input-validation': { readJsonObject: async request => { try { const v = await request.json(); return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; } }, asIdentifier: value => typeof value === 'string' && value.trim() && value.trim().length <= 191 && !/[\u0000-\u001f\u007f]/.test(value) ? value.trim() : null },
     '@/lib/request-context': { getRequestContext: async () => ctx, mutationOriginAllowed: () => options.origin !== false, unauthorized: () => Response.json({ error: 'Unauthorized.' }, { status: 401 }) }
   };
@@ -126,12 +126,12 @@ for (const [name, options] of [
   const h = harness(options); const before = structuredClone(h.state);
   assert.equal((await h.post()).status, 409); assert.deepEqual(h.state, before); assert.equal(h.calls.writes.length, 0);
 });
-for (const status of ['PENDING', 'OVERDUE']) test(`ack: ${status} creates one receipt and one audit in the transaction`, async () => {
+for (const status of ['PENDING', 'OVERDUE']) test(`ack: ${status} creates one receipt with acknowledgement and server binding events atomically`, async () => {
   const h = harness({ assignment: { status } }); const result = await h.post();
   assert.equal(result.status, 201); assert.equal(result.body.meta.replayed, false);
   assert.equal(result.body.data.policyId, 'policy-a'); assert.equal(result.body.data.policyVersion, '1.0');
   assert.equal(result.body.data.employmentId, 'employment-a'); assert.equal(result.body.data.acknowledgedBy, 'actor-a');
-  assert.equal(h.state.assignments[0].status, 'ACKNOWLEDGED'); assert.equal(h.state.receipts.length, 1); assert.equal(h.state.audits.length, 1);
+  assert.equal(h.state.assignments[0].status, 'ACKNOWLEDGED'); assert.equal(h.state.receipts.length, 1); assert.equal(h.state.audits.length, 2); assert.deepEqual(h.state.audits.map(a => a.action), ['policy.acknowledged', 'policy.acknowledgement-content-bound']);
   assert.equal(h.state.audits[0].resourceId, result.body.data.id);
 });
 test('ack: replay preserves the original actor, timestamp and IP without a second audit', async () => {
@@ -192,7 +192,9 @@ for (const [name, audits] of [
   ['different hash', [{ purpose: auditPurpose('1.0', '0'.repeat(64)) }]],
   ['ambiguous duplicated events', [{ purpose: auditPurpose() }, { purpose: auditPurpose() }]]
 ]) test(`ack snapshot: ${name} does not backfill evidence`, async () => {
-  const events = audits.map(a => ({ tenantId: 'tenant-a', resourceType: 'PolicyAcknowledgement', resourceId: 'receipt-a', action: 'policy.acknowledged', ...a }));
+  const base = { tenantId: 'tenant-a', actorId: 'original-actor', resourceType: 'PolicyAcknowledgement', resourceId: 'receipt-a' };
+  const events = name.startsWith('legacy') ? audits.map(a => ({ ...base, action: 'policy.acknowledged', ...a }))
+    : [{ ...base, action: 'policy.acknowledged', purpose: auditPurpose() }, ...audits.map(a => ({ ...base, action: 'policy.acknowledgement-content-bound', ...a }))];
   const h = harness({ assignment: { status: 'ACKNOWLEDGED' }, receipts: [receipt()], audits: events });
   const before = structuredClone(h.state); assert.equal((await h.post()).status, 409); assert.deepEqual(h.state, before);
 });
@@ -210,4 +212,25 @@ for (const [name, options, expected] of [
   ['corrupt hash', { policy: { contentHash: '0'.repeat(64) } }, 409]
 ]) test(`preview: ${name} does not expose policy content`, async () => {
   const h = harness(options), r = await h.get(); assert.equal(r.status, expected); assert.equal(r.body.data, undefined); assert.equal(h.calls.writes.length, 0);
+});
+
+test('binding provenance: legacy caller-controlled purpose cannot impersonate a server content assertion', async () => {
+  const h = harness({ assignment: { status: 'ACKNOWLEDGED' }, receipts: [receipt()], audits: [
+    { tenantId: 'tenant-a', resourceType: 'PolicyAcknowledgement', resourceId: 'receipt-a',
+      action: 'policy.acknowledged', purpose: auditPurpose() }
+  ] });
+  const before = structuredClone(h.state);
+  assert.equal((await h.post()).status, 409);
+  assert.deepEqual(h.state, before); assert.equal(h.calls.writes.length, 0);
+});
+
+
+test('binding provenance: a second-event failure rolls back the first event, receipt and assignment', async () => {
+  const h = harness({ bindingAuditError: true }), before = structuredClone(h.state);
+  assert.equal((await h.post()).status, 503); assert.deepEqual(h.state, before);
+});
+test('binding provenance: content binding actor must match the original receipt actor', async () => {
+  const h = harness({ assignment: { status: 'ACKNOWLEDGED' }, receipts: [receipt()] });
+  h.state.audits[1].actorId = 'another-actor';
+  const before = structuredClone(h.state); assert.equal((await h.post()).status, 409); assert.deepEqual(h.state, before);
 });

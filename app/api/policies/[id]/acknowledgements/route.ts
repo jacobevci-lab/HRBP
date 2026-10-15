@@ -8,6 +8,7 @@ import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/re
 
 const privateHeaders = { "cache-control": "private, no-store", vary: "Cookie" };
 const hashPattern = /^[a-f0-9]{64}$/;
+const contentBindingAction = "policy.acknowledgement-content-bound";
 // The hash is retained inside the existing tamper-evident audit payload, in the
 // same transaction as the acknowledgement. Never backfill it for old receipts.
 function binding(version: string, contentHash: string) {
@@ -96,10 +97,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (assignment.status !== PolicyAssignmentStatus.ACKNOWLEDGED) throw new Error("STATE");
       // Validate the ORIGINAL event, not a newly manufactured hash on replay.
       // Missing/legacy/duplicate bindings need controlled review, not backfill.
+      // Older acknowledgement purpose fields could come from x-purpose.
+      // Only the distinct, server-selected binding action proves that this
+      // endpoint actually enforced the new content contract at creation time.
       const events = await tx.auditEvent.findMany({ where: { tenantId: ctx.tenantId,
-        resourceType: "PolicyAcknowledgement", resourceId: existing.id, action: "policy.acknowledged" },
-        select: { purpose: true }, take: 2 });
-      if (events.length !== 1 || events[0].purpose !== binding(policyVersion, contentHash)) throw new Error("CONTENT_CHANGED");
+        resourceType: "PolicyAcknowledgement", resourceId: existing.id,
+        action: { in: ["policy.acknowledged", contentBindingAction] } },
+        select: { action: true, purpose: true, actorId: true }, take: 3 });
+      if (events.length !== 2 || events.filter(e => e.action === "policy.acknowledged").length !== 1
+        || events.filter(e => e.action === contentBindingAction).length !== 1
+        || events.some(e => e.actorId !== existing.acknowledgedBy || e.purpose !== binding(policyVersion, contentHash))) throw new Error("CONTENT_CHANGED");
       return { data: existing, replayed: true };
     }
     if (assignment.status !== PolicyAssignmentStatus.PENDING && assignment.status !== PolicyAssignmentStatus.OVERDUE) throw new Error("STATE");
@@ -113,6 +120,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         acknowledgedBy: ctx.actorId, acknowledgedAt: now, ipAddress: ctx.ipAddress }
     });
     await appendAudit(tx, ctx, { action: "policy.acknowledged", resourceType: "PolicyAcknowledgement", resourceId: acknowledgement.id,
+      classification: DataClassification.CONFIDENTIAL, purpose: binding(policy.version, policy.contentHash) });
+    // Preserve the established acknowledgement event for existing consumers,
+    // plus a distinct server-issued binding event. Failure of either rolls back
+    // the receipt, assignment and both events; replay appends neither.
+    await appendAudit(tx, ctx, { action: contentBindingAction, resourceType: "PolicyAcknowledgement", resourceId: acknowledgement.id,
       classification: DataClassification.CONFIDENTIAL, purpose: binding(policy.version, policy.contentHash) });
     return { data: acknowledgement, replayed: false };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted }).catch((error) => {
