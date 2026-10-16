@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 type Phase = "idle" | "pending" | "saved" | "unknown" | "denied" | "conflict" | "rejected" | "capacity";
 type Outcome = { phase: Phase; action: string };
 type Options = { action: string; confirmation: string; url: string; body: unknown; expectedStatus: number;
-  accepts: (value: unknown) => boolean; afterSave?: (isCurrent: () => boolean) => void };
+  isApplicable?: () => boolean; accepts: (value: unknown) => boolean; afterSave?: (isCurrent: () => boolean) => void };
 
 /** Mounted-component duplicate/receipt guard, NOT durable server idempotency.
  * No request bodies, reply text or credentials are retained in the outcome map.
@@ -24,10 +24,10 @@ export function useHRServiceAction(key: string, allowed: boolean) {
   const full = !outcomes.current.has(key) && outcomes.current.size >= 32;
 
   async function run(options: Options): Promise<unknown | null> {
-    if (!isCurrent() || pending.current || outcomes.current.has(key) || outcomes.current.size >= 32) return null;
+    if (!isCurrent() || options.isApplicable?.() === false || pending.current || outcomes.current.has(key) || outcomes.current.size >= 32) return null;
     pending.current = true; // synchronous: protects calls before React re-renders
     try {
-      if (!window.confirm(options.confirmation) || !isCurrent()) { pending.current = false; render(); return null; }
+      if (!window.confirm(options.confirmation) || !isCurrent() || options.isApplicable?.() === false) { pending.current = false; render(); return null; }
     } catch { pending.current = false; render(); return null; }
     outcomes.current.set(key, { phase: "pending", action: options.action }); render();
     let phase: Phase = "unknown", accepted: unknown = null;
@@ -38,7 +38,7 @@ export function useHRServiceAction(key: string, allowed: boolean) {
         const envelope: unknown = await response.json();
         if (isObject(envelope) && options.accepts(envelope.data)) { phase = "saved"; accepted = envelope.data; }
       } else if ([401, 403].includes(response.status)) phase = "denied";
-      else if ([404, 409].includes(response.status)) phase = "conflict";
+      else if ([404, 409, 428].includes(response.status)) phase = "conflict";
       else if ([400, 422, 429].includes(response.status)) phase = "rejected";
     } catch { /* Timeout/transport/invalid receipts are unknown, never a rollback assertion. */ }
     outcomes.current.set(key, { phase, action: options.action }); pending.current = false; render();

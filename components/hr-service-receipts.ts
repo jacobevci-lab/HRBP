@@ -1,3 +1,4 @@
+import { asServiceRevision } from "@/lib/hr-service-revision";
 import { isObject } from "@/components/hr-service-action-state";
 export type ServicePrincipal = { id: string; tenantId: string; role: string; employmentId?: string | null };
 export type Intake = { category: string; subcategory: string; title: string; description: string; priority: string };
@@ -19,10 +20,18 @@ export function acceptsServiceIntake(data: unknown, user: ServicePrincipal, sent
     data.category === sent.category && data.subcategory === (sent.subcategory || null) &&
     data.title === sent.title && data.description === sent.description && data.priority === sent.priority && iso(data.createdAt);
 }
-export function acceptsServiceTransition(data: unknown, user: ServicePrincipal, id: string, target: string) {
-  return isObject(data) && data.id === id && data.tenantId === user.tenantId && data.status === target && iso(data.updatedAt);
+export function acceptsServiceWriteReceipt(value: unknown, user: ServicePrincipal, id: string, expectedUpdatedAt: string, operation: string) {
+  return isObject(value) && value.requestId === id && value.tenantId === user.tenantId && value.actorId === user.id &&
+    value.operation === operation && asServiceRevision(expectedUpdatedAt) !== null && value.expectedUpdatedAt === expectedUpdatedAt &&
+    asServiceRevision(value.updatedAt) !== null && Date.parse(value.updatedAt as string) > Date.parse(expectedUpdatedAt);
 }
-export function acceptsServiceComment(data: unknown, user: ServicePrincipal, id: string, body: string, visibility: string) {
+export function acceptsServiceTransition(data: unknown, user: ServicePrincipal, id: string, target: string, expectedUpdatedAt: string, reason: string | null = null) {
+  return isObject(data) && data.id === id && data.tenantId === user.tenantId && data.status === target && iso(data.updatedAt) &&
+    acceptsServiceWriteReceipt(data.writeReceipt, user, id, expectedUpdatedAt, "STATUS") &&
+    isObject(data.writeReceipt) && data.writeReceipt.updatedAt === data.updatedAt && data.writeReceipt.reason === reason;
+}
+export function acceptsServiceComment(data: unknown, user: ServicePrincipal, id: string, body: string, visibility: string, expectedUpdatedAt: string) {
   return isObject(data) && identifier(data.id) && data.tenantId === user.tenantId && data.requestId === id &&
-    data.authorId === user.id && data.body === body && data.visibility === visibility && iso(data.createdAt);
+    data.authorId === user.id && data.body === body && data.visibility === visibility && iso(data.createdAt) &&
+    acceptsServiceWriteReceipt(data.writeReceipt, user, id, expectedUpdatedAt, "COMMENT");
 }

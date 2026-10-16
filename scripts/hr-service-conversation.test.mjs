@@ -15,7 +15,7 @@ function compile(path, mocks = {}) {
   return module.exports;
 }
 const record = v => !!v && typeof v === 'object' && !Array.isArray(v);
-const receipts = compile('components/hr-service-receipts.ts', { '@/components/hr-service-action-state': { isObject: record } });
+const receipts = compile('components/hr-service-receipts.ts', { '@/components/hr-service-action-state': { isObject: record }, '@/lib/hr-service-revision': compile('lib/hr-service-revision.ts') });
 const contract = compile('components/hr-service-conversation-contract.ts', { '@/components/hr-service-receipts': receipts });
 const actor = (role = 'EMPLOYEE') => ({ id: 'actor-a', tenantId: 'tenant-a', role });
 const time = '2026-10-16T00:00:00.000Z';

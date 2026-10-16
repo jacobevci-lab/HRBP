@@ -107,6 +107,7 @@ export type LifecycleActionItem = {
     assessmentId: string;
   } | {
     type: "advance-hr-service";
+    expectedUpdatedAt: string;
     requestId: string;
     status: "TRIAGE" | "IN_PROGRESS";
   } | {

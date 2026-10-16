@@ -16,18 +16,20 @@ function compile(path, mocks) {
 const flatten = n => Array.isArray(n) ? n.flatMap(flatten) : !n || typeof n !== 'object' ? [] : [n, ...flatten(n.props?.children)];
 const text = n => Array.isArray(n) ? n.map(text).join('') : n == null || typeof n === 'boolean' ? '' : typeof n === 'object' ? text(n.props?.children) : String(n);
 const stamp = '2026-10-16T12:00:00.000Z';
+const revision = '2026-10-16T11:59:59.000Z';
 const user = { id:'actor-a', tenantId:'tenant-a', role:'HR_OPERATIONS', employmentId:'employee-a' };
 const sent = { category:'Benefits', subcategory:'QA', title:'Synthetic service request', description:'Synthetic request body', priority:'MEDIUM' };
 const replyBody = 'Synthetic private or public text';
 function receipt(kind, body) {
   if (kind === 'intake') return { ...body, subcategory:body.subcategory || null, id:'ticket-a', requestNumber:'HR-2026-ABCDE123', tenantId:user.tenantId, requestorId:user.id, subjectEmploymentId:null, status:'OPEN', createdAt:stamp };
-  if (kind === 'transition') return { id:'ticket-a', tenantId:user.tenantId, status:body.status, updatedAt:stamp };
-  return { id:'comment-a', requestId:'ticket-a', tenantId:user.tenantId, authorId:user.id, body:body.body, visibility:body.visibility, createdAt:stamp };
+  const writeReceipt = {requestId:'ticket-a',tenantId:user.tenantId,actorId:user.id,operation:kind==='transition'?'STATUS':'COMMENT',expectedUpdatedAt:body.expectedUpdatedAt,updatedAt:stamp,reason:body.reason??null};
+  if (kind === 'transition') return { id:'ticket-a', tenantId:user.tenantId, status:body.status, updatedAt:stamp, writeReceipt };
+  return { id:'comment-a', requestId:'ticket-a', tenantId:user.tenantId, authorId:user.id, body:body.body, visibility:body.visibility, createdAt:stamp, writeReceipt };
 }
 const response = (status, data, extra={}) => ({ status, ok:status>=200&&status<300, redirected:false, json:async()=>({data}), ...extra });
 function harness(kind='intake') {
   const old = { window:globalThis.window, fetch:globalThis.fetch };
-  let props={requestId:'ticket-a',status:'OPEN',locale:'en',staff:true}, principal={...user}, authenticated=true, loading=false;
+  let props={requestId:'ticket-a',status:'OPEN',locale:'en',staff:true,expectedUpdatedAt:revision}, principal={...user}, authenticated=true, loading=false;
   const slots=[]; let cursor=0, effects=[], tree, confirmation=true, refreshFailure=false;
   const calls={posts:[],patches:[],confirms:[],refresh:0,events:[],reload:0};
   let transport = async (_url, init) => response(kind==='transition'?200:201, receipt(kind, JSON.parse(init.body)));
@@ -44,6 +46,7 @@ function harness(kind='intake') {
     'next/navigation':{useRouter:()=>({refresh:()=>{calls.refresh++;if(refreshFailure)throw Error('RAW_PRIVATE_REFRESH');}})},
     '@/components/session-provider':{useSessionContext:()=>({session:{authenticated,user:principal},loading})},
     '@/components/hr-service-actions.module.css':{default:new Proxy({},{get:(_,k)=>k})}};
+  mocks['@/lib/hr-service-revision']=compile('lib/hr-service-revision.ts',mocks);
   mocks['@/components/hr-service-action-state']=compile('components/hr-service-action-state.ts',mocks);
   mocks['@/components/hr-service-receipts']=compile('components/hr-service-receipts.ts',mocks);
   const filename=kind==='intake'?'hr-service-request-form.tsx':'hr-service-lifecycle-actions.tsx';
@@ -94,3 +97,13 @@ test('lifecycle: employee cannot use a stale staff transition/private callback',
 test('all visible input controls have stable accessible names',()=>{for(const kind of ['intake','transition']){const h=prepared(kind);try{assert.ok(h.controls.every(c=>Boolean(c.props['aria-label'])));}finally{h.close();}}});
 test('locale change translates existing unknown feedback without another request',async()=>{const h=prepared('reply');try{h.transport(async()=>{throw Error('offline');});await h.submit();h.props({locale:'tr'});assert.match(h.text,/sonucu doğrulanamadı/);assert.equal(h.calls.posts.length,1);}finally{h.close();}});
 test('record switch and return retain unknown outcome without retaining other record drafts',async()=>{const h=prepared('reply');try{h.transport(async()=>{throw Error('offline');});await h.submit();h.props({requestId:'ticket-b'});assert.equal(h.controls[2].props.value,'');h.props({requestId:'ticket-a'});assert.match(h.text,/could not be confirmed/);await h.submit();assert.equal(h.calls.posts.length,1);}finally{h.close();}});
+
+for (const kind of ['transition', 'reply', 'private']) {
+  test(`revision ${kind}: sends the displayed version, never a submit-time reread`, async () => { const h=prepared(kind);try {await h.submit();assert.equal(JSON.parse(h.calls.posts[0].body).expectedUpdatedAt,revision);}finally{h.close();} });
+  test(`revision ${kind}: missing version cannot issue a mutation`, async () => {const h=prepared(kind);try{h.props({expectedUpdatedAt:undefined});await h.submit();assert.equal(h.calls.posts.length,0);}finally{h.close();}});
+  test(`revision ${kind}: same-status refresh preserves draft and requires explicit review`, async () => {const h=prepared(kind);try{h.props({expectedUpdatedAt:stamp});await h.submit();assert.equal(h.calls.posts.length,0);if(kind!=='transition')assert.equal(h.controls[2].props.value,replyBody);h.button('Use reviewed current version').props.onClick();h.render();await h.submit();assert.equal(JSON.parse(h.calls.posts[0].body).expectedUpdatedAt,stamp);}finally{h.close();}});
+  test(`revision ${kind}: version changed during confirmation cancels the captured write`, async () => {const h=prepared(kind);try{h.confirm(()=>{h.props({expectedUpdatedAt:stamp});return true;});await h.submit();assert.equal(h.calls.posts.length,0);}finally{h.close();}});
+  for (const fault of ['missing','stale','actor','operation','result-version']) test(`revision ${kind}: ${fault} write receipt cannot report success`,async()=>{const h=prepared(kind);try{h.transport(async(_u,init)=>{const d=receipt(kind,JSON.parse(init.body));if(fault==='missing')delete d.writeReceipt;else if(fault==='stale')d.writeReceipt.expectedUpdatedAt=stamp;else if(fault==='actor')d.writeReceipt.actorId='other';else if(fault==='operation')d.writeReceipt.operation='INTAKE';else d.writeReceipt.updatedAt=revision;return response(kind==='transition'?200:201,d);});await h.submit();assert.equal(h.calls.refresh,0);assert.match(h.text,/could not be confirmed/);h.props({expectedUpdatedAt:stamp});await h.submit();assert.equal(h.calls.posts.length,1);assert.equal(h.button('Use reviewed current version'),undefined);}finally{h.close();}});
+}
+test('revision: changed transition reason cannot confirm a matching status receipt', async()=>{const h=prepared('transition');try{h.set(1,'Synthetic expected reason');h.transport(async(_u,init)=>{const d=receipt('transition',JSON.parse(init.body));d.writeReceipt.reason='other reason';return response(200,d);});await h.submit();assert.equal(h.calls.refresh,0);assert.equal(h.controls[1].props.value,'Synthetic expected reason');}finally{h.close();}});
+test('revision: next action stays blocked until the confirmed version is rendered',async()=>{const h=prepared('reply');try{await h.submit();assert.equal(h.button('Prepare next action').props.disabled,true);h.props({expectedUpdatedAt:stamp});assert.equal(h.button('Prepare next action').props.disabled,false);h.button('Prepare next action').props.onClick();h.render();assert.equal(h.controls[2].props.disabled,false);}finally{h.close();}});

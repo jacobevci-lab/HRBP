@@ -56,7 +56,7 @@ export async function HRServiceLifecyclePanel({ focus }: { focus?: string }) {
           <td>{row.queue}<small className="cell-sub">{row.assigneeId ? c(locale, "Assigned", "Atanmış") : c(locale, "Unassigned", "Atanmamış")}</small></td>
           <td>{row.lastTransition}<small className="cell-sub">{formatHRServiceLifecycleDate(row.lastTransitionAt)}</small></td>
           <td>{row.openPauseReason ?? row.lastTransitionReason ?? "—"}<small className="cell-sub">{row.lastTransitionActorId ? `${c(locale, "Actor", "İşlemi yapan")}: ${row.lastTransitionActorId}` : c(locale, "Domain evidence", "Domain kanıtı")}</small></td>
-          {canWrite ? <td>{terminal ? <small>{c(locale, "Read only", "Salt okunur")}</small> : <HRServiceLifecycleActions requestId={row.id} status={row.rawStatus} locale={locale} staff={!data.selfService}/>}</td> : null}
+          {canWrite ? <td>{terminal ? <small>{c(locale, "Read only", "Salt okunur")}</small> : <HRServiceLifecycleActions requestId={row.id} expectedUpdatedAt={row.updatedAt} status={row.rawStatus} locale={locale} staff={!data.selfService}/>}</td> : null}
         </tr>;
       }) : <tr><td colSpan={canWrite ? 8 : 7} style={{ textAlign: "center", padding: 26 }}>{c(locale, "No HR service requests are visible in this scope.", "Bu kapsamda görünür İK hizmet talebi bulunmuyor.")}</td></tr>}</tbody></table></div>
     </section>

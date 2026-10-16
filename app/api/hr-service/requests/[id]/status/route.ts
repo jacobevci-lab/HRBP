@@ -2,6 +2,7 @@ import { DataClassification, PlatformRole, Prisma, ServiceRequestStatus } from "
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { asServiceRevision, nextServiceRevision } from "@/lib/hr-service-revision";
 import { canUseHRServiceQueue, hrServiceRequestWhere } from "@/lib/hr-service-access";
 import { asEnumValue, asIdentifier, asOptionalText, readJsonObject } from "@/lib/input-validation";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
@@ -49,6 +50,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!id) return Response.json({ error: "A valid request id is required." }, { status: 400 });
   const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "JSON body must be an object." }, { status: 400 });
+  if (body.expectedUpdatedAt === undefined) return Response.json({ code: "SERVICE_REVISION_REQUIRED", error: "Reload the request and send its displayed expectedUpdatedAt." }, { status: 428, headers: { "Cache-Control": "private, no-store" } });
+  const expectedUpdatedAt = asServiceRevision(body.expectedUpdatedAt);
+  if (!expectedUpdatedAt) return Response.json({ code: "SERVICE_REVISION_INVALID", error: "expectedUpdatedAt must be a canonical UTC timestamp with milliseconds." }, { status: 400, headers: { "Cache-Control": "private, no-store" } });
   const nextStatus = asEnumValue(body.status, Object.values(ServiceRequestStatus));
   if (!nextStatus) return Response.json({ error: "A valid status is required." }, { status: 400 });
   const reasonInput = asOptionalText(body.reason, 2000);
@@ -81,6 +85,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         }
       });
       if (!current) throw new Error("NOT_FOUND");
+      if (current.updatedAt.toISOString() !== expectedUpdatedAt) throw new Error("REVISION_CONFLICT");
       if (nextStatus !== current.status && !transitions[current.status].includes(nextStatus)) throw new Error("INVALID_TRANSITION");
       if (nextStatus !== current.status && requiresReason(current.status, nextStatus) && (!reason || reason.length < 10)) throw new Error("REASON");
 
@@ -105,6 +110,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
 
       const now = new Date();
+      const revision = nextServiceRevision(current.updatedAt, now);
       const statusChanged = nextStatus !== current.status;
       const routingChanged = desiredQueueKey !== current.queue || desiredAssigneeId !== current.assigneeId;
       if (!statusChanged && !routingChanged) throw new Error("NO_CHANGE");
@@ -150,6 +156,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         where: { id: current.id, tenantId: ctx.tenantId, status: current.status, updatedAt: current.updatedAt },
         data: {
           status: nextStatus,
+          updatedAt: revision,
           assigneeId: desiredAssigneeId,
           queue: queue?.key ?? null,
           slaDueAt,
@@ -246,10 +253,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
       const record = await tx.hRServiceRequest.findUnique({ where: { id: current.id } });
       if (!record) throw new Error("NOT_FOUND");
-      return record;
+      return { ...record, writeReceipt: {
+        requestId: id, tenantId: ctx.tenantId, actorId: ctx.actorId, operation: "STATUS",
+        expectedUpdatedAt, updatedAt: revision.toISOString(), reason
+      } };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
-    return Response.json({ data });
+    return Response.json({ data }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
     if (code === "NOT_FOUND") return Response.json({ error: "Request not found in your authorized service scope." }, { status: 404 });
@@ -259,8 +269,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (code === "QUEUE") return forbidden("The selected HR service queue is unavailable or not delegated to you.");
     if (code === "ASSIGNEE") return Response.json({ error: "Assignee must be an active HR service staff user in this tenant." }, { status: 400 });
     if (code === "ASSIGNEE_QUEUE") return Response.json({ error: "Assignee must be a member of the selected HR service queue." }, { status: 400 });
+    if (code === "REVISION_CONFLICT") return Response.json({ code: "SERVICE_REVISION_CONFLICT", error: "The displayed request version is stale. Review the current request before submitting again." }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
     if (code === "STATE_CONFLICT" || (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034")) return Response.json({ error: "The request changed concurrently. Refresh and try again." }, { status: 409 });
-    console.error("HR service status transition failed", error);
+    console.error("[HRBP] HR service status transition could not be completed.");
     return Response.json({ error: "HR service request could not be updated." }, { status: 500 });
   }
 }

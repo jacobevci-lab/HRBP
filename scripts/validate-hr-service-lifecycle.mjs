@@ -74,7 +74,7 @@ const actionCenterUiPath = "components/workflow-action-center.tsx";
 const actionCenterUi = await source(actionCenterUiPath);
 expect(actionCenterUiPath, actionCenterUi, /item\.action\.type === "advance-hr-service"/, "Action Center must understand HR Service quick progression");
 expect(actionCenterUiPath, actionCenterUi, /\/api\/hr-service\/requests\//, "HR Service quick progression must use the governed status endpoint");
-expect(actionCenterUiPath, actionCenterUi, /payload = \{ status: item\.action\.status \}/, "HR Service quick progression must remain limited to precomputed safe target states");
+expect(actionCenterUiPath, actionCenterUi, /payload = \{ status: item\.action\.status, expectedUpdatedAt: item\.action\.expectedUpdatedAt \}/, "HR Service quick progression must remain limited to precomputed safe target states");
 expect(actionCenterUiPath, actionCenterUi, /resourceType:\s*"HRServiceRequest"/, "successful HR Service quick actions must clear matching notifications");
 
 const formPath = "components/hr-service-request-form.tsx";
