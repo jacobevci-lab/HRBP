@@ -3,7 +3,7 @@ import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { asServiceRevision, nextServiceRevision } from "@/lib/hr-service-revision";
-import { hrServiceRequestWhere, isHRServiceSelfServiceRole } from "@/lib/hr-service-access";
+import { hrServiceRequestWhere, isHRServiceSelfServiceRole, isHRServiceStaffRole } from "@/lib/hr-service-access";
 import { asEnumValue, asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
@@ -11,25 +11,40 @@ import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/re
 const commentTerminalStatuses = new Set<ServiceRequestStatus>([ServiceRequestStatus.CLOSED, ServiceRequestStatus.CANCELLED]);
 const fallbackSlaMinutes: Record<ServicePriority, number> = { LOW: 4320, MEDIUM: 1440, HIGH: 480, CRITICAL: 240 };
 
+const readHeaders = { "Cache-Control": "private, no-store", Vary: "Cookie", "X-Content-Type-Options": "nosniff" };
+const readJson = (body: unknown, status = 200) => Response.json(body, { status, headers: readHeaders });
+
+/** Legacy response fields and 300-row bound are retained. New callers that
+ * need further history should use the paginated /conversation endpoint. */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await getRequestContext(request);
-  if (!ctx) return unauthorized();
-  if (!can(ctx, "hr-service:read")) return forbidden();
-  const id = asIdentifier((await params).id);
-  if (!id) return Response.json({ error: "A valid request id is required." }, { status: 400 });
-  const access = await hrServiceRequestWhere(db, ctx);
-  const ticket = await db.hRServiceRequest.findFirst({ where: { AND: [access, { id }] }, select: { id: true } });
-  if (!ticket) return Response.json({ error: "Request not found." }, { status: 404 });
-  const data = await db.hRServiceComment.findMany({
-    where: {
-      tenantId: ctx.tenantId,
-      requestId: id,
-      ...(isHRServiceSelfServiceRole(ctx.role) ? { visibility: ServiceVisibility.REQUESTOR } : {})
-    },
-    orderBy: { createdAt: "asc" },
-    take: 300
-  });
-  return Response.json({ data });
+  try {
+    const ctx = await getRequestContext(request);
+    if (!ctx) return readJson({ error: "Authentication required." }, 401);
+    if (!can(ctx, "hr-service:read")) return readJson({ error: "Access denied." }, 403);
+    const id = asIdentifier((await params).id);
+    if (!id) return readJson({ error: "A valid request id is required." }, 400);
+    const data = await db.$transaction(async tx => {
+      const access = await hrServiceRequestWhere(tx, ctx);
+      const ticket = await tx.hRServiceRequest.findFirst({ where: { AND: [access, { id }] }, select: { id: true } });
+      if (!ticket) throw new Error("NOT_FOUND");
+      return tx.hRServiceComment.findMany({
+        where: {
+          tenantId: ctx.tenantId,
+          requestId: id,
+          visibility: isHRServiceStaffRole(ctx.role)
+            ? { in: [ServiceVisibility.REQUESTOR, ServiceVisibility.PRIVATE_NOTE] }
+            : ServiceVisibility.REQUESTOR
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: 300
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+    return readJson({ data });
+  } catch (error) {
+    if (error instanceof Error && error.message === "NOT_FOUND") return readJson({ error: "Request not found." }, 404);
+    console.error("[HRBP] Service comments could not be loaded.");
+    return readJson({ error: "Service comments could not be loaded." }, 503);
+  }
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
