@@ -1,0 +1,74 @@
+name: Materialize Reviewed Revision Patch
+
+on:
+  push:
+    branches: [fix/ui-qa-remediation-20261014]
+    paths: [.github/workflows/qa-apply-revision.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  reviewed-tree:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Verify source and apply exact reviewed patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = 9bdd4c8f38528535dcc4080d145131d6abfd4a97
+          python3 - <<'PY'
+          import base64, hashlib, lzma, os
+          from pathlib import Path
+          parts = [Path(f'.github/qa-revision-patch/part-{i:02}.txt').read_text() for i in range(4)]
+          patch = lzma.decompress(base64.b64decode(''.join(parts), validate=True))
+          assert len(patch) == 70437
+          assert hashlib.sha256(patch).hexdigest() == '51d5719bbe139f5986745f0bd91023db574e8998e911cca509feb5e59f5fe92f'
+          Path(os.environ['RUNNER_TEMP'], 'revision.patch').write_bytes(patch)
+          PY
+          git apply --check --index --unidiff-zero "$RUNNER_TEMP/revision.patch"
+          git apply --index --unidiff-zero "$RUNNER_TEMP/revision.patch"
+          git rm .github/workflows/qa-apply-revision.yml
+          git rm -r .github/qa-revision-patch
+          git diff --cached --check
+          test "$(git write-tree)" = fc4279fa36cc90b1d3eeedee9eaa7362a4fd65ad
+      - name: Store verified Git tree without moving any branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          def git(*args):
+              return subprocess.check_output(['git', *args]).decode().strip()
+          entries = []
+          for name in git('diff', '--cached', '--name-only').splitlines():
+              stage = git('ls-files', '--stage', '--', name)
+              if not stage:
+                  entries.append({'path': name, 'mode': '100644', 'type': 'blob', 'sha': None})
+              else:
+                  mode = stage.split()[0]
+                  assert mode == '100644', name
+                  entries.append({'path': name, 'mode': mode, 'type': 'blob', 'content': Path(name).read_bytes().decode('utf-8')})
+          payload = json.dumps({'base_tree': git('rev-parse', 'HEAD^{tree}'), 'tree': entries}).encode()
+          raw = subprocess.check_output(['gh', 'api', '--method', 'POST', 'repos/jacobevci-lab/HRBP/git/trees', '--input', '-'], input=payload)
+          result = json.loads(raw)
+          assert result['sha'] == 'fc4279fa36cc90b1d3eeedee9eaa7362a4fd65ad'
+          dest = Path(os.environ['RUNNER_TEMP'], 'verified-revision')
+          dest.mkdir()
+          (dest/'tree.json').write_text(json.dumps({'tree': result['sha'], 'parent': git('rev-parse', 'HEAD'), 'sourceBase': '9bdd4c8f38528535dcc4080d145131d6abfd4a97', 'patchSha256': '51d5719bbe139f5986745f0bd91023db574e8998e911cca509feb5e59f5fe92f'}, indent=2))
+          subprocess.run(['git', 'archive', '--format=tar.gz', '--output='+str(dest/'source.tar.gz'), result['sha']], check=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hrbp-verified-revision-tree
+          path: ${{ runner.temp }}/verified-revision/
+          retention-days: 1
+          if-no-files-found: error
