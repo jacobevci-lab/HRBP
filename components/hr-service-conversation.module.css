@@ -1,9 +1,9 @@
 .root { margin-top: 8px; font-size: 12px; }
-.root button { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; min-height: 36px; cursor: pointer; }
+.root button { font: inherit; color: var(--text); background: var(--surface, #fff); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; min-height: 36px; cursor: pointer; }
 .root button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .root button:disabled { cursor: wait; opacity: .6; }
 .root .trigger { color: var(--accent); padding: 5px 9px; }
-.dialog { width: min(760px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); margin: auto; padding: 0; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-sizing: border-box; overflow: hidden; text-align: left; white-space: normal; }
+.dialog { width: min(760px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); margin: auto; padding: 0; color: var(--text); background: var(--surface, #fff); border: 1px solid var(--line); border-radius: 14px; box-sizing: border-box; overflow: hidden; text-align: left; white-space: normal; }
 .dialog[open] { display: flex; flex-direction: column; }
 .dialog::backdrop { background: rgb(0 0 0 / 55%); }
 .header, .footer { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; flex-shrink: 0; padding: 14px 16px; }

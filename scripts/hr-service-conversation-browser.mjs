@@ -175,11 +175,25 @@ try {
     await check(`UI: ${locale}/${theme}/${width}px modal, keyboard containment and Escape`, hp, async () => {
       const ctx = await context(staffId, locale, theme, width), page = await ctx.newPage(), t = await fixture();
       await add(t, 'Synthetic long unbroken text ' + 'x'.repeat(300)); await add(t, privateText, 'PRIVATE_NOTE'); const d = await open(page, t, locale); await loaded(d); await d.getByText(privateText, { exact: true }).waitFor();
-      const geometry = await d.evaluate(el => { const b = el.getBoundingClientRect(); return { left: b.left, right: b.right, width: innerWidth, scroll: el.scrollWidth, client: el.clientWidth, overflow: document.documentElement.style.getPropertyValue('overflow-y') }; });
+      const geometry = await d.evaluate(el => {
+        const b = el.getBoundingClientRect(), styles = getComputedStyle(el), probe = document.createElement('span');
+        probe.style.backgroundColor = 'var(--surface)'; el.appendChild(probe);
+        const surface = getComputedStyle(probe).backgroundColor; probe.remove();
+        return { left: b.left, right: b.right, width: innerWidth, scroll: el.scrollWidth, client: el.clientWidth,
+          overflow: document.documentElement.style.getPropertyValue('overflow-y'), background: styles.backgroundColor, surface,
+          opacity: styles.opacity, color: styles.color };
+      });
       assert.ok(geometry.left >= 0 && geometry.right <= width + 1); assert.ok(geometry.scroll <= geometry.client + 2); assert.equal(geometry.overflow, 'hidden');
+      // The first functional run passed geometry with a transparent dialog:
+      // an undefined --panel token exposed background table text. Test opacity,
+      // the actual theme surface and text contrast, not just dimensions.
+      assert.match(geometry.background, /^rgb\(\d+, \d+, \d+\)$/); assert.equal(geometry.background, geometry.surface); assert.equal(geometry.opacity, '1');
+      const luminance = color => color.match(/[\d.]+/g).slice(0, 3).map(n => Number(n) / 255).map(n => n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4).reduce((sum, n, i) => sum + n * [.2126, .7152, .0722][i], 0);
+      const light = luminance(geometry.background), ink = luminance(geometry.color);
+      const contrast = (Math.max(light, ink) + .05) / (Math.min(light, ink) + .05); assert.ok(contrast >= 4.5, 'Dialog text/surface contrast must be at least 4.5');
       for (const key of ['Tab', 'Shift+Tab']) for (let i = 0; i < 30; i++) { await page.keyboard.press(key); assert.ok(await d.evaluate(el => el.contains(document.activeElement))); }
       const screenshot = await shot(page, `history-${locale}-${theme}-${width}`); await page.keyboard.press('Escape'); await d.waitFor({ state: 'hidden' });
-      assert.ok(await trigger(page, t, locale).evaluate(el => el === document.activeElement)); return { screenshot, geometry };
+      assert.ok(await trigger(page, t, locale).evaluate(el => el === document.activeElement)); return { screenshot, geometry, contrast };
     });
   }
 } finally {
