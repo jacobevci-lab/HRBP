@@ -1,0 +1,12 @@
+.root { min-width: 0; max-width: 100%; }
+.root > summary { cursor: pointer; font-weight: 700; }
+.form { display: grid; gap: 12px; margin-top: 12px; max-width: 760px; min-width: 0; }
+.row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); min-width: 0; }
+.field { display: grid; gap: 5px; min-width: 0; color: var(--text); font-size: 12px; }
+.field input, .field select, .field textarea { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px; font: inherit; }
+.field textarea { resize: vertical; }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.buttons button, .form > button { max-width: 100%; white-space: normal; }
+.feedback { display: block; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; }
+.hint { color: var(--muted); font-size: 11px; line-height: 1.5; margin: 0; }
+.lifecycle { min-width: min(260px, 100%); width: 280px; max-width: 100%; }

@@ -63,7 +63,6 @@ expect(actionPath, actions, /PRIVATE_NOTE/, "service staff must be able to recor
 expect(actionPath, actions, /resourceType:\s*"HRServiceRequest"[\s\S]*resourceId:\s*requestId[\s\S]*read:\s*true/, "successful HR Service actions must retire the actor's stale notifications for that request");
 expect(actionPath, actions, /hrbp:notifications-changed/, "notification badges must refresh after request action acknowledgement");
 
-
 const actionCenterDataPath = "lib/lifecycle-action-center.ts";
 const actionCenterData = await source(actionCenterDataPath);
 expect(actionCenterDataPath, actionCenterData, /isHRServiceStaffRole\(ctx\.role\)/, "HR Service quick progression must be limited to service staff roles");
@@ -81,7 +80,17 @@ expect(actionCenterUiPath, actionCenterUi, /resourceType:\s*"HRServiceRequest"/,
 const formPath = "components/hr-service-request-form.tsx";
 const form = await source(formPath);
 expect(formPath, form, /maxLength=\{80\}[\s\S]*maxLength=\{200\}[\s\S]*maxLength=\{4000\}/, "intake UI must mirror bounded request fields");
-expect(formPath, form, /fetch\("\/api\/hr-service\/requests"/, "intake UI must use the governed request endpoint");
+// Transport moved to the tested receipt guard; verify the owning URL and
+// helper delegation together instead of requiring an inline fetch call.
+expect(formPath, form, /url: "\/api\/hr-service\/requests"/, "intake UI must use the governed request endpoint");
+expect(formPath, form, /action\.run\([\s\S]*acceptsServiceIntake/, "intake success must validate the bound response");
+expect(actionPath, actions, /acceptsServiceComment/, "comment success must validate author, body and visibility");
+const guardPath = "components/hr-service-action-state.ts";
+const guard = await source(guardPath);
+expect(guardPath, guard, /fetch\(options\.url/, "guard must execute the owning endpoint");
+expect(guardPath, guard, /window\.confirm/, "writes must retain explicit confirmation");
+expect(guardPath, guard, /response\.status === options\.expectedStatus/, "success needs the expected HTTP status");
+expect(guardPath, guard, /outcomes\.current\.has\(key\)/, "unknown outcomes must not unlock replay");
 
 const panelPath = "components/hr-service-lifecycle-panel.tsx";
 const panel = await source(panelPath);

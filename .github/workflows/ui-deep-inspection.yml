@@ -13,6 +13,9 @@ on:
       - components/app-shell.tsx
       - components/navigation-*
       - components/hr-service-queue-admin*
+      - components/hr-service-*
+      - scripts/hr-service-ui.test.mjs
+      - scripts/hr-service-browser.mjs
       - lib/engagement-authoring-copy.ts
       - lib/employee-services-live-data.ts
       - scripts/create-page-authorization.test.mjs
@@ -73,8 +76,8 @@ jobs:
           npm ci > .audit/install.log 2>&1
           npm install --no-save --package-lock=false playwright@1.56.1 > .audit/playwright-install.log 2>&1
           npx playwright install --with-deps chromium > .audit/browser-install.log 2>&1
-      - name: Authorization, authoring and policy component regression tests
-        run: node --test scripts/create-page-authorization.test.mjs scripts/engagement-authoring-ui.test.mjs scripts/policy-actions-ui.test.mjs scripts/policy-reader.test.mjs scripts/policy-acknowledgement-metrics.test.mjs scripts/policy-acknowledgement-route.test.mjs scripts/policy-assignment-exception.test.mjs scripts/policy-forms-ui.test.mjs scripts/policy-dialog.test.mjs scripts/policy-action-recovery.test.mjs
+      - name: Authorization, authoring, policy and service component regression tests
+        run: node --test scripts/create-page-authorization.test.mjs scripts/engagement-authoring-ui.test.mjs scripts/policy-actions-ui.test.mjs scripts/policy-reader.test.mjs scripts/policy-acknowledgement-metrics.test.mjs scripts/policy-acknowledgement-route.test.mjs scripts/policy-assignment-exception.test.mjs scripts/policy-forms-ui.test.mjs scripts/policy-dialog.test.mjs scripts/policy-action-recovery.test.mjs scripts/hr-service-ui.test.mjs
       - name: Migrate and seed isolated product domains
         run: |
           npx prisma generate > .audit/schema.log 2>&1
@@ -103,6 +106,7 @@ jobs:
           node scripts/policy-acknowledgement-regression.mjs || result=1
           node scripts/policy-assignment-exception-regression.mjs || result=1
           node scripts/policy-forms-browser.mjs || result=1
+          node scripts/hr-service-browser.mjs || result=1
           exit "$result"
       - name: Preserve report and synthetic screenshots even on findings
         if: always()
