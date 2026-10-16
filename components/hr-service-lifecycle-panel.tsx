@@ -5,6 +5,7 @@ import type { Locale } from "@/lib/i18n";
 import { formatHRServiceLifecycleDate, getHRServiceLifecycleLiveData } from "@/lib/hr-service-lifecycle-live-data";
 import { getServerRequestContext } from "@/lib/server-session";
 import { HRServiceLifecycleActions } from "@/components/hr-service-lifecycle-actions";
+import { HRServiceConversation } from "@/components/hr-service-conversation";
 import { HRServiceRequestForm } from "@/components/hr-service-request-form";
 
 function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
@@ -49,7 +50,7 @@ export async function HRServiceLifecyclePanel({ focus }: { focus?: string }) {
         const focused = row.id === data.focusedRequestId;
         return <tr key={row.id} style={focused ? { background: "var(--accent-soft)", boxShadow: "inset 3px 0 0 var(--accent)" } : undefined}>
           <td><strong>{row.requestNumber}</strong>{focused ? <small className="cell-sub">{c(locale, "Linked action", "Bağlantılı aksiyon")}</small> : <small className="cell-sub">{row.category} · {row.priority}</small>}</td>
-          <td>{row.title}{focused ? <small className="cell-sub">{row.category} · {row.priority}</small> : null}</td>
+          <td>{row.title}<HRServiceConversation requestId={row.id} locale={locale}/>{focused ? <small className="cell-sub">{row.category} · {row.priority}</small> : null}</td>
           <td><em className={`services-pill ${row.rawStatus.toLowerCase().replace(/_/g, "-")}`}>{row.status}</em></td>
           <td>{row.slaPaused ? <><PauseCircle size={13}/> {c(locale, "Paused", "Duraklatıldı")}</> : row.sla}{row.escalationLevel ? <small className="cell-sub">L{row.escalationLevel} {c(locale, "escalation", "eskalasyon")}</small> : null}</td>
           <td>{row.queue}<small className="cell-sub">{row.assigneeId ? c(locale, "Assigned", "Atanmış") : c(locale, "Unassigned", "Atanmamış")}</small></td>
