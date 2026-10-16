@@ -113,6 +113,7 @@ jobs:
           node scripts/hr-service-browser.mjs || result=1
           node scripts/hr-service-conversation-browser.mjs || result=1
           node scripts/hr-service-revision-browser.mjs || result=1
+          node scripts/hr-service-revision-review-browser.mjs || result=1
           exit "$result"
       - name: Preserve exact checked-out source without runtime secrets
         if: always()

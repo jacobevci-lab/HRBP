@@ -3,17 +3,17 @@
 .form { display: grid; gap: 12px; margin-top: 12px; max-width: 760px; min-width: 0; }
 .row { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr)); min-width: 0; }
 .field { display: grid; gap: 5px; min-width: 0; color: var(--text); font-size: 12px; }
-.field input, .field select, .field textarea { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px; font: inherit; }
+.field input, .field select, .field textarea { width: 100%; min-width: 0; max-width: 100%; box-sizing: border-box; background: var(--surface, #fff); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 9px; font: inherit; }
 .field textarea { resize: vertical; }
 .buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.buttons button, .form > button { max-width: 100%; white-space: normal; }
+.buttons button, .form > button, .feedback > button { max-width: 100%; white-space: normal; }
 .feedback { display: block; overflow-wrap: anywhere; font-size: 12px; line-height: 1.5; }
 .hint { color: var(--muted); font-size: 11px; line-height: 1.5; margin: 0; }
 .lifecycle { min-width: min(260px, 100%); width: 280px; max-width: 100%; }
 /* Keep native buttons consistent with the existing panel/accent theme. */
 .root > summary { padding: 12px; font-size: 12px; }
 .form { padding: 0 12px 12px; box-sizing: border-box; }
-.buttons button, .form > button { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); padding: 8px 12px; min-height: 36px; font: inherit; font-size: 12px; font-weight: 600; line-height: 1.35; cursor: pointer; }
+.buttons button, .form > button, .feedback > button { border: 1px solid var(--line); border-radius: 8px; background: var(--surface, #fff); color: var(--text); padding: 8px 12px; min-height: 36px; font: inherit; font-size: 12px; font-weight: 600; line-height: 1.35; cursor: pointer; }
 .buttons button[type="submit"], .form > button { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
-.buttons button:disabled, .form > button:disabled { opacity: .55; cursor: not-allowed; }
-.field input:focus-visible, .field select:focus-visible, .field textarea:focus-visible, .buttons button:focus-visible, .form > button:focus-visible, .root > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.buttons button:disabled, .form > button:disabled, .feedback > button:disabled { opacity: .55; cursor: not-allowed; }
+.field input:focus-visible, .field select:focus-visible, .field textarea:focus-visible, .buttons button:focus-visible, .form > button:focus-visible, .feedback > button:focus-visible, .root > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
