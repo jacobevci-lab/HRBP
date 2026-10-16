@@ -114,6 +114,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const statusChanged = nextStatus !== current.status;
       const routingChanged = desiredQueueKey !== current.queue || desiredAssigneeId !== current.assigneeId;
       if (!statusChanged && !routingChanged) throw new Error("NO_CHANGE");
+      if (current.status === ServiceRequestStatus.CLOSED || current.status === ServiceRequestStatus.CANCELLED) throw new Error("TERMINAL_ROUTING");
 
       const enteringWait = statusChanged && !waitingStatuses.has(current.status) && waitingStatuses.has(nextStatus);
       const leavingWait = statusChanged && waitingStatuses.has(current.status) && !waitingStatuses.has(nextStatus);
@@ -150,8 +151,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         slaDueAt = new Date(now.getTime() + renewedMinutes * 60_000);
       }
 
-      const shouldResetEscalation = enteringWait || reopening || terminalStatuses.has(nextStatus);
-      const establishesFirstResponse = firstResponseStatuses.has(nextStatus);
+      const shouldResetEscalation = statusChanged && (enteringWait || reopening || terminalStatuses.has(nextStatus));
+      const establishesFirstResponse = statusChanged && firstResponseStatuses.has(nextStatus);
       const updated = await tx.hRServiceRequest.updateMany({
         where: { id: current.id, tenantId: ctx.tenantId, status: current.status, updatedAt: current.updatedAt },
         data: {
@@ -161,8 +162,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           queue: queue?.key ?? null,
           slaDueAt,
           firstResponseAt: current.firstResponseAt ?? (establishesFirstResponse ? now : null),
-          resolvedAt: nextStatus === ServiceRequestStatus.RESOLVED ? now : (reopening ? null : current.resolvedAt),
-          closedAt: nextStatus === ServiceRequestStatus.CLOSED ? now : current.closedAt,
+          resolvedAt: statusChanged && nextStatus === ServiceRequestStatus.RESOLVED ? now : (reopening ? null : current.resolvedAt),
+          closedAt: statusChanged && nextStatus === ServiceRequestStatus.CLOSED ? now : current.closedAt,
           ...(shouldResetEscalation ? { escalationLevel: 0, escalatedAt: null, escalationReason: null } : {})
         }
       });
@@ -255,7 +256,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (!record) throw new Error("NOT_FOUND");
       return { ...record, writeReceipt: {
         requestId: id, tenantId: ctx.tenantId, actorId: ctx.actorId, operation: "STATUS",
-        expectedUpdatedAt, updatedAt: revision.toISOString(), reason
+        expectedUpdatedAt, updatedAt: revision.toISOString(), reason,
+        queue: record.queue, assigneeId: record.assigneeId
       } };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
@@ -265,6 +267,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (code === "NOT_FOUND") return Response.json({ error: "Request not found in your authorized service scope." }, { status: 404 });
     if (code === "INVALID_TRANSITION") return Response.json({ error: "The requested service status transition is not allowed." }, { status: 409 });
     if (code === "REASON") return Response.json({ error: "A reason of 10–2000 characters is required for waiting, resolution, closure, cancellation and reopen transitions." }, { status: 400 });
+    if (code === "TERMINAL_ROUTING") return Response.json({ error: "Closed or cancelled requests are read-only." }, { status: 409 });
     if (code === "NO_CHANGE") return Response.json({ error: "No status or routing change was requested." }, { status: 409 });
     if (code === "QUEUE") return forbidden("The selected HR service queue is unavailable or not delegated to you.");
     if (code === "ASSIGNEE") return Response.json({ error: "Assignee must be an active HR service staff user in this tenant." }, { status: 400 });
