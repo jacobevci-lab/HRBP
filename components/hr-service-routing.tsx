@@ -9,18 +9,25 @@ import { parseRoutingOptions, acceptsRoutingWrite, type RoutingOptions } from "@
 import modal from "@/components/hr-service-conversation.module.css";
 import fields from "@/components/hr-service-actions.module.css";
 
-type ConfirmedRouting = { key: string; parentRevision: string; revision: string; status: string; queue: string | null; assigneeId: string | null };
-type ReviewedRevision = { key: string; parentRevision: string; revision: string; status: string };
+type ReviewedRevision = { key: string; parentRevision: string; priorRevision: string; revision: string; status: string };
+type ConfirmedRouting = ReviewedRevision & { queue: string | null; assigneeId: string | null };
 type View = { scope: string; phase: "idle" | "loading" | "ready" | "error"; data: RoutingOptions | null; assignee: string };
 export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale }: { requestId: string; expectedUpdatedAt: string; status: string; locale: Locale }) {
   const { session, loading } = useSessionContext(), user = session?.user;
   const allowed = Boolean(!loading && session?.authenticated && user && serviceStaffRoles.has(user.role) && !["CLOSED", "CANCELLED"].includes(status));
   const key = JSON.stringify([requestId, user?.id, user?.tenantId, user?.role]);
-  const scope = JSON.stringify([key, expectedUpdatedAt, status]);
   const [reviewed, setReviewed] = useState<ReviewedRevision | null>(null);
-  const writeRevision = reviewed?.key === key && reviewed.status === status &&
-    (expectedUpdatedAt === reviewed.parentRevision || expectedUpdatedAt === reviewed.revision)
-    ? reviewed.revision : expectedUpdatedAt;
+  const [confirmed, setConfirmed] = useState<ConfirmedRouting | null>(null);
+  const matchesParent = (binding: ReviewedRevision | null) => Boolean(binding?.key === key && binding.status === status &&
+    [binding.parentRevision, binding.priorRevision, binding.revision].includes(expectedUpdatedAt));
+  // A delayed parent render of our exact validated write is not an independent
+  // change. Keep the dialog/read generation stable across that catch-up. The
+  // bounded lineage contains only the opening, preceding and committed versions;
+  // any other revision still invalidates the dialog and requires record review.
+  const binding = matchesParent(confirmed) ? confirmed : matchesParent(reviewed) ? reviewed : null;
+  const scopeRevision = binding?.parentRevision ?? expectedUpdatedAt;
+  const scope = JSON.stringify([key, scopeRevision, status]);
+  const writeRevision = matchesParent(reviewed) && reviewed ? reviewed.revision : expectedUpdatedAt;
   const latest = useRef({ key, scope, allowed, writeRevision }); latest.current = { key, scope, allowed, writeRevision };
   const dialog = useRef<HTMLDialogElement>(null), trigger = useRef<HTMLButtonElement>(null), openRef = useRef<string | null>(null);
   const read = useRef<AbortController | null>(null), [openScope, setOpenScope] = useState<string | null>(null);
@@ -32,13 +39,11 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
   // Only one validated receipt binding, never a response body or staff name.
   // Unknown results do not create this proof; returning to another record whose
   // proof was replaced still requires a full reload rather than evicting its guard.
-  const [confirmed, setConfirmed] = useState<ConfirmedRouting | null>(null);
   const open = allowed && openScope === scope && openRef.current === scope;
   const data = open && view.scope === scope && view.phase === "ready" ? view.data : null;
   const pending = open && view.scope === scope && view.phase === "loading";
   const failed = open && view.scope === scope && view.phase === "error";
-  const receiptMatchesParent = confirmed?.key === key && confirmed.status === status &&
-    (expectedUpdatedAt === confirmed.parentRevision || expectedUpdatedAt === confirmed.revision);
+  const receiptMatchesParent = matchesParent(confirmed);
   // A router refresh is best effort, not evidence of a new server render. After
   // a validated save the explicit GET must match its known resulting revision,
   // even while the parent still displays the original revision. This does not
@@ -94,7 +99,7 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
       accepts: value => acceptsRoutingWrite(value, user, requestId, status, writeRevision, selectedQueue, assigneeId) });
     if (isObject(result) && isObject(result.writeReceipt) && typeof result.writeReceipt.updatedAt === "string" &&
         latest.current.key === key && latest.current.allowed) {
-      setConfirmed({ key, parentRevision: expectedUpdatedAt, revision: result.writeReceipt.updatedAt, status, queue: selectedQueue, assigneeId });
+      setConfirmed({ key, parentRevision: scopeRevision, priorRevision: writeRevision, revision: result.writeReceipt.updatedAt, status, queue: selectedQueue, assigneeId });
     }
   }
   // A successful POST alone cannot rearm the write guard. Require an explicit
@@ -106,8 +111,8 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
     data.request.queue === confirmed.queue && data.queue === confirmed.queue &&
     data.request.assigneeId === confirmed.assigneeId);
   function prepare() {
-    if (!applicable() || read.current || latestView.current !== view || !canPrepare || !data || !action.newDraft()) return;
-    setReviewed({ key, parentRevision: expectedUpdatedAt, revision: data.request.updatedAt, status: data.request.status });
+    if (!applicable() || read.current || latestView.current !== view || !canPrepare || !data || !confirmed || !action.newDraft()) return;
+    setReviewed({ key, parentRevision: confirmed.parentRevision, priorRevision: confirmed.priorRevision, revision: data.request.updatedAt, status: data.request.status });
     setConfirmed(null);
     setView({ scope, phase: "ready", data, assignee: data.request.assigneeId ?? "" });
   }

@@ -141,6 +141,8 @@ async function savedRouting(h, server) {
 }
 async function showReviewedRouting(h, server) {
   h.props({ expectedUpdatedAt: server.revision }); await h.settle();
+  // A known self-revision may catch up without dismissing this dialog.
+  if (nodes(h.tree).find(n => n.type === 'dialog').props.ref.current.open) await h.click('Close');
   await h.click('Route / assign');
 }
 test('routing recovery: a confirmed save permits a second deliberate assignment without a document reload', async () => {

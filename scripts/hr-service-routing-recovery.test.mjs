@@ -75,6 +75,8 @@ async function savedRouting(h, server) {
 }
 async function showReviewedRouting(h, server) {
   h.props({ expectedUpdatedAt: server.revision }); await h.settle();
+  // A known self-revision may catch up without dismissing this dialog.
+  if (nodes(h.tree).find(n => n.type === 'dialog').props.ref.current.open) await h.click('Close');
   await h.click('Route / assign');
 }
 
@@ -127,6 +129,46 @@ test('routing recovery: an unknown write cannot use a newer response to replace 
     await h.click('Reload choices');
     assert.ok(!nodes(h.tree).some(n => n.type === 'button' && label(n) === nextRouting));
     assert.equal(nodes(h.tree).filter(n => n.type === 'select').length, 0);
+    assert.equal(server.writes.length, 1);
+  } finally { h.close(); }
+});
+
+test('routing recovery: parent catching up to a confirmed revision does not close an explicitly reopened dialog', async () => {
+  const h = client(); try {
+    const server = routingServer(h); await savedRouting(h, server);
+    await h.click('Close'); await h.click('Route / assign');
+    assert.equal(h.button(nextRouting).props.disabled, false);
+    h.props({ expectedUpdatedAt: server.revision }); await h.settle();
+    assert.equal(h.button(nextRouting).props.disabled, false, 'a delayed render of our own receipt must not discard the verified page');
+    assert.equal(nodes(h.tree).find(n => n.type === 'dialog').props.ref.current.open, true);
+    await h.click(nextRouting);
+    assert.equal(nodes(h.tree).find(n => n.type === 'dialog').props.ref.current.open, true, 'preparing must retain the dialog generation');
+    await h.choose('Assignee', ''); await h.click('Save routing');
+    assert.equal(server.writes.length, 2);
+    assert.equal(server.writes[1].expectedUpdatedAt, '2026-10-16T00:00:01.000Z');
+  } finally { h.close(); }
+});
+test('routing recovery: parent catching up while the explicit reread is pending preserves only that read', async () => {
+  const h = client(); try {
+    const server = routingServer(h); await savedRouting(h, server);
+    let release;
+    h.transport(async () => new Promise(resolve => { release = resolve; }));
+    const reading = h.click('Reload choices'); await h.settle();
+    h.props({ expectedUpdatedAt: server.revision }); await h.settle();
+    assert.equal(h.calls.get.at(-1).signal.aborted, false, 'known self-revision refresh must not abort explicit read');
+    release({ status: 200, json: async () => ({ data: structuredClone(server.snapshot) }) });
+    await reading; await h.settle();
+    assert.equal(h.button(nextRouting).props.disabled, false);
+    assert.equal(server.writes.length, 1);
+  } finally { h.close(); }
+});
+test('routing recovery: independent parent revision closes the dialog and cannot rearm using the old receipt', async () => {
+  const h = client(); try {
+    const server = routingServer(h); await savedRouting(h, server);
+    await h.click('Reload choices');
+    h.props({ expectedUpdatedAt: '2026-10-16T00:00:10.000Z' }); await h.settle();
+    assert.equal(nodes(h.tree).find(n => n.type === 'dialog').props.ref.current.open, false);
+    assert.equal(h.button(nextRouting).props.disabled, true);
     assert.equal(server.writes.length, 1);
   } finally { h.close(); }
 });
