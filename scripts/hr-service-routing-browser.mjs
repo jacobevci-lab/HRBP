@@ -54,9 +54,11 @@ try{
  // Continuation: no document navigation or POST replay is needed after a
  // confirmed route, but only its freshly reauthorized exact receipt may rearm.
  async function reopenAfterSave(page, t, d, locale='en') {
-   await d.waitFor({state:'hidden'});
+   // A successful receipt does not imply router.refresh committed new props.
+   // Explicitly close/open if still visible; either path performs a new GET.
    const message=page.locator(`[data-hr-service-routing="${t.id}"]`).getByRole('status');
    await message.waitFor();
+   if (await d.isVisible()) await d.getByRole('button',{name:c(locale,'Close','Kapat'),exact:true}).click();
    await button(page,t,locale).click();
    return dialog(page,locale);
  }
@@ -123,7 +125,8 @@ try{
  await check('routing recovery: a newer independent routing change requires full review rather than reusing old proof',hp,async()=>{
    const t=await ticket(),d=await opened(hp,t);await choose(d,qb.key,agent);
    assert.equal((await save(hp,d,t)).status(),200);
-   await d.waitFor({state:'hidden'});
+   await hp.locator(`[data-hr-service-routing="${t.id}"]`).getByRole('status').waitFor();
+   if (await d.isVisible()) await d.getByRole('button',{name:'Close',exact:true}).click();
    const saved=await current(t.id);
    assert.equal((await post(staff,saved,{queue:qa.key,assigneeId:null})).status,200);
    const moved=await current(t.id);

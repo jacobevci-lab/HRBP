@@ -60,7 +60,8 @@ starts from the freshly read current queue and assignee.
 
 The control requires a new initial options read authorized for the same actor,
 tenant, role and request. Its revision, status, queue and assignee must exactly
-match the previously validated write receipt and the displayed request revision.
+match the previously validated write receipt. The parent must still have the
+previously displayed revision or the receipt's resulting revision.
 A receipt alone, old options, failed reauthorization, substituted targets or a
 newer independent change cannot rearm the form. A captured old prepare callback
 also cannot bypass a changed principal/revision or an outstanding/failed reread.
@@ -78,3 +79,20 @@ real API/Chromium scenarios cover two deliberate routing changes without a full
 navigation in EN/TR, a denied options read, substituted same-revision targets,
 and an independently changed newer revision. Exact-head CI results are required
 before this continuation is considered integration-tested.
+
+### A completed save does not prove the parent UI refreshed
+
+The first integration run of the recovery control had 20 routing cases pass and
+all five new cases stop while waiting for automatic dialog closure. The saved
+receipt was shown, but router.refresh had not committed a new parent view.
+Do not equate a successful mutation or a refresh call with updated screen props.
+
+An explicit options reread may now verify the exact known committed revision even
+when its parent still has the pre-save props. Only after explicit preparation is
+that verified revision used for the next routing command. Closing/reopening keeps
+this reviewed version within the mounted form; an independent newer revision or
+unconfirmed write still cannot be adopted. The parent list may remain stale until
+its own refresh; the dialog's authoritative snapshot does not attest a whole-page
+refresh. The browser tests explicitly close/reopen instead of assuming auto-close
+and retain the document-identity, exact POST revision, audit and notification
+assertions. There is no automatic write retry or generic newer-version acceptance.

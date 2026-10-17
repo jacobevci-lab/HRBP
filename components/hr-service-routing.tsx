@@ -9,14 +9,19 @@ import { parseRoutingOptions, acceptsRoutingWrite, type RoutingOptions } from "@
 import modal from "@/components/hr-service-conversation.module.css";
 import fields from "@/components/hr-service-actions.module.css";
 
-type ConfirmedRouting = { key: string; revision: string; status: string; queue: string | null; assigneeId: string | null };
+type ConfirmedRouting = { key: string; parentRevision: string; revision: string; status: string; queue: string | null; assigneeId: string | null };
+type ReviewedRevision = { key: string; parentRevision: string; revision: string; status: string };
 type View = { scope: string; phase: "idle" | "loading" | "ready" | "error"; data: RoutingOptions | null; assignee: string };
 export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale }: { requestId: string; expectedUpdatedAt: string; status: string; locale: Locale }) {
   const { session, loading } = useSessionContext(), user = session?.user;
   const allowed = Boolean(!loading && session?.authenticated && user && serviceStaffRoles.has(user.role) && !["CLOSED", "CANCELLED"].includes(status));
   const key = JSON.stringify([requestId, user?.id, user?.tenantId, user?.role]);
   const scope = JSON.stringify([key, expectedUpdatedAt, status]);
-  const latest = useRef({ key, scope, allowed }); latest.current = { key, scope, allowed };
+  const [reviewed, setReviewed] = useState<ReviewedRevision | null>(null);
+  const writeRevision = reviewed?.key === key && reviewed.status === status &&
+    (expectedUpdatedAt === reviewed.parentRevision || expectedUpdatedAt === reviewed.revision)
+    ? reviewed.revision : expectedUpdatedAt;
+  const latest = useRef({ key, scope, allowed, writeRevision }); latest.current = { key, scope, allowed, writeRevision };
   const dialog = useRef<HTMLDialogElement>(null), trigger = useRef<HTMLButtonElement>(null), openRef = useRef<string | null>(null);
   const read = useRef<AbortController | null>(null), [openScope, setOpenScope] = useState<string | null>(null);
   const [view, setView] = useState<View>({ scope, phase: "idle", data: null, assignee: "" });
@@ -32,6 +37,13 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
   const data = open && view.scope === scope && view.phase === "ready" ? view.data : null;
   const pending = open && view.scope === scope && view.phase === "loading";
   const failed = open && view.scope === scope && view.phase === "error";
+  const receiptMatchesParent = confirmed?.key === key && confirmed.status === status &&
+    (expectedUpdatedAt === confirmed.parentRevision || expectedUpdatedAt === confirmed.revision);
+  // A router refresh is best effort, not evidence of a new server render. After
+  // a validated save the explicit GET must match its known resulting revision,
+  // even while the parent still displays the original revision. This does not
+  // accept an arbitrary newer version, and never upgrades an unknown result.
+  const readRevision = action.phase === "saved" && receiptMatchesParent && confirmed ? confirmed.revision : writeRevision;
   const titleId = useId(), c = (en: string, tr: string) => locale === "tr" ? tr : en;
   useEffect(() => {
     if (open && dialog.current && !dialog.current.open) dialog.current.showModal();
@@ -57,7 +69,7 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
       });
       if (response.status !== 200 || response.redirected) throw new Error("UNAVAILABLE");
       const body: unknown = await response.json();
-      const result = isObject(body) ? parseRoutingOptions(body.data, user, requestId, expectedUpdatedAt, selected) : null;
+      const result = isObject(body) ? parseRoutingOptions(body.data, user, requestId, readRevision, selected) : null;
       if (!result || result.request.status !== status) throw new Error("UNAVAILABLE");
       if (applicable() && read.current === token) setView({ scope, phase: "ready", data: result,
         assignee: selected === undefined ? result.request.assigneeId ?? "" : "" });
@@ -71,29 +83,31 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
   const selectedValid = Boolean(data?.queueAvailable && (!view.assignee || data.assignees.some(a => a.id === view.assignee)));
   const changed = Boolean(data && (data.queue !== data.request.queue || (view.assignee || null) !== data.request.assigneeId));
   async function save() {
-    if (!user || !data || !applicable() || action.blocked || !selectedValid || !changed) return;
+    const currentDraft = () => applicable() && latest.current.writeRevision === writeRevision && latestView.current === view;
+    if (!user || !data || !currentDraft() || action.blocked || !selectedValid || !changed || data.request.updatedAt !== writeRevision) return;
     const selectedQueue = data.queue, assigneeId = view.assignee || null;
     const assigneeName = data.assignees.find(a => a.id === assigneeId)?.displayName ?? c("Unassigned", "Atanmamış");
     const result = await action.run({ action: "ROUTING", url: `/api/hr-service/requests/${encodeURIComponent(requestId)}/status`, expectedStatus: 200,
-      body: { expectedUpdatedAt, status, queue: selectedQueue, assigneeId }, isApplicable: applicable,
+      body: { expectedUpdatedAt: writeRevision, status, queue: selectedQueue, assigneeId }, isApplicable: currentDraft,
       confirmation: c(`Save routing for ${data.request.requestNumber}? Queue: ${selectedQueue ?? "No queue"}. Assignee: ${assigneeName}. Status will not change.`,
         `${data.request.requestNumber} yönlendirmesi kaydedilsin mi? Kuyruk: ${selectedQueue ?? "Kuyruk yok"}. Sorumlu: ${assigneeName}. Durum değişmeyecek.`),
-      accepts: value => acceptsRoutingWrite(value, user, requestId, status, expectedUpdatedAt, selectedQueue, assigneeId) });
+      accepts: value => acceptsRoutingWrite(value, user, requestId, status, writeRevision, selectedQueue, assigneeId) });
     if (isObject(result) && isObject(result.writeReceipt) && typeof result.writeReceipt.updatedAt === "string" &&
         latest.current.key === key && latest.current.allowed) {
-      setConfirmed({ key, revision: result.writeReceipt.updatedAt, status, queue: selectedQueue, assigneeId });
+      setConfirmed({ key, parentRevision: expectedUpdatedAt, revision: result.writeReceipt.updatedAt, status, queue: selectedQueue, assigneeId });
     }
   }
   // A successful POST alone cannot rearm the write guard. Require an explicit
   // fresh initial read under the same principal, matching the exact committed
   // revision and targets. A newer unrelated change needs a full record review.
   const canPrepare = Boolean(action.phase === "saved" && data?.initial && data.queueAvailable &&
-    confirmed?.key === key && confirmed.revision === expectedUpdatedAt &&
+    receiptMatchesParent && confirmed &&
     data.request.updatedAt === confirmed.revision && data.request.status === confirmed.status &&
     data.request.queue === confirmed.queue && data.queue === confirmed.queue &&
     data.request.assigneeId === confirmed.assigneeId);
   function prepare() {
     if (!applicable() || read.current || latestView.current !== view || !canPrepare || !data || !action.newDraft()) return;
+    setReviewed({ key, parentRevision: expectedUpdatedAt, revision: data.request.updatedAt, status: data.request.status });
     setConfirmed(null);
     setView({ scope, phase: "ready", data, assignee: data.request.assigneeId ?? "" });
   }
@@ -124,6 +138,7 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
           {data.queuesTruncated || data.assigneesTruncated ? <p role="status">{c("Choice list is limited to 100 queues and 200 eligible staff; it is not the full directory.", "Seçenekler 100 kuyruk ve 200 uygun personelle sınırlıdır; tüm dizin değildir.")}</p> : null}
           <button type="button" onClick={save} disabled={action.blocked || !selectedValid || !changed}>{c("Save routing", "Yönlendirmeyi kaydet")}</button>
         </div> : null}
+        {action.phase === "saved" && !canPrepare ? <p className={fields.hint}>{c("Reload choices to verify the saved routing before preparing another change. If the request changed again, review the current request first.", "Yeni değişiklik hazırlamadan önce kaydedilen yönlendirmeyi doğrulamak için seçenekleri yeniden okuyun. Talep tekrar değiştiyse önce güncel kaydı kontrol edin.")}</p> : null}
         {message ? <p role={action.phase === "saved" ? "status" : "alert"}>{message}</p> : null}
       </div>
       <footer className={modal.footer}>
