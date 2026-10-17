@@ -117,6 +117,7 @@ function client() {
   const jsx = (type, props) => ({ type, props });
   const component = compile('components/hr-service-conversation.tsx', { react, 'react/jsx-runtime': { jsx, jsxs: jsx },
     '@/components/session-provider': { useSessionContext: () => ({ session: { authenticated: auth, user: current }, loading }) },
+    '@/components/hr-service-conversation-compose': { HRServiceConversationCompose: () => null },
     '@/components/use-policy-dialog': { usePolicyDialog: () => {} }, '@/components/hr-service-conversation-contract': contract,
     '@/components/hr-service-conversation.module.css': { default: new Proxy({}, { get: (_, k) => k }) } }).HRServiceConversation;
   function render() { cursor = 0; tree = component(props); for (const n of nodes(tree)) if (n.props?.ref) n.props.ref.current ??= { open: false, showModal() { this.open = true; }, close() { this.open = false; }, focus() {} }; const next = effects; effects = []; next.forEach(f => f()); return tree; }
