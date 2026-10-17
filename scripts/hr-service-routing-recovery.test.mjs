@@ -172,3 +172,19 @@ test('routing recovery: independent parent revision closes the dialog and cannot
     assert.equal(server.writes.length, 1);
   } finally { h.close(); }
 });
+
+test('routing recovery: a queued close event from the previous opening cannot cancel a new explicit opening', async () => {
+  const h = client(); try {
+    const server = routingServer(h); await savedRouting(h, server);
+    const previousDialog = nodes(h.tree).find(n => n.type === 'dialog');
+    await h.click('Close');
+    // Native close events can be delivered after the close command. The user
+    // has now requested reopening, but its modal effect has not committed yet.
+    h.button('Route / assign').props.onClick();
+    previousDialog.props.onClose({ currentTarget: previousDialog.props.ref.current });
+    h.render(); await h.settle();
+    assert.equal(nodes(h.tree).find(n => n.type === 'dialog').props.ref.current.open, true);
+    assert.equal(h.button(nextRouting).props.disabled, false);
+    assert.equal(server.writes.length, 1);
+  } finally { h.close(); }
+});

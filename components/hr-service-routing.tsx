@@ -30,6 +30,7 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
   const writeRevision = matchesParent(reviewed) && reviewed ? reviewed.revision : expectedUpdatedAt;
   const latest = useRef({ key, scope, allowed, writeRevision }); latest.current = { key, scope, allowed, writeRevision };
   const dialog = useRef<HTMLDialogElement>(null), trigger = useRef<HTMLButtonElement>(null), openRef = useRef<string | null>(null);
+  const closeEvents = useRef(new WeakMap<HTMLDialogElement, number>());
   const read = useRef<AbortController | null>(null), [openScope, setOpenScope] = useState<string | null>(null);
   const [view, setView] = useState<View>({ scope, phase: "idle", data: null, assignee: "" });
   const latestView = useRef(view); latestView.current = view;
@@ -50,9 +51,17 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
   // accept an arbitrary newer version, and never upgrades an unknown result.
   const readRevision = action.phase === "saved" && receiptMatchesParent && confirmed ? confirmed.revision : writeRevision;
   const titleId = useId(), c = (en: string, tr: string) => locale === "tr" ? tr : en;
+  function closeElement() {
+    const element = dialog.current;
+    if (!element?.open) return;
+    // close() queues its own event. Account for it before a later explicit
+    // opening; that old event must not clear the new read or open intent.
+    closeEvents.current.set(element, (closeEvents.current.get(element) ?? 0) + 1);
+    element.close();
+  }
   useEffect(() => {
     if (open && dialog.current && !dialog.current.open) dialog.current.showModal();
-    else if (!open && dialog.current?.open) dialog.current.close();
+    else if (!open) closeElement();
   }, [open]);
   usePolicyDialog(dialog, open);
   useEffect(() => () => { read.current?.abort(); read.current = null; openRef.current = null; }, [scope, allowed]);
@@ -60,7 +69,7 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
   function close() {
     read.current?.abort(); read.current = null; openRef.current = null; setOpenScope(null);
     setView({ scope, phase: "idle", data: null, assignee: "" });
-    if (dialog.current?.open) dialog.current.close(); trigger.current?.focus();
+    closeElement(); trigger.current?.focus();
   }
   async function load(selected: string | null | undefined) {
     if (!user || !applicable() || read.current) return;
@@ -121,7 +130,15 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
   return <div className={modal.root} data-hr-service-routing={requestId}>
     <button type="button" ref={trigger} onClick={show}>{c("Route / assign", "Yönlendir / ata")}</button>
     {!open && message ? <small role={action.phase === "saved" ? "status" : "alert"}>{message}</small> : null}
-    <dialog ref={dialog} className={modal.dialog} aria-labelledby={titleId} onCancel={e => { e.preventDefault(); close(); }} onClose={() => { if (!dialog.current?.open) close(); }}>
+    <dialog ref={dialog} className={modal.dialog} aria-labelledby={titleId} onCancel={e => { e.preventDefault(); close(); }} onClose={event => {
+      const element = event.currentTarget, queued = closeEvents.current.get(element) ?? 0;
+      if (queued) {
+        if (queued === 1) closeEvents.current.delete(element);
+        else closeEvents.current.set(element, queued - 1);
+        return;
+      }
+      if (!element.open) close();
+    }}>
       <header className={modal.header}><h3 id={titleId}>{c("Request routing", "Talep yönlendirme")}</h3><button type="button" onClick={close}>{c("Close", "Kapat")}</button></header>
       <div className={modal.body} aria-busy={pending || action.phase === "pending"}>
         {pending ? <p role="status">{c("Loading routing choices…", "Yönlendirme seçenekleri yükleniyor…")}</p> : null}
