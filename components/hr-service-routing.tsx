@@ -9,19 +9,25 @@ import { parseRoutingOptions, acceptsRoutingWrite, type RoutingOptions } from "@
 import modal from "@/components/hr-service-conversation.module.css";
 import fields from "@/components/hr-service-actions.module.css";
 
+type ConfirmedRouting = { key: string; revision: string; status: string; queue: string | null; assigneeId: string | null };
 type View = { scope: string; phase: "idle" | "loading" | "ready" | "error"; data: RoutingOptions | null; assignee: string };
 export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale }: { requestId: string; expectedUpdatedAt: string; status: string; locale: Locale }) {
   const { session, loading } = useSessionContext(), user = session?.user;
   const allowed = Boolean(!loading && session?.authenticated && user && serviceStaffRoles.has(user.role) && !["CLOSED", "CANCELLED"].includes(status));
   const key = JSON.stringify([requestId, user?.id, user?.tenantId, user?.role]);
   const scope = JSON.stringify([key, expectedUpdatedAt, status]);
-  const latest = useRef({ scope, allowed }); latest.current = { scope, allowed };
+  const latest = useRef({ key, scope, allowed }); latest.current = { key, scope, allowed };
   const dialog = useRef<HTMLDialogElement>(null), trigger = useRef<HTMLButtonElement>(null), openRef = useRef<string | null>(null);
   const read = useRef<AbortController | null>(null), [openScope, setOpenScope] = useState<string | null>(null);
   const [view, setView] = useState<View>({ scope, phase: "idle", data: null, assignee: "" });
+  const latestView = useRef(view); latestView.current = view;
   // The outcome key intentionally excludes revision: a refreshed prop or a
   // close/reopen must not erase an uncertain routing write.
   const action = useHRServiceAction(key, allowed);
+  // Only one validated receipt binding, never a response body or staff name.
+  // Unknown results do not create this proof; returning to another record whose
+  // proof was replaced still requires a full reload rather than evicting its guard.
+  const [confirmed, setConfirmed] = useState<ConfirmedRouting | null>(null);
   const open = allowed && openScope === scope && openRef.current === scope;
   const data = open && view.scope === scope && view.phase === "ready" ? view.data : null;
   const pending = open && view.scope === scope && view.phase === "loading";
@@ -68,11 +74,28 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
     if (!user || !data || !applicable() || action.blocked || !selectedValid || !changed) return;
     const selectedQueue = data.queue, assigneeId = view.assignee || null;
     const assigneeName = data.assignees.find(a => a.id === assigneeId)?.displayName ?? c("Unassigned", "Atanmamış");
-    await action.run({ action: "ROUTING", url: `/api/hr-service/requests/${encodeURIComponent(requestId)}/status`, expectedStatus: 200,
+    const result = await action.run({ action: "ROUTING", url: `/api/hr-service/requests/${encodeURIComponent(requestId)}/status`, expectedStatus: 200,
       body: { expectedUpdatedAt, status, queue: selectedQueue, assigneeId }, isApplicable: applicable,
       confirmation: c(`Save routing for ${data.request.requestNumber}? Queue: ${selectedQueue ?? "No queue"}. Assignee: ${assigneeName}. Status will not change.`,
         `${data.request.requestNumber} yönlendirmesi kaydedilsin mi? Kuyruk: ${selectedQueue ?? "Kuyruk yok"}. Sorumlu: ${assigneeName}. Durum değişmeyecek.`),
       accepts: value => acceptsRoutingWrite(value, user, requestId, status, expectedUpdatedAt, selectedQueue, assigneeId) });
+    if (isObject(result) && isObject(result.writeReceipt) && typeof result.writeReceipt.updatedAt === "string" &&
+        latest.current.key === key && latest.current.allowed) {
+      setConfirmed({ key, revision: result.writeReceipt.updatedAt, status, queue: selectedQueue, assigneeId });
+    }
+  }
+  // A successful POST alone cannot rearm the write guard. Require an explicit
+  // fresh initial read under the same principal, matching the exact committed
+  // revision and targets. A newer unrelated change needs a full record review.
+  const canPrepare = Boolean(action.phase === "saved" && data?.initial && data.queueAvailable &&
+    confirmed?.key === key && confirmed.revision === expectedUpdatedAt &&
+    data.request.updatedAt === confirmed.revision && data.request.status === confirmed.status &&
+    data.request.queue === confirmed.queue && data.queue === confirmed.queue &&
+    data.request.assigneeId === confirmed.assigneeId);
+  function prepare() {
+    if (!applicable() || read.current || latestView.current !== view || !canPrepare || !data || !action.newDraft()) return;
+    setConfirmed(null);
+    setView({ scope, phase: "ready", data, assignee: data.request.assigneeId ?? "" });
   }
   if (!allowed) return null;
   const message = serviceActionMessage(action.phase, locale);
@@ -104,6 +127,7 @@ export function HRServiceRouting({ requestId, expectedUpdatedAt, status, locale 
         {message ? <p role={action.phase === "saved" ? "status" : "alert"}>{message}</p> : null}
       </div>
       <footer className={modal.footer}>
+        {action.phase === "saved" ? <button type="button" disabled={!canPrepare} onClick={prepare}>{c("Prepare new routing", "Yeni yönlendirme hazırla")}</button> : null}
         <button type="button" disabled={pending || action.phase === "pending"} onClick={() => void load(undefined)}>{c("Reload choices", "Seçenekleri yeniden oku")}</button>
         {failed || message ? <button type="button" onClick={action.reload}>{c("Reload current request", "Güncel talebi yeniden yükle")}</button> : null}
       </footer>

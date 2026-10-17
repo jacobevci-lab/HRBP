@@ -51,6 +51,92 @@ try{
  await check('routing UI: wrong viewer identity never renders candidate names',hp,async()=>{const t=await ticket(),pattern='**'+path(t)+'/routing-options';await hp.route(pattern,async route=>{const response=await route.fetch(),body=await response.json();body.data.viewer.actorId='other';body.data.assignees=[{id:agent,displayName:'MUST_NOT_RENDER'}];await route.fulfill({response,body:JSON.stringify(body)});});try{await ready(hp,t);await button(hp,t).click();const d=dialog(hp);await d.getByRole('alert').waitFor();assert.ok(!(await d.innerText()).includes('MUST_NOT_RENDER'));assert.equal(await d.locator('select').count(),0);}finally{await hp.unroute(pattern);}});
  await check('routing API: eight same-version assignments commit one target and one audit',hp,async()=>{const t=await ticket(),results=await Promise.all(Array.from({length:8},()=>post(staff,t)));assert.equal(results.filter(r=>r.status===200).length,1);assert.equal(results.filter(r=>r.status===409).length,7);assert.equal(await db.auditEvent.count({where:{tenantId,resourceId:t.id,action:'hr-service.routing-updated'}}),1);});
  for(const [locale,theme,width]of[['en','light',320],['en','dark',390],['tr','light',320],['tr','dark',390]])await check(`routing UI: ${locale}/${theme}/${width}px geometry, focus, Escape and opaque theme`,hp,async()=>{const x=await ctx(hr,locale,theme,width),p=await x.newPage(),t=await ticket(),d=await opened(p,t,locale);await choose(d,qb.key,agent,locale);const geometry=await d.evaluate(el=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el);return{left:r.left,right:r.right,width:innerWidth,scroll:el.scrollWidth,client:el.clientWidth,background:s.backgroundColor,bodyOverflow:getComputedStyle(document.body).overflow};});assert.ok(geometry.left>=0&&geometry.right<=width&&geometry.scroll<=geometry.client+1);assert.notEqual(geometry.background,'rgba(0, 0, 0, 0)');assert.equal(geometry.bodyOverflow,'hidden');for(const key of ['Tab','Shift+Tab'])for(let i=0;i<12;i++){await p.keyboard.press(key);assert.equal(await d.evaluate(el=>el.contains(document.activeElement)),true);}const screenshot=await shot(p,`routing-${locale}-${theme}-${width}`);await p.keyboard.press('Escape');await d.waitFor({state:'hidden'});assert.equal(await button(p,t,locale).evaluate(el=>el===document.activeElement),true);return{screenshot,geometry};});
+ // Continuation: no document navigation or POST replay is needed after a
+ // confirmed route, but only its freshly reauthorized exact receipt may rearm.
+ async function reopenAfterSave(page, t, d, locale='en') {
+   await d.waitFor({state:'hidden'});
+   const message=page.locator(`[data-hr-service-routing="${t.id}"]`).getByRole('status');
+   await message.waitFor();
+   await button(page,t,locale).click();
+   return dialog(page,locale);
+ }
+ for(const [locale,theme] of [['en','light'],['tr','dark']]) {
+   await check(`routing recovery: ${locale} prepares a second verified route without reloading the document`,hp,async()=>{
+     const x=await ctx(hr,locale,theme,390),p=await x.newPage(),t=await ticket(),d=await opened(p,t,locale);
+     const sentinel=marker+'-document-'+locale;
+     await p.evaluate(value=>{window.__routingDocumentIdentity=value;},sentinel);
+     await choose(d,qb.key,agent,locale);
+     assert.equal((await save(p,d,t,locale)).status(),200);
+     const committed=await current(t.id);
+     const fresh=await reopenAfterSave(p,t,d,locale);
+     await fresh.getByLabel(c(locale,'Queue','Kuyruk'),{exact:true}).waitFor();
+     const prepare=fresh.getByRole('button',{name:c(locale,'Prepare new routing','Yeni yönlendirme hazırla'),exact:true});
+     assert.equal(await prepare.isEnabled(),true);
+     assert.equal(await fresh.getByRole('button',{name:c(locale,'Save routing','Yönlendirmeyi kaydet'),exact:true}).isDisabled(),true);
+     assert.equal(await p.evaluate(()=>window.__routingDocumentIdentity),sentinel);
+     await prepare.scrollIntoViewIfNeeded();
+     const screenshot=await shot(p,`routing-recovery-${locale}-${theme}-390`);
+     await prepare.click();
+     assert.equal((await current(t.id)).updatedAt.toISOString(),committed.updatedAt.toISOString());
+     assert.equal(await db.auditEvent.count({where:{tenantId,resourceId:t.id,action:'hr-service.routing-updated'}}),1);
+     await fresh.getByLabel(c(locale,'Assignee','Sorumlu'),{exact:true}).selectOption('');
+     const second=await save(p,fresh,t,locale);
+     assert.equal(second.status(),200);
+     assert.equal(second.request().postDataJSON().expectedUpdatedAt,committed.updatedAt.toISOString());
+     const final=await current(t.id);
+     assert.equal(final.queue,qb.key);assert.equal(final.assigneeId,null);assert.equal(final.status,t.status);
+     assert.equal(await db.auditEvent.count({where:{tenantId,resourceId:t.id,action:'hr-service.routing-updated'}}),2);
+     assert.equal(await db.hRServiceStatusTransition.count({where:{requestId:t.id}}),0);
+     assert.equal(await db.notificationOutbox.count({where:{tenantId,resourceId:t.id,eventType:'HR_SERVICE_ASSIGNED'}}),1);
+     assert.equal(await p.evaluate(()=>window.__routingDocumentIdentity),sentinel);
+     return{screenshot};
+   });
+ }
+ await check('routing recovery: denied options after committed assignment cannot enable another write',hp,async()=>{
+   const t=await ticket(),d=await opened(hp,t);await choose(d,qb.key,agent);
+   assert.equal((await save(hp,d,t)).status(),200);
+   const committed=await current(t.id),pattern='**'+path(t)+'/routing-options';
+   await hp.route(pattern,r=>r.fulfill({status:403,contentType:'application/json',body:'{"error":"Denied"}'}));
+   try{
+     const fresh=await reopenAfterSave(hp,t,d);
+     await fresh.getByText(/Choices could not be verified/).waitFor();
+     assert.equal(await fresh.getByRole('button',{name:'Prepare new routing',exact:true}).isDisabled(),true);
+     assert.equal(await fresh.locator('select').count(),0);
+     assert.deepEqual(await current(t.id),committed);
+     assert.equal(await db.auditEvent.count({where:{tenantId,resourceId:t.id,action:'hr-service.routing-updated'}}),1);
+   }finally{await hp.unroute(pattern);}
+ });
+ await check('routing recovery: substituted same-revision targets cannot rearm a confirmed write',hp,async()=>{
+   const t=await ticket(),d=await opened(hp,t);await choose(d,qb.key,agent);
+   assert.equal((await save(hp,d,t)).status(),200);
+   const committed=await current(t.id),pattern='**'+path(t)+'/routing-options';
+   await hp.route(pattern,async route=>{const response=await route.fetch(),body=await response.json();
+     body.data.request.assigneeId=null;await route.fulfill({response,body:JSON.stringify(body)});});
+   try{
+     const fresh=await reopenAfterSave(hp,t,d);await fresh.getByLabel('Assignee',{exact:true}).waitFor();
+     assert.equal(await fresh.getByRole('button',{name:'Prepare new routing',exact:true}).isDisabled(),true);
+     assert.equal(await fresh.getByRole('button',{name:'Save routing',exact:true}).isDisabled(),true);
+     assert.deepEqual(await current(t.id),committed);
+     assert.equal(await db.auditEvent.count({where:{tenantId,resourceId:t.id,action:'hr-service.routing-updated'}}),1);
+   }finally{await hp.unroute(pattern);}
+ });
+ await check('routing recovery: a newer independent routing change requires full review rather than reusing old proof',hp,async()=>{
+   const t=await ticket(),d=await opened(hp,t);await choose(d,qb.key,agent);
+   assert.equal((await save(hp,d,t)).status(),200);
+   await d.waitFor({state:'hidden'});
+   const saved=await current(t.id);
+   assert.equal((await post(staff,saved,{queue:qa.key,assigneeId:null})).status,200);
+   const moved=await current(t.id);
+   // Existing server locale action refreshes props, not the whole document.
+   await hp.getByRole('group',{name:'Language',exact:true}).getByRole('button',{name:'TR',exact:true}).click();
+   await button(hp,t,'tr').click();
+   const fresh=dialog(hp,'tr');await fresh.getByLabel('Kuyruk',{exact:true}).waitFor();
+   assert.equal(await fresh.getByLabel('Kuyruk',{exact:true}).inputValue(),qa.key);
+   assert.equal(await fresh.getByRole('button',{name:'Yeni yönlendirme hazırla',exact:true}).isDisabled(),true);
+   assert.equal(await fresh.getByRole('button',{name:'Yönlendirmeyi kaydet',exact:true}).isDisabled(),true);
+   assert.deepEqual(await current(t.id),moved);
+   assert.equal(await db.auditEvent.count({where:{tenantId,resourceId:t.id,action:'hr-service.routing-updated'}}),2);
+ });
 }finally{
  await Promise.all(contexts.map(x=>x.close().catch(()=>{})));await browser.close();
  if(tickets.length){await db.notificationOutbox.deleteMany({where:{resourceId:{in:tickets},tenantId}}).catch(()=>{});await db.hRServiceRequest.deleteMany({where:{id:{in:tickets}}}).catch(()=>{});}
@@ -59,4 +145,4 @@ try{
  if(foreignTenant)await db.tenant.deleteMany({where:{id:foreignTenant}}).catch(()=>{});await db.$disconnect();
  report.summary={tests:report.tests.length,passed:report.tests.filter(t=>t.passed).length,failed:report.tests.filter(t=>!t.passed).length};await writeFile(out+'/report.json',JSON.stringify(report,null,2));console.log('ROUTING_SUMMARY '+JSON.stringify(report.summary));
 }
-if(report.tests.length!==20||report.tests.some(t=>!t.passed))process.exitCode=1;
+if(report.tests.length!==25||report.tests.some(t=>!t.passed))process.exitCode=1;

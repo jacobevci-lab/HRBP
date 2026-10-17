@@ -48,3 +48,33 @@ The disposable localhost-only routing browser suite performs real API and UI
 writes, checks preserved lifecycle timestamps, queue/assignee restrictions,
 unknown transport results, stale versions, contention and four narrow viewports.
 Check exact-head CI results before merge/deployment. No production data is used.
+
+
+## Preparing a subsequent routing change after a confirmed save
+
+A mounted routing form previously stayed locked after a validated successful
+save, even after its choices were read again. It now offers an explicit
+**Prepare new routing / Yeni yönlendirme hazırla** control. No POST is sent by
+that control. It clears only the existing helper's confirmed-save guard and
+starts from the freshly read current queue and assignee.
+
+The control requires a new initial options read authorized for the same actor,
+tenant, role and request. Its revision, status, queue and assignee must exactly
+match the previously validated write receipt and the displayed request revision.
+A receipt alone, old options, failed reauthorization, substituted targets or a
+newer independent change cannot rearm the form. A captured old prepare callback
+also cannot bypass a changed principal/revision or an outstanding/failed reread.
+For a newer independent change use full current-record review, not this shortcut.
+
+Only one small in-memory confirmed binding is retained (context key, revision,
+status and routing identifiers), not employee names or response bodies. Unknown,
+denied and conflict outcomes never acquire this binding and remain blocked across
+close/reopen or option reload. Preparing is not an idempotency retry, and no
+backend permission or write-revision rule changed. Another intentional command
+still uses its reviewed revision and normal server-side concurrency control.
+
+The added recovery unit tests use handler/component doubles. Five additional
+real API/Chromium scenarios cover two deliberate routing changes without a full
+navigation in EN/TR, a denied options read, substituted same-revision targets,
+and an independently changed newer revision. Exact-head CI results are required
+before this continuation is considered integration-tested.

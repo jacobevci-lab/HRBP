@@ -106,3 +106,150 @@ for(const fault of ['lost','wrong-queue'])test('routing UI '+fault+' result neve
 test('routing UI failed read stops, hides choices and needs explicit retry',async()=>{const h=client();try{h.transport(async()=>({status:503}));await h.click('Route / assign');assert.equal(h.calls.get.length,1);assert.ok(h.text.includes('could not be verified'));assert.equal(nodes(h.tree).filter(n=>n.type==='select').length,0);h.transport(async()=>({status:200,json:async()=>({data:valid()})}));await h.click('Reload choices');assert.equal(h.calls.get.length,2);}finally{h.close();}});
 test('routing UI stale revision hides old options and rejects captured save callback',async()=>{const h=client();try{await h.click('Route / assign');await h.choose('Assignee','agent-a');const cb=h.button('Save routing').props.onClick;h.props({expectedUpdatedAt:'2026-10-16T00:00:01.000Z'});await cb();await h.settle();assert.equal(h.calls.post.length,0);assert.ok(!h.text.includes('New queue'));}finally{h.close();}});
 test('routing UI employee and terminal states expose no action or read',async()=>{const h=client();try{h.session({role:'EMPLOYEE'});assert.equal(h.tree,null);h.session({role:'HR_OPERATIONS'});h.props({status:'CLOSED'});assert.equal(h.tree,null);assert.equal(h.calls.get.length,0);}finally{h.close();}});
+
+// Deterministic transport for recovery tests: commits update the same mock
+// parent and issue a matching receipt. This is not SQL acceptance evidence.
+const nextRouting = 'Prepare new routing';
+function routingServer(h) {
+  let current = valid(), failRead = false, corruptReply = false;
+  const writes = [];
+  h.transport(async (url, init) => {
+    if (init.method === 'POST') {
+      const sent = JSON.parse(init.body);
+      assert.equal(sent.expectedUpdatedAt, current.request.updatedAt);
+      const updatedAt = new Date(Date.parse(sent.expectedUpdatedAt) + 1000).toISOString();
+      current.request = { ...current.request, queue: sent.queue, assigneeId: sent.assigneeId, updatedAt };
+      current.queue = sent.queue;
+      writes.push(sent);
+      return { status: 200, json: async () => ({ data: corruptReply ? {} : {
+        ...current.request, writeReceipt: { requestId: 'ticket-a', tenantId: user.tenantId,
+          actorId: user.id, operation: 'STATUS', expectedUpdatedAt: sent.expectedUpdatedAt,
+          updatedAt, reason: null, queue: sent.queue, assigneeId: sent.assigneeId }
+      } }) };
+    }
+    if (failRead) return { status: 403 };
+    const data = structuredClone(current), q = new URL(url, 'http://localhost').searchParams;
+    if (q.has('queue')) { data.initial = false; data.queue = q.get('queue') || null; }
+    return { status: 200, json: async () => ({ data }) };
+  });
+  return { writes, get snapshot() { return current; }, get revision() { return current.request.updatedAt; },
+    denyRead() { failRead = true; }, badReply() { corruptReply = true; } };
+}
+async function savedRouting(h, server) {
+  await h.click('Route / assign'); await h.choose('Queue', 'NEW'); await h.choose('Assignee', 'agent-a');
+  await h.click('Save routing'); assert.equal(server.writes.length, 1);
+}
+async function showReviewedRouting(h, server) {
+  h.props({ expectedUpdatedAt: server.revision }); await h.settle();
+  await h.click('Route / assign');
+}
+test('routing recovery: a confirmed save permits a second deliberate assignment without a document reload', async () => {
+  const h = client(); try {
+    const server = routingServer(h); await savedRouting(h, server);
+    assert.equal(h.button(nextRouting).props.disabled, true, 'receipt alone is not a current authorized read');
+    await showReviewedRouting(h, server);
+    assert.equal(h.button(nextRouting).props.disabled, false);
+    await h.click(nextRouting);
+    assert.equal(server.writes.length, 1, 'preparing is local, never a replay');
+    assert.equal(h.button('Save routing').props.disabled, true, 'unchanged target stays disabled');
+    await h.choose('Assignee', ''); await h.click('Save routing');
+    assert.equal(server.writes.length, 2);
+    assert.equal(server.writes[1].expectedUpdatedAt, '2026-10-16T00:00:01.000Z');
+    assert.equal(server.writes[1].assigneeId, null);
+  } finally { h.close(); }
+});
+for (const [name, alter] of [
+  ['unexpected later revision', server => { server.snapshot.request.updatedAt = '2026-10-16T00:00:02.000Z'; }],
+  ['different queue', server => { server.snapshot.queue = server.snapshot.request.queue = 'OTHER'; }],
+  ['different assignee', server => { server.snapshot.request.assigneeId = null; }],
+  ['unavailable queue', server => { server.snapshot.queueAvailable = false; server.snapshot.assignees = []; }]
+]) test('routing recovery: ' + name + ' cannot clear the confirmed guard', async () => {
+  const h = client(); try {
+    const server = routingServer(h); await savedRouting(h, server); alter(server);
+    await showReviewedRouting(h, server);
+    assert.equal(h.button(nextRouting).props.disabled, true);
+    await h.click(nextRouting); await h.click('Save routing');
+    assert.equal(server.writes.length, 1);
+  } finally { h.close(); }
+});
+test('routing recovery: a denied fresh read cannot rearm a prior successful write', async () => {
+  const h = client(); try {
+    const server = routingServer(h); await savedRouting(h, server); server.denyRead();
+    await showReviewedRouting(h, server);
+    assert.equal(h.button(nextRouting).props.disabled, true);
+    await h.click(nextRouting); assert.equal(server.writes.length, 1);
+    assert.equal(nodes(h.tree).filter(n => n.type === 'select').length, 0);
+  } finally { h.close(); }
+});
+test('routing recovery: a captured prepare handler cannot rearm after a newer revision arrives', async () => {
+  const h = client(); try {
+    const server = routingServer(h); await savedRouting(h, server); await showReviewedRouting(h, server);
+    const prepare = h.button(nextRouting).props.onClick;
+    h.props({ expectedUpdatedAt: '2026-10-16T00:00:02.000Z' }); await prepare(); await h.settle();
+    // Return to the receipt version and read again; the old handler did not clear
+    // the saved guard while another displayed record version was current.
+    await showReviewedRouting(h, server);
+    assert.equal(h.button('Save routing').props.disabled, true);
+    assert.equal(h.button(nextRouting).props.disabled, false);
+    assert.equal(server.writes.length, 1);
+  } finally { h.close(); }
+});
+test('routing recovery: a captured prepare handler cannot rearm under a different principal', async () => {
+  const h = client(); try {
+    const server = routingServer(h); await savedRouting(h, server); await showReviewedRouting(h, server);
+    const prepare = h.button(nextRouting).props.onClick;
+    h.session({ id: 'other-user' }); await prepare(); await h.settle();
+    h.session({ id: user.id }); await h.settle(); await h.click('Route / assign');
+    assert.equal(h.button('Save routing').props.disabled, true);
+    assert.equal(h.button(nextRouting).props.disabled, false);
+    assert.equal(server.writes.length, 1);
+  } finally { h.close(); }
+});
+test('routing recovery: an uncertain committed result never exposes prepare, even after an exact reread', async () => {
+  const h = client(); try {
+    const server = routingServer(h); server.badReply(); await savedRouting(h, server);
+    await showReviewedRouting(h, server);
+    assert.ok(!nodes(h.tree).some(n => n.type === 'button' && label(n) === nextRouting));
+    assert.equal(h.button('Save routing').props.disabled, true);
+    await h.click('Reload choices'); await h.click('Save routing');
+    assert.equal(server.writes.length, 1);
+  } finally { h.close(); }
+});
+test('routing recovery: language changes preserve proof; preparing never automatically submits', async () => {
+  const h = client(); try {
+    const server = routingServer(h); await savedRouting(h, server); await showReviewedRouting(h, server);
+    h.props({ locale: 'tr' }); await h.settle();
+    assert.equal(h.button('Yeni yönlendirme hazırla').props.disabled, false);
+    await h.click('Yeni yönlendirme hazırla');
+    assert.equal(server.writes.length, 1);
+    assert.equal(h.button('Yönlendirmeyi kaydet').props.disabled, true);
+    assert.equal(nodes(h.tree).find(n => n.type === 'select' && n.props['aria-label'] === 'Kuyruk').props.disabled, false);
+  } finally { h.close(); }
+});
+
+
+test('routing recovery: a previously enabled prepare callback cannot clear the guard after a failed reread', async () => {
+  const h = client(); try {
+    const server = routingServer(h); await savedRouting(h, server); await showReviewedRouting(h, server);
+    const prepare = h.button(nextRouting).props.onClick;
+    server.denyRead(); await h.click('Reload choices'); await prepare(); await h.settle();
+    assert.equal(h.button(nextRouting).props.disabled, true);
+    assert.ok(h.text.includes('was saved'));
+    assert.equal(server.writes.length, 1);
+  } finally { h.close(); }
+});
+test('routing recovery: a same-turn read blocks an old prepare handler before any rerender', async () => {
+  const h = client(); let resolveRead;
+  try {
+    const server = routingServer(h); await savedRouting(h, server); await showReviewedRouting(h, server);
+    const prepare = h.button(nextRouting).props.onClick;
+    const blocked = new Promise(resolve => { resolveRead = resolve; });
+    h.transport(async () => blocked);
+    h.button('Reload choices').props.onClick();
+    await prepare(); h.render();
+    resolveRead({ status: 403 }); await h.settle();
+    assert.ok(h.text.includes('was saved'));
+    assert.equal(h.button(nextRouting).props.disabled, true);
+    assert.equal(server.writes.length, 1);
+  } finally { resolveRead?.({ status: 403 }); h.close(); }
+});
