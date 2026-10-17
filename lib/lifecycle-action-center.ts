@@ -128,6 +128,7 @@ export type LifecycleActionItem = {
     assessmentId: string;
   } | {
     type: "advance-hr-service";
+    expectedUpdatedAt: string;
     requestId: string;
     status: "TRIAGE" | "IN_PROGRESS";
   } | {
@@ -281,6 +282,7 @@ async function hrServiceItems(ctx: RequestContext): Promise<LifecycleActionItem[
       queue: true,
       slaDueAt: true,
       escalationLevel: true,
+      updatedAt: true,
       createdAt: true
     }
   });
@@ -302,9 +304,9 @@ async function hrServiceItems(ctx: RequestContext): Promise<LifecycleActionItem[
     urgency: serviceUrgency(row.priority, row.slaDueAt, row.escalationLevel),
     action: !selfService && isHRServiceStaffRole(ctx.role)
       ? row.status === ServiceRequestStatus.OPEN
-        ? { type: "advance-hr-service", requestId: row.id, status: "TRIAGE" }
+        ? { type: "advance-hr-service", expectedUpdatedAt: row.updatedAt.toISOString(), requestId: row.id, status: "TRIAGE" }
         : row.status === ServiceRequestStatus.TRIAGE || row.status === ServiceRequestStatus.WAITING_EMPLOYEE || row.status === ServiceRequestStatus.WAITING_THIRD_PARTY
-          ? { type: "advance-hr-service", requestId: row.id, status: "IN_PROGRESS" }
+          ? { type: "advance-hr-service", expectedUpdatedAt: row.updatedAt.toISOString(), requestId: row.id, status: "IN_PROGRESS" }
           : null
       : null
   }));

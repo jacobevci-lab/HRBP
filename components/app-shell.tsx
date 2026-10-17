@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Menu, Plus, Sparkles, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useId, useMemo } from "react";
 import { navigation } from "@/lib/navigation";
 import { GlobalSearch } from "@/components/global-search";
 import { SessionIndicator } from "@/components/session-indicator";
@@ -13,6 +13,8 @@ import { TopbarAccount } from "@/components/topbar-account";
 import { LocaleProvider, useLocale } from "@/components/locale-provider";
 import { LocaleToggle } from "@/components/locale-toggle";
 import { NotificationCenter } from "@/components/notification-center";
+import { useNavigationDrawer } from "@/components/navigation-drawer";
+import styles from "@/components/navigation-drawer.module.css";
 
 function initials(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -21,9 +23,11 @@ function initials(value: string) {
 
 function AppShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const drawer = useNavigationDrawer(pathname);
+  const mobileOpen = drawer.open;
+  const navigationId = useId();
   const { session, loading } = useSessionContext();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const authenticated = Boolean(session?.authenticated);
   const navigationCapabilities = useMemo(() => new Set(session?.navigationCapabilities ?? []), [session?.navigationCapabilities]);
 
@@ -49,14 +53,16 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const workspaceName = session?.user?.tenantName?.trim() || "HRBP One";
 
   return (
-    <div className="app-shell" data-session-loading={loading ? "true" : "false"}>
-      <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
+    <div className={`app-shell ${styles.shell}`} data-session-loading={loading ? "true" : "false"}>
+      <aside ref={drawer.sidebarRef} id={navigationId} className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}
+        role={mobileOpen ? "dialog" : undefined} aria-modal={mobileOpen || undefined}
+        aria-label={locale === "tr" ? "Ana gezinme" : "Main navigation"}>
         <div className="brand-row">
-          <Link href="/" className="brand" onClick={() => setMobileOpen(false)}>
+          <Link href="/" className="brand" onClick={() => drawer.close(false)}>
             <span className="brand-mark"><span /><span /><span /></span>
             <span><strong>HRBP</strong><small>ONE</small></span>
           </Link>
-          <button className="icon-button mobile-close" onClick={() => setMobileOpen(false)} aria-label={t("shell.closeNavigation")}><X size={18}/></button>
+          <button type="button" className="icon-button mobile-close" onClick={() => drawer.close()} aria-label={t("shell.closeNavigation")}><X size={18}/></button>
         </div>
         <div className="tenant-switcher">
           <span className="tenant-avatar">{initials(workspaceName)}</span>
@@ -72,7 +78,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
                 const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
                 const Icon = item.icon;
                 return (
-                  <Link key={item.slug} href={href} className={`nav-item ${active ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
+                  <Link key={item.slug} href={href} className={`nav-item ${active ? "active" : ""}`} onClick={() => drawer.close(false)}>
                     <Icon size={17} strokeWidth={1.8}/><span>{t(item.labelKey)}</span>{item.badge && <em>{item.badge}</em>}
                   </Link>
                 );
@@ -82,10 +88,11 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
         </nav>
         <div className="sidebar-footer"><SessionIndicator/></div>
       </aside>
-      {mobileOpen && <button className="sidebar-overlay" aria-label={t("shell.closeNavigation")} onClick={() => setMobileOpen(false)} />}
-      <main className="main-area">
+      {mobileOpen && <button type="button" tabIndex={-1} className="sidebar-overlay" aria-label={t("shell.closeNavigation")} onClick={() => drawer.close()} />}
+      <main ref={drawer.mainRef} className="main-area">
         <header className="topbar">
-          <button className="icon-button mobile-menu" onClick={() => setMobileOpen(true)} aria-label={t("shell.openNavigation")}><Menu size={20}/></button>
+          <button ref={drawer.toggleRef} type="button" className="icon-button mobile-menu" onClick={drawer.show}
+            aria-expanded={mobileOpen} aria-controls={navigationId} aria-label={t("shell.openNavigation")}><Menu size={20}/></button>
           <GlobalSearch/>
           <div className="topbar-actions">
             <LocaleToggle/>

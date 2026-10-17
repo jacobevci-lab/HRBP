@@ -1,5 +1,6 @@
 import { DataClassification, EmergencyAccessStatus, PlatformRole, PolicyExceptionStatus, PolicyStatus, ServiceQueueRole, ServiceRequestStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
+import { nextServiceRevision } from "@/lib/hr-service-revision";
 import { db } from "@/lib/db";
 import { runNotificationDispatcher } from "@/lib/notification-dispatcher";
 import { runScheduledPositionChanges } from "@/lib/scheduled-position-changes";
@@ -39,7 +40,8 @@ async function escalateServiceRequests(now: Date) {
       queue: true,
       assigneeId: true,
       slaDueAt: true,
-      escalationLevel: true
+      escalationLevel: true,
+      updatedAt: true
     }
   });
   let escalated = 0;
@@ -74,11 +76,12 @@ async function escalateServiceRequests(now: Date) {
         // Never overwrite a newer assignment or escalate against a stale SLA.
         where: {
           id: candidate.id, tenantId: candidate.tenantId,
-          escalationLevel: candidate.escalationLevel, slaDueAt,
+          escalationLevel: candidate.escalationLevel, slaDueAt, updatedAt: candidate.updatedAt,
           assigneeId: candidate.assigneeId, queue: candidate.queue,
           status: { notIn: terminalServiceStatuses }
         },
         data: {
+          updatedAt: nextServiceRevision(candidate.updatedAt, now),
           escalationLevel: target.level,
           escalationReason: target.reason,
           escalatedAt: now,

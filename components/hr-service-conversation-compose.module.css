@@ -1,0 +1,12 @@
+.root { border-top: 1px solid var(--line); margin-top: 18px; padding-top: 16px; display: grid; gap: 10px; min-width: 0; }
+.root h4, .root p { margin: 0; }
+.root label { display: grid; gap: 6px; font-weight: 600; min-width: 0; }
+.root textarea, .root select { font: inherit; color: var(--text); background: var(--surface, #fff); border: 1px solid var(--line); border-radius: 8px; padding: 10px; width: 100%; min-width: 0; box-sizing: border-box; }
+.root textarea { resize: vertical; min-height: 92px; max-height: 240px; line-height: 1.5; }
+.root textarea:focus-visible, .root select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.root textarea:disabled, .root select:disabled { opacity: .7; }
+.hint { color: var(--muted); line-height: 1.5; }
+.privateHint { color: var(--text); background: var(--accent-soft); padding: 10px; border-inline-start: 3px solid var(--orange, var(--accent)); border-radius: 6px; line-height: 1.5; }
+.buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+.feedback { padding: 10px; border: 1px solid var(--line); border-radius: 8px; overflow-wrap: anywhere; line-height: 1.5; }
+@media (max-width: 480px) { .buttons { display: grid; } .buttons button { width: 100%; } }

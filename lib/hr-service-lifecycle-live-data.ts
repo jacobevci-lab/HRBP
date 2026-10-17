@@ -66,6 +66,7 @@ export type HRServiceLifecycleRow = {
   category: string;
   status: string;
   rawStatus: ServiceRequestStatus;
+  updatedAt: string;
   priority: string;
   queue: string;
   assigneeId: string | null;
@@ -167,6 +168,7 @@ export async function getHRServiceLifecycleLiveData(ctx: RequestContext, focus?:
             category: request.category,
             status: label(request.status),
             rawStatus: request.status,
+            updatedAt: request.updatedAt.toISOString(),
             priority: label(request.priority),
             queue: request.queue ?? "Unassigned",
             assigneeId: request.assigneeId,
