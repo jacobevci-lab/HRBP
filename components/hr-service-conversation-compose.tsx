@@ -30,11 +30,18 @@ export function HRServiceConversationCompose({ requestId, page, active, locale, 
   const draft = stored.key === key ? stored : empty;
   const latest = useRef({ key, page, writable, draft, active }); latest.current = { key, page, writable, draft, active };
   const action = useHRServiceAction(key, principalAllowed);
+  const invalidatedDenials = useRef(new Set<string>());
   const id = useId(), c = (en: string, tr: string) => locale === "tr" ? tr : en;
   // Do not retain private draft text through an actor/role/tenant change or
   // loss of the verified session. Outcomes remain guarded by the shared hook.
   useEffect(() => { setStored({ key, revision: null, body: "", visibility: "REQUESTOR" }); setProof(null); }, [key, principalAllowed]);
-  useEffect(() => { if (action.phase === "denied" && active && page) invalidate(); }, [action.phase, active, page, invalidate]);
+  // Once per guarded outcome (at most the shared guard's 32 keys). A later
+  // explicit, authorized read may show history without rearming the denied write.
+  useEffect(() => {
+    if (action.phase === "denied" && active && page && !invalidatedDenials.current.has(key)) {
+      invalidatedDenials.current.add(key); invalidate();
+    }
+  }, [action.phase, key, active, page, invalidate]);
   const stale = Boolean(draft.revision && verified && draft.revision !== verified.request.updatedAt);
   const current = () => latest.current.key === key && latest.current.page === page && latest.current.writable && latest.current.draft === draft;
   const editable = writable && !action.blocked && !stale;
@@ -106,6 +113,11 @@ export function HRServiceConversationCompose({ requestId, page, active, locale, 
         {draft.visibility === "PRIVATE_NOTE" ? c("Save private note", "Özel notu kaydet") : c("Send reply", "Yanıtı gönder")}
       </button>
       {action.phase === "saved" ? <button type="button" onClick={prepare} disabled={!canPrepare}>{c("Prepare another message", "Yeni mesaj hazırla")}</button> : null}
+      {message && action.phase !== "saved" ? <button type="button" onClick={() => {
+        if (!current()) return;
+        if (draft.body.trim() && !window.confirm(c("Reload the current request? This unsent draft will be discarded.", "Güncel talep yeniden yüklensin mi? Gönderilmemiş taslak silinecek."))) return;
+        if (current()) action.reload();
+      }}>{c("Reload current request", "Güncel talebi yeniden yükle")}</button> : null}
     </div>
     {message ? <p className={styles.feedback} role={action.phase === "saved" ? "status" : "alert"}>{message}</p> : null}
     {action.phase === "saved" ? <p className={styles.hint}>{c("Refresh the latest messages to verify this save before preparing another message.", "Yeni mesaj hazırlamadan önce kaydı doğrulamak için son mesajları yenileyin.")}</p> : null}

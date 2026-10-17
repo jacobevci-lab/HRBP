@@ -153,6 +153,9 @@ try {
   await check('revoked session on POST clears previously displayed history without an automatic reread',hp,async()=>{
     const ctx=await context(staffId),p=await ctx.newPage(),t=await fixture();await add(t,'Sensitive old history','PRIVATE_NOTE');const d=await opened(p,t);await compose(d,t).getByLabel('Conversation message',{exact:true}).fill('Denied draft');await ctx.clearCookies();p.once('dialog',x=>x.accept());
     await compose(d,t).getByRole('button',{name:'Send reply',exact:true}).click();await d.getByText('The conversation could not be loaded. Access may have changed. Retry to read the latest page.',{exact:true}).waitFor();assert.ok(!(await d.innerText()).includes('Sensitive old history'));assert.equal(await d.locator('textarea').count(),0);assert.equal(await db.hRServiceComment.count({where:{tenantId,requestId:t.id}}),1);
+    assert.equal((await ctx.request.post(origin+'/api/auth/local',{headers:{origin},data:{identifier:staffId,password}})).status(),200);
+    await d.getByRole('button',{name:'Retry latest page',exact:true}).click();await d.getByText('Sensitive old history',{exact:true}).waitFor();
+    assert.equal(await compose(d,t).getByRole('button',{name:'Send reply',exact:true}).isDisabled(),true);
   });
   for(const [locale,theme,width] of [['en','light',320],['en','dark',390],['tr','light',320],['tr','dark',390]])await check(`unified ${locale}/${theme}/${width}px reply composer, focus and visibility`,hp,async()=>{
     const ctx=await context(staffId,locale,theme,width),p=await ctx.newPage(),t=await fixture(),d=await opened(p,t,locale),form=compose(d,t);
