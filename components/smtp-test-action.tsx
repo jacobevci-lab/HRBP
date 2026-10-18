@@ -45,7 +45,7 @@ export function SmtpTestAction({ enabled }: { enabled: boolean }) {
             data.auditRecorded === (response.status === 200)) result = data.auditRecorded ? "accepted" : "audit-warning";
       } else if ([401, 403].includes(response.status)) result = "denied";
       else if (response.status === 429) result = "limited";
-      else if ([400, 409, 503].includes(response.status)) result = "unavailable";
+      else if ([400, 409].includes(response.status)) result = "unavailable";
     } catch { /* Unknown side effect: no automatic resend and no raw diagnostics. */ }
     outcomes.current.set(key, result); pending.current = false; render();
   }

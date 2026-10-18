@@ -15,7 +15,7 @@ assert.equal(process.env.HRBP_DISPOSABLE_AUDIT, 'true');
 assert.ok(['postgres:', 'postgresql:'].includes(database.protocol));
 assert.ok(['localhost','127.0.0.1'].includes(database.hostname));assert.equal(database.pathname,'/hrbp_audit');
 const password=process.env.HRBP_TEST_ADMIN_PASSWORD;assert.ok(password);
-const origin='http://127.0.0.1:3101',path='/api/settings/notifications/smtp-test',out='.audit/smtp-verification';
+const origin='http://localhost:3101',path='/api/settings/notifications/smtp-test',out='.audit/smtp-verification';
 await mkdir(out,{recursive:true});const temp=await mkdtemp(join(tmpdir(),'hrbp-smtp-'));
 const report={source:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),tests:[],
  scope:'Production Next.js + Chromium + disposable PostgreSQL + authenticated TLS SMTP on loopback only.',
@@ -39,14 +39,15 @@ async function account(role='TENANT_ADMIN'){
 async function context(id,locale='en',theme='light',width=1280){
  const ctx=await browser.newContext({viewport:{width,height:900},reducedMotion:'reduce'});contexts.push(ctx);
  await ctx.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
- if(id)assert.equal((await ctx.request.post(origin+'/api/auth/local',{headers:{origin},data:{identifier:id,password}})).status(),200);
+ if(id){const login=await ctx.request.post(origin+'/api/auth/local',{headers:{origin},data:{identifier:id,password}});
+  assert.equal(login.status(),200,`Synthetic local sign-in: ${login.status()} ${JSON.stringify(await login.json()).slice(0,300)}`);}
  await ctx.addCookies([{name:'hrbp-locale',value:locale,url:origin}]);
  await ctx.addInitScript(({locale,theme})=>{localStorage.setItem('hrbp-locale',locale);localStorage.setItem('hrbp-theme',theme);},{locale,theme});
  return ctx;
 }
 async function post(ctx,extra={}){return ctx.request.post(origin+path,{headers:{origin,'x-hrbp-test-id':randomUUID(),...extra}});}
 async function count(id,action){return db.auditEvent.count({where:{tenantId,actorId:id,action}});}
-async function check(name,fn){let r={name,passed:false};try{Object.assign(r,await fn(),{passed:true});}catch(e){r.error=String(e.message).replaceAll(password,'[redacted]').replaceAll(smtpPassword,'[redacted]').slice(0,600);}report.tests.push(r);console.log('SMTP_VERIFICATION_SCENARIO '+JSON.stringify(r));await writeFile(out+'/report.json',JSON.stringify(report,null,2));}
+async function check(name,fn){let r={name,passed:false};try{Object.assign(r,await fn(),{passed:true});}catch(e){r.error=String(e.message).replaceAll(password,'[redacted]').replaceAll(smtpPassword,'[redacted]').slice(0,600);const page=contexts.at(-1)?.pages().at(-1);if(page){r.screenshot=`failure-${report.tests.length}.jpg`;await page.screenshot({path:out+'/'+r.screenshot,type:'jpeg',quality:80}).catch(()=>{delete r.screenshot;});}}report.tests.push(r);console.log('SMTP_VERIFICATION_SCENARIO '+JSON.stringify(r));await writeFile(out+'/report.json',JSON.stringify(report,null,2));}
 try{
  execFileSync('openssl',['req','-x509','-newkey','rsa:2048','-nodes','-keyout',join(temp,'key.pem'),'-out',join(temp,'cert.pem'),'-days','1','-subj','/CN=localhost','-addext','subjectAltName=DNS:localhost,IP:127.0.0.1','-addext','basicConstraints=critical,CA:TRUE'],{stdio:'ignore'});
  server=createServer({key:await readFile(join(temp,'key.pem')),cert:await readFile(join(temp,'cert.pem')),minVersion:'TLSv1.2'},socket=>{
@@ -72,7 +73,7 @@ try{
  });
  await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
  const logfile=createWriteStream(out+'/server.log');
- child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','127.0.0.1','--port','3101'],{env:{...process.env,
+ child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','localhost','--port','3101'],{env:{...process.env,
    APP_URL:origin,NODE_EXTRA_CA_CERTS:join(temp,'cert.pem'),HRBP_SMTP_ENABLED:'true',HRBP_SMTP_HOST:'127.0.0.1',HRBP_SMTP_TLS_SERVERNAME:'localhost',
    HRBP_SMTP_PORT:String(server.address().port),HRBP_SMTP_SECURE:'true',HRBP_SMTP_USERNAME:smtpUser,HRBP_SMTP_PASSWORD:smtpPassword,
    HRBP_SMTP_FROM:'sender@example.test',HRBP_NOTIFICATION_EMAIL_EVENTS:'SMTP_CONFIGURATION_TEST'},stdio:['ignore','pipe','pipe']});
@@ -115,9 +116,9 @@ try{
   const {page,root}=await settings(),before=messages.length;page.once('dialog',d=>d.dismiss());await root.getByRole('button',{name:sendName('en'),exact:true}).click();assert.equal(messages.length,before);
   assert.equal((await clickSend(page,root)).status(),200);await root.getByRole('status').waitFor();assert.match(await root.innerText(),/mailbox delivery is not verified/);assert.equal(messages.length,before+1);assert.equal(await root.getByRole('button',{name:sendName('en'),exact:true}).isDisabled(),true);
  });
- await check('settings UI: substituted correlation after actual commit is unknown and not replayed',async()=>{
+ for(const fault of ['correlation','upstream503'])await check(`settings UI: ${fault} after actual commit is unknown and not replayed`,async()=>{
   const {page,root}=await settings(),before=messages.length;
-  await page.route('**/api/settings/notifications/smtp-test',async route=>{const response=await route.fetch();const b=await response.json();b.data.testId=randomUUID();await route.fulfill({response,json:b});});
+  await page.route('**/api/settings/notifications/smtp-test',async route=>{const response=await route.fetch();const b=await response.json();if(fault==='correlation'){b.data.testId=randomUUID();await route.fulfill({response,json:b});}else await route.fulfill({response,status:503,json:{error:'Synthetic upstream failure'}});});
   await clickSend(page,root);await root.getByRole('alert').waitFor();assert.match(await root.innerText(),/result is unknown/);assert.equal(messages.length,before+1);assert.equal(await root.getByRole('button',{name:sendName('en'),exact:true}).isDisabled(),true);
  });
  await check('settings UI: actual audit failure shows partial-success warning without another send',async()=>{
@@ -139,4 +140,4 @@ try{
  report.summary={tests:report.tests.length,passed:report.tests.filter(t=>t.passed).length,failed:report.tests.filter(t=>!t.passed).length};
  await writeFile(out+'/report.json',JSON.stringify(report,null,2));console.log('SMTP_VERIFICATION_SUMMARY '+JSON.stringify(report.summary));
 }
-if(report.tests.length!==11||report.tests.some(t=>!t.passed))process.exitCode=1;
+if(report.tests.length!==12||report.tests.some(t=>!t.passed))process.exitCode=1;
