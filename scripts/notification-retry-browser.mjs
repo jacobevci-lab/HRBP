@@ -7,6 +7,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
 import { PrismaClient } from '@prisma/client';
 import { chromium } from 'playwright';
+import { createRetryTestBindings } from './notification-retry-fixture.mjs';
 const database=new URL(process.env.DATABASE_URL||'invalid:');
 assert.equal(process.env.HRBP_DISPOSABLE_AUDIT,'true');assert.ok(['postgres:','postgresql:'].includes(database.protocol));
 assert.ok(['127.0.0.1','localhost'].includes(database.hostname));assert.equal(database.pathname,'/hrbp_audit');
@@ -16,7 +17,8 @@ await mkdir(out,{recursive:true});
 const db=new PrismaClient(),browser=await chromium.launch(),contexts=[];
 const marker='qaretry'+randomUUID().replaceAll('-','').slice(0,12),tenantId=marker,foreignTenant=marker+'foreign',accounts={};
 const report={source:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),tests:[],scope:'Production Next.js, signed sessions, Chromium and disposable PostgreSQL in a synthetic tenant.',limitations:['No dispatcher, SMTP, external notification delivery or production data.','Reviewed snapshots are not durable idempotency keys.','Only Chromium and listed scenarios; not universal module acceptance.']};
-let child,sequence=0,trigger=false;
+let child,sequence=0,trigger=false,removeBindings;
+let setupStage='binding-lease';
 const fn=marker+'_fault',trg=marker+'_trigger';
 const snapshot=r=>({id:r.id,status:r.status,attempts:r.attempts,updatedAt:new Date(r.updatedAt).toISOString()});
 const command=(items,mode='SINGLE')=>({commandId:randomUUID(),mode,items:items.map(snapshot)});
@@ -24,7 +26,14 @@ async function fixture(status='DEAD_LETTER',tenant=tenantId){const id=marker+'-'
 async function context(role='TENANT_ADMIN',locale='en',theme='light',width=1280){
  const ctx=await browser.newContext({viewport:{width,height:900},reducedMotion:'reduce'});contexts.push(ctx);
  await ctx.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
- if(role){const r=await ctx.request.post(origin+'/api/auth/local',{headers:{origin},data:{identifier:accounts[role],password}});assert.equal(r.status(),200,'Synthetic local login '+r.status());}
+ if(role){
+  setupStage='session-'+role;
+  const r=await ctx.request.post(origin+'/api/auth/local',{headers:{origin},data:{identifier:accounts[role],password}});
+  assert.equal(r.status(),200,'Synthetic session HTTP '+r.status());
+  const response=await ctx.request.get(origin+'/api/auth/session');assert.equal(response.status(),200);
+  const identity=await response.json();assert.equal(identity.authenticated,true);
+  assert.equal(identity.user.id,accounts[role]);assert.equal(identity.user.tenantId,tenantId);assert.equal(identity.user.role,role);
+ }
  await ctx.addCookies([{name:'hrbp-locale',value:locale,url:origin}]);
  await ctx.addInitScript(({locale,theme})=>{localStorage.setItem('hrbp-locale',locale);localStorage.setItem('hrbp-theme',theme);},{locale,theme});return ctx;
 }
@@ -35,13 +44,18 @@ async function screen(ctx){const p=await ctx.newPage();await p.goto(origin+'/mod
 async function check(name,fn){const t={name,passed:false};try{Object.assign(t,await fn(),{passed:true});}catch(e){t.error=String(e.message).replaceAll(password,'[redacted]').slice(0,900);}report.tests.push(t);console.log('NOTIFICATION_RETRY_SCENARIO '+JSON.stringify(t));await writeFile(out+'/report.json',JSON.stringify(report,null,2));}
 async function removeFault(){await db.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${trg}" ON "AuditEvent"`);await db.$executeRawUnsafe(`DROP FUNCTION IF EXISTS "${fn}"()`);trigger=false;}
 try{
+ removeBindings=await createRetryTestBindings(process.cwd(),tenantId);
+ setupStage='fixtures';
  const template=await db.userAccount.findUniqueOrThrow({where:{id:'user-local-test-admin'}});assert.ok(template.localPasswordHash);
  for(const id of [tenantId,foreignTenant])await db.tenant.create({data:{id,name:'Synthetic notification retry',region:'QA'}});
  for(const [role,suffix] of [['TENANT_ADMIN','a'],['HR_OPERATIONS','h'],['EMPLOYEE','e']]){const id=marker+'-'+suffix;assert.ok(id.length<=24,'Synthetic account id must remain short');accounts[role]=id;await db.userAccount.create({data:{id,tenantId,subject:id,email:id+'@example.test',displayName:'Synthetic '+role,role,active:true,localAuthEnabled:true,localPasswordHash:template.localPasswordHash}});}
+ setupStage='application-start';
  const log=createWriteStream(out+'/server.log');
  child=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--hostname','localhost','--port','3102'],{env:{...process.env,HRBP_AUTH_TENANT_ID:tenantId,HRBP_SMTP_ENABLED:'false'},stdio:['ignore','pipe','pipe']});child.stdout.pipe(log);child.stderr.pipe(log);
  let ready=false;for(let n=0;n<40;n++){try{if((await fetch(origin+'/api/health/runtime')).ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,500));}assert.ok(ready,'Isolated app did not start');
  const admin=await context(),staff=await context('HR_OPERATIONS'),employee=await context('EMPLOYEE'),anonymous=await context(null);
+ setupStage='scenarios';
+ report.isolation={bindingLease:true,signedTenantAndRoleVerified:true,dispatcherStarted:false};
  await check('API: malformed single selectors cannot widen to tenant-wide retry',async()=>{const r=await fixture();for(const body of [{id:null},{id:123},{id:''},{id:[]},{},{limit:100}])assert.equal((await post(admin,body)).status(),400);assert.equal((await current(r.id)).status,'DEAD_LETTER');assert.equal(await auditCount(r.id),0);});
  await check('API: one reviewed row requeues once with bound receipt and unchanged payload/read state',async()=>{const r=await fixture('FAILED'),c=command([r]);const response=await post(admin,c);assert.equal(response.status(),200);const data=(await response.json()).data;assert.deepEqual(data.command,c);assert.equal(data.actorId,accounts.TENANT_ADMIN);assert.equal(data.requeued,1);const changed=await current(r.id);assert.equal(changed.status,'PENDING');assert.equal(changed.attempts,0);assert.deepEqual(changed.payload,r.payload);assert.deepEqual(changed.readAt,r.readAt);assert.equal(await auditCount(r.id),1);assert.equal((await post(admin,c)).status(),409);assert.equal(await auditCount(r.id),1);});
  await check('SQL: eight same-version retries commit one requeue and one audit',async()=>{const r=await fixture(),c=command([r]);const responses=await Promise.all(Array.from({length:8},()=>post(admin,c)));assert.equal(responses.filter(r=>r.status()===200).length,1);assert.equal(responses.filter(r=>r.status()===409).length,7);assert.equal(await auditCount(r.id),1);return {responses:responses.map(r=>r.status())};});
@@ -59,11 +73,16 @@ try{
  for(const[theme,width]of[['light',320],['dark',390]])await check(`UI: Turkish ${theme}/${width}px reviewed retry controls fit their panel`,async()=>{await fixture();const ctx=await context('TENANT_ADMIN','tr',theme,width),p=await screen(ctx),panel=p.locator('[data-notification-operations]'),batch=p.locator('[data-notification-batch]');await panel.locator('[data-notification-row]').first().waitFor();await batch.getByRole('button',{name:'Dead-letter yeniden denemeyi hazırla',exact:true}).click();await batch.getByRole('button',{name:'İncelenen kayıtları yeniden kuyruğa al',exact:true}).waitFor();const geometry=await panel.evaluate(el=>{const r=el.getBoundingClientRect();return {left:r.left,right:r.right,width:innerWidth,scroll:el.scrollWidth,client:el.clientWidth,background:getComputedStyle(el).backgroundColor};});assert.ok(geometry.left>=-1&&geometry.right<=width+1);assert.ok(geometry.scroll<=geometry.client+1);const b=await batch.boundingBox();assert.ok(b.x>=0&&b.x+b.width<=width+1);await panel.screenshot({path:out+`/retry-tr-${theme}-${width}.jpg`});await batch.screenshot({path:out+`/batch-tr-${theme}-${width}.jpg`});await p.close();return {geometry,screenshots:[`retry-tr-${theme}-${width}.jpg`,`batch-tr-${theme}-${width}.jpg`]};});
 }catch(error){
  // Record setup failure without dumping Prisma arguments or credential-bearing data.
- report.setupFailure={name:'Isolated retry acceptance could not complete',code:typeof error?.code==='string'&&/^P[0-9]{4}$/.test(error.code)?error.code:'SETUP_ERROR',completedCases:report.tests.length};
+ report.setupFailure={name:'Isolated retry acceptance could not complete',code:typeof error?.code==='string'&&/^P[0-9]{4}$/.test(error.code)?error.code:'SETUP_ERROR',completedCases:report.tests.length,stage:setupStage};
  console.error('NOTIFICATION_RETRY_SETUP '+JSON.stringify(report.setupFailure));process.exitCode=1;
 }finally{
  if(trigger)await removeFault().catch(()=>{});
- await Promise.all(contexts.map(c=>c.close().catch(()=>{})));await browser.close();child?.kill('SIGTERM');await db.$disconnect();
+ await Promise.all(contexts.map(c=>c.close().catch(()=>{})));await browser.close();
+ if(child&&child.exitCode===null&&child.signalCode===null){
+  await new Promise(resolve=>{const timer=setTimeout(()=>child.kill('SIGKILL'),5000);child.once('exit',()=>{clearTimeout(timer);resolve();});child.kill('SIGTERM');});
+ }
+ try{await removeBindings?.();}catch{report.cleanupFailure='BINDING_LEASE_NOT_REMOVED';process.exitCode=1;}
+ await db.$disconnect();
  report.summary={tests:report.tests.length,passed:report.tests.filter(t=>t.passed).length,failed:report.tests.filter(t=>!t.passed).length};await writeFile(out+'/report.json',JSON.stringify(report,null,2));console.log('NOTIFICATION_RETRY_SUMMARY '+JSON.stringify(report.summary));
 }
 if(report.tests.length!==16||report.tests.some(t=>!t.passed))process.exitCode=1;
