@@ -10,12 +10,12 @@ export function useOperationsRead(filter: string, limit: number, enabled = true)
   const latest = useRef({ scope, allowed }); latest.current = { scope, allowed };
   const token = useRef<AbortController | null>(null), epoch = useRef(0);
   const generation = epoch.current;
-  const [state, setState] = useState<{ scope: string; phase: "loading" | "ready" | "error"; data: OpsData | null }>({ scope, phase: "loading", data: null });
-  const invalidate = useCallback(() => { epoch.current++; token.current?.abort(); token.current = null; setState({ scope, phase: "error", data: null }); }, [scope]);
+  const [state, setState] = useState<{ scope: string; epoch: number; phase: "loading" | "ready" | "error"; data: OpsData | null }>({ scope, epoch: epoch.current, phase: "loading", data: null });
+  const invalidate = useCallback(() => { epoch.current++; token.current?.abort(); token.current = null; setState({ scope, epoch: epoch.current, phase: "error", data: null }); }, [scope]);
   const load = useCallback(async () => {
     if (!user || !latest.current.allowed || latest.current.scope !== scope || token.current) return;
     const controller = new AbortController(); token.current = controller; epoch.current++;
-    setState({ scope, phase: "loading", data: null });
+    setState({ scope, epoch: epoch.current, phase: "loading", data: null });
     const timer = setTimeout(() => controller.abort(), 15000);
     try {
       const response = await fetch(`/api/settings/notifications/operations?status=${filter}&limit=${limit}`, {
@@ -24,13 +24,13 @@ export function useOperationsRead(filter: string, limit: number, enabled = true)
       if (response.status !== 200 || response.redirected) throw Error("UNAVAILABLE");
       const body: unknown = await response.json(), data = object(body) ? parseOpsData(body.data, user, filter, limit) : null;
       if (!data) throw Error("INVALID_RESPONSE");
-      if (token.current === controller && latest.current.allowed && latest.current.scope === scope) setState({ scope, phase: "ready", data });
+      if (token.current === controller && latest.current.allowed && latest.current.scope === scope) setState({ scope, epoch: epoch.current, phase: "ready", data });
     } catch {
-      if (token.current === controller && latest.current.allowed && latest.current.scope === scope) setState({ scope, phase: "error", data: null });
+      if (token.current === controller && latest.current.allowed && latest.current.scope === scope) setState({ scope, epoch: epoch.current, phase: "error", data: null });
     } finally { clearTimeout(timer); if (token.current === controller) token.current = null; }
   }, [scope, allowed]); // Locale changes are not authorization or reread events.
   useEffect(() => { void load(); return () => { epoch.current++; token.current?.abort(); token.current = null; }; }, [load]);
-  const data = allowed && state.scope === scope && state.phase === "ready" ? state.data : null;
+  const data = allowed && state.scope === scope && state.epoch === epoch.current && state.phase === "ready" ? state.data : null;
   const current = () => Boolean(data && latest.current.allowed && latest.current.scope === scope && !token.current && epoch.current === generation);
   return { data, current, load, invalidate, allowed, loading: allowed && (state.scope !== scope || state.phase === "loading"), error: allowed && state.scope === scope && state.phase === "error" };
 }
