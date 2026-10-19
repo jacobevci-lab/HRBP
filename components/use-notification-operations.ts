@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSessionContext } from "@/components/session-provider";
-import { acceptsRetryReceipt, object, parseOpsData, parsePagedOpsData, type PagedOpsData, type OpsData, type RetryCommand, type RetrySnapshot } from "@/lib/notification-retry-contract";
+import { acceptsRetryReceipt, object, parseOpsData, parsePagedOpsData, type OperationsPage, type OpsData, type RetryCommand, type RetrySnapshot } from "@/lib/notification-retry-contract";
 
 export function useOperationsRead(filter: string, limit: number, enabled = true, after?: string | null) {
   const { session, loading } = useSessionContext(), user = session?.user;
@@ -10,7 +10,7 @@ export function useOperationsRead(filter: string, limit: number, enabled = true,
   const latest = useRef({ scope, allowed }); latest.current = { scope, allowed };
   const token = useRef<AbortController | null>(null), epoch = useRef(0);
   const generation = epoch.current;
-  const [state, setState] = useState<{ scope: string; epoch: number; phase: "loading" | "ready" | "error"; data: OpsData | PagedOpsData | null }>({ scope, epoch: epoch.current, phase: "loading", data: null });
+  const [state, setState] = useState<{ scope: string; epoch: number; phase: "loading" | "ready" | "error"; data: (OpsData & { page?: OperationsPage }) | null }>({ scope, epoch: epoch.current, phase: "loading", data: null });
   const invalidate = useCallback(() => { epoch.current++; token.current?.abort(); token.current = null; setState({ scope, epoch: epoch.current, phase: "error", data: null }); }, [scope]);
   const load = useCallback(async () => {
     if (!user || !latest.current.allowed || latest.current.scope !== scope || token.current) return;
@@ -32,7 +32,7 @@ export function useOperationsRead(filter: string, limit: number, enabled = true,
   useEffect(() => { void load(); return () => { epoch.current++; token.current?.abort(); token.current = null; }; }, [load]);
   const data = allowed && state.scope === scope && state.epoch === epoch.current && state.phase === "ready" ? state.data : null;
   const current = () => Boolean(data && latest.current.allowed && latest.current.scope === scope && !token.current && epoch.current === generation);
-  return { data, page: data && "page" in data ? data.page : null, current, load, invalidate, allowed, loading: allowed && (state.scope !== scope || state.phase === "loading"), error: allowed && state.scope === scope && state.phase === "error" };
+  return { data, page: after === undefined ? null : data?.page ?? null, current, load, invalidate, allowed, loading: allowed && (state.scope !== scope || state.phase === "loading"), error: allowed && state.scope === scope && state.phase === "error" };
 }
 
 type Phase = "pending" | "saved" | "conflict" | "denied" | "unknown";

@@ -67,3 +67,34 @@ test('a delayed old page cannot replace a new authorized page',async()=>{const h
 test('failed later-page read hides rows and cursor and never loops',async()=>{const h=hookHarness();try{await loadedHook(h);const after=h.result.page.next;h.transport(async()=>({status:503}));h.set({after});await h.settle();assert.equal(h.result.data,null);assert.equal(h.result.page,null);assert.ok(h.result.error);const n=h.calls.length;await h.settle();assert.equal(h.calls.length,n);}finally{h.close();}});
 test('principal change hides the previous page and invalidates captured callbacks',async()=>{const h=hookHarness();try{await loadedHook(h);const callback=h.result.current;h.set({user:{id:'other'}});assert.equal(h.result.data,null);assert.equal(callback(),false);await h.settle();assert.equal(h.result.data,null);}finally{h.close();}});
 test('legacy and first-page modes are separate read generations',async()=>{const h=hookHarness();try{await loadedHook(h);h.set({after:undefined});await h.settle();assert.ok(h.result.data);assert.equal(h.result.page,null);assert.ok(!h.calls.at(-1).url.includes('after='));h.set({after:null});await h.settle();assert.ok(h.result.page);assert.equal(h.result.page.after,null);}finally{h.close();}});
+
+// transpileModule intentionally does not perform semantic type checking. Keep a
+// narrow real TypeScript consumer check so the hook's legacy/optional page shape
+// cannot collapse to unknown while all runtime doubles still pass.
+test('hook exposes a typed optional page to TypeScript consumers without skipping strict checks', () => {
+ const root = '/virtual-notification-types/';
+ const source = readFileSync('components/use-notification-operations.ts', 'utf8')
+  .replaceAll('"react"', '"./react"')
+  .replaceAll('"@/components/session-provider"', '"./session"')
+  .replaceAll('"@/lib/notification-retry-contract"', '"./contract"');
+ const files = new Map([
+  [root + 'hook.ts', source],
+  [root + 'contract.ts', readFileSync('lib/notification-retry-contract.ts', 'utf8')],
+  [root + 'react.ts', `export declare function useRef<T>(value:T):{current:T};
+export declare function useState<T>(value:T):[T,(next:T|((previous:T)=>T))=>void];
+export declare function useEffect(effect:()=>void|(()=>void),deps:unknown[]):void;
+export declare function useCallback<T extends Function>(fn:T,deps:unknown[]):T;`],
+  [root + 'session.ts', `export declare function useSessionContext():{loading:boolean;session:{authenticated:boolean;user?:{id:string;tenantId:string;role:string}}|null};`],
+  [root + 'consumer.ts', `import {useOperationsRead} from './hook';import type {OperationsPage} from './contract';const read=useOperationsRead('ALL',100,true,null);const page:OperationsPage|null=read.page;if(read.page?.next){const cursor:string=read.page.next;}`]
+ ]);
+ const options = { noEmit:true, strict:true, target:ts.ScriptTarget.ES2022, module:ts.ModuleKind.CommonJS,
+  moduleResolution:ts.ModuleResolutionKind.Node10, skipLibCheck:true };
+ const host = ts.createCompilerHost(options), read = host.readFile, exists = host.fileExists;
+ host.readFile = path => files.get(path) ?? read(path);
+ host.fileExists = path => files.has(path) || exists(path);
+ host.directoryExists = path => path === root.slice(0, -1) || ts.sys.directoryExists(path);
+ host.getSourceFile = (path, language) => { const content = host.readFile(path); return content === undefined ? undefined : ts.createSourceFile(path, content, language, true); };
+ const program = ts.createProgram([root + 'consumer.ts'], options, host);
+ const errors = ts.getPreEmitDiagnostics(program).filter(d => d.category === ts.DiagnosticCategory.Error);
+ assert.deepEqual(errors.map(d => ts.flattenDiagnosticMessageText(d.messageText, ' ')), []);
+});
