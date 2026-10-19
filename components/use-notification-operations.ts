@@ -1,16 +1,16 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSessionContext } from "@/components/session-provider";
-import { acceptsRetryReceipt, object, parseOpsData, type OpsData, type RetryCommand, type RetrySnapshot } from "@/lib/notification-retry-contract";
+import { acceptsRetryReceipt, object, parseOpsData, parsePagedOpsData, type PagedOpsData, type OpsData, type RetryCommand, type RetrySnapshot } from "@/lib/notification-retry-contract";
 
-export function useOperationsRead(filter: string, limit: number, enabled = true) {
+export function useOperationsRead(filter: string, limit: number, enabled = true, after?: string | null) {
   const { session, loading } = useSessionContext(), user = session?.user;
   const allowed = Boolean(enabled && !loading && session?.authenticated && user && ["TENANT_ADMIN", "HR_OPERATIONS", "SECURITY_AUDITOR"].includes(user.role));
-  const scope = JSON.stringify([user?.id, user?.tenantId, user?.role, filter, limit]);
+  const scope = JSON.stringify([user?.id, user?.tenantId, user?.role, filter, limit, after === undefined ? "legacy" : after]);
   const latest = useRef({ scope, allowed }); latest.current = { scope, allowed };
   const token = useRef<AbortController | null>(null), epoch = useRef(0);
   const generation = epoch.current;
-  const [state, setState] = useState<{ scope: string; epoch: number; phase: "loading" | "ready" | "error"; data: OpsData | null }>({ scope, epoch: epoch.current, phase: "loading", data: null });
+  const [state, setState] = useState<{ scope: string; epoch: number; phase: "loading" | "ready" | "error"; data: OpsData | PagedOpsData | null }>({ scope, epoch: epoch.current, phase: "loading", data: null });
   const invalidate = useCallback(() => { epoch.current++; token.current?.abort(); token.current = null; setState({ scope, epoch: epoch.current, phase: "error", data: null }); }, [scope]);
   const load = useCallback(async () => {
     if (!user || !latest.current.allowed || latest.current.scope !== scope || token.current) return;
@@ -18,11 +18,11 @@ export function useOperationsRead(filter: string, limit: number, enabled = true)
     setState({ scope, epoch: epoch.current, phase: "loading", data: null });
     const timer = setTimeout(() => controller.abort(), 15000);
     try {
-      const response = await fetch(`/api/settings/notifications/operations?status=${filter}&limit=${limit}`, {
+      const response = await fetch(`/api/settings/notifications/operations?status=${filter}&limit=${limit}${after === undefined ? "" : `&after=${encodeURIComponent(after ?? "")}`}`, {
         cache: "no-store", credentials: "same-origin", redirect: "error", signal: controller.signal
       });
       if (response.status !== 200 || response.redirected) throw Error("UNAVAILABLE");
-      const body: unknown = await response.json(), data = object(body) ? parseOpsData(body.data, user, filter, limit) : null;
+      const body: unknown = await response.json(), data = object(body) ? (after === undefined ? parseOpsData(body.data, user, filter, limit) : parsePagedOpsData(body.data, user, filter, limit, after)) : null;
       if (!data) throw Error("INVALID_RESPONSE");
       if (token.current === controller && latest.current.allowed && latest.current.scope === scope) setState({ scope, epoch: epoch.current, phase: "ready", data });
     } catch {
@@ -32,7 +32,7 @@ export function useOperationsRead(filter: string, limit: number, enabled = true)
   useEffect(() => { void load(); return () => { epoch.current++; token.current?.abort(); token.current = null; }; }, [load]);
   const data = allowed && state.scope === scope && state.epoch === epoch.current && state.phase === "ready" ? state.data : null;
   const current = () => Boolean(data && latest.current.allowed && latest.current.scope === scope && !token.current && epoch.current === generation);
-  return { data, current, load, invalidate, allowed, loading: allowed && (state.scope !== scope || state.phase === "loading"), error: allowed && state.scope === scope && state.phase === "error" };
+  return { data, page: data && "page" in data ? data.page : null, current, load, invalidate, allowed, loading: allowed && (state.scope !== scope || state.phase === "loading"), error: allowed && state.scope === scope && state.phase === "error" };
 }
 
 type Phase = "pending" | "saved" | "conflict" | "denied" | "unknown";

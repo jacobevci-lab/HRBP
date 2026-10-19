@@ -10,3 +10,6 @@
 .batch p { margin: 0; }
 .batch details { width: 100%; max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
 .batch details p { padding: 6px 0; border-top: 1px solid var(--line); }
+
+.pagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; }
+.pagination > div { display: flex; gap: 8px; flex-wrap: wrap; min-width: 0; }

@@ -53,3 +53,40 @@ export function parseOpsData(v: unknown, user: { id: string; tenantId: string; r
   }
   return v as unknown as OpsData;
 }
+
+/** Opaque read positions are scoped hints, never authorization credentials.
+ * A cursor survives deletion/movement of its anchor; every page is reauthorized. */
+
+type Viewer = { id: string; tenantId: string; role: string };
+export type OperationsPosition = { updatedAt: string; createdAt: string; id: string };
+export type OperationsPage = { after: string | null; next: string | null };
+export type PagedOpsData = OpsData & { page: OperationsPage };
+const identifier = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 128 && v.trim() === v && !/[\u0000-\u001f\u007f]/.test(v);
+
+export function operationsCursor(item: OperationsPosition, viewer: Viewer, filter: string, limit: number): string {
+  return JSON.stringify([1, viewer.id, viewer.tenantId, viewer.role, filter, limit, item.updatedAt, item.createdAt, item.id]);
+}
+
+export function parseOperationsCursor(value: string, viewer: Viewer, filter: string, limit: number): OperationsPosition | null {
+  if (value.length > 1024 || !["ALL", ...operationalStates].includes(filter) || !Number.isInteger(limit) || limit < 1 || limit > 100) return null;
+  try {
+    const data: unknown = JSON.parse(value);
+    if (!Array.isArray(data) || data.length !== 9 || data[0] !== 1 || data[1] !== viewer.id || data[2] !== viewer.tenantId ||
+        data[3] !== viewer.role || data[4] !== filter || data[5] !== limit || !utc(data[6]) || !utc(data[7]) || !identifier(data[8])) return null;
+    const position = { updatedAt: data[6], createdAt: data[7], id: data[8] };
+    return operationsCursor(position, viewer, filter, limit) === value ? position : null;
+  } catch { return null; }
+}
+
+export function parsePagedOpsData(value: unknown, viewer: Viewer, filter: string, limit: number, after: string | null): PagedOpsData | null {
+  const data = parseOpsData(value, viewer, filter, limit);
+  if (!data || !object(value) || !object(value.page) || value.page.after !== after) return null;
+  if (after !== null && !parseOperationsCursor(after, viewer, filter, limit)) return null;
+  const next = value.page.next;
+  if (next !== null) {
+    if (typeof next !== "string" || !parseOperationsCursor(next, viewer, filter, limit) || next === after || data.items.length !== limit) return null;
+    const last: OpsItem = data.items[data.items.length - 1];
+    if (operationsCursor(last, viewer, filter, limit) !== next) return null;
+  }
+  return value as PagedOpsData;
+}
