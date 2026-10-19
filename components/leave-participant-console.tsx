@@ -1,11 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, CheckCircle2, CircleAlert, ShieldCheck, WalletCards } from "lucide-react";
 import { useLocale } from "@/components/locale-provider";
 import { leaveActionMessage, submitLeaveAction, type LeaveClientAction, type LeaveActionResult } from "@/lib/leave-client-action";
 import type { LeaveParticipantData } from "@/lib/leave-participant-data";
+
+type UnitSelection = { id: string; unit: "DAYS" | "HOURS" };
+function supportedUnit(value: string): value is UnitSelection["unit"] {
+  return value === "DAYS" || value === "HOURS";
+}
+function unitLabel(unit: string | undefined, locale: "en" | "tr") {
+  if (unit === "DAYS") return locale === "tr" ? "gün" : "days";
+  if (unit === "HOURS") return locale === "tr" ? "saat" : "hours";
+  return locale === "tr" ? "birim seçilmedi" : "unit not selected";
+}
 
 function dateOnly(value: string) { return value.slice(0, 10); }
 function statusLabel(value: string, locale: "en" | "tr") {
@@ -31,6 +41,18 @@ function LeaveParticipantContent({ employmentId, data }: { employmentId: string;
   const reloadStarted = useRef(false);
   const [cancelledIds, setCancelledIds] = useState<string[]>([]);
   const blocked = pending !== null || reviewRequired || reloading;
+  const [selection, setSelection] = useState<UnitSelection | null>(null);
+  const selected = useRef<UnitSelection | null>(null);
+  const currentTypes = useRef(data.leaveTypes); currentTypes.current = data.leaveTypes;
+  const [unitChanged, setUnitChanged] = useState(false);
+  const unitHelpId = useId();
+  // Bind the entered quantity to its displayed unit, not just a type ID. A
+  // refreshed catalogue cannot silently reinterpret days as hours or vice versa.
+  const selectedType = data.leaveTypes.find(type => type.id === selection?.id &&
+    type.unit === selection?.unit && supportedUnit(type.unit));
+  function resetSelection() {
+    selected.current = null; setSelection(null); setUnitChanged(false);
+  }
 
   useEffect(() => {
     alive.current = true;
@@ -90,12 +112,15 @@ function LeaveParticipantContent({ employmentId, data }: { employmentId: string;
     </div> : null}
 
     <div className="performance-create-grid">
-      <form className="performance-form" onSubmit={(event) => {
+      <form className="performance-form" onReset={resetSelection} onSubmit={(event) => {
         event.preventDefault();
         if (locked.current || needsReview.current || reloadStarted.current) return;
         const form = event.currentTarget;
         const values = new FormData(form);
         const field = (name: string) => { const value = values.get(name); return typeof value === "string" ? value : ""; };
+        const chosen = currentTypes.current.find(type => type.id === field("leaveTypeId"));
+        if (!chosen || !supportedUnit(chosen.unit) || selected.current?.id !== chosen.id ||
+            selected.current.unit !== chosen.unit) return;
         void request("new-leave", { kind: "create", input: {
           employmentId,
           leaveTypeId: field("leaveTypeId"),
@@ -106,11 +131,36 @@ function LeaveParticipantContent({ employmentId, data }: { employmentId: string;
         } }).then((ok) => { if (ok && form.isConnected) form.reset(); });
       }}>
         <div className="performance-form-title"><CalendarDays size={17}/><div><strong>{c("New leave request", "Yeni izin talebi")}</strong><small>{c("Overlap and balance controls are enforced server-side", "Çakışma ve bakiye kontrolleri sunucu tarafında zorunlu")}</small></div></div>
-        <label>{c("Leave type", "İzin türü")}<select name="leaveTypeId" required disabled={blocked} defaultValue=""><option value="" disabled>{c("Select leave type", "İzin türü seçin")}</option>{data.leaveTypes.map((type) => <option key={type.id} value={type.id}>{type.code} · {type.name}{type.requiresApproval ? "" : ` · ${c("auto approval", "otomatik onay")}`}</option>)}</select></label>
+        <label>{c("Leave type", "İzin türü")}<select name="leaveTypeId" required disabled={blocked} value={selectedType ? selection?.id ?? "" : ""} onChange={event => {
+          const select = event.currentTarget;
+          const next = currentTypes.current.find(type => type.id === select.value);
+          const previous = selected.current;
+          if (locked.current || needsReview.current || reloadStarted.current || !next || !supportedUnit(next.unit)) {
+            select.value = previous?.id ?? ""; return;
+          }
+          const quantity = select.form?.elements.namedItem("units") as HTMLInputElement | null;
+          const changesUnit = Boolean(previous && previous.unit !== next.unit);
+          if (changesUnit && quantity?.value && !window.confirm(c(
+            `Change from ${unitLabel(previous?.unit, "en")} to ${unitLabel(next.unit, "en")}? The amount will be cleared, not converted. Dates and reason will stay.`,
+            `${unitLabel(previous?.unit, "tr")} yerine ${unitLabel(next.unit, "tr")} seçilsin mi? Miktar dönüştürülmeden temizlenecek. Tarihler ve açıklama korunacak.`
+          ))) { select.value = previous?.id ?? ""; return; }
+          if (changesUnit && quantity) quantity.value = "";
+          selected.current = { id: next.id, unit: next.unit };
+          setSelection(selected.current); setUnitChanged(changesUnit);
+        }}><option value="" disabled>{c("Select leave type", "İzin türü seçin")}</option>{data.leaveTypes.map((type) => <option key={type.id} value={type.id} disabled={!supportedUnit(type.unit)}>{type.code} · {type.name} · {unitLabel(type.unit, locale)}{type.requiresApproval ? "" : ` · ${c("auto approval", "otomatik onay")}`}</option>)}</select></label>
         <div className="performance-form-row"><label>{c("Starts", "Başlangıç")}<input name="startsAt" type="date" required disabled={blocked}/></label><label>{c("Ends", "Bitiş")}<input name="endsAt" type="date" required disabled={blocked}/></label></div>
-        <label>{c("Units", "Birim")}<input name="units" type="number" min="0.01" max="366" step="0.01" required disabled={blocked}/></label>
+        <label>{selectedType ? c(`Amount (${unitLabel(selectedType.unit, "en")})`, `Miktar (${unitLabel(selectedType.unit, "tr")})`) : c("Amount — select a leave type", "Miktar — izin türü seçin")}<input name="units" type="number" min="0.01" max="366" step="0.01" required disabled={blocked || !selectedType} aria-describedby={unitHelpId} data-leave-unit={selectedType?.unit ?? ""}/></label>
+        <div id={unitHelpId} data-leave-unit-help role="status" aria-live="polite">
+          <small>{selectedType ? c(
+            `Enter the amount in ${unitLabel(selectedType.unit, "en")}. The date range does not automatically calculate working days, holidays or hours. No day/hour conversion is performed.`,
+            `Miktarı ${unitLabel(selectedType.unit, "tr")} olarak girin. Tarih aralığından çalışma günleri, tatiller veya saatler otomatik hesaplanmaz. Gün/saat dönüşümü yapılmaz.`
+          ) : c("Select an available leave type to verify its unit before entering an amount.", "Miktar girmeden önce kullanılabilir bir izin türü seçerek birimini doğrulayın.")}</small>
+          {unitChanged ? <p>{c("The unit changed. Enter a new amount; your dates and reason are retained.", "Birim değişti. Yeni miktarı girin; tarihleriniz ve açıklamanız korundu.")}</p> : null}
+          {selection && !selectedType ? <p>{c("The selected type is unavailable or its unit changed. Reselect a current type before submitting.", "Seçilen tür kullanılamıyor veya birimi değişti. Göndermeden önce güncel bir türü yeniden seçin.")}</p> : null}
+          {selectedType && !selectedType.requiresApproval ? <p>{c("This type is automatically approved if the server's overlap and balance checks pass.", "Bu tür, sunucudaki çakışma ve bakiye kontrolleri geçerse otomatik onaylanır.")}</p> : null}
+        </div>
         <label>{c("Reason", "Açıklama")}<textarea name="reason" rows={2} maxLength={2000} disabled={blocked}/></label>
-        <button className="create-button" type="submit" disabled={blocked || !data.leaveTypes.length}>{pending === "new-leave" ? c("Submitting…", "Gönderiliyor…") : c("Submit leave request", "İzin talebini gönder")}</button>
+        <button className="create-button" type="submit" disabled={blocked || !selectedType}>{pending === "new-leave" ? c("Submitting…", "Gönderiliyor…") : c("Submit leave request", "İzin talebini gönder")}</button>
       </form>
 
       <div className="performance-form">
