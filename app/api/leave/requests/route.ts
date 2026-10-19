@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
   const parsed = parseLeaveRequest(body);
   if (!parsed.ok) return Response.json({ error: parsed.error }, { status: 400 });
-  const { employmentId, leaveTypeId, startsAt, endsAt, units, reason } = parsed.value;
+  const { employmentId, leaveTypeId, startsAt, endsAt, units, reason, expectedUnit } = parsed.value;
 
   const selfRequest = Boolean(ctx.employmentId && employmentId === ctx.employmentId);
   if (selfRequest) {
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
         }),
         tx.leaveType.findFirst({
           where: { id: leaveTypeId, tenantId: ctx.tenantId, active: true },
-          select: { id: true, name: true, requiresApproval: true, annualAllowance: true }
+          select: { id: true, name: true, unit: true, requiresApproval: true, annualAllowance: true }
         }),
         tx.leaveRequest.findFirst({
           where: {
@@ -79,6 +79,9 @@ export async function POST(request: Request) {
         })
       ]);
       if (!employment || !leaveType) throw new Error("NOT_FOUND");
+      // A stale self-service page must not reinterpret its amount after the
+      // catalogue changed. Compare the same transactional type used below.
+      if (expectedUnit !== undefined && leaveType.unit !== expectedUnit) throw new Error("LEAVE_UNIT_CHANGED");
       if (overlap) throw new Error("OVERLAP");
 
       const trackedBalance = leaveType.annualAllowance !== null;
@@ -116,7 +119,8 @@ export async function POST(request: Request) {
         action: status === LeaveRequestStatus.APPROVED ? "leave-request.created-auto-approved" : "leave-request.created",
         resourceType: "LeaveRequest",
         resourceId: leave.id,
-        classification: DataClassification.CONFIDENTIAL
+        classification: DataClassification.CONFIDENTIAL,
+        ...(expectedUnit === undefined ? {} : { purpose: `Leave quantity verified in ${leaveType.unit} at creation` })
       });
 
       if (status === LeaveRequestStatus.PENDING && employment.managerEmploymentId) {
@@ -131,12 +135,13 @@ export async function POST(request: Request) {
           units: String(units)
         });
       }
-      return leave;
+      return expectedUnit === undefined ? leave : { ...leave, validatedUnit: leaveType.unit };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return Response.json({ data }, { status: 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
     if (code === "NOT_FOUND") return Response.json({ error: "Employment or active leave type not found in tenant." }, { status: 404 });
+    if (code === "LEAVE_UNIT_CHANGED") return Response.json({ code: "LEAVE_UNIT_CHANGED", error: "The selected leave type unit changed. Reload the catalogue and review the amount before submitting again." }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
     if (code === "OVERLAP") return Response.json({ error: "An overlapping pending, approved or taken leave request already exists." }, { status: 409 });
     if (code === "CROSS_YEAR_TRACKED") return Response.json({ error: "Balance-tracked leave requests must stay within one balance year." }, { status: 400 });
     if (code === "BALANCE_NOT_FOUND") return Response.json({ error: "No governed leave balance exists for this employee, leave type and year." }, { status: 409 });

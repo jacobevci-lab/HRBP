@@ -22,11 +22,17 @@ export function asLeaveDate(value: unknown): Date | null {
 }
 
 export type LeaveRequestInput = {
-  employmentId: string; leaveTypeId: string; startsAt: Date; endsAt: Date; units: number; reason: string | null;
+  employmentId: string; leaveTypeId: string; startsAt: Date; endsAt: Date; units: number; reason: string | null; expectedUnit?: LeaveUnit;
 };
 export function parseLeaveRequest(body: JsonObject): Parsed<LeaveRequestInput> {
   const employmentId = asIdentifier(body.employmentId), leaveTypeId = asIdentifier(body.leaveTypeId);
   if (!employmentId || !leaveTypeId) return invalid("employmentId and leaveTypeId must be non-empty identifiers of at most 191 characters.");
+  // Additive precondition: older API callers may omit it, but any supplied
+  // value must be an exact supported unit, never a default or coercion.
+  const expectedUnit = body.expectedUnit;
+  if (expectedUnit !== undefined && expectedUnit !== LeaveUnit.DAYS && expectedUnit !== LeaveUnit.HOURS) {
+    return invalid("expectedUnit must be DAYS or HOURS when supplied.");
+  }
   const startsAt = asLeaveDate(body.startsAt), endsAt = asLeaveDate(body.endsAt);
   if (!startsAt || !endsAt) return invalid("startsAt and endsAt must be real YYYY-MM-DD dates or ISO timestamps with an explicit timezone.");
   if (endsAt < startsAt) return invalid("endsAt must be on or after startsAt.");
@@ -35,7 +41,7 @@ export function parseLeaveRequest(body: JsonObject): Parsed<LeaveRequestInput> {
   if (!Number.isFinite(units) || units <= 0 || units > 366) return invalid("units must be greater than 0 and no more than 366, with at most two decimal places.");
   const reason = body.reason == null ? "" : asText(body.reason, 2000, true);
   if (reason === null || reason.includes("\u0000")) return invalid("reason must be text of at most 2000 characters without null characters.");
-  return { ok: true, value: { employmentId, leaveTypeId, startsAt, endsAt, units, reason: reason || null } };
+  return { ok: true, value: { employmentId, leaveTypeId, startsAt, endsAt, units, reason: reason || null, ...(expectedUnit === undefined ? {} : { expectedUnit }) } };
 }
 
 export type LeaveTypeInput = {

@@ -105,7 +105,7 @@ function LeaveParticipantContent({ employmentId, data }: { employmentId: string;
     </div>
 
     {notice ? <div className={`performance-notice ${notice.outcome === "saved" ? "ok" : "error"}`} role={notice.outcome === "saved" ? "status" : "alert"} data-leave-result={notice.outcome}><span>{notice.outcome === "saved" ? <CheckCircle2 size={15}/> : <CircleAlert size={15}/>}</span>{leaveActionMessage(notice, locale)}</div> : null}
-    {reviewRequired || refreshFailed ? <div className="performance-form" data-leave-recovery="true">
+    {reviewRequired || refreshFailed || (notice?.outcome === "rejected" && notice.code === "LEAVE_UNIT_CHANGED") ? <div className="performance-form" data-leave-recovery="true">
       {refreshFailed ? <p>{c("The write was confirmed, but refreshing the view failed. Reload to review current records; unsaved form input will be lost.", "İşlem doğrulandı ancak görünüm yenilenemedi. Güncel kayıtları görmek için yeniden yükleyin; kaydedilmemiş form bilgileri silinecek.")}</p> : null}
       <button className="secondary-button" type="button" disabled={reloading || pending !== null} aria-busy={reloading} onClick={reload}>{reloading ? c("Reloading…", "Yeniden yükleniyor…") : c("Reload and check requests", "Yenile ve talepleri kontrol et")}</button>
       {reloadFailed ? <p role="alert">{c("Reload did not start. Use your browser's reload control before submitting again.", "Yenileme başlatılamadı. Yeniden işlem yapmadan önce tarayıcının yenileme düğmesini kullanın.")}</p> : null}
@@ -124,6 +124,7 @@ function LeaveParticipantContent({ employmentId, data }: { employmentId: string;
         void request("new-leave", { kind: "create", input: {
           employmentId,
           leaveTypeId: field("leaveTypeId"),
+          expectedUnit: chosen.unit,
           startsAt: field("startsAt"),
           endsAt: field("endsAt"),
           units: field("units"),
