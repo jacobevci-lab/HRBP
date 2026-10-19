@@ -13,3 +13,6 @@
 
 .pagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; }
 .pagination > div { display: flex; gap: 8px; flex-wrap: wrap; min-width: 0; }
+
+/* Keep localized status words intact inside the existing horizontal table scroller. */
+.console :global(.notification-ops-table) td:nth-child(3) { white-space: nowrap; overflow-wrap: normal; }
