@@ -40,6 +40,9 @@ jobs:
       - name: Audit complete dependency graph
         run: npm run security:audit:full
 
+      - name: Verify source SBOM inventory and tamper rejection
+        run: node --test scripts/release-sbom.test.mjs
+
       - name: Generate release evidence
         run: npm run release:evidence:generate
 
@@ -103,7 +106,7 @@ jobs:
         with:
           subject-path: .release-evidence/hrbp-one-source.tar
 
-      - name: Attest production dependency SBOM
+      - name: Attest production-root source dependency SBOM
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: .release-evidence/hrbp-one-source.tar

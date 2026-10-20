@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { validateProductionSbom, SBOM_SCOPE } from "./release-sbom.mjs";
 
 const root = process.cwd();
 const outputDir = path.resolve(root, process.argv[2] || ".release-evidence");
@@ -56,18 +57,13 @@ if (sbom?.bomFormat !== "CycloneDX" || !Array.isArray(sbom?.components) || sbom.
   fail("SBOM is not a populated CycloneDX document.");
 }
 const packageJson = parseJson(path.join(root, "package.json"), "package.json");
-const serializedSbomIdentity = JSON.stringify(sbom.metadata ?? {});
-if (!serializedSbomIdentity.includes(packageJson.name)) {
-  fail("SBOM metadata does not identify the HRBP package.");
+const packageLock = parseJson(path.join(root, "package-lock.json"), "package-lock.json");
+try {
+  validateProductionSbom(sbom, packageJson, packageLock);
+} catch (error) {
+  fail(error instanceof Error ? error.message : "Production SBOM validation failed.");
 }
-
-const directDependencyCount = Object.keys(packageJson.dependencies || {}).length;
-if (sbom.components.length < directDependencyCount) {
-  fail("SBOM component inventory is unexpectedly smaller than the direct production dependency set.");
-}
-if (!Array.isArray(sbom.dependencies) || sbom.dependencies.length === 0) {
-  fail("SBOM dependency graph is empty.");
-}
+if (manifest?.sbom?.scope !== SBOM_SCOPE) fail("Release manifest SBOM scope is invalid.");
 
 if (manifest?.sourceArchive?.sha256 !== sha256File(path.join(outputDir, "hrbp-one-source.tar"))) {
   fail("Source archive digest does not match the release manifest.");
