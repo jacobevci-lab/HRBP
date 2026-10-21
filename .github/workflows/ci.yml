@@ -92,6 +92,8 @@ jobs:
         run: node scripts/validate-ci-registry-fallback.mjs
       - run: npm run typecheck
       - run: npm run build
+      - name: Verify required Cloudflare manifest inlining
+        run: node --test scripts/cloudflare-manifest.test.mjs
       - run: npm run cf:build
       - name: Validate on-prem Compose and build runtime image
         shell: bash

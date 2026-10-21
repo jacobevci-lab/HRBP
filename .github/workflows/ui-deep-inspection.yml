@@ -20,6 +20,8 @@ on:
       - lib/leave-client-action.ts
       - scripts/leave-unit-binding.test.mjs
       - scripts/leave-unit-binding-browser.mjs
+      - scripts/browser-json-observer.mjs
+      - scripts/browser-json-observer.test.mjs
       - components/leave-participant-console.tsx
       - scripts/leave-unit-browser.mjs
       - scripts/leave-client-action.test.mjs
@@ -121,7 +123,7 @@ jobs:
           test "$lock_sha" = "$(sha256sum package-lock.json)"
           node scripts/verify-audit-runtime.mjs > .audit/browser-runtime.json
       - name: Authorization, authoring, policy and service component regression tests
-        run: node --test scripts/create-page-authorization.test.mjs scripts/engagement-authoring-ui.test.mjs scripts/policy-actions-ui.test.mjs scripts/policy-reader.test.mjs scripts/policy-acknowledgement-metrics.test.mjs scripts/policy-acknowledgement-route.test.mjs scripts/policy-assignment-exception.test.mjs scripts/policy-forms-ui.test.mjs scripts/policy-dialog.test.mjs scripts/policy-action-recovery.test.mjs scripts/hr-service-ui.test.mjs scripts/hr-service-conversation.test.mjs scripts/hr-service-conversation-compose.test.mjs scripts/hr-service-revision.test.mjs scripts/hr-service-read-privacy.test.mjs scripts/hr-service-routing.test.mjs scripts/hr-service-routing-recovery.test.mjs scripts/smtp-verification.test.mjs scripts/notification-retry.test.mjs scripts/notification-retry-fixture.test.mjs scripts/notification-pagination.test.mjs scripts/leave-client-action.test.mjs scripts/leave-unit-binding.test.mjs scripts/workforce-workspace-locale.test.mjs scripts/verify-audit-runtime.test.mjs
+        run: node --test scripts/create-page-authorization.test.mjs scripts/engagement-authoring-ui.test.mjs scripts/policy-actions-ui.test.mjs scripts/policy-reader.test.mjs scripts/policy-acknowledgement-metrics.test.mjs scripts/policy-acknowledgement-route.test.mjs scripts/policy-assignment-exception.test.mjs scripts/policy-forms-ui.test.mjs scripts/policy-dialog.test.mjs scripts/policy-action-recovery.test.mjs scripts/hr-service-ui.test.mjs scripts/hr-service-conversation.test.mjs scripts/hr-service-conversation-compose.test.mjs scripts/hr-service-revision.test.mjs scripts/hr-service-read-privacy.test.mjs scripts/hr-service-routing.test.mjs scripts/hr-service-routing-recovery.test.mjs scripts/smtp-verification.test.mjs scripts/notification-retry.test.mjs scripts/notification-retry-fixture.test.mjs scripts/notification-pagination.test.mjs scripts/leave-client-action.test.mjs scripts/leave-unit-binding.test.mjs scripts/browser-json-observer.test.mjs scripts/workforce-workspace-locale.test.mjs scripts/verify-audit-runtime.test.mjs
       - name: Migrate and seed isolated product domains
         run: |
           npx prisma generate > .audit/schema.log 2>&1

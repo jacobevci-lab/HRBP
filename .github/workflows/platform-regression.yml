@@ -95,7 +95,7 @@ jobs:
           npm run lint-compat:validate > .audit/lint-compat.log 2>&1
       - name: Build production application
         run: |
-          node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs scripts/locale-preference.test.mjs scripts/locale-progress.test.mjs scripts/core-workspace-resilience.test.mjs scripts/core-workspace-browser-wiring.test.mjs scripts/module-workspace-resilience.test.mjs scripts/leave-validation.test.mjs scripts/leave-client-action.test.mjs scripts/leave-decision.test.mjs scripts/action-center-leave.test.mjs scripts/action-center-queue.test.mjs scripts/action-center-source-health.test.mjs scripts/audit-locale-readiness.test.mjs
+          node --test scripts/platform-remediation.test.mjs scripts/platform-render.test.mjs scripts/locale-preference.test.mjs scripts/locale-progress.test.mjs scripts/core-workspace-resilience.test.mjs scripts/core-workspace-browser-wiring.test.mjs scripts/module-workspace-resilience.test.mjs scripts/leave-validation.test.mjs scripts/leave-client-action.test.mjs scripts/leave-decision.test.mjs scripts/action-center-leave.test.mjs scripts/action-center-queue.test.mjs scripts/action-center-source-health.test.mjs scripts/audit-locale-readiness.test.mjs scripts/logout-get-probe.test.mjs
           npx next build --webpack > .audit/build.log 2>&1 || { tail -80 .audit/build.log; exit 1; }
       - name: Browser, link, API and workflow audit
         run: |
