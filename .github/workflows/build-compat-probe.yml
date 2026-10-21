@@ -1,0 +1,87 @@
+name: Build Compatibility Probe
+on:
+  push:
+    branches: [chore/build-compat-probe-20261021]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # Immutable candidate blobs only; no ref updates or deployments.
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Preserve diagnosis from the existing immutable failed CI job
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .compat-evidence/candidate
+          curl --fail --silent --show-error --location -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' https://api.github.com/repos/jacobevci-lab/HRBP/actions/jobs/119099942076/logs > "$RUNNER_TEMP/previous-ci.log"
+          grep -E 'Next.js version|not supported by|Major versions|context.getAncestors|malformed Headers|normalizeRequest' "$RUNNER_TEMP/previous-ci.log" > .compat-evidence/previous-ci-diagnostic.txt
+          git rev-parse HEAD > .compat-evidence/source-commit.txt
+      - name: Install the committed baseline and demonstrate regression
+        run: |
+          npm ci > .compat-evidence/baseline-install.log 2>&1
+          set +e
+          node --test scripts/lint-return-compat.test.mjs > .compat-evidence/baseline-tests.log 2>&1
+          code=$?
+          set -e
+          test "$code" -ne 0
+          grep -q 'context.getAncestors is not a function' .compat-evidence/baseline-tests.log
+          cp package-lock.json .compat-evidence/baseline-package-lock.json
+      - name: Resolve the official ESLint compatibility helper without lifecycle scripts
+        run: |
+          npm view @eslint/compat version --json > .compat-evidence/compat-version.json
+          version=$(node -e 'const v=require("./.compat-evidence/compat-version.json"); if(!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(v))process.exit(1); process.stdout.write(v)')
+          npm install --save-dev --save-exact --ignore-scripts "@eslint/compat@$version" > .compat-evidence/compat-install.log 2>&1
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const before=JSON.parse(fs.readFileSync('.compat-evidence/baseline-package-lock.json'));
+          const after=JSON.parse(fs.readFileSync('package-lock.json'));
+          assert.deepEqual(before.packages[''].dependencies, after.packages[''].dependencies);
+          for (const name of Object.keys(before.packages[''].dependencies)) assert.equal(after.packages[`node_modules/${name}`].version,before.packages[`node_modules/${name}`].version,name);
+          const filename='eslint.config.mjs'; let text=fs.readFileSync(filename,'utf8');
+          assert.ok(text.includes('...compat.extends("next/core-web-vitals", "next/typescript"),'));
+          text='import { fixupConfigRules } from "@eslint/compat";\n'+text.replace('...compat.extends("next/core-web-vitals", "next/typescript"),','...fixupConfigRules(compat.extends("next/core-web-vitals", "next/typescript")),');
+          fs.writeFileSync(filename,text);
+          for(const file of ['package.json','package-lock.json','eslint.config.mjs'])fs.copyFileSync(file,`.compat-evidence/candidate/${file}`);
+          NODE
+      - name: Validate actual configured return visitors and retain full source-lint findings
+        run: |
+          node --test scripts/lint-return-compat.test.mjs > .compat-evidence/fixed-tests.log 2>&1
+          set +e
+          npx eslint app components lib --format json > .compat-evidence/source-lint.json 2> .compat-evidence/source-lint-stderr.txt
+          code=$?
+          set -e
+          echo "$code" > .compat-evidence/source-lint-exit.txt
+          test "$code" -le 1
+          npm audit --json > .compat-evidence/npm-audit.json
+      - name: Preserve immutable candidate blob identities without changing branches
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('node:fs');
+            const blobs = {};
+            for (const file of ['package.json', 'package-lock.json', 'eslint.config.mjs']) {
+              const data = fs.readFileSync(`.compat-evidence/candidate/${file}`);
+              const response = await github.rest.git.createBlob({ ...context.repo, content: data.toString('base64'), encoding: 'base64' });
+              blobs[file] = { sha: response.data.sha, bytes: data.length };
+            }
+            fs.writeFileSync('.compat-evidence/candidate-blobs.json', JSON.stringify(blobs, null, 2));
+      - name: Preserve bounded diagnostic and candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hrbp-build-compat-probe
+          path: .compat-evidence/
+          include-hidden-files: true
+          retention-days: 7
