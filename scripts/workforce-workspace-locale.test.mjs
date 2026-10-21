@@ -71,3 +71,39 @@ test('approval paragraph has a scoped typography rule without changing theme tok
   const css=readFileSync('app/work-pay.css','utf8'),match=css.match(/\[data-workforce-live="leave"\] \.workforce-approval-description\s*\{([^}]+)\}/);
   assert.ok(match);assert.match(match[1],/font-size:\s*12px/);assert.match(match[1],/line-height:\s*1\.6/);assert.match(match[1],/var\(--muted\)/);assert.doesNotMatch(match[1],/!important|#[0-9a-f]{3,8}|overflow:\s*hidden/i);
 });
+
+// transpileModule above checks syntax, not type semantics. Exercise the actual
+// leave-unit JSX expression against the closed enum from the Prisma schema so
+// an unreachable fallback cannot pass these component tests but break next build.
+test('leave unit rendering type-checks with the complete Prisma unit union', () => {
+  const source = readFileSync('components/work-pay-live-workspace.tsx', 'utf8');
+  const ast = ts.createSourceFile('workspace.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const expressions = [];
+  const helpers = [];
+  const visit = node => {
+    if (ts.isJsxExpression(node) && node.expression && /\brow\.unit\b/.test(node.expression.getText(ast)) &&
+        !ts.isCallExpression(node.parent)) {
+      // Only the smallest expression using the unit, not an enclosing row map.
+      if (!node.expression.getText(ast).includes('data.rows.map')) expressions.push(node.expression.getText(ast));
+    }
+    if (ts.isFunctionDeclaration(node) && node.name?.text === 'leaveUnitLabel') helpers.push(node.getText(ast));
+    ts.forEachChild(node, visit);
+  };
+  visit(ast);
+  assert.equal(expressions.length, 1, 'Exactly one actual leave-unit display expression is checked');
+  const schema = readFileSync('prisma/schema.prisma', 'utf8');
+  const members = schema.match(/enum\s+LeaveUnit\s*\{([^}]+)\}/)?.[1].match(/^\s*([A-Z][A-Z_0-9]*)\s*$/gm)?.map(x => x.trim());
+  assert.ok(members?.length, 'Read supported units from the committed schema');
+  const filename = '/virtual/hrbp-workspace-unit-check.ts';
+  const text = `type Locale = "en" | "tr";\n` +
+    `declare const row: { unit: ${members.map(x => JSON.stringify(x)).join(' | ')} };\n` +
+    `declare const locale: Locale;\ndeclare function c(en: string, tr: string): string;\n` +
+    helpers.join('\n') + `\nconst rendered: string = (${expressions[0]});\n`;
+  const options = { strict: true, noEmit: true, target: ts.ScriptTarget.ES2022, types: [] };
+  const host = ts.createCompilerHost(options), original = host.getSourceFile.bind(host);
+  host.getSourceFile = (file, language, ...args) => file === filename
+    ? ts.createSourceFile(file, text, language, true) : original(file, language, ...args);
+  const program = ts.createProgram([filename], options, host);
+  const diagnostics = ts.getPreEmitDiagnostics(program).filter(d => d.category === ts.DiagnosticCategory.Error);
+  assert.deepEqual(diagnostics.map(d => ts.flattenDiagnosticMessageText(d.messageText, '\n')), []);
+});
