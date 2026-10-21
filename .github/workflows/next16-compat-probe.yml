@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: write # Only immutable candidate blobs; no ref update or deployment.
     env:
-      DATABASE_URL: postgresql://hrbp:disposable-probe-only@localhost:5432/hrbp_probe
+      DATABASE_URL: postgresql://hrbp:disposable-probe-only@localhost:5432/hrbp
       NEXT_TELEMETRY_DISABLED: 1
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +49,7 @@ jobs:
         run: |
           sudo systemctl start postgresql
           sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE hrbp LOGIN PASSWORD 'disposable-probe-only' CREATEDB"
-          sudo -u postgres createdb -O hrbp hrbp_probe
+          sudo -u postgres createdb -O hrbp hrbp
           npm run db:generate > .framework-evidence/schema.log 2>&1
           npm run db:migrate:upgrade >> .framework-evidence/schema.log 2>&1
       - name: Typecheck, explicit application lint and actual-config regression
