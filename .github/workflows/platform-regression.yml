@@ -70,8 +70,14 @@ jobs:
         run: |
           mkdir -p .audit
           npm ci > .audit/install.log 2>&1
-          npm install --no-save --package-lock=false playwright@1.56.1 > .audit/playwright-install.log 2>&1
-          npx playwright install --with-deps chromium > .audit/browser-install.log 2>&1
+          lock_sha=$(sha256sum package-lock.json)
+          tool_dir=$(mktemp -d "$RUNNER_TEMP/hrbp-browser-tools.XXXXXX")
+          npm install --prefix "$tool_dir" --ignore-scripts --no-save --package-lock=false playwright@1.56.1 > .audit/playwright-install.log 2>&1
+          test ! -e node_modules/playwright
+          ln -s "$tool_dir/node_modules/playwright" node_modules/playwright
+          "$tool_dir/node_modules/.bin/playwright" install --with-deps chromium > .audit/browser-install.log 2>&1
+          test "$lock_sha" = "$(sha256sum package-lock.json)"
+          node scripts/verify-audit-runtime.mjs > .audit/browser-runtime.json
       - name: Verify native download observation independently of application code
         run: |
           node --test scripts/audit-download-observer.test.mjs
