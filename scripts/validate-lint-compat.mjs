@@ -1,5 +1,6 @@
 /** Keep security rollback scoped to tooling, with the actual config and rules still enforced. */
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { ESLint } from 'eslint';
 const require = createRequire(import.meta.url);
@@ -27,4 +28,7 @@ for (const [rule,code] of [
  assert.ok(result.messages.some(x=>x.ruleId==='@next/next/'+rule),`${rule} must execute and reject its fixture`);
  assert.ok(!result.messages.some(x=>x.fatal), 'The fixture must parse successfully.');
 }
-console.log('Lint compatibility: 21 rules/severities, existing config, Next 15 and three ESLint 9 behavior fixtures verified.');
+const regressions = spawnSync(process.execPath, ['--test', 'scripts/lint-return-compat.test.mjs'], { stdio: 'inherit' });
+assert.ifError(regressions.error);
+assert.equal(regressions.status, 0, 'The actual configured return-visitor regressions must pass.');
+console.log('Lint compatibility: all 21 rule severities, original behavior fixtures and eight actual-config regressions verified.');
