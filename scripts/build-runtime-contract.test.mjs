@@ -43,3 +43,20 @@ test('the official compatibility utility is pinned without removing the audited 
   assert.equal(lock.packages['node_modules/@eslint/compat'].version, '2.1.1');
   assert.match(read('eslint.config.mjs'), /fixupConfigRules\(compat\.extends\("next\/core-web-vitals", "next\/typescript"\)\)/);
 });
+
+// The previous production build rewrote these values. Commit the same compiler
+// configuration used by Next so pre-build typechecking does not use another JSX
+// mode and development route types remain included after a clean checkout.
+test('committed TypeScript settings match the automatic JSX runtime used by the production build', () => {
+  const config = JSON.parse(read('tsconfig.json'));
+  assert.equal(config.compilerOptions.jsx, 'react-jsx');
+  for (const option of ['strict', 'noEmit', 'isolatedModules']) assert.equal(config.compilerOptions[option], true, option);
+  assert.equal(config.compilerOptions.moduleResolution, 'bundler');
+  assert.ok(config.include.includes('.next/types/**/*.ts'));
+  assert.ok(config.include.includes('.next/dev/types/**/*.ts'));
+  assert.ok(config.include.includes('**/*.ts') && config.include.includes('**/*.tsx'));
+});
+test('TypeScript config changes trigger the actual browser build acceptance', () => {
+  const lines = read('.github/workflows/ui-deep-inspection.yml').split('\n');
+  assert.ok(lines.includes('      - tsconfig.json'));
+});
