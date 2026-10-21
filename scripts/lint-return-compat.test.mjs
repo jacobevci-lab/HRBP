@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ESLint } from 'eslint';
-import { FlatCompat } from '@eslint/eslintrc';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 const engine = new ESLint();
 async function lint(code, filePath) {
@@ -31,6 +31,10 @@ for (const [heads, violations] of [[1, 0], [2, 1], [3, 2]]) {
   });
 }
 test('the compatibility layer preserves every configured rule severity and option', async () => {
+  // Let ESLint initialize the shareable config before comparing legacy rules.
+  // Eagerly importing FlatCompat changes the Rushstack loader's caller chain.
+  await engine.calculateConfigForFile('components/session-indicator.tsx');
+  const { FlatCompat } = createRequire(import.meta.url)('@eslint/eslintrc');
   const before = new ESLint({ overrideConfigFile: true, overrideConfig: new FlatCompat({ baseDirectory: process.cwd() }).extends('next/core-web-vitals', 'next/typescript') });
   for (const filename of ['components/session-indicator.tsx', 'app/api/action-center/history/export/route.ts']) {
     const [raw, actual] = await Promise.all([before.calculateConfigForFile(filename), engine.calculateConfigForFile(filename)]);
