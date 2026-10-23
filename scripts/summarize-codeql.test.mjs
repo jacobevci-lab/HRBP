@@ -12,9 +12,10 @@ test("summary exposes only rule metadata and repository location", async () => {
     await writeFile(path.join(root, "nested", "javascript.sarif"), JSON.stringify({
       runs: [{
         tool: { driver: { rules: [
-          { id: "js/example-high", name: "Example high", properties: { "security-severity": "8.8" } },
           { id: "js/example-note", name: "Example note", properties: {} }
-        ]}},
+        ]}, extensions: [{ rules: [
+          { id: "js/example-high", name: "Example high", properties: { "security-severity": "8.8" } }
+        ]}] },
         results: [
           { ruleId: "js/example-note", level: "warning", message: { text: "DO NOT COPY secret fixture value" },
             locations: [{ physicalLocation: { artifactLocation: { uri: "lib/other.ts" }, region: { startLine: 9 }}}] },

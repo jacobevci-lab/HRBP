@@ -100,6 +100,7 @@ jobs:
           path: .codeql-summary/
           if-no-files-found: error
           retention-days: 7
+          include-hidden-files: true
 
   attest-main:
     name: Attest main release evidence
