@@ -31,7 +31,8 @@ export async function summarizeCodeql(inputPath) {
   for (const file of await filesUnder(inputPath)) {
     const sarif = JSON.parse(await readFile(file, "utf8"));
     for (const run of Array.isArray(sarif.runs) ? sarif.runs : []) {
-      const ruleSets = [run.tool?.driver?.rules ?? [], ...(run.tool?.extensions ?? []).map(extension => extension?.rules ?? [])];\n      const rules = new Map(ruleSets.flat().map(rule => [rule.id, rule]));
+      const ruleSets = [run.tool?.driver?.rules ?? [], ...(run.tool?.extensions ?? []).map(extension => extension?.rules ?? [])];
+      const rules = new Map(ruleSets.flat().map(rule => [rule.id, rule]));
       for (const result of Array.isArray(run.results) ? run.results : []) {
         const rule = rules.get(result.ruleId);
         const location = result.locations?.[0]?.physicalLocation;
@@ -64,5 +65,6 @@ if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === imp
   const summary = await summarizeCodeql(inputPath);
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeFile(outputPath, JSON.stringify(summary, null, 2) + "\n");
-  console.log(`CODEQL_SUMMARY count=${summary.count} highOrCritical=${summary.highOrCritical}`);\n  console.log(`CODEQL_FINDINGS ${JSON.stringify(summary.findings)}`);
+  console.log(`CODEQL_SUMMARY count=${summary.count} highOrCritical=${summary.highOrCritical}`);
+  console.log(`CODEQL_FINDINGS ${JSON.stringify(summary.findings)}`);
 }
