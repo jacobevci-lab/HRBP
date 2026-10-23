@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { createProductionSbom, SBOM_SCOPE } from "./release-sbom.mjs";
 
 const root = process.cwd();
 const outputDir = path.resolve(root, process.argv[2] || ".release-evidence");
@@ -58,7 +59,7 @@ mkdirSync(outputDir, { recursive: true });
 
 const sbomResult = spawnSync(
   process.platform === "win32" ? "npm.cmd" : "npm",
-  ["sbom", "--omit=dev", "--sbom-format=cyclonedx"],
+  ["sbom", "--package-lock-only", "--include=dev", "--include=optional", "--include=peer", "--sbom-format=cyclonedx", "--sbom-type=application", "--offline"],
   { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
 );
 if (sbomResult.error || sbomResult.status !== 0) {
@@ -74,6 +75,14 @@ try {
 }
 if (sbom?.bomFormat !== "CycloneDX" || !Array.isArray(sbom?.components)) {
   fail("npm sbom did not produce the expected CycloneDX structure.");
+}
+
+try {
+  sbom = createProductionSbom(sbom,
+    JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")),
+    JSON.parse(readFileSync(path.join(root, "package-lock.json"), "utf8")));
+} catch (error) {
+  fail(error instanceof Error ? error.message : "Production SBOM validation failed.");
 }
 
 const sbomPath = path.join(outputDir, "hrbp-one.cdx.json");
@@ -133,6 +142,7 @@ const manifest = {
   sbom: {
     file: path.basename(sbomPath),
     format: "CycloneDX",
+    scope: SBOM_SCOPE,
     sha256: sha256File(sbomPath),
     bytes: statSync(sbomPath).size
   },

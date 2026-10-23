@@ -176,7 +176,9 @@ export async function getPoliciesLiveData(ctx: RequestContext) {
     });
     const due60 = new Date(now); due60.setDate(due60.getDate() + 60);
     const assignments = policies.flatMap((policy) => policy.assignments);
-    const acknowledged = assignments.filter((assignment) => assignment.status === PolicyAssignmentStatus.ACKNOWLEDGED || assignment.status === PolicyAssignmentStatus.WAIVED).length;
+    // Exemption closes an obligation but is not evidence that it was read.
+    // These percentages count actual acknowledgements among visible assignments.
+    const acknowledged = assignments.filter((assignment) => assignment.status === PolicyAssignmentStatus.ACKNOWLEDGED).length;
     const pending = assignments.filter((assignment) => assignment.status === PolicyAssignmentStatus.PENDING || assignment.status === PolicyAssignmentStatus.OVERDUE).length;
     const published = policies.filter((policy) => policy.status === PolicyStatus.PUBLISHED).length;
     const activeExceptions = governance ? policies.reduce((sum, policy) => sum + (Array.isArray(policy.exceptions) ? policy.exceptions.filter((item) => item.status === PolicyExceptionStatus.APPROVED && item.active && (!item.expiresAt || item.expiresAt > now)).length : 0), 0) : 0;
@@ -189,7 +191,7 @@ export async function getPoliciesLiveData(ctx: RequestContext) {
       acknowledgement: percent(acknowledged, assignments.length), pending, activeExceptions, pendingExceptions,
       rows: policies.map((policy) => ({
         id: policy.id, code: policy.code, title: policy.title, version: policy.version, jurisdiction: policy.jurisdiction ?? "Global", audience: policy.audience ?? "Configured population",
-        acknowledged: percent(policy.assignments.filter((assignment) => assignment.status === PolicyAssignmentStatus.ACKNOWLEDGED || assignment.status === PolicyAssignmentStatus.WAIVED).length, policy.assignments.length),
+        acknowledged: percent(policy.assignments.filter((assignment) => assignment.status === PolicyAssignmentStatus.ACKNOWLEDGED).length, policy.assignments.length),
         assignmentStatus: selfService ? enumLabel(policy.assignments[0]?.status ?? PolicyAssignmentStatus.PENDING) : null,
         reviewDueAt: formatDate(policy.reviewDueAt), effectiveFrom: formatDate(policy.effectiveFrom), status: enumLabel(policy.status), rawStatus: policy.status, ownerId: policy.ownerId, approvedById: policy.approvedById
       }))

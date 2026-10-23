@@ -9,8 +9,9 @@ const routePath = "app/api/settings/notifications/operations/route.ts";
 const route = await source(routePath);
 expect(routePath, route, /can\(ctx,\s*"settings:read"\)/, "notification operations telemetry must require settings read authority");
 expect(routePath, route, /tenantId:\s*ctx\.tenantId/, "notification operations telemetry must remain tenant scoped");
-expect(routePath, route, /take:\s*limitFrom\(request\)/, "notification operations telemetry must remain bounded");
-expect(routePath, route, /status:\s*\{\s*in:\s*operationalStatuses\s*\}/, "operations view must project only open delivery states");
+expect(routePath, route, /limit > 100[\s\S]*take: paged \? limit \+ 1 : limit[\s\S]*items\.slice\(0, limit\)/, "notification operations telemetry must cap response rows at 100 with one-row page lookahead");
+expect(routePath, route, /operationalStates[\s\S]*status: filter === "ALL" \? \{ in: \[\.\.\.operationalStates\]/, "operations view must project only allowlisted open delivery states");
+expect(routePath, route, /safeOperationalError\(item.lastError\)/, "operations errors must be allowlisted, not raw provider diagnostics");
 expect(routePath, route, /lastError:\s*true/, "operations view must expose bounded dispatcher errors");
 reject(routePath, route, /payload:\s*true|dedupeKey:\s*true|recipientUserId:\s*true/, "operations telemetry must not project notification payloads, dedupe keys or recipients");
 
@@ -26,8 +27,15 @@ expect(retryPath, retry, /attempts:\s*0[\s\S]*nextAttemptAt:\s*new Date\(\)/, "r
 
 const componentPath = "components/notification-operations-console.tsx";
 const component = await source(componentPath);
-expect(componentPath, component, /\/api\/settings\/notifications\/operations/, "operations console must consume the governed telemetry route");
-expect(componentPath, component, /\/api\/settings\/notifications\/retry/, "operations console must use the governed retry route");
+const hooksPath = "components/use-notification-operations.ts";
+const hooks = await source(hooksPath);
+expect(componentPath, component, /useOperationsRead\(filter, 100, true, selected\?\.after \?\? null\)/, "operations console must consume the scoped read hook");
+expect(componentPath, component, /useNotificationRetry\(tr, canWrite\)/, "operations console must use the capability-gated retry hook");
+expect(hooksPath, hooks, /parsePagedOpsData/, "paged operations reads must validate the requested position and returned boundary");
+expect(routePath, route, /parseOperationsCursor/, "page positions must be scoped and validated before querying");
+expect(hooksPath, hooks, /\/api\/settings\/notifications\/operations/, "operations hook must call the governed telemetry route");
+expect(hooksPath, hooks, /\/api\/settings\/notifications\/retry/, "operations hook must call the governed retry route");
+expect(retryPath, retry, /parseRetryCommand[\s\S]*result.count !== command.items.length[\s\S]*appendAudit[\s\S]*Serializable/, "retry must require explicit reviewed records and atomically reject partial claims before audit");
 expect(componentPath, component, /FAILED[\s\S]*DEAD_LETTER/, "operations console must expose failure state filters");
 expect(componentPath, component, /canWrite/, "retry controls must be capability-gated");
 expect(componentPath, component, /payload data is never projected|payload verisi bu ekrana taşınmaz/, "operations console must disclose minimized data projection");

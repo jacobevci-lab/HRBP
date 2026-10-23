@@ -148,7 +148,7 @@ export async function sendSmtpNotification(
 
     const accepted = Array.isArray(result.accepted) ? result.accepted.map(String) : [];
     const rejected = Array.isArray(result.rejected) ? result.rejected.map(String) : [];
-    if (accepted.length !== 1 || rejected.length !== 0) throw new Error("SMTP_RECIPIENT_REJECTED");
+    if (accepted.length !== 1 || validEmailAddress(accepted[0]) !== recipient || rejected.length !== 0) throw new Error("SMTP_RECIPIENT_REJECTED");
 
     return {
       accepted: 1,
@@ -161,6 +161,9 @@ export async function sendSmtpNotification(
     }
     throw new Error("SMTP_DELIVERY_FAILED");
   } finally {
-    if (transport && typeof transport.close === "function") transport.close();
+    // Cleanup cannot undo an SMTP acceptance, or mask the original error.
+    // Suppress only cleanup failures; sendMail errors still propagate above.
+    try { if (transport && typeof transport.close === "function") await transport.close(); }
+    catch { /* No retry or provider detail logging from cleanup. */ }
   }
 }

@@ -1,0 +1,22 @@
+.root { margin-top: 8px; font-size: 12px; }
+.root button { font: inherit; color: var(--text); background: var(--surface, #fff); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; min-height: 36px; cursor: pointer; }
+.root button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.root button:disabled { cursor: wait; opacity: .6; }
+.root .trigger { color: var(--accent); padding: 5px 9px; }
+.dialog { width: min(760px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 24px); margin: auto; padding: 0; color: var(--text); background: var(--surface, #fff); border: 1px solid var(--line); border-radius: 14px; box-sizing: border-box; overflow: hidden; text-align: left; white-space: normal; }
+.dialog[open] { display: flex; flex-direction: column; }
+.dialog::backdrop { background: rgb(0 0 0 / 55%); }
+.header, .footer { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; flex-shrink: 0; padding: 14px 16px; }
+.header { border-bottom: 1px solid var(--line); }
+.header h3 { margin: 0; font-size: 16px; }
+.footer { border-top: 1px solid var(--line); }
+.body { overflow: auto; min-height: 0; padding: 16px; overscroll-behavior: contain; }
+.request, .message, .privateNote { border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; overflow-wrap: anywhere; }
+.request h4 { margin: 8px 0; font-size: 15px; }
+.request p, .messages p { margin: 8px 0 0; white-space: pre-wrap; line-height: 1.6; overflow-wrap: anywhere; }
+.messages { list-style: none; margin: 12px 0; padding: 0; display: grid; gap: 12px; }
+.privateNote { border-inline-start: 3px solid var(--orange, var(--accent)); background: var(--accent-soft); }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; }
+.meta time, .hint { color: var(--muted); line-height: 1.5; }
+.badge { display: inline-block; font-size: 11px; margin-top: 8px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 6px; }
+@media (max-width: 480px) { .header, .footer, .body { padding: 12px; } .footer { align-items: stretch; } .footer button { width: 100%; } .header h3 { font-size: 14px; } }

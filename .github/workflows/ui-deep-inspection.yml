@@ -1,0 +1,183 @@
+name: UI Deep Inspection
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - package.json
+      - tsconfig.json
+      - package-lock.json
+      - eslint.config.mjs
+      - scripts/lint-return-compat.test.mjs
+      - scripts/validate-lint-compat.mjs
+      - scripts/build-runtime-contract.test.mjs
+      - components/work-pay-live-workspace.tsx
+      - components/growth-live-workspace.tsx
+      - app/work-pay.css
+      - scripts/workforce-workspace-locale*
+      - scripts/verify-audit-runtime*
+      - app/api/leave/requests/**
+      - lib/leave-input.ts
+      - lib/leave-client-action.ts
+      - scripts/leave-unit-binding.test.mjs
+      - scripts/leave-unit-binding-browser.mjs
+      - scripts/browser-json-observer.mjs
+      - scripts/browser-json-observer.test.mjs
+      - components/leave-participant-console.tsx
+      - scripts/leave-unit-browser.mjs
+      - scripts/leave-client-action.test.mjs
+      - app/module/people/new/**
+      - app/module/positions/new/**
+      - app/api/hr-service/queues/**
+      - app/api/hr-service/requests/**
+      - components/hr-service-conversation*
+      - components/hr-service-lifecycle-panel.tsx
+      - scripts/hr-service-conversation*
+      - scripts/hr-service-routing*
+      - scripts/hr-service-read-privacy*
+      - app/api/policies/**
+      - components/engagement-*
+      - components/policy-*
+      - components/use-policy-dialog.ts
+      - components/app-shell.tsx
+      - components/navigation-*
+      - components/hr-service-queue-admin*
+      - components/hr-service-*
+      - scripts/hr-service-ui.test.mjs
+      - scripts/hr-service-browser.mjs
+      - lib/engagement-authoring-copy.ts
+      - lib/employee-services-live-data.ts
+      - scripts/create-page-authorization.test.mjs
+      - scripts/engagement-authoring-ui.test.mjs
+      - scripts/policy-actions-ui.test.mjs
+      - scripts/policy-action-recovery.test.mjs
+      - scripts/policy-forms-ui.test.mjs
+      - scripts/policy-dialog.test.mjs
+      - scripts/policy-forms-browser.mjs
+      - scripts/policy-assignment-exception.test.mjs
+      - scripts/policy-assignment-exception-regression.mjs
+      - scripts/policy-reader.test.mjs
+      - scripts/policy-acknowledgement-metrics.test.mjs
+      - scripts/policy-acknowledgement-route.test.mjs
+      - scripts/policy-acknowledgement-regression.mjs
+      - scripts/ui-deep-audit.mjs
+      - scripts/ui-navigation-regression.mjs
+      - scripts/ui-queue-regression.mjs
+      - scripts/ui-policy-regression.mjs
+      - app/api/settings/notifications/smtp-test/**
+      - components/smtp-test-action.tsx
+      - lib/smtp-notification-provider.ts
+      - scripts/smtp-verification*
+      - scripts/notification-pagination*
+      - scripts/notification-retry*
+      - app/api/settings/notifications/operations/**
+      - app/api/settings/notifications/retry/**
+      - components/notification-operations*
+      - components/notification-dead-letter-action.tsx
+      - components/use-notification-operations.ts
+      - lib/notification-retry-contract.ts
+      - .github/workflows/ui-deep-inspection.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ui-deep-inspection-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: postgresql://hrbp:disposable-ui-only@127.0.0.1:5432/hrbp_audit
+      CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://hrbp:disposable-ui-only@127.0.0.1:5432/hrbp_audit
+      HRBP_DISPOSABLE_AUDIT: "true"
+      HRBP_LOCAL_AUTH_ENABLED: "true"
+      HRBP_AUTH_TENANT_ID: tenant-acme-global
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Initialize disposable database and ephemeral local secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .audit
+          sudo systemctl start postgresql
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE hrbp LOGIN PASSWORD 'disposable-ui-only' CREATEDB"
+          sudo -u postgres createdb -O hrbp hrbp_audit
+          for name in HRBP_SESSION_SECRET HRBP_TEST_ADMIN_PASSWORD HRBP_ENGAGEMENT_RESPONSE_SECRET; do
+            value=$(openssl rand -hex 48)
+            echo "::add-mask::$value"
+            echo "$name=$value" >> "$GITHUB_ENV"
+          done
+      - name: Install application and Chromium
+        run: |
+          npm ci > .audit/install.log 2>&1
+          lock_sha=$(sha256sum package-lock.json)
+          tool_dir=$(mktemp -d "$RUNNER_TEMP/hrbp-browser-tools.XXXXXX")
+          npm install --prefix "$tool_dir" --ignore-scripts --no-save --package-lock=false playwright@1.56.1 > .audit/playwright-install.log 2>&1
+          test ! -e node_modules/playwright
+          ln -s "$tool_dir/node_modules/playwright" node_modules/playwright
+          "$tool_dir/node_modules/.bin/playwright" install --with-deps chromium > .audit/browser-install.log 2>&1
+          test "$lock_sha" = "$(sha256sum package-lock.json)"
+          node scripts/verify-audit-runtime.mjs > .audit/browser-runtime.json
+      - name: Authorization, authoring, policy and service component regression tests
+        run: node --test scripts/create-page-authorization.test.mjs scripts/engagement-authoring-ui.test.mjs scripts/policy-actions-ui.test.mjs scripts/policy-reader.test.mjs scripts/policy-acknowledgement-metrics.test.mjs scripts/policy-acknowledgement-route.test.mjs scripts/policy-assignment-exception.test.mjs scripts/policy-forms-ui.test.mjs scripts/policy-dialog.test.mjs scripts/policy-action-recovery.test.mjs scripts/hr-service-ui.test.mjs scripts/hr-service-conversation.test.mjs scripts/hr-service-conversation-compose.test.mjs scripts/hr-service-revision.test.mjs scripts/hr-service-read-privacy.test.mjs scripts/hr-service-routing.test.mjs scripts/hr-service-routing-recovery.test.mjs scripts/smtp-verification.test.mjs scripts/notification-retry.test.mjs scripts/notification-retry-fixture.test.mjs scripts/notification-pagination.test.mjs scripts/leave-client-action.test.mjs scripts/leave-unit-binding.test.mjs scripts/browser-json-observer.test.mjs scripts/workforce-workspace-locale.test.mjs scripts/verify-audit-runtime.test.mjs
+      - name: Migrate and seed isolated product domains
+        run: |
+          npx prisma generate > .audit/schema.log 2>&1
+          npm run db:migrate:upgrade >> .audit/schema.log 2>&1
+          for script in seed-staging seed-work-pay-staging seed-access-staging seed-growth-staging seed-connected-growth-staging seed-services-staging seed-service-governance-staging seed-governance-planning-staging; do
+            node "scripts/$script.mjs" >> .audit/seed.log 2>&1 || { tail -40 .audit/seed.log; exit 1; }
+          done
+      - name: Validate explicit lint and configured build contracts
+        run: |
+          npm run lint:app > .audit/lint.log 2>&1
+          npm run lint-compat:validate > .audit/lint-compat.log 2>&1
+      - name: Build actual production application
+        run: npx next build --webpack > .audit/build.log 2>&1 || { tail -80 .audit/build.log; exit 1; }
+      - name: Inspect module views, valid CRUD and real navigation transitions
+        run: |
+          node node_modules/next/dist/bin/next start --hostname localhost --port 3100 > .audit/server.log 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          ready=0
+          for i in {1..30}; do
+            if curl --fail --silent http://localhost:3100/api/health/runtime >/dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1 || { tail -60 .audit/server.log; exit 1; }
+          result=0
+          node scripts/ui-deep-audit.mjs || result=1
+          node scripts/ui-navigation-regression.mjs || result=1
+          node scripts/ui-queue-regression.mjs || result=1
+          node scripts/ui-policy-regression.mjs || result=1
+          node scripts/policy-acknowledgement-regression.mjs || result=1
+          node scripts/policy-assignment-exception-regression.mjs || result=1
+          node scripts/policy-forms-browser.mjs || result=1
+          node scripts/hr-service-browser.mjs || result=1
+          node scripts/hr-service-conversation-browser.mjs || result=1
+          node scripts/hr-service-conversation-compose-browser.mjs || result=1
+          node scripts/hr-service-read-privacy-browser.mjs || result=1
+          node scripts/hr-service-routing-browser.mjs || result=1
+          node scripts/hr-service-revision-browser.mjs || result=1
+          node scripts/hr-service-revision-review-browser.mjs || result=1
+          node scripts/smtp-verification-browser.mjs || result=1
+          node scripts/notification-retry-browser.mjs || result=1
+          node scripts/notification-pagination-browser.mjs || result=1
+          node scripts/leave-unit-browser.mjs || result=1
+          node scripts/leave-unit-binding-browser.mjs || result=1
+          node scripts/workforce-workspace-locale-browser.mjs || result=1
+          exit "$result"
+      - name: Preserve exact checked-out source without runtime secrets
+        if: always()
+        run: git archive --format=tar.gz HEAD > .audit/tested-source.tar.gz
+      - name: Preserve report and synthetic screenshots even on findings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hrbp-ui-deep-inspection
+          path: .audit/
+          include-hidden-files: true
+          retention-days: 7

@@ -63,7 +63,6 @@ expect(actionPath, actions, /PRIVATE_NOTE/, "service staff must be able to recor
 expect(actionPath, actions, /resourceType:\s*"HRServiceRequest"[\s\S]*resourceId:\s*requestId[\s\S]*read:\s*true/, "successful HR Service actions must retire the actor's stale notifications for that request");
 expect(actionPath, actions, /hrbp:notifications-changed/, "notification badges must refresh after request action acknowledgement");
 
-
 const actionCenterDataPath = "lib/lifecycle-action-center.ts";
 const actionCenterData = await source(actionCenterDataPath);
 expect(actionCenterDataPath, actionCenterData, /isHRServiceStaffRole\(ctx\.role\)/, "HR Service quick progression must be limited to service staff roles");
@@ -75,13 +74,23 @@ const actionCenterUiPath = "components/workflow-action-center.tsx";
 const actionCenterUi = await source(actionCenterUiPath);
 expect(actionCenterUiPath, actionCenterUi, /item\.action\.type === "advance-hr-service"/, "Action Center must understand HR Service quick progression");
 expect(actionCenterUiPath, actionCenterUi, /\/api\/hr-service\/requests\//, "HR Service quick progression must use the governed status endpoint");
-expect(actionCenterUiPath, actionCenterUi, /payload = \{ status: item\.action\.status \}/, "HR Service quick progression must remain limited to precomputed safe target states");
+expect(actionCenterUiPath, actionCenterUi, /payload = \{ status: item\.action\.status, expectedUpdatedAt: item\.action\.expectedUpdatedAt \}/, "HR Service quick progression must remain limited to precomputed safe target states");
 expect(actionCenterUiPath, actionCenterUi, /resourceType:\s*"HRServiceRequest"/, "successful HR Service quick actions must clear matching notifications");
 
 const formPath = "components/hr-service-request-form.tsx";
 const form = await source(formPath);
 expect(formPath, form, /maxLength=\{80\}[\s\S]*maxLength=\{200\}[\s\S]*maxLength=\{4000\}/, "intake UI must mirror bounded request fields");
-expect(formPath, form, /fetch\("\/api\/hr-service\/requests"/, "intake UI must use the governed request endpoint");
+// Transport moved to the tested receipt guard; verify the owning URL and
+// helper delegation together instead of requiring an inline fetch call.
+expect(formPath, form, /url: "\/api\/hr-service\/requests"/, "intake UI must use the governed request endpoint");
+expect(formPath, form, /action\.run\([\s\S]*acceptsServiceIntake/, "intake success must validate the bound response");
+expect(actionPath, actions, /acceptsServiceComment/, "comment success must validate author, body and visibility");
+const guardPath = "components/hr-service-action-state.ts";
+const guard = await source(guardPath);
+expect(guardPath, guard, /fetch\(options\.url/, "guard must execute the owning endpoint");
+expect(guardPath, guard, /window\.confirm/, "writes must retain explicit confirmation");
+expect(guardPath, guard, /response\.status === options\.expectedStatus/, "success needs the expected HTTP status");
+expect(guardPath, guard, /outcomes\.current\.has\(key\)/, "unknown outcomes must not unlock replay");
 
 const panelPath = "components/hr-service-lifecycle-panel.tsx";
 const panel = await source(panelPath);

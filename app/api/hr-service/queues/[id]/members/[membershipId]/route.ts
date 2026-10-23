@@ -17,6 +17,13 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!id || !membershipId) return Response.json({ error: "Valid queue and membership ids are required." }, { status: 400 });
 
   const result = await db.$transaction(async (tx) => {
+    // The same tenant-scoped row lock as add/update protects the last owner
+    // across concurrent delete/delete and delete/demote transactions.
+    const queues = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "HRServiceQueue"
+      WHERE "id" = ${id} AND "tenantId" = ${ctx.tenantId} FOR UPDATE
+    `;
+    if (!queues.length) throw new Error("NOT_FOUND");
     const membership = await tx.hRServiceQueueMembership.findFirst({ where: { id: membershipId, tenantId: ctx.tenantId, queueId: id } });
     if (!membership) throw new Error("NOT_FOUND");
     if (membership.role === ServiceQueueRole.OWNER) {

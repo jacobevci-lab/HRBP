@@ -5,6 +5,8 @@ import type { Locale } from "@/lib/i18n";
 import { formatHRServiceLifecycleDate, getHRServiceLifecycleLiveData } from "@/lib/hr-service-lifecycle-live-data";
 import { getServerRequestContext } from "@/lib/server-session";
 import { HRServiceLifecycleActions } from "@/components/hr-service-lifecycle-actions";
+import { HRServiceRouting } from "@/components/hr-service-routing";
+import { HRServiceConversation } from "@/components/hr-service-conversation";
 import { HRServiceRequestForm } from "@/components/hr-service-request-form";
 
 function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
@@ -49,15 +51,16 @@ export async function HRServiceLifecyclePanel({ focus }: { focus?: string }) {
         const focused = row.id === data.focusedRequestId;
         return <tr key={row.id} style={focused ? { background: "var(--accent-soft)", boxShadow: "inset 3px 0 0 var(--accent)" } : undefined}>
           <td><strong>{row.requestNumber}</strong>{focused ? <small className="cell-sub">{c(locale, "Linked action", "Bağlantılı aksiyon")}</small> : <small className="cell-sub">{row.category} · {row.priority}</small>}</td>
-          <td>{row.title}{focused ? <small className="cell-sub">{row.category} · {row.priority}</small> : null}</td>
+          <td>{row.title}<HRServiceConversation requestId={row.id} locale={locale}/>{focused ? <small className="cell-sub">{row.category} · {row.priority}</small> : null}</td>
           <td><em className={`services-pill ${row.rawStatus.toLowerCase().replace(/_/g, "-")}`}>{row.status}</em></td>
           <td>{row.slaPaused ? <><PauseCircle size={13}/> {c(locale, "Paused", "Duraklatıldı")}</> : row.sla}{row.escalationLevel ? <small className="cell-sub">L{row.escalationLevel} {c(locale, "escalation", "eskalasyon")}</small> : null}</td>
-          <td>{row.queue}<small className="cell-sub">{row.assigneeId ? c(locale, "Assigned", "Atanmış") : c(locale, "Unassigned", "Atanmamış")}</small></td>
+          <td>{row.queue}{canWrite && !data.selfService && !terminal ? <HRServiceRouting requestId={row.id} expectedUpdatedAt={row.updatedAt} status={row.rawStatus} locale={locale}/> : null}<small className="cell-sub">{row.assigneeId ? c(locale, "Assigned", "Atanmış") : c(locale, "Unassigned", "Atanmamış")}</small></td>
           <td>{row.lastTransition}<small className="cell-sub">{formatHRServiceLifecycleDate(row.lastTransitionAt)}</small></td>
           <td>{row.openPauseReason ?? row.lastTransitionReason ?? "—"}<small className="cell-sub">{row.lastTransitionActorId ? `${c(locale, "Actor", "İşlemi yapan")}: ${row.lastTransitionActorId}` : c(locale, "Domain evidence", "Domain kanıtı")}</small></td>
-          {canWrite ? <td>{terminal ? <small>{c(locale, "Read only", "Salt okunur")}</small> : <HRServiceLifecycleActions requestId={row.id} status={row.rawStatus} locale={locale} staff={!data.selfService}/>}</td> : null}
+          {canWrite ? <td>{terminal ? <small>{c(locale, "Read only", "Salt okunur")}</small> : <HRServiceLifecycleActions requestId={row.id} expectedUpdatedAt={row.updatedAt} status={row.rawStatus} locale={locale} staff={!data.selfService}/>}</td> : null}
         </tr>;
       }) : <tr><td colSpan={canWrite ? 8 : 7} style={{ textAlign: "center", padding: 26 }}>{c(locale, "No HR service requests are visible in this scope.", "Bu kapsamda görünür İK hizmet talebi bulunmuyor.")}</td></tr>}</tbody></table></div>
     </section>
   </div>;
 }
+
