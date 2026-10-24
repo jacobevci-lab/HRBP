@@ -43,9 +43,9 @@ CREATE TABLE "AuditHistoryVerificationProgress" (
     )
 );
 
-CREATE INDEX "AuditHistoryVerificationProgress_status_lastAttemptAt_tenantId_idx"
+CREATE INDEX "AuditHistoryProgress_status_attempt_tenant_idx"
   ON "AuditHistoryVerificationProgress"("status", "lastAttemptAt", "tenantId");
-CREATE INDEX "AuditHistoryVerificationProgress_lastSuccessAt_tenantId_idx"
+CREATE INDEX "AuditHistoryProgress_success_tenant_idx"
   ON "AuditHistoryVerificationProgress"("lastSuccessAt", "tenantId");
 
 CREATE TABLE "AuditHistoryVerificationStats" (
