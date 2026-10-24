@@ -879,3 +879,42 @@ model AuditVerificationProgress {
 
   @@index([lastSuccessAt, tenantId])
 }
+
+// Cross-run full-history verification progress. This is operational state in the
+// application database, NOT an independent trust anchor. It never stores event
+// payloads; signed checkpoints remain outside this database.
+model AuditHistoryVerificationProgress {
+  tenantId          String @id
+  scanVersion       Int @default(1)
+  scheduleVersion   Int @default(1)
+  status            String
+  targetSequence    BigInt?
+  targetTailHash    String?
+  verifiedSequence  BigInt @default(0)
+  verifiedHash      String?
+  checkedEvents     BigInt @default(0)
+  scanStartedAt     DateTime
+  targetCapturedAt  DateTime
+  lastAttemptAt     DateTime
+  lastSuccessAt     DateTime?
+  lastFailureAt     DateTime?
+  completedAt       DateTime?
+  failureCode       String?
+
+  @@index([status, lastAttemptAt, tenantId])
+  @@index([lastSuccessAt, tenantId])
+}
+
+// Deployment-wide monotonic counters for private aggregate monitoring only.
+// Prometheus can derive throughput from eventsChecked without tenant labels.
+model AuditHistoryVerificationStats {
+  id              String @id
+  scanVersion     Int @default(1)
+  eventsChecked   BigInt @default(0)
+  partialChunks   BigInt @default(0)
+  successfulScans BigInt @default(0)
+  failedScans     BigInt @default(0)
+  lastAttemptAt   DateTime?
+  lastSuccessAt   DateTime?
+  lastFailureAt   DateTime?
+}
