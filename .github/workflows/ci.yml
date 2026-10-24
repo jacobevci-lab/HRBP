@@ -902,6 +902,7 @@ jobs:
               !/^hrbp_emergency_access_active [0-9]+$/m.test(text) ||
               !/^hrbp_audit_history_tenant_universe [0-9]+$/m.test(text) ||
               !/^hrbp_audit_history_untracked_tenants [0-9]+$/m.test(text) ||
+              !/^hrbp_audit_history_orphaned_progress_records [0-9]+$/m.test(text) ||
               !/^hrbp_audit_history_records\{status="RUNNING"\} [0-9]+$/m.test(text) ||
               !/^hrbp_audit_history_records\{status="VALID"\} [0-9]+$/m.test(text) ||
               !/^hrbp_audit_history_records\{status="INVALID"\} [0-9]+$/m.test(text) ||
