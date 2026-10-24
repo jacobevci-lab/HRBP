@@ -95,6 +95,8 @@ jobs:
       - name: Verify required Cloudflare manifest inlining
         run: node --test scripts/cloudflare-manifest.test.mjs
       - run: npm run cf:build
+      - name: Validate Cloudflare deploy bundle without publishing
+        run: npx wrangler deploy --dry-run
       - name: Validate on-prem Compose and build runtime image
         shell: bash
         run: |
