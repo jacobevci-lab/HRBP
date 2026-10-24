@@ -316,6 +316,7 @@ export async function advanceAuditHistoryVerification(now = new Date()) {
 
 type AggregateRow = {
   trackedTenants: bigint;
+  orphanedProgressRecords: bigint;
   running: bigint;
   valid: bigint;
   invalid: bigint;
@@ -328,19 +329,22 @@ export async function auditHistoryAggregateMetrics(now = new Date()) {
   const [tenantUniverse, rows, stats] = await Promise.all([
     db.tenant.count(),
     db.$queryRaw<AggregateRow[]>`
-      SELECT COUNT(*)::bigint AS "trackedTenants",
-        COUNT(*) FILTER (WHERE "status" = 'RUNNING')::bigint AS "running",
-        COUNT(*) FILTER (WHERE "status" = 'VALID')::bigint AS "valid",
-        COUNT(*) FILTER (WHERE "status" = 'INVALID')::bigint AS "invalid",
-        COALESCE(SUM(CASE WHEN "status" = 'RUNNING' AND "targetSequence" IS NOT NULL
-          THEN GREATEST("targetSequence" - "verifiedSequence", 0) ELSE 0 END), 0)::bigint AS "backlogEvents",
-        MIN("scanStartedAt") FILTER (WHERE "status" = 'RUNNING') AS "oldestRunningAt"
-      FROM "AuditHistoryVerificationProgress"
+      SELECT COUNT(*) FILTER (WHERE t."id" IS NOT NULL)::bigint AS "trackedTenants",
+        COUNT(*) FILTER (WHERE t."id" IS NULL)::bigint AS "orphanedProgressRecords",
+        COUNT(*) FILTER (WHERE t."id" IS NOT NULL AND p."status" = 'RUNNING')::bigint AS "running",
+        COUNT(*) FILTER (WHERE t."id" IS NOT NULL AND p."status" = 'VALID')::bigint AS "valid",
+        COUNT(*) FILTER (WHERE t."id" IS NOT NULL AND p."status" = 'INVALID')::bigint AS "invalid",
+        COALESCE(SUM(CASE WHEN t."id" IS NOT NULL AND p."status" = 'RUNNING' AND p."targetSequence" IS NOT NULL
+          THEN GREATEST(p."targetSequence" - p."verifiedSequence", 0) ELSE 0 END), 0)::bigint AS "backlogEvents",
+        MIN(p."scanStartedAt") FILTER (WHERE t."id" IS NOT NULL AND p."status" = 'RUNNING') AS "oldestRunningAt"
+      FROM "AuditHistoryVerificationProgress" p
+      LEFT JOIN "Tenant" t ON t."id" = p."tenantId"
     `,
     db.auditHistoryVerificationStats.findUnique({ where: { id: STATS_KEY } })
   ]);
   const row = rows[0] ?? {
-    trackedTenants: 0n, running: 0n, valid: 0n, invalid: 0n, backlogEvents: 0n, oldestRunningAt: null
+    trackedTenants: 0n, orphanedProgressRecords: 0n,
+    running: 0n, valid: 0n, invalid: 0n, backlogEvents: 0n, oldestRunningAt: null
   };
   const tracked = Number(row.trackedTenants <= BigInt(Number.MAX_SAFE_INTEGER) ? row.trackedTenants : BigInt(Number.MAX_SAFE_INTEGER));
   const age = (value: Date | null | undefined) =>
@@ -349,6 +353,7 @@ export async function auditHistoryAggregateMetrics(now = new Date()) {
     tenantUniverse,
     trackedTenants: row.trackedTenants.toString(),
     untrackedTenants: Math.max(0, tenantUniverse - tracked),
+    orphanedProgressRecords: row.orphanedProgressRecords.toString(),
     running: row.running.toString(),
     valid: row.valid.toString(),
     invalid: row.invalid.toString(),
