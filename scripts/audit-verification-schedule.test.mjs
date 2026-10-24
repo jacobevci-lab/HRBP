@@ -110,6 +110,29 @@ test("durable pages ignore skipped wall-clock slots and commit only completed te
   assert.ok([...f.receipts.values()].every(count => count === 1));
 });
 
+test("fenced partial persistence commits work without advancing the tenant cursor", async () => {
+  const f = fixture(2);
+  const lease = await f.scheduler.start(1);
+  await f.scheduler.persist(lease, tx => tx.record("partial-tenant-0"));
+  assert.equal(f.receipts.get("partial-tenant-0"), 1);
+  assert.equal(f.state.cursorTenantId, null);
+  assert.equal(lease.nextIndex, 0);
+  await f.scheduler.release(lease);
+  const resumed = await f.scheduler.start(1);
+  assert.equal(resumed.tenants[0].id, "tenant-0");
+});
+
+test("lease expiry during partial persistence rolls back the callback and retains the cursor", async () => {
+  const f = fixture(2);
+  const lease = await f.scheduler.start(1);
+  await assert.rejects(f.scheduler.persist(lease, async tx => {
+    await tx.record("partial-expired"); f.advance(120_001);
+  }), error => error.code === "AUDIT_SCHEDULE_LEASE_LOST");
+  assert.equal(f.receipts.has("partial-expired"), false);
+  assert.equal(f.state.cursorTenantId, null);
+  assert.equal(lease.nextIndex, 0);
+});
+
 test("an uncommitted receipt and cursor roll back together", async () => {
   const f = fixture();
   const lease = await f.scheduler.start(2);
@@ -219,6 +242,8 @@ test("queries remain parameter bound, short-transaction based and payload-free",
   assert.match(source, /clock_timestamp\(\)/);
   assert.match(source, /const LEASE_MS = 120_000/);
   assert.match(source, /take: take \+ 1/);
+  assert.match(source, /async persist<T>\(lease: Lease/);
+  assert.match(source, /owned\(await lock\(tx\), persistenceLease\)/);
   assert.doesNotMatch(source, /setInterval|setTimeout|skip:/);
 });
 
