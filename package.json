@@ -137,7 +137,7 @@
     "eslint-config-next": "^15.2.4",
     "prisma": "6.19.3",
     "typescript": "^5.7.2",
-    "wrangler": "4.148.0"
+    "wrangler": "4.152.0"
   },
   "overrides": {
     "postcss": "^8.5.23",
@@ -150,10 +150,7 @@
     "@node-minify/core": {
       "glob": "10.5.0"
     },
-    "body-parser": "2.4.0",
-    "miniflare": {
-      "undici": "7.30.1"
-    }
+    "body-parser": "2.4.0"
   },
   "overridesRationale": {
     "postcss": "Security override for GHSA-qx2v-qp2m-jg93, GHSA-6g55-p6wh-862q, GHSA-fxqj-rqcc-2cmp and GHSA-r28c-9q8g-f849 while remaining on the validated Next.js 15 line.",
@@ -162,6 +159,6 @@
     "sharp": "Security override for GHSA-wq5f-xc86-pv6w / CVE-2026-96889 in the Miniflare/Wrangler development toolchain. Keep production dependencies unchanged while forcing the patched Sharp line; remove once the pinned Cloudflare toolchain resolves to a patched Sharp transitively.",
     "@node-minify/core": "OpenNext AWS 4.1.11 introduces @node-minify/core 9.0.2 with glob 10.3.3. Pin its glob to the patched 10.5.0 release for GHSA-5j98-mcp5-4vw2; retain full dependency audit and verify the actual Worker build/minification path.",
     "body-parser": "Security override for GHSA-27r3-jxmh-p828. Express 5 accepts body-parser ^2.3.0; pin the patched 2.4.0 line until the lock graph naturally resolves to a fixed version.",
-    "miniflare": "Security override for the Wrangler development/runtime test toolchain: Miniflare currently pins undici 7.29.1; force patched undici 7.30.1 for the October 2026 high-severity Undici advisories without downgrading Wrangler."
+    "wrangler": "Wrangler 4.152.0 is within @opennextjs/cloudflare 1.20.12 peer range (^4.148.0) and refreshes the Cloudflare/Miniflare toolchain after October 2026 Undici security advisories."
   }
 }
