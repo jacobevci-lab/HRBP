@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, readFile, writeFile, rm, lstat, symlink } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm, lstat, symlink, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRetryTestBindings } from './notification-retry-fixture.mjs';
@@ -28,6 +28,14 @@ test('fixture cleanup preserves a file changed by another writer', () => tempora
   const clean = await createRetryTestBindings(dir, tenant, env); await writeFile(join(dir, '.dev.vars'), 'NEW=preserve');
   await assert.rejects(clean(), /RETRY_FIXTURE_BINDINGS_CHANGED/);
   assert.equal(await readFile(join(dir, '.dev.vars'), 'utf8'), 'NEW=preserve');
+}));
+test('fixture cleanup preserves a pathname replaced after lease creation', () => temporary(async dir => {
+  const file = join(dir, '.dev.vars');
+  const clean = await createRetryTestBindings(dir, tenant, env);
+  await unlink(file);
+  await writeFile(file, 'REPLACED=preserve');
+  await assert.rejects(clean(), /RETRY_FIXTURE_BINDINGS_CHANGED/);
+  assert.equal(await readFile(file, 'utf8'), 'REPLACED=preserve');
 }));
 test('fixture binding rejects production database, missing opt-in and non-synthetic tenants before writing', () => temporary(async dir => {
   for (const [id, vars] of [[tenant, {}], [tenant, { ...env, DATABASE_URL: 'postgresql://fixture@db.example.test/hrbp_audit' }],
