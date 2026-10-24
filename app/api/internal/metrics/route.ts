@@ -1,5 +1,6 @@
 import { ConnectionStatus, EmergencyAccessStatus, NotificationOutboxStatus, ScheduledPositionChangeStatus, VaultScanStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { auditHistoryAggregateMetrics } from "@/lib/audit-history-monitoring";
 import { internalBearerAuthorized } from "@/lib/internal-auth";
 import { scimRuntimeConfig } from "@/lib/scim";
 
@@ -71,7 +72,8 @@ export async function GET(request: Request) {
       oldestDueScheduledPositionChange,
       emergencyAccessGroups,
       activeEmergencyAccessCount,
-      oldestActiveEmergencyExpiry
+      oldestActiveEmergencyExpiry,
+      auditHistory
     ] = await Promise.all([
       db.notificationOutbox.groupBy({
         by: ["channel", "status"],
@@ -178,7 +180,8 @@ export async function GET(request: Request) {
         },
         orderBy: [{ validTo: "asc" }, { id: "asc" }],
         select: { validTo: true }
-      })
+      }),
+      auditHistoryAggregateMetrics(now)
     ]);
 
     const notificationCounts = new Map<string, number>();
@@ -318,6 +321,42 @@ export async function GET(request: Request) {
       "# HELP hrbp_emergency_access_next_expiry_seconds Seconds until the nearest active break-glass grant expires.",
       "# TYPE hrbp_emergency_access_next_expiry_seconds gauge",
       `hrbp_emergency_access_next_expiry_seconds ${oldestActiveEmergencyExpiry?.validTo ? Math.max(0, Math.floor((oldestActiveEmergencyExpiry.validTo.getTime() - now.getTime()) / 1000)) : 0}`,
+      "# HELP hrbp_audit_history_tenant_universe Current tenant count used to measure full-history coverage.",
+      "# TYPE hrbp_audit_history_tenant_universe gauge",
+      `hrbp_audit_history_tenant_universe ${auditHistory.tenantUniverse}`,
+      "# HELP hrbp_audit_history_untracked_tenants Tenants without persisted full-history verification state.",
+      "# TYPE hrbp_audit_history_untracked_tenants gauge",
+      `hrbp_audit_history_untracked_tenants ${auditHistory.untrackedTenants}`,
+      "# HELP hrbp_audit_history_records Full-history progress records by bounded status.",
+      "# TYPE hrbp_audit_history_records gauge",
+      `hrbp_audit_history_records{status="RUNNING"} ${auditHistory.running}`,
+      `hrbp_audit_history_records{status="VALID"} ${auditHistory.valid}`,
+      `hrbp_audit_history_records{status="INVALID"} ${auditHistory.invalid}`,
+      "# HELP hrbp_audit_history_backlog_events Events remaining in currently running fixed-watermark scans.",
+      "# TYPE hrbp_audit_history_backlog_events gauge",
+      `hrbp_audit_history_backlog_events ${auditHistory.backlogEvents}`,
+      "# HELP hrbp_audit_history_oldest_running_age_seconds Age of the oldest resumable full-history scan.",
+      "# TYPE hrbp_audit_history_oldest_running_age_seconds gauge",
+      `hrbp_audit_history_oldest_running_age_seconds ${auditHistory.oldestRunningAgeSeconds}`,
+      "# HELP hrbp_audit_history_events_checked_total Cumulative events hashed by the resumable full-history worker.",
+      "# TYPE hrbp_audit_history_events_checked_total counter",
+      `hrbp_audit_history_events_checked_total ${auditHistory.eventsCheckedTotal}`,
+      "# HELP hrbp_audit_history_partial_chunks_total Cumulative partial history chunks committed without tenant cursor advance.",
+      "# TYPE hrbp_audit_history_partial_chunks_total counter",
+      `hrbp_audit_history_partial_chunks_total ${auditHistory.partialChunksTotal}`,
+      "# HELP hrbp_audit_history_scans_total Cumulative completed full-history scans by result.",
+      "# TYPE hrbp_audit_history_scans_total counter",
+      `hrbp_audit_history_scans_total{result="success"} ${auditHistory.successfulScansTotal}`,
+      `hrbp_audit_history_scans_total{result="failure"} ${auditHistory.failedScansTotal}`,
+      "# HELP hrbp_audit_history_last_attempt_age_seconds Age since the latest full-history chunk attempt.",
+      "# TYPE hrbp_audit_history_last_attempt_age_seconds gauge",
+      `hrbp_audit_history_last_attempt_age_seconds ${auditHistory.lastAttemptAgeSeconds}`,
+      "# HELP hrbp_audit_history_last_success_age_seconds Age since the latest completed valid full-history scan.",
+      "# TYPE hrbp_audit_history_last_success_age_seconds gauge",
+      `hrbp_audit_history_last_success_age_seconds ${auditHistory.lastSuccessAgeSeconds}`,
+      "# HELP hrbp_audit_history_last_failure_age_seconds Age since the latest completed invalid full-history scan.",
+      "# TYPE hrbp_audit_history_last_failure_age_seconds gauge",
+      `hrbp_audit_history_last_failure_age_seconds ${auditHistory.lastFailureAgeSeconds}`,
       "# HELP hrbp_operational_metrics_scrape_duration_seconds Time spent collecting this metrics snapshot.",
       "# TYPE hrbp_operational_metrics_scrape_duration_seconds gauge",
       `hrbp_operational_metrics_scrape_duration_seconds ${((Date.now() - startedAt) / 1000).toFixed(3)}`
