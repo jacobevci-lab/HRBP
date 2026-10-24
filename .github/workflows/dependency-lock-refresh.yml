@@ -25,8 +25,6 @@ jobs:
         run: npm install --package-lock-only --ignore-scripts
       - name: Install exact refreshed graph
         run: npm ci --ignore-scripts
-      - name: Verify high-severity audit gate
-        run: npm audit --audit-level=high
       - name: Record remediated versions
         run: |
           node - <<'NODE'
@@ -41,9 +39,12 @@ jobs:
           for (const path of paths) console.log(path, lock.packages[path]?.version ?? 'missing');
           NODE
       - name: Preserve regenerated lockfile
+        if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: hrbp-dependency-lock-refresh-${{ github.sha }}
           path: package-lock.json
           if-no-files-found: error
           retention-days: 1
+      - name: Verify high-severity audit gate
+        run: npm audit --audit-level=high
