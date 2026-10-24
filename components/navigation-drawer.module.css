@@ -1,0 +1,9 @@
+/* Closing and breakpoint changes must not leave a partially visible drawer.
+   Preserve the established dimensions, colors, spacing and open animation. */
+.shell :global(.sidebar:not(.sidebar-open)) { transition: none; }
+.shell :global(.sidebar[inert]) { visibility: hidden; pointer-events: none; }
+.shell :global(.sidebar-open) { overscroll-behavior: contain; transition-property: transform; }
+.shell :global(.sidebar-open .nav-scroll) { overscroll-behavior: contain; }
+@media (prefers-reduced-motion: reduce) {
+  .shell :global(.sidebar), .shell :global(.sidebar-overlay) { transition: none; }
+}

@@ -6,6 +6,7 @@ export type LeaveCreateInput = {
   endsAt: string;
   units: string;
   reason?: string;
+  expectedUnit?: "DAYS" | "HOURS";
 };
 export type LeaveClientAction =
   | { kind: "create"; input: LeaveCreateInput }
@@ -13,7 +14,7 @@ export type LeaveClientAction =
   | { kind: "decision"; requestId: string; decision: "APPROVED" | "REJECTED" };
 export type LeaveActionResult =
   | { outcome: "saved"; id: string; status: "PENDING" | "APPROVED" | "CANCELLED" | "REJECTED" }
-  | { outcome: "rejected"; status: number }
+  | { outcome: "rejected"; status: number; code?: "LEAVE_UNIT_CHANGED" }
   | { outcome: "unknown" };
 
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -64,7 +65,8 @@ function matchesReceipt(action: LeaveClientAction, data: Record<string, unknown>
       Number.isFinite(dateMillis(data.decidedAt));
   }
   const input = action.input;
-  return data.employmentId === input.employmentId && data.leaveTypeId === input.leaveTypeId &&
+  return (input.expectedUnit === undefined || data.validatedUnit === input.expectedUnit) &&
+    data.employmentId === input.employmentId && data.leaveTypeId === input.leaveTypeId &&
     typeof data.status === "string" && ["PENDING", "APPROVED"].includes(data.status) &&
     Number.isFinite(dateMillis(data.startsAt)) && dateMillis(data.startsAt) === dateMillis(input.startsAt) &&
     Number.isFinite(dateMillis(data.endsAt)) && dateMillis(data.endsAt) === dateMillis(input.endsAt) &&
@@ -80,7 +82,9 @@ export async function submitLeaveAction(action: LeaveClientAction, options: {
       ["APPROVED", "REJECTED"].includes(action.decision)
     : identifier(action.kind === "create" ? action.input.employmentId : action.employmentId) &&
       identifier(action.kind === "create" ? action.input.leaveTypeId : action.requestId);
-  if (!validTarget ||
+  const validUnit = action.kind !== "create" || action.input.expectedUnit === undefined ||
+    action.input.expectedUnit === "DAYS" || action.input.expectedUnit === "HOURS";
+  if (!validTarget || !validUnit ||
       !Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) {
     return { outcome: "rejected", status: 400 };
   }
@@ -108,7 +112,8 @@ export async function submitLeaveAction(action: LeaveClientAction, options: {
     if ([400, 401, 403, 404, 409, 422, 429].includes(response.status) &&
         typeof body.error === "string" && body.error.trim().length > 0 && body.error.length <= 2000 && body.data === undefined) {
       // Only the status is passed to the UI; arbitrary upstream error text is not displayed.
-      return { outcome: "rejected", status: response.status };
+      return { outcome: "rejected", status: response.status,
+        ...(response.status === 409 && body.code === "LEAVE_UNIT_CHANGED" ? { code: "LEAVE_UNIT_CHANGED" as const } : {}) };
     }
     if (response.status === (action.kind === "create" ? 201 : 200) &&
         body.error === undefined && object(body.data) && matchesReceipt(action, body.data)) {
@@ -130,6 +135,9 @@ export function leaveActionMessage(result: LeaveActionResult, locale: "en" | "tr
   if (result.outcome === "unknown") return tr
     ? "İşlemin sonucu doğrulanamadı; kaydedilmiş olabilir. Otomatik tekrar gönderilmedi. Yeniden işlem yapmadan önce sayfayı yenileyip taleplerinizi kontrol edin. Yenileme kaydedilmemiş form bilgilerini siler."
     : "The outcome could not be confirmed; the action may have been saved. It was not retried automatically. Reload and check your requests before another action. Reloading discards unsaved form input.";
+  if (result.code === "LEAVE_UNIT_CHANGED") return tr
+    ? "İzin türünün birimi değişmiş. Talep kaydedilmedi ve formunuz korundu. Güncel izin türünü yeniden yükleyip miktarı kontrol edin; otomatik gün/saat dönüşümü yapılmaz. Yenileme kaydedilmemiş form bilgilerini siler."
+    : "The leave type unit changed. No request was saved and your form is retained. Reload the current leave type and review the amount; no day/hour conversion is performed. Reloading discards unsaved form input.";
   if (result.status === 401) return tr ? "Oturum doğrulanamadı. Formunuz korunuyor; devam etmek için yeniden giriş yapın." : "Your session could not be verified. The form is retained; sign in again to continue.";
   if (result.status === 403) return tr ? "Bu işlem için yetkiniz yok veya istek kaynağı kabul edilmedi." : "You are not authorized for this action or the request origin was rejected.";
   if (result.status === 409) return tr ? "Talep, mevcut izinlerle, bakiye veya kayıt durumuyla çakışıyor. Formunuz korunuyor; güncel taleplerinizi kontrol edin." : "The action conflicts with existing leave, the balance or the record state. Your form is retained; check your current requests.";

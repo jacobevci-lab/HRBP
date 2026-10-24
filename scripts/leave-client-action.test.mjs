@@ -129,14 +129,17 @@ function text(tree) {
   if (tree == null || typeof tree === 'boolean') return '';
   return typeof tree === 'object' ? text(tree.props?.children) : String(tree);
 }
-function componentFixture({ locale = 'en', refreshThrows = false, confirms = true, rowStatus = 'APPROVED' } = {}) {
+function componentFixture({ locale = 'en', refreshThrows = false, confirms = true, rowStatus = 'APPROVED', preselect = true } = {}) {
   let index = 0, refreshes = 0, resets = 0, reloads = 0, cleanup;
+  const confirmations = []; let confirmResult = confirms;
   const hooks = [], effects = [], calls = [];
-  const data = { leaveTypes: [{ id: 'lt1', code: 'QA', name: 'QA leave', requiresApproval: true }], balances: [], requests: [{ id: 'r1', leaveType: 'QA leave', startsAt: input.startsAt, endsAt: input.endsAt, units: '0.1', unit: 'DAYS', status: rowStatus }] };
-  const form = { fields: { ...input }, isConnected: true, reset() { resets++; this.fields = {}; } };
+  const data = { leaveTypes: [{ id: 'lt1', code: 'QA', name: 'QA leave', unit: 'DAYS', requiresApproval: true }, { id: 'lt2', code: 'QAH', name: 'Hourly leave', unit: 'HOURS', requiresApproval: true }, { id: 'lt3', code: 'QAD', name: 'Other days', unit: 'DAYS', requiresApproval: false }], balances: [], requests: [{ id: 'r1', leaveType: 'QA leave', startsAt: input.startsAt, endsAt: input.endsAt, units: '0.1', unit: 'DAYS', status: rowStatus }] };
+  const form = { fields: { ...input }, isConnected: true, reset() { resets++; nodes(render()).find(n => n.type === 'form').props.onReset?.(); this.fields = {}; } };
+  form.elements = { namedItem(name) { return { get value() { return form.fields[name] ?? ''; }, set value(v) { form.fields[name] = v; } }; } };
   const component = load('components/leave-participant-console.tsx', {
     'react/jsx-runtime': { jsx, jsxs: jsx },
     react: {
+      useId() { return 'fixture-unit-'+index++; },
       useState(initial) { const i = index++; if (!(i in hooks)) hooks[i] = initial; return [hooks[i], value => { hooks[i] = typeof value === 'function' ? value(hooks[i]) : value; }]; },
       useRef(initial) { const i = index++; if (!(i in hooks)) hooks[i] = { current: initial }; return hooks[i]; },
       useEffect(effect) { const i = index++; if (!(i in hooks)) { hooks[i] = true; effects.push(effect); } }
@@ -146,11 +149,18 @@ function componentFixture({ locale = 'en', refreshThrows = false, confirms = tru
     '@/components/locale-provider': { useLocale: () => ({ locale }) },
     '@/lib/leave-client-action': { leaveActionMessage: helper.leaveActionMessage,
       submitLeaveAction(action, options) { return new Promise(resolve => calls.push({ action, options, resolve })); } }
-  }, { window: { location: { reload() { reloads++; } }, confirm: () => confirms },
+  }, { window: { location: { reload() { reloads++; } }, confirm: message => { confirmations.push(message); return confirmResult; } },
     FormData: class { constructor(form) { this.form = form; } get(name) { return this.form.fields[name] ?? null; } } });
   const wrapper = component.LeaveParticipantConsole({ employmentId: 'e1', data });
   function render() { index = 0; const tree = wrapper.type(wrapper.props); for (const effect of effects.splice(0)) cleanup = effect(); return tree; }
-  return { wrapper, calls, form, render, dispose() { form.isConnected = false; cleanup(); },
+  function selectType(id) {
+    const select = { form, get value() { return form.fields.leaveTypeId; }, set value(v) { form.fields.leaveTypeId = v; } };
+    select.value = id;
+    nodes(render()).find(n => n.type === 'select' && n.props.name === 'leaveTypeId').props.onChange?.({ currentTarget: select });
+    render();
+  }
+  render(); if (preselect) selectType('lt1');
+  return { wrapper, calls, form, data, confirmations, selectType, confirms(v) { confirmResult = v; }, render, dispose() { form.isConnected = false; cleanup(); },
     submit(tree = render()) { nodes(tree).find(n => n.type === 'form').props.onSubmit({ preventDefault() {}, currentTarget: form }); },
     async settle(result) { calls.at(-1).resolve(result); await tick(); await tick(); },
     get refreshes() { return refreshes; }, get resets() { return resets; }, get reloads() { return reloads; } };
@@ -227,3 +237,79 @@ for (const [locale, expectedLabel] of [['en', 'Cancelled'], ['tr', 'İptal']]) {
     assert.ok(browser.includes('status?.textContent?.trim() === expectedLabel'));
   });
 }
+
+// Explicit unit semantics; production balance/approval calculations are unchanged.
+for (const locale of ['en', 'tr']) {
+  test(`${locale}: quantity stays unavailable until a supported unit is selected`, () => {
+    const f = componentFixture({ locale, preselect: false }); const tree = f.render();
+    assert.equal(nodes(tree).find(n => n.props.name === 'units').props.disabled, true);
+    assert.equal(nodes(tree).find(n => n.type === 'button' && n.props.type === 'submit').props.disabled, true);
+    f.submit(); assert.equal(f.calls.length, 0);
+    assert.match(text(tree), locale === 'tr' ? /Miktar — izin türü seçin/ : /Amount — select a leave type/);
+  });
+  test(`${locale}: selected days and hours have exact visible unit labels and accessible help`, () => {
+    const f = componentFixture({ locale }); let tree = f.render();
+    assert.match(text(tree), locale === 'tr' ? /Miktar \(gün\)/ : /Amount \(days\)/);
+    f.form.fields.units = ''; f.selectType('lt2'); tree = f.render();
+    assert.match(text(tree), locale === 'tr' ? /Miktar \(saat\)/ : /Amount \(hours\)/);
+    const quantity = nodes(tree).find(n => n.props.name === 'units');
+    assert.equal(quantity.props['data-leave-unit'], 'HOURS');
+    assert.equal(quantity.props['aria-describedby'], nodes(tree).find(n => n.props['data-leave-unit-help']).props.id);
+    assert.equal(quantity.props.disabled, false); assert.equal(f.confirmations.length, 0);
+  });
+  test(`${locale}: cancelling day-to-hour switch preserves the original type, amount, dates and reason`, () => {
+    const f = componentFixture({ locale, confirms: false }); f.selectType('lt2');
+    assert.equal(f.confirmations.length, 1); assert.equal(f.form.fields.leaveTypeId, 'lt1');
+    assert.equal(f.form.fields.units, input.units); assert.equal(f.form.fields.startsAt, input.startsAt);
+    assert.equal(f.form.fields.endsAt, input.endsAt); assert.equal(f.form.fields.reason, input.reason);
+    assert.equal(nodes(f.render()).find(n => n.props.name === 'units').props['data-leave-unit'], 'DAYS');
+    assert.equal(f.calls.length, 0);
+  });
+  test(`${locale}: accepting a unit switch clears only amount without inventing a conversion`, () => {
+    const f = componentFixture({ locale }); f.selectType('lt2');
+    assert.equal(f.confirmations.length, 1); assert.equal(f.form.fields.units, '');
+    assert.equal(f.form.fields.leaveTypeId, 'lt2'); assert.equal(f.form.fields.reason, input.reason);
+    assert.equal(f.form.fields.startsAt, input.startsAt); assert.equal(f.form.fields.endsAt, input.endsAt);
+    assert.match(text(f.render()), locale === 'tr' ? /Yeni miktarı girin/ : /Enter a new amount/);
+    assert.equal(f.calls.length, 0);
+  });
+}
+test('switching leave types within DAYS preserves amount but updates approval guidance', () => {
+  const f = componentFixture(); f.selectType('lt3');
+  assert.equal(f.confirmations.length, 0); assert.equal(f.form.fields.units, input.units);
+  assert.match(text(f.render()), /automatically approved/);
+});
+test('catalogue changing a selected unit invalidates the amount and captured submission', () => {
+  const f = componentFixture(); const captured = f.render(); f.data.leaveTypes[0].unit = 'HOURS';
+  f.render(); f.submit(captured);
+  assert.equal(f.calls.length, 0); assert.equal(nodes(f.render()).find(n => n.props.name === 'units').props.disabled, true);
+  assert.match(text(f.render()), /unit changed/);
+  f.selectType('lt1'); assert.equal(f.confirmations.length, 1); assert.equal(f.form.fields.units, '');
+});
+test('removed or unsupported catalogue types cannot submit even via a captured handler', () => {
+  for (const remove of [false, true]) {
+    const f = componentFixture(); const captured = f.render();
+    if (remove) f.data.leaveTypes.splice(0, 1); else f.data.leaveTypes[0].unit = 'WEEKS';
+    f.render(); f.submit(captured); assert.equal(f.calls.length, 0);
+    assert.equal(nodes(f.render()).find(n => n.props.name === 'units').props.disabled, true);
+  }
+});
+test('busy or uncertain writes prevent captured type-change handlers from mutating the unit', async () => {
+  const f = componentFixture(); f.submit(); f.selectType('lt2');
+  assert.equal(f.form.fields.leaveTypeId, 'lt1'); assert.equal(f.form.fields.units, input.units);
+  await f.settle({ outcome: 'unknown' }); f.selectType('lt2');
+  assert.equal(f.form.fields.leaveTypeId, 'lt1'); assert.equal(f.confirmations.length, 0);
+});
+test('successful form reset clears the selected unit but rejection preserves it', async () => {
+  const f = componentFixture(); f.submit(); await f.settle({ outcome: 'rejected', status: 409 });
+  assert.equal(nodes(f.render()).find(n => n.props.name === 'units').props['data-leave-unit'], 'DAYS');
+  f.submit(); await f.settle({ outcome: 'saved', id: 'r2', status: 'PENDING' });
+  assert.equal(nodes(f.render()).find(n => n.props.name === 'units').props['data-leave-unit'], '');
+  assert.equal(nodes(f.render()).find(n => n.type === 'button' && n.props.type === 'submit').props.disabled, true);
+});
+test('a replacement quantity is submitted without changing server wire units or dates', async () => {
+  const f = componentFixture(); f.selectType('lt2'); f.form.fields.units = '1.25'; f.submit();
+  assert.equal(f.calls.length, 1); assert.equal(f.calls[0].action.input.leaveTypeId, 'lt2');
+  assert.equal(f.calls[0].action.input.units, '1.25'); assert.equal(f.calls[0].action.input.startsAt, input.startsAt);
+  await f.settle({ outcome: 'rejected', status: 409 });
+});

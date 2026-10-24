@@ -23,7 +23,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
       - name: Verify revision identity and negative response cases
         run: node --test scripts/deployment-verification.test.mjs
   live:
@@ -40,6 +40,6 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
       - name: One anonymous read-only probe of the deployed revision
         run: node scripts/verify-deployment.mjs

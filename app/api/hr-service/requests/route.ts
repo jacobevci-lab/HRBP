@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { DataClassification, PlatformRole, ServicePriority } from "@prisma/client";
+import { DataClassification, PlatformRole, ServicePriority, ServiceVisibility } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
 import { canActOnEmployment, resolveEmploymentScope } from "@/lib/employment-scope";
-import { canUseHRServiceQueue, hrServiceRequestWhere, isHRServiceSelfServiceRole } from "@/lib/hr-service-access";
+import { canUseHRServiceQueue, hrServiceRequestWhere, isHRServiceSelfServiceRole, isHRServiceStaffRole } from "@/lib/hr-service-access";
 import { asEnumValue, asIdentifier, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
@@ -23,18 +23,31 @@ function queueKey(value: unknown) {
   return /^[A-Z0-9_-]{2,40}$/.test(key) ? key : undefined;
 }
 
+const readHeaders = { "Cache-Control": "private, no-store", Vary: "Cookie", "X-Content-Type-Options": "nosniff" };
+const readJson = (body: unknown, status = 200) => Response.json(body, { status, headers: readHeaders });
+
+/** The public count describes visible messages, never hidden HR notes.
+ * Keep the existing bounded list and response shape for legacy clients. */
 export async function GET(request: Request) {
-  const ctx = await getRequestContext(request);
-  if (!ctx) return unauthorized();
-  if (!can(ctx, "hr-service:read")) return forbidden();
-  const where = await hrServiceRequestWhere(db, ctx);
-  const data = await db.hRServiceRequest.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    include: { _count: { select: { comments: true } } },
-    take: 300
-  });
-  return Response.json({ data });
+  try {
+    const ctx = await getRequestContext(request);
+    if (!ctx) return readJson({ error: "Authentication required." }, 401);
+    if (!can(ctx, "hr-service:read")) return readJson({ error: "Access denied." }, 403);
+    const where = await hrServiceRequestWhere(db, ctx);
+    const visibility = isHRServiceStaffRole(ctx.role)
+      ? { in: [ServiceVisibility.REQUESTOR, ServiceVisibility.PRIVATE_NOTE] }
+      : ServiceVisibility.REQUESTOR;
+    const data = await db.hRServiceRequest.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      include: { _count: { select: { comments: { where: { tenantId: ctx.tenantId, visibility } } } } },
+      take: 300
+    });
+    return readJson({ data });
+  } catch {
+    console.error("[HRBP] Service request list could not be loaded.");
+    return readJson({ error: "Service requests could not be loaded." }, 503);
+  }
 }
 
 export async function POST(request: Request) {

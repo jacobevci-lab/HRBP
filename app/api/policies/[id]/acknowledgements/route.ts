@@ -1,9 +1,55 @@
-import { DataClassification, PolicyAssignmentStatus, PolicyStatus } from "@prisma/client";
+import { createHash } from "node:crypto";
+import { DataClassification, EmploymentStatus, PolicyAssignmentStatus, PolicyStatus, Prisma } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
-import { asIdentifier } from "@/lib/input-validation";
+import { asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
+
+const privateHeaders = { "cache-control": "private, no-store", vary: "Cookie" };
+const hashPattern = /^[a-f0-9]{64}$/;
+const contentBindingAction = "policy.acknowledgement-content-bound";
+// The hash is retained inside the existing tamper-evident audit payload, in the
+// same transaction as the acknowledgement. Never backfill it for old receipts.
+function binding(version: string, contentHash: string) {
+  return JSON.stringify({ schema: "policy-ack-content/v1", version, contentHash });
+}
+function validContent(policy: { contentMarkdown: string; contentHash: string; version: string }) {
+  return typeof policy.contentMarkdown === "string" && policy.contentMarkdown.trim().length > 0
+    && Buffer.byteLength(policy.contentMarkdown, "utf8") <= 65_536
+    && asIdentifier(policy.version) === policy.version && hashPattern.test(policy.contentHash)
+    && createHash("sha256").update(policy.contentMarkdown, "utf8").digest("hex") === policy.contentHash;
+}
+
+/** Assigned employee preview, never a public policy download or proof of human
+ * comprehension. One statement returns the displayed bytes and their snapshot.
+ */
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const ctx = await getRequestContext(request);
+  if (!ctx) return unauthorized();
+  if (!can(ctx, "policies:acknowledge") || !ctx.employmentId) return forbidden();
+  const id = asIdentifier((await params).id);
+  if (!id) return Response.json({ error: "A valid policy id is required." }, { status: 400, headers: privateHeaders });
+  try {
+    const now = new Date();
+    // No GET lock or write. POST rechecks all prerequisites and the exact
+    // snapshot under locks; a preview can legitimately become stale afterward.
+    const policy = await db.policyRecord.findFirst({
+      where: { id, tenantId: ctx.tenantId, status: PolicyStatus.PUBLISHED,
+        effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+        assignments: { some: { tenantId: ctx.tenantId, employmentId: ctx.employmentId,
+          status: { in: [PolicyAssignmentStatus.PENDING, PolicyAssignmentStatus.OVERDUE, PolicyAssignmentStatus.ACKNOWLEDGED] } } } },
+      select: { id: true, title: true, version: true, contentMarkdown: true, contentHash: true }
+    });
+    const employment = await db.employment.findFirst({ where: { id: ctx.employmentId, tenantId: ctx.tenantId,
+      status: { not: EmploymentStatus.TERMINATED } }, select: { id: true } });
+    if (!policy || !employment) return Response.json({ error: "Effective published policy assignment not found." }, { status: 404, headers: privateHeaders });
+    if (!validContent(policy)) return Response.json({ error: "Policy content is inconsistent. Ask the policy owner to review it." }, { status: 409, headers: privateHeaders });
+    return Response.json({ data: policy }, { headers: privateHeaders });
+  } catch {
+    return Response.json({ error: "Policy content is unavailable. Retry reading the policy later." }, { status: 503, headers: privateHeaders });
+  }
+}
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await getRequestContext(request);
@@ -14,35 +60,85 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const id = asIdentifier((await params).id);
   if (!id) return Response.json({ error: "A valid policy id is required." }, { status: 400 });
+  const body = await readJsonObject(request);
+  const policyVersion = asIdentifier(body?.policyVersion);
+  const contentHash = body?.contentHash;
+  // Old tabs/clients fail closed. Do not silently substitute today's content
+  // for the version that the employee actually had open in their browser.
+  if (!policyVersion || typeof contentHash !== "string" || !hashPattern.test(contentHash)) {
+    return Response.json({ error: "The displayed policyVersion and SHA-256 contentHash are required. Reopen the policy before acknowledging." }, { status: 400, headers: privateHeaders });
+  }
 
-  const data = await db.$transaction(async (tx) => {
-    const [policy, employment] = await Promise.all([
-      tx.policyRecord.findFirst({ where: { id, tenantId: ctx.tenantId, status: PolicyStatus.PUBLISHED } }),
-      tx.employment.findFirst({ where: { id: ctx.employmentId, tenantId: ctx.tenantId }, select: { id: true } })
+  const result = await db.$transaction(async (tx) => {
+    await tx.$queryRaw`/* policy-ack:employment */ SELECT "id" FROM "Employment"
+      WHERE "id" = ${ctx.employmentId} AND "tenantId" = ${ctx.tenantId} FOR SHARE`;
+    await tx.$queryRaw`/* policy-ack:policy */ SELECT "id" FROM "PolicyRecord"
+      WHERE "id" = ${id} AND "tenantId" = ${ctx.tenantId} FOR SHARE`;
+    await tx.$queryRaw`/* policy-ack:assignment */ SELECT "id" FROM "PolicyAssignment"
+      WHERE "policyId" = ${id} AND "employmentId" = ${ctx.employmentId}
+        AND "tenantId" = ${ctx.tenantId} FOR UPDATE`;
+
+    const now = new Date();
+    const [policy, employment, assignment] = await Promise.all([
+      tx.policyRecord.findFirst({ where: { id, tenantId: ctx.tenantId, status: PolicyStatus.PUBLISHED,
+        effectiveFrom: { lte: now }, OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }] },
+        select: { id: true, version: true, contentHash: true, contentMarkdown: true } }),
+      tx.employment.findFirst({ where: { id: ctx.employmentId, tenantId: ctx.tenantId, status: { not: EmploymentStatus.TERMINATED } }, select: { id: true } }),
+      tx.policyAssignment.findFirst({ where: { tenantId: ctx.tenantId, policyId: id, employmentId: ctx.employmentId }, select: { id: true, status: true } })
     ]);
-    if (!policy || !employment) throw new Error("NOT_FOUND");
+    if (!policy || !employment || !assignment) throw new Error("NOT_FOUND");
+    if (assignment.status === PolicyAssignmentStatus.WAIVED) throw new Error("STATE");
+    if (policy.version !== policyVersion || policy.contentHash !== contentHash || !validContent(policy)) throw new Error("CONTENT_CHANGED");
 
-    const acknowledgement = await tx.policyAcknowledgement.upsert({
-      where: { policyId_employmentId_policyVersion: { policyId: policy.id, employmentId: employment.id, policyVersion: policy.version } },
-      update: { acknowledgedBy: ctx.actorId, acknowledgedAt: new Date(), ipAddress: ctx.ipAddress },
-      create: { tenantId: ctx.tenantId, policyId: policy.id, employmentId: employment.id, policyVersion: policy.version, acknowledgedBy: ctx.actorId, ipAddress: ctx.ipAddress }
+    const existing = await tx.policyAcknowledgement.findFirst({
+      where: { tenantId: ctx.tenantId, policyId: policy.id, employmentId: employment.id, policyVersion: policy.version }
     });
-
-    const assignments = await tx.policyAssignment.findMany({
-      where: { tenantId: ctx.tenantId, policyId: policy.id, employmentId: employment.id },
-      select: { id: true }
-    });
-    for (const assignment of assignments) {
-      await tx.policyAssignment.update({
-        where: { id: assignment.id },
-        data: { status: PolicyAssignmentStatus.ACKNOWLEDGED }
-      });
+    if (existing) {
+      if (assignment.status !== PolicyAssignmentStatus.ACKNOWLEDGED) throw new Error("STATE");
+      // Validate the ORIGINAL event, not a newly manufactured hash on replay.
+      // Missing/legacy/duplicate bindings need controlled review, not backfill.
+      // Older acknowledgement purpose fields could come from x-purpose.
+      // Only the distinct, server-selected binding action proves that this
+      // endpoint actually enforced the new content contract at creation time.
+      const events = await tx.auditEvent.findMany({ where: { tenantId: ctx.tenantId,
+        resourceType: "PolicyAcknowledgement", resourceId: existing.id,
+        action: { in: ["policy.acknowledged", contentBindingAction] } },
+        select: { action: true, purpose: true, actorId: true }, take: 3 });
+      if (events.length !== 2 || events.filter(e => e.action === "policy.acknowledged").length !== 1
+        || events.filter(e => e.action === contentBindingAction).length !== 1
+        || events.some(e => e.actorId !== existing.acknowledgedBy || e.purpose !== binding(policyVersion, contentHash))) throw new Error("CONTENT_CHANGED");
+      return { data: existing, replayed: true };
     }
+    if (assignment.status !== PolicyAssignmentStatus.PENDING && assignment.status !== PolicyAssignmentStatus.OVERDUE) throw new Error("STATE");
 
-    await appendAudit(tx, ctx, { action: "policy.acknowledged", resourceType: "PolicyAcknowledgement", resourceId: acknowledgement.id, classification: DataClassification.CONFIDENTIAL });
-    return acknowledgement;
-  }).catch((error) => error instanceof Error && error.message === "NOT_FOUND" ? null : Promise.reject(error));
+    await tx.policyAssignment.update({
+      where: { id: assignment.id, tenantId: ctx.tenantId, policyId: policy.id, employmentId: employment.id, status: assignment.status },
+      data: { status: PolicyAssignmentStatus.ACKNOWLEDGED }
+    });
+    const acknowledgement = await tx.policyAcknowledgement.create({
+      data: { tenantId: ctx.tenantId, policyId: policy.id, employmentId: employment.id, policyVersion: policy.version,
+        acknowledgedBy: ctx.actorId, acknowledgedAt: now, ipAddress: ctx.ipAddress }
+    });
+    await appendAudit(tx, ctx, { action: "policy.acknowledged", resourceType: "PolicyAcknowledgement", resourceId: acknowledgement.id,
+      classification: DataClassification.CONFIDENTIAL, purpose: binding(policy.version, policy.contentHash) });
+    // Preserve the established acknowledgement event for existing consumers,
+    // plus a distinct server-issued binding event. Failure of either rolls back
+    // the receipt, assignment and both events; replay appends neither.
+    await appendAudit(tx, ctx, { action: contentBindingAction, resourceType: "PolicyAcknowledgement", resourceId: acknowledgement.id,
+      classification: DataClassification.CONFIDENTIAL, purpose: binding(policy.version, policy.contentHash) });
+    return { data: acknowledgement, replayed: false };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted }).catch((error) => {
+    if (error instanceof Error && ["NOT_FOUND", "STATE", "CONTENT_CHANGED"].includes(error.message)) return error.message;
+    if (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2025", "P2034"].includes(error.code)) return "STATE";
+    console.error("[HRBP] Policy acknowledgement could not be completed.");
+    return "UNAVAILABLE";
+  });
 
-  if (!data) return Response.json({ error: "Published policy or employment not found in tenant." }, { status: 404 });
-  return Response.json({ data }, { status: 201 });
+  if (result === "NOT_FOUND") return Response.json({ error: "Effective published policy assignment not found." }, { status: 404, headers: privateHeaders });
+  if (result === "CONTENT_CHANGED") return Response.json({ error: "The displayed policy content changed or its original content binding is unavailable. Reload and review before continuing." }, { status: 409, headers: privateHeaders });
+  if (result === "STATE") return Response.json({ error: "Policy assignment state changed or its receipt is inconsistent. Refresh before continuing." }, { status: 409, headers: privateHeaders });
+  if (typeof result === "string") return Response.json({ error: "Policy acknowledgement is unavailable. Reload the current record before retrying." }, { status: 503, headers: privateHeaders });
+  // policyContentHash is a verified projection of the persisted audit binding,
+  // not a new mutable column or a claim about legacy receipt content.
+  return Response.json({ data: { ...result.data, policyContentHash: contentHash }, meta: { replayed: result.replayed } }, { status: 201, headers: privateHeaders });
 }

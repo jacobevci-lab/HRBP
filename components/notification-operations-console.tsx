@@ -1,139 +1,71 @@
 "use client";
-
-import { AlertTriangle, Clock3, RefreshCw, RotateCcw, ShieldAlert } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import styles from "@/components/notification-operations.module.css";
+import { useState } from "react";
+import { useSessionContext } from "@/components/session-provider";
 import { useLocale } from "@/components/locale-provider";
-
-type OpsItem = {
-  id: string;
-  eventType: string;
-  channel: string;
-  resourceType: string;
-  resourceId: string;
-  status: "PENDING" | "PROCESSING" | "FAILED" | "DEAD_LETTER";
-  attempts: number;
-  nextAttemptAt: string;
-  lockedAt: string | null;
-  lastError: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type OpsResponse = {
-  data?: {
-    counts: {
-      pending: number;
-      processing: number;
-      failed: number;
-      deadLetter: number;
-      delivered: number;
-    };
-    items: OpsItem[];
-  };
-  error?: string;
-};
-
-type Filter = "ALL" | OpsItem["status"];
+import { useNotificationRetry, useOperationsRead } from "@/components/use-notification-operations";
+import { operationalStates, retrySnapshot, type OpsItem } from "@/lib/notification-retry-contract";
 
 export function NotificationOperationsConsole({ canWrite }: { canWrite: boolean }) {
-  const { locale } = useLocale();
-  const tr = locale === "tr";
-  const [items, setItems] = useState<OpsItem[]>([]);
-  const [counts, setCounts] = useState({ pending: 0, processing: 0, failed: 0, deadLetter: 0, delivered: 0 });
-  const [filter, setFilter] = useState<Filter>("ALL");
-  const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setMessage(null);
-    try {
-      const response = await fetch("/api/settings/notifications/operations?limit=100", { cache: "no-store" });
-      const body = await response.json() as OpsResponse;
-      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-      setItems(body.data?.items ?? []);
-      setCounts(body.data?.counts ?? { pending: 0, processing: 0, failed: 0, deadLetter: 0, delivered: 0 });
-    } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : (tr ? "Bildirim operasyonları yüklenemedi." : "Notification operations could not be loaded."));
-    } finally {
-      setLoading(false);
-    }
-  }, [tr]);
-
-  useEffect(() => { void load(); }, [load]);
-
-  const visible = useMemo(() => filter === "ALL" ? items : items.filter((item) => item.status === filter), [filter, items]);
-
-  function fmt(value: string | null) {
-    if (!value) return "—";
-    return new Intl.DateTimeFormat(tr ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-  }
-
+  const { locale } = useLocale(), tr = locale === "tr";
+  const [filter, setFilter] = useState("ALL");
+  const { session } = useSessionContext();
+  const owner = JSON.stringify([session?.user?.id, session?.user?.tenantId, session?.user?.role]);
+  const [position, setPosition] = useState<{ owner: string; filter: string; after: string; number: number } | null>(null);
+  const selected = position?.owner === owner && position.filter === filter ? position : null;
+  const read = useOperationsRead(filter, 100, true, selected?.after ?? null), action = useNotificationRetry(tr, canWrite);
+  const labels: Record<string, string> = tr
+    ? { ALL: "Tüm açık kayıtlar", PENDING: "Bekliyor", PROCESSING: "İşleniyor", FAILED: "Başarısız", DEAD_LETTER: "Otomatik denemeler durdu" }
+    : { ALL: "All open", PENDING: "Pending", PROCESSING: "Processing", FAILED: "Failed", DEAD_LETTER: "Automatic retries stopped" };
+  const counts = read.data?.counts;
+  const countFor = (state: string) => !counts ? "—" : state === "ALL" ? counts.pending + counts.processing + counts.failed + counts.deadLetter
+    : state === "PENDING" ? counts.pending : state === "PROCESSING" ? counts.processing : state === "FAILED" ? counts.failed : counts.deadLetter;
+  const fmt = (value: string) => new Intl.DateTimeFormat(tr ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(new Date(value));
   async function retry(item: OpsItem) {
-    if (!canWrite || !["FAILED", "DEAD_LETTER"].includes(item.status)) return;
-    const confirmed = window.confirm(tr
-      ? `${item.eventType} bildirimi yeniden kuyruğa alınsın mı?`
-      : `Requeue ${item.eventType} notification?`);
-    if (!confirmed) return;
-
-    setBusyId(item.id);
-    setMessage(null);
-    try {
-      const response = await fetch("/api/settings/notifications/retry", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: item.id })
-      });
-      const body = await response.json() as { data?: { requeued?: number }; error?: string };
-      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-      setMessage(tr ? "Bildirim yeniden kuyruğa alındı." : "Notification requeued.");
-      await load();
-    } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : (tr ? "Yeniden kuyruğa alma başarısız." : "Requeue failed."));
-    } finally {
-      setBusyId(null);
-    }
+    const snapshot = retrySnapshot(item);
+    if (!snapshot) return;
+    const phase = await action.run("SINGLE", [snapshot], read.current);
+    if (phase === "denied") read.invalidate();
+    else if (phase === "saved") await read.load();
   }
-
-  return <section className="card settings-live-panel notification-ops-console">
-    <div className="settings-live-panel-head">
-      <div>
-        <span className="section-kicker">{tr ? "Bildirim operasyonları" : "Notification operations"}</span>
-        <h3>{tr ? "Outbox hata ve teslim kuyruğu" : "Outbox failure & delivery queue"}</h3>
-        <p>{tr ? "Aktif teslim kuyruğunu, başarısızlıkları ve dead-letter kayıtlarını payload içeriğini açığa çıkarmadan yönetin." : "Operate active delivery work, failures and dead letters without exposing notification payload content."}</p>
-      </div>
-      <button type="button" className="secondary-button compact" onClick={() => void load()} disabled={loading}><RefreshCw size={14}/>{tr ? "Yenile" : "Refresh"}</button>
-    </div>
-
-    <div className="notification-ops-metrics">
-      <button type="button" className={filter === "PENDING" ? "active" : ""} onClick={() => setFilter("PENDING")}><Clock3 size={15}/><span>PENDING</span><strong>{counts.pending}</strong></button>
-      <button type="button" className={filter === "PROCESSING" ? "active" : ""} onClick={() => setFilter("PROCESSING")}><RefreshCw size={15}/><span>PROCESSING</span><strong>{counts.processing}</strong></button>
-      <button type="button" className={filter === "FAILED" ? "active attention" : "attention"} onClick={() => setFilter("FAILED")}><AlertTriangle size={15}/><span>FAILED</span><strong>{counts.failed}</strong></button>
-      <button type="button" className={filter === "DEAD_LETTER" ? "active danger" : "danger"} onClick={() => setFilter("DEAD_LETTER")}><ShieldAlert size={15}/><span>DEAD LETTER</span><strong>{counts.deadLetter}</strong></button>
-      <button type="button" className={filter === "ALL" ? "active" : ""} onClick={() => setFilter("ALL")}><span>{tr ? "TÜM AÇIK" : "ALL OPEN"}</span><strong>{items.length}</strong></button>
-    </div>
-
-    {message ? <div className="settings-policy-message">{message}</div> : null}
-
-    <div className="settings-live-table-wrap">
-      <table className="settings-live-table notification-ops-table">
-        <thead><tr><th>{tr ? "Olay" : "Event"}</th><th>{tr ? "Kaynak" : "Resource"}</th><th>{tr ? "Durum" : "Status"}</th><th>{tr ? "Deneme" : "Attempts"}</th><th>{tr ? "Sonraki deneme" : "Next attempt"}</th><th>{tr ? "Son hata" : "Last error"}</th><th>{tr ? "İşlem" : "Operation"}</th></tr></thead>
-        <tbody>
-          {loading && !items.length ? <tr><td colSpan={7} className="settings-live-empty">{tr ? "Operasyon kayıtları yükleniyor…" : "Loading operational records…"}</td></tr> : null}
-          {!loading && !visible.length ? <tr><td colSpan={7} className="settings-live-empty">{tr ? "Bu görünümde açık bildirim operasyonu yok." : "No open notification operations in this view."}</td></tr> : null}
-          {visible.map((item) => <tr key={item.id}>
-            <td><strong>{item.eventType}</strong><small>{item.channel} · {fmt(item.updatedAt)}</small></td>
-            <td><strong>{item.resourceType}</strong><small>{item.resourceId}</small></td>
-            <td><span className={`settings-live-state ${item.status === "FAILED" || item.status === "DEAD_LETTER" ? "attention" : "ok"}`}>{item.status.replaceAll("_", " ")}</span></td>
-            <td>{item.attempts}</td>
-            <td>{fmt(item.nextAttemptAt)}</td>
-            <td><span className="notification-ops-error">{item.lastError ?? "—"}</span></td>
-            <td>{canWrite && (item.status === "FAILED" || item.status === "DEAD_LETTER") ? <button type="button" className="secondary-button compact" disabled={busyId === item.id} onClick={() => void retry(item)}><RotateCcw size={13}/>{busyId === item.id ? (tr ? "İşleniyor…" : "Processing…") : (tr ? "Yeniden dene" : "Retry")}</button> : <span className="matrix-note">{item.status === "PROCESSING" ? (tr ? "İşleniyor" : "In progress") : "—"}</span>}</td>
-          </tr>)}
-        </tbody>
-      </table>
-    </div>
-    <p className="settings-live-footnote">{tr ? "Görünüm tenant kapsamındaki son 100 açık operasyon kaydıyla sınırlıdır; notification payload verisi bu ekrana taşınmaz." : "The view is bounded to the latest 100 open tenant-scoped operational records; notification payload data is never projected here."}</p>
+  function firstPage() {
+    if (action.pending) return;
+    if (selected) setPosition(null);
+    else void read.load();
+  }
+  function olderPage() {
+    if (!read.current() || !read.page?.next || action.pending) return;
+    setPosition({ owner, filter, after: read.page.next, number: (selected?.number ?? 1) + 1 });
+  }
+  if (!read.allowed) return null;
+  return <section className={`card settings-live-panel notification-ops-console ${styles.console}`} data-notification-operations>
+    <div className="settings-live-panel-head"><div>
+      <span className="section-kicker">{tr ? "Bildirim operasyonları" : "Notification operations"}</span>
+      <h3>{tr ? "Gönderim kuyruğu ve yeniden deneme" : "Delivery queue and retry"}</h3>
+      <p>{tr ? "Yalnız incelenen kayıtlar yeniden kuyruğa alınır; bu, e-postanın teslim edildiği anlamına gelmez." : "Only reviewed records are requeued; this does not mean an email was delivered."}</p>
+    </div><button type="button" className="secondary-button compact" onClick={firstPage} disabled={read.loading || action.pending}>{tr ? "Yenile" : "Refresh"}</button></div>
+    <div className="notification-ops-metrics">{["ALL", ...operationalStates].map(state => <button type="button" key={state} aria-pressed={filter === state} disabled={action.pending}
+      className={filter === state ? "active" : ""} onClick={() => { setPosition(null); setFilter(state); }}><span>{labels[state]}</span><strong>{countFor(state)}</strong></button>)}</div>
+    {action.message ? <p role={action.phase === "saved" ? "status" : "alert"} className="settings-policy-message">{action.message}</p> : null}
+    {read.error ? <p role="alert">{tr ? "Kayıtlar doğrulanamadı. Eski liste gizlendi; yeniden okumak için Yenile’ye basın." : "Records could not be verified. Old rows are hidden; press Refresh to read again."}</p> : null}
+    <div className="settings-live-table-wrap"><table className="settings-live-table notification-ops-table"><thead><tr>
+      {[tr ? "Olay" : "Event", tr ? "Kaynak" : "Resource", tr ? "Durum" : "Status", tr ? "Deneme" : "Attempts", tr ? "Sonraki deneme (UTC)" : "Next attempt (UTC)", tr ? "Son hata" : "Last error", tr ? "İşlem" : "Operation"].map(t => <th key={t}>{t}</th>)}
+    </tr></thead><tbody>
+      {read.loading ? <tr><td colSpan={7}>{tr ? "Kayıtlar yükleniyor…" : "Loading records…"}</td></tr> : null}
+      {read.data && !read.data.items.length ? <tr><td colSpan={7}>{tr ? "Bu görünümde kayıt yok." : "No records in this view."}</td></tr> : null}
+      {read.data?.items.map(item => { const snapshot = retrySnapshot(item); return <tr key={item.id} data-notification-row={item.id}>
+        <td><strong>{item.eventType}</strong><small>{item.channel} · {fmt(item.updatedAt)}</small></td>
+        <td><strong>{item.resourceType}</strong><small>{item.resourceId}</small></td><td>{labels[item.status]}</td><td>{item.attempts}</td><td>{fmt(item.nextAttemptAt)}</td>
+        <td>{item.lastError === "DELIVERY_ERROR_REDACTED" ? (tr ? "Sağlayıcı ayrıntıları gizlendi" : "Provider details redacted") : item.lastError ?? "—"}</td>
+        <td>{action.allowed && snapshot ? <button type="button" className="secondary-button compact" disabled={action.blocked([snapshot]) || read.loading} onClick={() => void retry(item)}>{tr ? "Yeniden dene" : "Retry"}</button> : "—"}</td>
+      </tr>; })}
+    </tbody></table></div>
+    <nav className={styles.pagination} aria-label={tr ? "Bildirim sayfaları" : "Notification pages"}>
+      <span role="status">{tr ? `Sayfa ${selected?.number ?? 1}` : `Page ${selected?.number ?? 1}`}{read.data ? ` · ${read.data.items.length} ${tr ? "kayıt" : "records"}` : ""}</span>
+      <div><button type="button" className="secondary-button compact" disabled={!selected || read.loading || action.pending} onClick={firstPage}>{tr ? "İlk sayfa" : "First page"}</button>
+      <button type="button" className="secondary-button compact" disabled={!read.page?.next || read.loading || action.pending} onClick={olderPage}>{tr ? "Daha eski kayıtlar" : "Older records"}</button></div>
+    </nav>
+    {read.data && !read.page?.next ? <p className="settings-live-footnote">{tr ? "Bu okumada daha eski kayıt bulunamadı." : "No older records were found in this read."}</p> : null}
+    <p className="settings-live-footnote">{tr ? "Sayaçlar kurum toplamıdır; her sayfa en fazla 100 kayıt gösterir. Canlı kuyruk değiştikçe kayıtlar sayfalar arasında yer değiştirebilir; Yenile ilk sayfayı açar. Bildirim payload verisi gösterilmez. Tarihler UTC’dir." : "Counters are tenant totals; each page shows up to 100 records. Live queue changes can move records between pages; Refresh returns to the first page. Notification payload data is never projected here. Dates use UTC."}</p>
   </section>;
 }

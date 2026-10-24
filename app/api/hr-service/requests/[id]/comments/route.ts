@@ -2,7 +2,8 @@ import { DataClassification, PlatformRole, Prisma, ServicePriority, ServiceReque
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
-import { hrServiceRequestWhere, isHRServiceSelfServiceRole } from "@/lib/hr-service-access";
+import { asServiceRevision, nextServiceRevision } from "@/lib/hr-service-revision";
+import { hrServiceRequestWhere, isHRServiceSelfServiceRole, isHRServiceStaffRole } from "@/lib/hr-service-access";
 import { asEnumValue, asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
 import { enqueueNotificationOutbox } from "@/lib/notification-outbox";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
@@ -10,25 +11,40 @@ import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/re
 const commentTerminalStatuses = new Set<ServiceRequestStatus>([ServiceRequestStatus.CLOSED, ServiceRequestStatus.CANCELLED]);
 const fallbackSlaMinutes: Record<ServicePriority, number> = { LOW: 4320, MEDIUM: 1440, HIGH: 480, CRITICAL: 240 };
 
+const readHeaders = { "Cache-Control": "private, no-store", Vary: "Cookie", "X-Content-Type-Options": "nosniff" };
+const readJson = (body: unknown, status = 200) => Response.json(body, { status, headers: readHeaders });
+
+/** Legacy response fields and 300-row bound are retained. New callers that
+ * need further history should use the paginated /conversation endpoint. */
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const ctx = await getRequestContext(request);
-  if (!ctx) return unauthorized();
-  if (!can(ctx, "hr-service:read")) return forbidden();
-  const id = asIdentifier((await params).id);
-  if (!id) return Response.json({ error: "A valid request id is required." }, { status: 400 });
-  const access = await hrServiceRequestWhere(db, ctx);
-  const ticket = await db.hRServiceRequest.findFirst({ where: { AND: [access, { id }] }, select: { id: true } });
-  if (!ticket) return Response.json({ error: "Request not found." }, { status: 404 });
-  const data = await db.hRServiceComment.findMany({
-    where: {
-      tenantId: ctx.tenantId,
-      requestId: id,
-      ...(isHRServiceSelfServiceRole(ctx.role) ? { visibility: ServiceVisibility.REQUESTOR } : {})
-    },
-    orderBy: { createdAt: "asc" },
-    take: 300
-  });
-  return Response.json({ data });
+  try {
+    const ctx = await getRequestContext(request);
+    if (!ctx) return readJson({ error: "Authentication required." }, 401);
+    if (!can(ctx, "hr-service:read")) return readJson({ error: "Access denied." }, 403);
+    const id = asIdentifier((await params).id);
+    if (!id) return readJson({ error: "A valid request id is required." }, 400);
+    const data = await db.$transaction(async tx => {
+      const access = await hrServiceRequestWhere(tx, ctx);
+      const ticket = await tx.hRServiceRequest.findFirst({ where: { AND: [access, { id }] }, select: { id: true } });
+      if (!ticket) throw new Error("NOT_FOUND");
+      return tx.hRServiceComment.findMany({
+        where: {
+          tenantId: ctx.tenantId,
+          requestId: id,
+          visibility: isHRServiceStaffRole(ctx.role)
+            ? { in: [ServiceVisibility.REQUESTOR, ServiceVisibility.PRIVATE_NOTE] }
+            : ServiceVisibility.REQUESTOR
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        take: 300
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
+    return readJson({ data });
+  } catch (error) {
+    if (error instanceof Error && error.message === "NOT_FOUND") return readJson({ error: "Request not found." }, 404);
+    console.error("[HRBP] Service comments could not be loaded.");
+    return readJson({ error: "Service comments could not be loaded." }, 503);
+  }
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -40,6 +56,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!id) return Response.json({ error: "A valid request id is required." }, { status: 400 });
   const body = await readJsonObject(request);
   if (!body) return Response.json({ error: "JSON body must be an object." }, { status: 400 });
+  if (body.expectedUpdatedAt === undefined) return Response.json({ code: "SERVICE_REVISION_REQUIRED", error: "Reload the request and send its displayed expectedUpdatedAt." }, { status: 428, headers: { "Cache-Control": "private, no-store" } });
+  const expectedUpdatedAt = asServiceRevision(body.expectedUpdatedAt);
+  if (!expectedUpdatedAt) return Response.json({ code: "SERVICE_REVISION_INVALID", error: "expectedUpdatedAt must be a canonical UTC timestamp with milliseconds." }, { status: 400, headers: { "Cache-Control": "private, no-store" } });
   const text = asText(body.body, 4000);
   if (!text) return Response.json({ error: "body must be between 1 and 4000 characters." }, { status: 400 });
   const requestedVisibility = body.visibility === undefined ? null : asEnumValue(body.visibility, Object.values(ServiceVisibility));
@@ -53,8 +72,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         select: { id: true, requestNumber: true, requestorId: true, assigneeId: true, firstResponseAt: true, status: true, priority: true, queue: true, updatedAt: true }
       });
       if (!ticket) throw new Error("NOT_FOUND");
+      if (ticket.updatedAt.toISOString() !== expectedUpdatedAt) throw new Error("REVISION_CONFLICT");
       if (commentTerminalStatuses.has(ticket.status)) throw new Error("TERMINAL");
 
+      // Claim the exact displayed version before inserting any comment. Every
+      // successful comment advances the parent, including private/employee notes.
+      // Serializable isolation plus the conditional update rejects competing writes.
+      const revision = nextServiceRevision(ticket.updatedAt, new Date());
+      const claimed = await tx.hRServiceRequest.updateMany({
+        where: { id: ticket.id, tenantId: ctx.tenantId, updatedAt: ticket.updatedAt, status: ticket.status },
+        data: { updatedAt: revision }
+      });
+      if (claimed.count !== 1) throw new Error("STATE_CONFLICT");
       const selfService = isHRServiceSelfServiceRole(ctx.role);
       const visibility = selfService ? ServiceVisibility.REQUESTOR : requestedVisibility ?? ServiceVisibility.REQUESTOR;
       const comment = await tx.hRServiceComment.create({
@@ -69,9 +98,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         }) : null;
         const renewedMinutes = queue?.defaultSlaMinutes ?? fallbackSlaMinutes[ticket.priority];
         const reopened = await tx.hRServiceRequest.updateMany({
-          where: { id: ticket.id, tenantId: ctx.tenantId, status: ServiceRequestStatus.RESOLVED, updatedAt: ticket.updatedAt },
+          where: { id: ticket.id, tenantId: ctx.tenantId, status: ServiceRequestStatus.RESOLVED, updatedAt: revision },
           data: {
             status: ServiceRequestStatus.IN_PROGRESS,
+            updatedAt: revision,
             resolvedAt: null,
             slaDueAt: new Date(comment.createdAt.getTime() + renewedMinutes * 60_000),
             escalationLevel: 0,
@@ -111,7 +141,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (staffResponse && !ticket.firstResponseAt) {
         await tx.hRServiceRequest.updateMany({
           where: { id: ticket.id, tenantId: ctx.tenantId, firstResponseAt: null },
-          data: { firstResponseAt: comment.createdAt }
+          data: { firstResponseAt: comment.createdAt, updatedAt: revision }
         });
       }
 
@@ -149,16 +179,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         });
       }
 
-      return comment;
+      return { ...comment, writeReceipt: {
+        requestId: id, tenantId: ctx.tenantId, actorId: ctx.actorId, operation: "COMMENT",
+        expectedUpdatedAt, updatedAt: revision.toISOString()
+      } };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
-    return Response.json({ data }, { status: 201 });
+    return Response.json({ data }, { status: 201, headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
     if (code === "NOT_FOUND") return Response.json({ error: "Request not found." }, { status: 404 });
     if (code === "TERMINAL") return Response.json({ error: "Closed or cancelled requests are read-only. Reopen a resolved request before continuing work." }, { status: 409 });
+    if (code === "REVISION_CONFLICT") return Response.json({ code: "SERVICE_REVISION_CONFLICT", error: "The displayed request version is stale. Review the current request before submitting again." }, { status: 409, headers: { "Cache-Control": "private, no-store" } });
     if (code === "STATE_CONFLICT" || (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2034")) return Response.json({ error: "The request changed concurrently. Refresh and try again." }, { status: 409 });
-    console.error("HR service comment creation failed", error);
+    console.error("[HRBP] HR service comment could not be completed.");
     return Response.json({ error: "Comment could not be added." }, { status: 500 });
   }
 }

@@ -48,7 +48,8 @@ function action(value: unknown, secondary = false): boolean {
   if (!object(value) || typeof value.type !== "string") return false;
   const specs: Record<string, readonly string[]> = secondary ? secondaryIds : primaryIds;
   if (!Object.hasOwn(specs, value.type) || !specs[value.type].every(key => id(value[key]))) return false;
-  if (value.type === "advance-hr-service") return value.status === "TRIAGE" || value.status === "IN_PROGRESS";
+  if (value.type === "advance-hr-service") return (value.status === "TRIAGE" || value.status === "IN_PROGRESS") &&
+    date(value.expectedUpdatedAt) && new Date(value.expectedUpdatedAt).toISOString() === value.expectedUpdatedAt;
   if (value.type === "advance-onboarding-task" || value.type === "advance-offboarding-task") return value.status === "IN_PROGRESS" || value.status === "COMPLETED";
   return true;
 }

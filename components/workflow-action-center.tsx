@@ -555,7 +555,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         payload = { action: "START" };
       } else if (item.action.type === "advance-hr-service") {
         endpoint = `/api/hr-service/requests/${encodeURIComponent(item.action.requestId)}/status`;
-        payload = { status: item.action.status };
+        payload = { status: item.action.status, expectedUpdatedAt: item.action.expectedUpdatedAt };
       } else if (item.action.type === "advance-onboarding-task") {
         endpoint = `/api/onboarding/tasks/${encodeURIComponent(item.action.taskId)}/status`;
         payload = { status: item.action.status };

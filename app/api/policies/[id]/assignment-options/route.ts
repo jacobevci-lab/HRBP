@@ -41,6 +41,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   return Response.json({
     data: {
+      policyId: id,
+      tenantId: ctx.tenantId,
       relationshipScoped: scope !== null,
       employments: employments.map((employment) => {
         const assignment = assignmentByEmployment.get(employment.id);
@@ -56,5 +58,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         };
       })
     }
-  });
+  }, { headers: { "Cache-Control": "private, no-store", Vary: "Cookie" } });
 }

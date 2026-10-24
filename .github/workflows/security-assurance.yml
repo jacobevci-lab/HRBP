@@ -28,7 +28,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
 
       - name: Install exact dependency graph
@@ -39,6 +39,9 @@ jobs:
 
       - name: Audit complete dependency graph
         run: npm run security:audit:full
+
+      - name: Verify source SBOM inventory and tamper rejection
+        run: node --test scripts/release-sbom.test.mjs
 
       - name: Generate release evidence
         run: npm run release:evidence:generate
@@ -75,10 +78,29 @@ jobs:
           languages: javascript-typescript
           queries: security-extended
 
+      - name: Verify sanitized CodeQL summary parser
+        run: node --test scripts/summarize-codeql.test.mjs
+
       - name: Analyze source
+        id: analyze
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           category: "/language:javascript-typescript"
+          post-processed-sarif-path: .codeql-results
+
+      - name: Build sanitized CodeQL finding summary
+        if: always()
+        run: node scripts/summarize-codeql.mjs .codeql-results .codeql-summary/codeql-summary.json
+
+      - name: Preserve sanitized CodeQL finding summary
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: hrbp-codeql-summary-${{ github.sha }}
+          path: .codeql-summary/
+          if-no-files-found: error
+          retention-days: 7
+          include-hidden-files: true
 
   attest-main:
     name: Attest main release evidence
@@ -103,7 +125,7 @@ jobs:
         with:
           subject-path: .release-evidence/hrbp-one-source.tar
 
-      - name: Attest production dependency SBOM
+      - name: Attest production-root source dependency SBOM
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: .release-evidence/hrbp-one-source.tar
