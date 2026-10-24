@@ -70,8 +70,9 @@ try {
         const balance = await db.leaveBalance.create({ data: { tenantId: actor.tenantId, employmentId: employee.id, leaveTypeId: type.id, periodYear: when.getUTCFullYear(), opening: '0.30', used: '0.20' } });
         const record = await db.leaveRequest.create({ data: { tenantId: actor.tenantId, employmentId: employee.id, leaveTypeId: type.id, startsAt: when, endsAt: when, units: '0.10', status: 'PENDING' } });
         const notice = await db.notificationOutbox.create({ data: { tenantId: actor.tenantId, recipientUserId: actor.id, eventType: 'LEAVE_APPROVAL_REQUIRED', resourceType: 'LeaveRequest', resourceId: record.id, dedupeKey: randomUUID(), status: 'DELIVERED', channel: 'IN_APP', deliveredAt: new Date() } });
-        await page.goto(origin + pagePath, { waitUntil: 'networkidle' });
-        const control = page.locator(`${actionCenter ? '.workflow-action-center ' : ''}[data-leave-decision-id="${record.id}"]`); await control.waitFor();
+        await page.goto(origin + pagePath, { waitUntil: 'domcontentloaded' });
+        const control = page.locator(`${actionCenter ? '.workflow-action-center ' : ''}[data-leave-decision-id="${record.id}"]`);
+        await control.waitFor({ state: 'visible' });
         assert.equal(await control.locator('[data-decision="APPROVED"]').innerText(), locale === 'tr' ? 'Onayla' : 'Approve');
         return { record, balance, notice, control, path: `/api/leave/requests/${record.id}/decision` };
       }
