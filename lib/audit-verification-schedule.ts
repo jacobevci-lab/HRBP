@@ -119,6 +119,20 @@ export function createAuditVerificationScheduler(database: PrismaClient, key = "
       }, TRANSACTION);
     },
 
+    /** Persist bounded work while retaining the current tenant cursor.
+     * Used by resumable jobs that need several invocations for one tenant.
+     * Ownership and expiry are fenced in the same transaction as the callback.
+     */
+    async persist<T>(lease: Lease, persist: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+      const persistenceLease = { ...lease };
+      return database.$transaction(async tx => {
+        owned(await lock(tx), persistenceLease);
+        const value = await persist(tx);
+        await fence(tx, persistenceLease);
+        return value;
+      }, TRANSACTION);
+    },
+
     async checkpoint<T>(lease: Lease, tenant: Position, persist: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
       const expected = lease.tenants[lease.nextIndex];
       if (!expected || !same(expected, tenant)) throw failure("AUDIT_SCHEDULE_ORDER_INVALID");
