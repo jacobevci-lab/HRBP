@@ -27,6 +27,8 @@ jobs:
       HRBP_ALLOWED_EMAIL_DOMAINS: example.test
       HRBP_SCIM_ENABLED: "true"
       HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "true"
+      HRBP_AUDIT_FULL_HISTORY_PAGE_SIZE: "2"
+      HRBP_AUDIT_FULL_HISTORY_INTERVAL_HOURS: "168"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -221,6 +223,8 @@ jobs:
             --var HRBP_ALLOWED_EMAIL_DOMAINS:$HRBP_ALLOWED_EMAIL_DOMAINS \
             --var HRBP_SCIM_ENABLED:$HRBP_SCIM_ENABLED \
             --var HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION:$HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION \
+            --var HRBP_AUDIT_FULL_HISTORY_PAGE_SIZE:$HRBP_AUDIT_FULL_HISTORY_PAGE_SIZE \
+            --var HRBP_AUDIT_FULL_HISTORY_INTERVAL_HOURS:$HRBP_AUDIT_FULL_HISTORY_INTERVAL_HOURS \
             > /tmp/hrbp-wrangler.log 2>&1 &
           WRANGLER_PID=$!
           trap 'kill $WRANGLER_PID 2>/dev/null || true' EXIT
@@ -240,6 +244,124 @@ jobs:
             cat /tmp/hrbp-wrangler.log
             exit 1
           fi
+
+          node --input-type=module <<'NODE'
+          import { PrismaClient } from '@prisma/client';
+          import { appendToAuditLedger } from './lib/audit-ledger-lock.mjs';
+          import { fullAuditHash } from './scripts/audit-full-history-verification.mjs';
+
+          const db = new PrismaClient();
+          const tenantId = 'ci-audit-history-resume';
+          const endpoint = 'http://127.0.0.1:8787/api/internal/audit-history';
+          const token = process.env.HRBP_MAINTENANCE_TOKEN;
+
+          async function append(index) {
+            await db.$transaction(tx => appendToAuditLedger(tx, tenantId, async ({ previousHash, ledgerSequence }) => {
+              const row = {
+                tenantId,
+                ledgerSequence,
+                actorId: 'system:ci-history-resume',
+                action: 'audit.synthetic-history-resume',
+                resourceType: 'CITest',
+                resourceId: 'history-resume-' + index,
+                purpose: 'Disposable resumable full-history verification',
+                classification: 'INTERNAL',
+                ipAddress: null,
+                occurredAt: new Date('2026-10-25T00:00:00.000Z')
+              };
+              const hash = fullAuditHash(row, previousHash);
+              await tx.auditEvent.create({ data: { ...row, hash, previousHash } });
+              return { nextHash: hash, value: true };
+            }));
+          }
+
+          async function post() {
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: { authorization: 'Bearer ' + token, accept: 'application/json' }
+            });
+            const text = await response.text();
+            let body;
+            try { body = JSON.parse(text); }
+            catch {
+              console.error('Audit history endpoint returned invalid JSON.', response.status, text.slice(0, 500));
+              process.exit(1);
+            }
+            if (!response.ok) {
+              console.error('Audit history endpoint failed.', response.status, body);
+              process.exit(1);
+            }
+            return body.data;
+          }
+
+          try {
+            const unauthorized = await fetch(endpoint, { method: 'POST' });
+            if (unauthorized.status !== 401) {
+              console.error('Audit history endpoint accepted an unauthenticated request.', unauthorized.status);
+              process.exit(1);
+            }
+
+            await db.auditVerificationSchedule.deleteMany({ where: { id: 'audit-full-history' } });
+            await db.auditHistoryVerificationProgress.deleteMany({ where: { tenantId } });
+            await db.auditHistoryVerificationStats.deleteMany({ where: { id: 'audit-full-history' } });
+            await db.auditEvent.deleteMany({ where: { tenantId } });
+            await db.auditLedgerState.deleteMany({ where: { tenantId } });
+            await db.tenant.deleteMany({ where: { id: tenantId } });
+            await db.tenant.create({
+              data: {
+                id: tenantId,
+                name: 'Disposable resumable audit history',
+                region: 'test',
+                createdAt: new Date('1900-01-01T00:00:00.000Z')
+              }
+            });
+            for (let i = 0; i < 5; i++) await append(i);
+
+            const first = await post();
+            let progress = await db.auditHistoryVerificationProgress.findUnique({ where: { tenantId } });
+            let schedule = await db.auditVerificationSchedule.findUnique({ where: { id: 'audit-full-history' } });
+            if (first.outcome !== 'PARTIAL' || first.eventsChecked !== 2 ||
+                !progress || progress.status !== 'RUNNING' ||
+                progress.targetSequence !== 5n || progress.verifiedSequence !== 2n ||
+                schedule?.cursorTenantId !== null) {
+              console.error('First history chunk did not retain the tenant cursor and fixed target.', { first, progress, schedule });
+              process.exit(1);
+            }
+
+            // Normal application append after target capture must wait for the next
+            // full scan rather than extending the current bounded traversal.
+            await append(5);
+
+            const second = await post();
+            progress = await db.auditHistoryVerificationProgress.findUnique({ where: { tenantId } });
+            schedule = await db.auditVerificationSchedule.findUnique({ where: { id: 'audit-full-history' } });
+            if (second.outcome !== 'PARTIAL' || second.eventsChecked !== 2 ||
+                !progress || progress.targetSequence !== 5n || progress.verifiedSequence !== 4n ||
+                schedule?.cursorTenantId !== null) {
+              console.error('Second history chunk did not resume the same fixed target.', { second, progress, schedule });
+              process.exit(1);
+            }
+
+            const third = await post();
+            progress = await db.auditHistoryVerificationProgress.findUnique({ where: { tenantId } });
+            const ledger = await db.auditLedgerState.findUnique({ where: { tenantId } });
+            const stats = await db.auditHistoryVerificationStats.findUnique({ where: { id: 'audit-full-history' } });
+            if (third.outcome !== 'VERIFIED' || third.eventsChecked !== 1 ||
+                !progress || progress.status !== 'VALID' ||
+                progress.targetSequence !== 5n || progress.verifiedSequence !== 5n ||
+                !progress.completedAt || !progress.lastSuccessAt ||
+                !ledger || ledger.eventCount !== 6n ||
+                !stats || stats.eventsChecked !== 5n || stats.partialChunks !== 2n ||
+                stats.successfulScans !== 1n || stats.failedScans !== 0n) {
+              console.error('Resumable history scan did not complete the captured watermark exactly once.',
+                { third, progress, ledger, stats });
+              process.exit(1);
+            }
+            console.log('Resumable full-history Worker/PostgreSQL protocol passed.');
+          } finally {
+            await db.$disconnect();
+          }
+          NODE
 
           node --input-type=module <<'NODE'
           const response = await fetch('http://127.0.0.1:8787/api/health/runtime', { redirect: 'error' });
@@ -777,11 +899,20 @@ jobs:
               !/^hrbp_scheduled_position_changes_due [0-9]+$/m.test(text) ||
               !/^hrbp_emergency_access_grants\{status="REQUESTED"\} [0-9]+$/m.test(text) ||
               !/^hrbp_emergency_access_grants\{status="ACTIVE"\} [0-9]+$/m.test(text) ||
-              !/^hrbp_emergency_access_active [0-9]+$/m.test(text)) {
+              !/^hrbp_emergency_access_active [0-9]+$/m.test(text) ||
+              !/^hrbp_audit_history_tenant_universe [0-9]+$/m.test(text) ||
+              !/^hrbp_audit_history_untracked_tenants [0-9]+$/m.test(text) ||
+              !/^hrbp_audit_history_records\{status="RUNNING"\} [0-9]+$/m.test(text) ||
+              !/^hrbp_audit_history_records\{status="VALID"\} [0-9]+$/m.test(text) ||
+              !/^hrbp_audit_history_records\{status="INVALID"\} [0-9]+$/m.test(text) ||
+              !/^hrbp_audit_history_backlog_events [0-9]+$/m.test(text) ||
+              !/^hrbp_audit_history_events_checked_total [0-9]+$/m.test(text) ||
+              !/^hrbp_audit_history_scans_total\{result="success"\} [0-9]+$/m.test(text) ||
+              !/^hrbp_audit_history_scans_total\{result="failure"\} [0-9]+$/m.test(text)) {
             console.error('Operational metrics snapshot is incomplete.', accepted.status, text.slice(0, 2000));
             process.exit(1);
           }
-          if (/ci-tenant|ci-user|ci-document-scan-version|ci-document-scan-stale-exhausted|ci-scim-external|protected\.admin@example\.test/.test(text)) {
+          if (/ci-tenant|ci-user|ci-document-scan-version|ci-document-scan-stale-exhausted|ci-scim-external|ci-audit-history-resume|protected\.admin@example\.test/.test(text)) {
             console.error('Operational metrics leaked tenant, user or resource identifiers.');
             process.exit(1);
           }
