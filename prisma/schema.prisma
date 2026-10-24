@@ -901,8 +901,8 @@ model AuditHistoryVerificationProgress {
   completedAt       DateTime?
   failureCode       String?
 
-  @@index([status, lastAttemptAt, tenantId])
-  @@index([lastSuccessAt, tenantId])
+  @@index([status, lastAttemptAt, tenantId], map: "AuditHistoryProgress_status_attempt_tenant_idx")
+  @@index([lastSuccessAt, tenantId], map: "AuditHistoryProgress_success_tenant_idx")
 }
 
 // Deployment-wide monotonic counters for private aggregate monitoring only.
