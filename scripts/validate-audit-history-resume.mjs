@@ -17,6 +17,9 @@ const maintenance = "lib/maintenance-protocol.mjs";
 const metrics = "app/api/internal/metrics/route.ts";
 const migration = "prisma/migrations/20261025003000_audit_history_resume_progress/migration.sql";
 const pkg = "package.json";
+const dockerfile = "Dockerfile.onprem";
+const compose = "docker-compose.onprem.yml";
+const envOnprem = ".env.onprem.example";
 
 expect(monitor, /SCHEDULE_KEY = "audit-full-history"/,
   "full-history verification must have a schedule key independent from the fast tail monitor");
@@ -84,6 +87,25 @@ expect(pkg, /"audit-integrity:validate":[^\n]*audit-verification-schedule\.test\
   "durable scheduler/fence tests must gate production prebuild validation");
 expect(pkg, /"audit-integrity:validate":[^\n]*validate-audit-history-resume\.mjs/,
   "static resumable-history contract must gate production prebuild validation");
+
+expect(pkg, /"onprem:validate":[^\n]*audit-history-scheduler\.test\.mjs/,
+  "independent history scheduler protocol tests must gate on-prem validation");
+expect(dockerfile, /COPY scripts\/onprem-audit-history-scheduler\.mjs/,
+  "on-prem scheduler image must include the independent history scheduler");
+expect(dockerfile, /COPY scripts\/onprem-audit-history-health\.mjs/,
+  "on-prem scheduler image must include the independent history health check");
+expect(compose, /audit-history-scheduler:[\s\S]*onprem-audit-history-scheduler\.mjs/,
+  "compose must run full-history verification in a process separate from fast maintenance");
+expect(compose, /audit_history_scheduler_state:\/var\/lib\/hrbp-audit-history-scheduler/,
+  "full-history scheduler health evidence must have a separate persistent state volume");
+expect(compose, /HRBP_AUDIT_HISTORY_SCHEDULER_INTERVAL_SECONDS/,
+  "full-history scheduler cadence must be independently configurable");
+expect(envOnprem, /HRBP_AUDIT_FULL_HISTORY_PAGE_SIZE=250/,
+  "on-prem example must declare a bounded history page budget");
+expect(envOnprem, /HRBP_AUDIT_FULL_HISTORY_INTERVAL_HOURS=168/,
+  "on-prem example must declare the full-history rescan interval");
+expect(envOnprem, /HRBP_AUDIT_HISTORY_SCHEDULER_INTERVAL_SECONDS=900/,
+  "on-prem example must declare a separate history scheduler cadence");
 
 if (failures.length) {
   console.error("Audit history resume validation failed:\n" + failures.map(x => "- " + x).join("\n"));
