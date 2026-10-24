@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { waitForAuditLocale } from './audit-locale-readiness.mjs';
 import { execFileSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
 import { chromium } from 'playwright';
@@ -71,6 +72,7 @@ try {
         const record = await db.leaveRequest.create({ data: { tenantId: actor.tenantId, employmentId: employee.id, leaveTypeId: type.id, startsAt: when, endsAt: when, units: '0.10', status: 'PENDING' } });
         const notice = await db.notificationOutbox.create({ data: { tenantId: actor.tenantId, recipientUserId: actor.id, eventType: 'LEAVE_APPROVAL_REQUIRED', resourceType: 'LeaveRequest', resourceId: record.id, dedupeKey: randomUUID(), status: 'DELIVERED', channel: 'IN_APP', deliveredAt: new Date() } });
         await page.goto(origin + pagePath, { waitUntil: 'domcontentloaded' });
+        await waitForAuditLocale(page, pagePath, locale);
         const control = page.locator(`${actionCenter ? '.workflow-action-center ' : ''}[data-leave-decision-id="${record.id}"]`);
         await control.waitFor({ state: 'visible' });
         assert.equal(await control.locator('[data-decision="APPROVED"]').innerText(), locale === 'tr' ? 'Onayla' : 'Approve');
@@ -150,7 +152,7 @@ try {
             assert.equal(posts.length - before, 1); assert.equal(patches.length, beforePatches);
           } finally { await context.unroute(origin + '/api/action-center', stale); }
         }
-        await f.control.locator('[data-leave-decision-reload]').click(); await page.waitForLoadState('networkidle');
+        await f.control.locator('[data-leave-decision-reload]').click(); await waitForAuditLocale(page, pagePath, locale);
         assert.equal(posts.length - before, 1); assert.equal(await auditCount(f), 1); await identity();
       });
       await scenario(name('real insufficient-balance rejection closes no notification and requires fresh review'), async () => {
