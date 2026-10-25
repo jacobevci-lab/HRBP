@@ -165,6 +165,16 @@ test("stale checkpoints cannot be newly archived and excessive export delay fail
   }), throwsCode("CHECKPOINT_ARCHIVE_EXPORT_DELAY_EXCEEDED"));
 });
 
+test("future-dated archive publication is rejected during offline verification", async () => {
+  const saved = await archive();
+  assert.throws(() => verifyAuditCheckpointArchive(saved.archive, saved.checkpoint, {
+    ...context,
+    publicKey: keys.publicKey,
+    maxExportDelayMs: 3600_000,
+    now: exportedAt - 60_000
+  }), throwsCode("CHECKPOINT_ARCHIVE_FUTURE"));
+});
+
 test("external retention floor and expiry are independently enforced", async () => {
   const saved = await archive({ retentionDays: 30 });
   assert.throws(() => verifyAuditCheckpointArchive(saved.archive, saved.checkpoint, {
@@ -195,6 +205,20 @@ test("bundle publication is no-overwrite and an incomplete/replaced directory ca
     assert.throws(() => writeAuditCheckpointArchiveBundle(target, saved.checkpoint, saved.archive),
       throwsCode("CHECKPOINT_ARCHIVE_OUTPUT_EXISTS"));
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("world-writable archive parents are rejected before bundle creation", async () => {
+  const root = mkdtempSync(join(tmpdir(), "hrbp-audit-archive-unsafe-"));
+  try {
+    const saved = await archive();
+    chmodSync(root, 0o777);
+    assert.throws(() => writeAuditCheckpointArchiveBundle(join(root, "bundle"), saved.checkpoint, saved.archive),
+      throwsCode("CHECKPOINT_ARCHIVE_OUTPUT_UNSAFE"));
+    assert.equal(existsSync(join(root, "bundle")), false);
+  } finally {
+    chmodSync(root, 0o700);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("CLI parser requires an absolute external target and explicit operator acknowledgement", () => {
