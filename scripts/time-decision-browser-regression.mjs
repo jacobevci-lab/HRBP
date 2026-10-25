@@ -116,15 +116,17 @@ try{
     await eventually(async()=>{const row=await state(f);return row.status==="APPROVED"&&row.approvedById===actor.id;});
     assert.equal(await auditCount(f),1);assert.equal(await unread(f),true);assert.equal(patches.length,beforePatches);
     await context.unroute(origin+f.path,handler);
-    const reloaded=page.waitForNavigation({waitUntil:"domcontentloaded",timeout:15000});
+    let reloaded;
     if(actionCenter){
      const center=page.locator(".workflow-action-center"),search=center.locator(".workflow-action-search input");
      await search.fill("no-match-"+randomUUID());await f.control.waitFor({state:"detached"});await search.fill("");await f.control.locator('[data-time-decision-result="unknown"]').waitFor();
      const stale=route=>route.fulfill({status:200,contentType:"application/json",body:JSON.stringify(snapshot)});
      await context.route(origin+"/api/action-center",stale);
      try{await center.locator(".workflow-action-head button").click();await page.waitForFunction(()=>!document.querySelector(".workflow-action-head button")?.disabled);await f.control.locator('[data-time-decision-result="unknown"]').waitFor();assert.equal(posts.length-before,1);}finally{await context.unroute(origin+"/api/action-center",stale);}
+     reloaded=page.waitForNavigation({waitUntil:"domcontentloaded",timeout:15000});
      await f.control.locator("[data-time-decision-reload]").click();
     }else{
+     reloaded=page.waitForNavigation({waitUntil:"domcontentloaded",timeout:15000});
      await f.control.locator("button").filter({hasText:locale==="tr"?"Yenile ve kaydı kontrol et":"Reload and check the entry"}).click();
     }
     await reloaded;await waitForAuditLocale(page,pagePath,locale);assert.equal(posts.length-before,1);assert.equal(await auditCount(f),1);await identity();
