@@ -69,6 +69,17 @@ expect(metrics, /hrbp_audit_history_untracked_tenants/,
   "private metrics must expose measurable untracked tenant backlog");
 expect(metrics, /hrbp_audit_history_backlog_events/,
   "private metrics must expose aggregate event backlog");
+expect(monitor, /FROM "Tenant" t[\s\S]*LEFT JOIN "AuditHistoryVerificationProgress" p ON p\."tenantId" = t\."id"/,
+  "coverage aggregation must start from the live tenant universe, not progress rows");
+expect(monitor, /LEFT JOIN "AuditLedgerState" s ON s\."tenantId" = t\."id"/,
+  "coverage backlog must include current ledger growth after the last successful scan");
+expect(monitor, /COALESCE\(s\."eventCount", 0\) - COALESCE\(p\."verifiedSequence", 0\)/,
+  "untracked tenants and newly appended events must remain visible in aggregate backlog");
+expect(metrics, /hrbp_audit_history_orphaned_progress_records/,
+  "removed-tenant progress must be visible only as an aggregate orphaned-evidence count");
+expect(metrics, /hrbp_audit_history_oldest_valid_age_seconds/,
+  "private metrics must expose oldest retained live coverage age");
+
 reject(metrics, /hrbp_audit_history_[^\n]*tenantId|hrbp_audit_history_[^\n]*tailHash/,
   "Prometheus metric labels/lines must not expose tenant identifiers or hashes");
 
