@@ -93,6 +93,18 @@ test('the actual browser sweep delegates both locale changes and records English
   assert.ok(source.includes('status:0,principalVerified:false,error:'), 'Readiness failure remains a failed audit row');
 });
 
+test('leave decision browser uses deterministic locale readiness instead of network idleness', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('./leave-decision-browser-regression.mjs', import.meta.url), 'utf8');
+  assert.match(source, /import \{ waitForAuditLocale \} from '\.\/audit-locale-readiness\.mjs'/);
+  assert.match(source, /waitForAuditLocale\(page, pagePath, locale\)/);
+  assert.ok(!source.includes('networkidle'), 'Leave decision acceptance must not depend on global network silence');
+  assert.match(source, /waitForURL\(origin \+ pagePath, \{ waitUntil: 'commit', timeout: 15000 \}\)/,
+    'Leave login must observe navigation commit before locale/UI readiness');
+  assert.match(source, /waitForNavigation\(\{ waitUntil: 'domcontentloaded', timeout: 15000 \}\)/,
+    'Leave reload must observe DOM commit and then locale/UI readiness');
+});
+
 test('time decision browser uses deterministic locale readiness instead of network idleness', async () => {
   const { readFile } = await import('node:fs/promises');
   const source = await readFile(new URL('./time-decision-browser-regression.mjs', import.meta.url), 'utf8');
