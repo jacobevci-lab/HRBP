@@ -16,6 +16,11 @@ type CaptureResult =
   | { valid: true; targetSequence: bigint; targetTailHash: string | null }
   | { valid: false; code: string };
 
+type RunningHistoryProgress = AuditHistoryVerificationProgress & {
+  status: "RUNNING";
+  targetSequence: bigint;
+};
+
 function failure(code: string): Error & { code: string } {
   return Object.assign(new Error("Audit full-history verification did not complete safely."), { code });
 }
@@ -39,6 +44,11 @@ function progressState(progress: AuditHistoryVerificationProgress) {
     throw failure("AUDIT_HISTORY_PROGRESS_VERSION_UNSUPPORTED");
   }
 }
+function assertRunningProgress(progress: AuditHistoryVerificationProgress): asserts progress is RunningHistoryProgress {
+  if (progress.status !== "RUNNING" || progress.targetSequence === null) {
+    throw failure("AUDIT_HISTORY_PROGRESS_INVALID");
+  }
+}
 function fresh(progress: AuditHistoryVerificationProgress, now: Date, intervalMs: number) {
   if (progress.status !== "VALID" || !progress.lastSuccessAt) return false;
   if (progress.lastSuccessAt.getTime() > now.getTime() + 30_000) {
@@ -58,12 +68,12 @@ async function captureTarget(tenantId: string): Promise<CaptureResult> {
     });
     if (!state) {
       return first ? { valid: false as const, code: "MISSING_LEDGER_STATE" }
-        : { valid: true as const, targetSequence: 0n, targetTailHash: null };
+        : { valid: true as const, targetSequence: BigInt(0), targetTailHash: null };
     }
-    if (state.eventCount < 0n) return { valid: false as const, code: "INVALID_LEDGER_STATE" };
-    if (state.eventCount === 0n) {
+    if (state.eventCount < BigInt(0)) return { valid: false as const, code: "INVALID_LEDGER_STATE" };
+    if (state.eventCount === BigInt(0)) {
       return state.tailHash === null && !first
-        ? { valid: true as const, targetSequence: 0n, targetTailHash: null }
+        ? { valid: true as const, targetSequence: BigInt(0), targetTailHash: null }
         : { valid: false as const, code: "INVALID_EMPTY_LEDGER_STATE" };
     }
     if (!validHash(state.tailHash) || !first) {
@@ -82,18 +92,18 @@ async function updateStats(
     where: { id: STATS_KEY },
     create: {
       id: STATS_KEY, scanVersion: SCAN_VERSION, eventsChecked: events,
-      partialChunks: outcome === "PARTIAL" ? 1n : 0n,
-      successfulScans: outcome === "SUCCESS" ? 1n : 0n,
-      failedScans: outcome === "FAILURE" ? 1n : 0n,
+      partialChunks: outcome === "PARTIAL" ? BigInt(1) : BigInt(0),
+      successfulScans: outcome === "SUCCESS" ? BigInt(1) : BigInt(0),
+      failedScans: outcome === "FAILURE" ? BigInt(1) : BigInt(0),
       lastAttemptAt: now,
       ...(outcome === "SUCCESS" ? { lastSuccessAt: now } : {}),
       ...(outcome === "FAILURE" ? { lastFailureAt: now } : {})
     },
     update: {
       eventsChecked: { increment: events },
-      ...(outcome === "PARTIAL" ? { partialChunks: { increment: 1n } } : {}),
-      ...(outcome === "SUCCESS" ? { successfulScans: { increment: 1n }, lastSuccessAt: now } : {}),
-      ...(outcome === "FAILURE" ? { failedScans: { increment: 1n }, lastFailureAt: now } : {}),
+      ...(outcome === "PARTIAL" ? { partialChunks: { increment: BigInt(1) } } : {}),
+      ...(outcome === "SUCCESS" ? { successfulScans: { increment: BigInt(1) }, lastSuccessAt: now } : {}),
+      ...(outcome === "FAILURE" ? { failedScans: { increment: BigInt(1) }, lastFailureAt: now } : {}),
       lastAttemptAt: now
     }
   });
@@ -131,13 +141,13 @@ async function initializeProgress(
     create: {
       tenantId, scanVersion: SCAN_VERSION, scheduleVersion: SCHEDULE_VERSION, status: "RUNNING",
       targetSequence: target.targetSequence, targetTailHash: target.targetTailHash,
-      verifiedSequence: 0n, verifiedHash: null, checkedEvents: 0n,
+      verifiedSequence: BigInt(0), verifiedHash: null, checkedEvents: BigInt(0),
       scanStartedAt: now, targetCapturedAt: now, lastAttemptAt: now
     },
     update: {
       scanVersion: SCAN_VERSION, scheduleVersion: SCHEDULE_VERSION, status: "RUNNING",
       targetSequence: target.targetSequence, targetTailHash: target.targetTailHash,
-      verifiedSequence: 0n, verifiedHash: null, checkedEvents: 0n,
+      verifiedSequence: BigInt(0), verifiedHash: null, checkedEvents: BigInt(0),
       scanStartedAt: now, targetCapturedAt: now, lastAttemptAt: now,
       completedAt: null, failureCode: null
     }
@@ -151,14 +161,14 @@ async function recordInitialFailure(
     where: { tenantId },
     create: {
       tenantId, scanVersion: SCAN_VERSION, scheduleVersion: SCHEDULE_VERSION, status: "INVALID",
-      targetSequence: null, targetTailHash: null, verifiedSequence: 0n, verifiedHash: null,
-      checkedEvents: 0n, scanStartedAt: now, targetCapturedAt: now, lastAttemptAt: now,
+      targetSequence: null, targetTailHash: null, verifiedSequence: BigInt(0), verifiedHash: null,
+      checkedEvents: BigInt(0), scanStartedAt: now, targetCapturedAt: now, lastAttemptAt: now,
       lastFailureAt: now, completedAt: now, failureCode: code
     },
     update: {
       scanVersion: SCAN_VERSION, scheduleVersion: SCHEDULE_VERSION, status: "INVALID",
-      targetSequence: null, targetTailHash: null, verifiedSequence: 0n, verifiedHash: null,
-      checkedEvents: 0n, scanStartedAt: now, targetCapturedAt: now, lastAttemptAt: now,
+      targetSequence: null, targetTailHash: null, verifiedSequence: BigInt(0), verifiedHash: null,
+      checkedEvents: BigInt(0), scanStartedAt: now, targetCapturedAt: now, lastAttemptAt: now,
       lastFailureAt: now, completedAt: now, failureCode: code
     }
   });
@@ -167,6 +177,7 @@ async function recordInitialFailure(
 }
 
 async function verifyChunk(progress: AuditHistoryVerificationProgress, take: number) {
+  assertRunningProgress(progress);
   return db.$transaction(
     tx => verifyAuditHistoryChunk(tx, progress, take, computeAuditHash),
     { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead }
@@ -343,8 +354,8 @@ export async function auditHistoryAggregateMetrics(now = new Date()) {
     db.auditHistoryVerificationStats.findUnique({ where: { id: STATS_KEY } })
   ]);
   const row = rows[0] ?? {
-    trackedTenants: 0n, orphanedProgressRecords: 0n,
-    running: 0n, valid: 0n, invalid: 0n, backlogEvents: 0n, oldestRunningAt: null
+    trackedTenants: BigInt(0), orphanedProgressRecords: BigInt(0),
+    running: BigInt(0), valid: BigInt(0), invalid: BigInt(0), backlogEvents: BigInt(0), oldestRunningAt: null
   };
   const tracked = Number(row.trackedTenants <= BigInt(Number.MAX_SAFE_INTEGER) ? row.trackedTenants : BigInt(Number.MAX_SAFE_INTEGER));
   const age = (value: Date | null | undefined) =>
