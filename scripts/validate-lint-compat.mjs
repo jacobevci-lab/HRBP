@@ -17,6 +17,13 @@ for (const name of [...errors,...warnings]) {
   assert.equal(actual.rules[key][0],expected,`${key} severity must not be weakened`);
 }
 assert.ok(actual.plugins.react&&actual.plugins['@typescript-eslint'],'Existing React and TypeScript plugins must remain loaded.');
+const actualEngine = new ESLint();
+const [actualReturnFixture] = await actualEngine.lintText(
+  'export default function Page(){ return null; }',
+  { filePath: 'app/lint-compat-return-fixture.jsx' }
+);
+assert.ok(!actualReturnFixture.messages.some(x=>x.fatal),
+  'Actual project config must parse and execute Next rules on return statements without an engine crash.');
 const engine = new ESLint({overrideConfigFile:true,overrideConfig:[{files:['**/*.jsx'],languageOptions:{ecmaVersion:'latest',sourceType:'module',parserOptions:{ecmaFeatures:{jsx:true}}},plugins:{'@next/next':plugin},rules:{...plugin.configs.recommended.rules,...plugin.configs['core-web-vitals'].rules}}]});
 for (const [rule,code] of [
  ['no-assign-module-variable','let module = {};'],
@@ -27,4 +34,4 @@ for (const [rule,code] of [
  assert.ok(result.messages.some(x=>x.ruleId==='@next/next/'+rule),`${rule} must execute and reject its fixture`);
  assert.ok(!result.messages.some(x=>x.fatal), 'The fixture must parse successfully.');
 }
-console.log('Lint compatibility: 21 rules/severities, existing config, Next 15 and three ESLint 9 behavior fixtures verified.');
+console.log('Lint compatibility: 21 rules/severities, actual return-path config execution, Next 15 and three ESLint 9 behavior fixtures verified.');
