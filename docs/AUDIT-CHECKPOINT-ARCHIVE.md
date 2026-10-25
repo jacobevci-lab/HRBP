@@ -17,6 +17,8 @@ The manifest is signed with the same independent Ed25519 trust root as the check
 
 The signed manifest records the retention policy requested at publication time. **It does not make ordinary disk immutable.**
 
+Both checkpoint `issuedAt` and archive `exportedAt` are operator-host clock values, not trusted timestamps. Keep signer/verifier clocks synchronized and use a trusted timestamp authority later if the customer's assurance model requires one.
+
 A deployment may claim independently retained / immutable evidence only after the operator has published the bundle to separately administered storage with an enforcement mechanism appropriate to the customer's governance model, for example:
 
 - S3-compatible Object Lock / WORM retention;
@@ -79,10 +81,11 @@ The command:
 1. validates private-key ownership/mode through the existing checkpoint file controls;
 2. verifies the checkpoint signature, subject, signer and freshness before publication;
 3. creates a signed archive manifest under a distinct cryptographic domain;
-4. creates a new private bundle directory;
-5. writes `checkpoint.json` and `archive-manifest.json` with no-overwrite semantics;
-6. fsyncs the evidence files/directories before reporting success;
-7. returns checkpoint and manifest SHA-256 digests plus the retention deadline.
+4. rejects a world-writable external evidence parent before creating the bundle;
+5. creates a new private bundle directory;
+6. writes `checkpoint.json` and `archive-manifest.json` with no-overwrite semantics;
+7. fsyncs the evidence files/directories before reporting success;
+8. returns checkpoint and manifest SHA-256 digests plus the retention deadline.
 
 A partial directory left by an interrupted publication is **not** a successful archive. Never delete or overwrite it automatically; investigate and publish a new uniquely named bundle.
 
@@ -123,6 +126,7 @@ Verification is offline. It checks:
 - exact checkpoint digest / sequence / issue-time binding;
 - signer key ID;
 - maximum delay between checkpoint issue and archive publication;
+- that the signed export timestamp is not more than 30 seconds in the future relative to the verifier clock;
 - externally supplied minimum retention deadline;
 - whether the recorded retention deadline has already expired.
 
