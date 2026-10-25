@@ -99,6 +99,8 @@ test('time decision browser uses deterministic locale readiness instead of netwo
   assert.match(source, /import \{ waitForAuditLocale \} from "\.\/audit-locale-readiness\.mjs"/);
   assert.match(source, /waitForAuditLocale\(page,pagePath,locale\)/);
   assert.ok(!source.includes('networkidle'), 'Time decision acceptance must not depend on global network silence');
+  assert.match(source, /waitForURL\(origin\+pagePath,\{waitUntil:"commit",timeout:15000\}\)/,
+    'Login navigation must observe URL commit before locale/UI readiness instead of waiting for the load event');
   assert.match(source, /waitForNavigation\(\{waitUntil:"domcontentloaded",timeout:15000\}\)/);
 });
 
