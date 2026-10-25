@@ -181,7 +181,9 @@ export function verifyAuditCheckpointArchive(archive, checkpoint, {
       envelope.manifest.keyId !== checkpointPayload.keyId) {
     fail("CHECKPOINT_ARCHIVE_CHECKPOINT_MISMATCH");
   }
-  const exportDelay = Date.parse(envelope.manifest.exportedAt) - Date.parse(envelope.manifest.checkpointIssuedAt);
+  const exportedAtMs = Date.parse(envelope.manifest.exportedAt);
+  if (exportedAtMs > now + 30_000) fail("CHECKPOINT_ARCHIVE_FUTURE");
+  const exportDelay = exportedAtMs - Date.parse(envelope.manifest.checkpointIssuedAt);
   if (exportDelay < 0 || exportDelay > maxExportDelayMs) fail("CHECKPOINT_ARCHIVE_EXPORT_DELAY_EXCEEDED");
   if (minRetentionUntil !== undefined) {
     strictIso(minRetentionUntil);
@@ -204,11 +206,12 @@ function writeNoReplaceFile(path, text) {
   }
   return digest(text);
 }
-function fsyncDirectory(path) {
+function fsyncDirectory(path, { rejectWorldWritable = false } = {}) {
   const fd = openSync(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
   try {
     const stat = fstatSync(fd);
     if (!stat.isDirectory()) fail("CHECKPOINT_ARCHIVE_OUTPUT_INVALID");
+    if (rejectWorldWritable && (stat.mode & 0o002) !== 0) fail("CHECKPOINT_ARCHIVE_OUTPUT_UNSAFE");
     fsyncSync(fd);
   } finally { closeSync(fd); }
 }
@@ -217,7 +220,12 @@ export function writeAuditCheckpointArchiveBundle(directory, checkpoint, archive
   if (typeof directory !== "string" || !isAbsolute(directory) || directory === "/" || directory.includes("\0")) fail();
   const parent = dirname(directory);
   try {
-    fsyncDirectory(parent);
+    fsyncDirectory(parent, { rejectWorldWritable: true });
+  } catch (error) {
+    if (error instanceof ArchiveError) throw error;
+    fail("CHECKPOINT_ARCHIVE_OUTPUT_INVALID");
+  }
+  try {
     mkdirSync(directory, { mode: 0o700 });
   } catch {
     fail("CHECKPOINT_ARCHIVE_OUTPUT_EXISTS");
