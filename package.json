@@ -67,7 +67,7 @@
     "benefits-action-center:validate": "node scripts/validate-benefits-action-center.mjs",
     "lifecycle-analytics:validate": "node scripts/validate-lifecycle-analytics-continuity.mjs",
     "maintenance:validate": "node scripts/validate-maintenance-resilience.mjs",
-    "audit-integrity:validate": "node scripts/validate-audit-integrity-monitor.mjs && node scripts/validate-audit-history-resume.mjs && node --test scripts/audit-integrity-monitoring.test.mjs scripts/audit-full-history-verification.test.mjs scripts/audit-history-chunk.test.mjs scripts/audit-verification-schedule.test.mjs",
+    "audit-integrity:validate": "node scripts/validate-audit-integrity-monitor.mjs && node scripts/validate-audit-history-resume.mjs && node --test scripts/audit-integrity-monitoring.test.mjs scripts/audit-full-history-verification.test.mjs scripts/audit-history-chunk.test.mjs scripts/audit-verification-schedule.test.mjs && npm run audit-checkpoint-archive:validate",
     "audit:full:verify": "node scripts/audit-full-history-verification.mjs",
     "hire:validate": "node scripts/validate-hire-conversion.mjs",
     "typecheck": "npm run db:generate && tsc --noEmit",
@@ -112,7 +112,8 @@
     "auth-assurance:validate": "node scripts/validate-auth-assurance.mjs && node --test scripts/auth-assurance.test.mjs scripts/auth-assurance-routes.test.mjs",
     "auth-health:validate": "node scripts/validate-auth-health-governance.mjs && node --test scripts/auth-health-runtime.test.mjs",
     "emergency-access:validate": "node scripts/validate-emergency-access.mjs && node --test scripts/emergency-access.test.mjs",
-    "lint:app": "eslint app components lib"
+    "lint:app": "eslint app components lib",
+    "audit-checkpoint-archive:validate": "node scripts/validate-audit-checkpoint-archive.mjs && node --test scripts/audit-checkpoint-archive.test.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "6.19.3",
