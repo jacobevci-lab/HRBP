@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { waitForAuditLocale } from "./audit-locale-readiness.mjs";
 import { execFileSync } from "node:child_process";
 import { PrismaClient } from "@prisma/client";
 import { chromium } from "playwright";
@@ -11,6 +12,7 @@ const origin="http://localhost:3100";
 const surface=process.env.HRBP_TIME_DECISION_SURFACE||"module";
 assert.ok(["module","action-center"].includes(surface));
 const actionCenter=surface==="action-center";
+const pagePath=actionCenter?"/module/workflows":"/module/time-attendance";
 const database=new URL(process.env.DATABASE_URL||"about:blank");
 assert.equal(process.env.HRBP_DISPOSABLE_AUDIT,"true");
 assert.ok(["postgres:","postgresql:"].includes(database.protocol));
@@ -40,11 +42,12 @@ try{
   let actor,employee,schedule;
   try{
    await check(name("real form login and manager principal"),async()=>{
-    await page.goto(origin+"/auth/sign-in?returnTo="+encodeURIComponent(actionCenter?"/module/workflows":"/module/time-attendance"),{waitUntil:"networkidle"});
+    await page.goto(origin+"/auth/sign-in?returnTo="+encodeURIComponent(pagePath),{waitUntil:"domcontentloaded"});
+    await page.locator("#local-identifier").waitFor({state:"visible"});
     await page.locator("#local-identifier").fill("audit.manager");
     await page.locator("#local-password").fill(process.env.HRBP_TEST_ADMIN_PASSWORD);
     await page.locator('.local-auth-card button[type="submit"]').click();
-    await page.waitForURL(origin+(actionCenter?"/module/workflows":"/module/time-attendance")); actor=await identity();
+    await page.waitForURL(origin+pagePath); await waitForAuditLocale(page,pagePath,locale); actor=await identity();
    });
    schedule=await db.workSchedule.findFirstOrThrow({where:{tenantId:actor.tenantId,active:true}});
    const person=await db.person.create({data:{tenantId:actor.tenantId,givenName:"QA time",familyName:"Report",employeeNumber:randomUUID()}});
@@ -56,8 +59,9 @@ try{
     const endAt=new Date(workDate);endAt.setUTCHours(17,0,0,0);
     const record=await db.timeEntry.create({data:{tenantId:actor.tenantId,employmentId:employee.id,workDate,startAt,endAt,minutes:480,overtimeMinutes:30,status:"SUBMITTED",source:"QA_BROWSER"}});
     const notice=await db.notificationOutbox.create({data:{tenantId:actor.tenantId,recipientUserId:actor.id,eventType:"TIME_ENTRY_APPROVAL_REQUIRED",resourceType:"TimeEntry",resourceId:record.id,dedupeKey:randomUUID(),status:"DELIVERED",channel:"IN_APP",deliveredAt:new Date()}});
-    const path=actionCenter?"/module/workflows":"/module/time-attendance?entry="+encodeURIComponent(record.id);
-    await page.goto(origin+path,{waitUntil:"networkidle"});
+    const path=actionCenter?pagePath:pagePath+"?entry="+encodeURIComponent(record.id);
+    await page.goto(origin+path,{waitUntil:"domcontentloaded"});
+    await waitForAuditLocale(page,pagePath,locale);
     const control=actionCenter?page.locator('[data-time-decision-id="'+record.id+'"]'):page.locator('[data-time-entry-id="'+record.id+'"]');
     await control.waitFor();
     const button=decision=>actionCenter?control.locator('[data-time-decision="'+decision+'"]'):control.locator('[data-time-transition="'+decision+'"]');
@@ -78,7 +82,7 @@ try{
     let release,started;const gate=new Promise(r=>{release=r;}),arrived=new Promise(r=>{started=r;});
     const handler=async route=>{started();await gate;const response=await route.fetch();await route.fulfill({response});};
     await context.route(origin+f.path,handler);const before=posts.length;page.once("dialog",d=>d.accept());
-    const savedReload=actionCenter?null:page.waitForNavigation({waitUntil:"networkidle",timeout:15000});
+    const savedReload=actionCenter?null:page.waitForNavigation({waitUntil:"domcontentloaded",timeout:15000});
     try{
      await f.control.evaluate((el,isAC)=>{const a=isAC?'[data-time-decision="APPROVED"]':'[data-time-transition="APPROVED"]';const r=isAC?'[data-time-decision="REJECTED"]':'[data-time-transition="REJECTED"]';el.querySelector(a)?.click();el.querySelector(r)?.click();},actionCenter);
      await Promise.race([arrived,new Promise((_,reject)=>setTimeout(()=>reject(new Error("No transition request")),10000))]);
@@ -86,7 +90,7 @@ try{
     }finally{release();}
     await eventually(async()=>{const row=await state(f);return row.status==="APPROVED"&&row.approvedById===actor.id;});
     assert.equal(await auditCount(f),1);await eventually(async()=>!(await unread(f)));
-    if(savedReload)await savedReload;
+    if(savedReload){await savedReload;await waitForAuditLocale(page,pagePath,locale);}
     await context.unroute(origin+f.path,handler);
    });
 
@@ -94,11 +98,11 @@ try{
     f=await fixture();
     const fail=route=>route.fulfill({status:503,contentType:"application/json",body:JSON.stringify({error:"Simulated notification failure"})});
     await context.route(origin+"/api/notifications",fail);page.once("dialog",d=>d.accept());
-    const savedReload=actionCenter?null:page.waitForNavigation({waitUntil:"networkidle",timeout:15000});
+    const savedReload=actionCenter?null:page.waitForNavigation({waitUntil:"domcontentloaded",timeout:15000});
     await f.button("REJECTED").click();
     await eventually(async()=>{const row=await state(f);return row.status==="REJECTED"&&row.approvedById===actor.id;});
     assert.equal(await auditCount(f),1);assert.equal(await unread(f),true);
-    if(savedReload)await savedReload;
+    if(savedReload){await savedReload;await waitForAuditLocale(page,pagePath,locale);}
     await context.unroute(origin+"/api/notifications",fail);
    });
 
@@ -112,6 +116,7 @@ try{
     await eventually(async()=>{const row=await state(f);return row.status==="APPROVED"&&row.approvedById===actor.id;});
     assert.equal(await auditCount(f),1);assert.equal(await unread(f),true);assert.equal(patches.length,beforePatches);
     await context.unroute(origin+f.path,handler);
+    const reloaded=page.waitForNavigation({waitUntil:"domcontentloaded",timeout:15000});
     if(actionCenter){
      const center=page.locator(".workflow-action-center"),search=center.locator(".workflow-action-search input");
      await search.fill("no-match-"+randomUUID());await f.control.waitFor({state:"detached"});await search.fill("");await f.control.locator('[data-time-decision-result="unknown"]').waitFor();
@@ -122,7 +127,7 @@ try{
     }else{
      await f.control.locator("button").filter({hasText:locale==="tr"?"Yenile ve kaydı kontrol et":"Reload and check the entry"}).click();
     }
-    await page.waitForLoadState("networkidle");assert.equal(posts.length-before,1);assert.equal(await auditCount(f),1);await identity();
+    await reloaded;await waitForAuditLocale(page,pagePath,locale);assert.equal(posts.length-before,1);assert.equal(await auditCount(f),1);await identity();
    });
    assert.deepEqual(jsErrors,[]);
   }finally{await context.close();}
