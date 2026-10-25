@@ -357,6 +357,45 @@ jobs:
                 { third, progress, ledger, stats });
               process.exit(1);
             }
+            const orphanTenantId = 'ci-audit-history-orphan';
+            await db.auditHistoryVerificationProgress.deleteMany({ where: { tenantId: orphanTenantId } });
+            await db.tenant.deleteMany({ where: { id: orphanTenantId } });
+            const orphanAt = new Date();
+            await db.tenant.create({
+              data: {
+                id: orphanTenantId,
+                name: 'Disposable deleted history tenant',
+                region: 'test',
+                createdAt: new Date('1900-01-02T00:00:00.000Z')
+              }
+            });
+            await db.auditHistoryVerificationProgress.create({
+              data: {
+                tenantId: orphanTenantId,
+                scanVersion: 1,
+                scheduleVersion: 1,
+                status: 'VALID',
+                targetSequence: 0n,
+                targetTailHash: null,
+                verifiedSequence: 0n,
+                verifiedHash: null,
+                checkedEvents: 0n,
+                scanStartedAt: orphanAt,
+                targetCapturedAt: orphanAt,
+                lastAttemptAt: orphanAt,
+                lastSuccessAt: orphanAt,
+                completedAt: orphanAt
+              }
+            });
+            await db.tenant.delete({ where: { id: orphanTenantId } });
+            const orphanProgress = await db.auditHistoryVerificationProgress.findUnique({
+              where: { tenantId: orphanTenantId }
+            });
+            if (!orphanProgress || orphanProgress.status !== 'VALID') {
+              console.error('Deleted tenant did not retain bounded orphan history evidence.', orphanProgress);
+              process.exit(1);
+            }
+
             console.log('Resumable full-history Worker/PostgreSQL protocol passed.');
           } finally {
             await db.$disconnect();
@@ -914,7 +953,13 @@ jobs:
             console.error('Operational metrics snapshot is incomplete.', accepted.status, text.slice(0, 2000));
             process.exit(1);
           }
-          if (/ci-tenant|ci-user|ci-document-scan-version|ci-document-scan-stale-exhausted|ci-scim-external|ci-audit-history-resume|protected\.admin@example\.test/.test(text)) {
+          const orphanMatch = text.match(/^hrbp_audit_history_orphaned_progress_records ([0-9]+)$/m);
+          const backlogMatch = text.match(/^hrbp_audit_history_backlog_events ([0-9]+)$/m);
+          if (!orphanMatch || Number(orphanMatch[1]) < 1 || !backlogMatch || BigInt(backlogMatch[1]) < 1n) {
+            console.error('Audit history aggregate coverage did not expose removed-tenant evidence and pending appended backlog.');
+            process.exit(1);
+          }
+          if (/ci-tenant|ci-user|ci-document-scan-version|ci-document-scan-stale-exhausted|ci-scim-external|ci-audit-history-resume|ci-audit-history-orphan|protected\.admin@example\.test/.test(text)) {
             console.error('Operational metrics leaked tenant, user or resource identifiers.');
             process.exit(1);
           }
