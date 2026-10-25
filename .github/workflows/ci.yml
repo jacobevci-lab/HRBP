@@ -96,6 +96,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm run cf:build
+      - name: Validate Cloudflare deploy bundle without publishing
+        run: npx wrangler deploy --dry-run
       - name: Validate on-prem Compose and build runtime image
         shell: bash
         run: |
