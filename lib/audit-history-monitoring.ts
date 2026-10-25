@@ -333,6 +333,7 @@ type AggregateRow = {
   invalid: bigint;
   backlogEvents: bigint;
   oldestRunningAt: Date | null;
+  oldestSuccessAt: Date | null;
 };
 
 export async function auditHistoryAggregateMetrics(now = new Date()) {
@@ -340,16 +341,22 @@ export async function auditHistoryAggregateMetrics(now = new Date()) {
   const [tenantUniverse, rows, stats] = await Promise.all([
     db.tenant.count(),
     db.$queryRaw<AggregateRow[]>`
-      SELECT COUNT(*) FILTER (WHERE t."id" IS NOT NULL)::bigint AS "trackedTenants",
-        COUNT(*) FILTER (WHERE t."id" IS NULL)::bigint AS "orphanedProgressRecords",
-        COUNT(*) FILTER (WHERE t."id" IS NOT NULL AND p."status" = 'RUNNING')::bigint AS "running",
-        COUNT(*) FILTER (WHERE t."id" IS NOT NULL AND p."status" = 'VALID')::bigint AS "valid",
-        COUNT(*) FILTER (WHERE t."id" IS NOT NULL AND p."status" = 'INVALID')::bigint AS "invalid",
-        COALESCE(SUM(CASE WHEN t."id" IS NOT NULL AND p."status" = 'RUNNING' AND p."targetSequence" IS NOT NULL
-          THEN GREATEST(p."targetSequence" - p."verifiedSequence", 0) ELSE 0 END), 0)::bigint AS "backlogEvents",
-        MIN(p."scanStartedAt") FILTER (WHERE t."id" IS NOT NULL AND p."status" = 'RUNNING') AS "oldestRunningAt"
-      FROM "AuditHistoryVerificationProgress" p
-      LEFT JOIN "Tenant" t ON t."id" = p."tenantId"
+      SELECT COUNT(p."tenantId")::bigint AS "trackedTenants",
+        (SELECT COUNT(*)::bigint
+           FROM "AuditHistoryVerificationProgress" orphan
+           LEFT JOIN "Tenant" live ON live."id" = orphan."tenantId"
+          WHERE live."id" IS NULL) AS "orphanedProgressRecords",
+        COUNT(*) FILTER (WHERE p."status" = 'RUNNING')::bigint AS "running",
+        COUNT(*) FILTER (WHERE p."status" = 'VALID')::bigint AS "valid",
+        COUNT(*) FILTER (WHERE p."status" = 'INVALID')::bigint AS "invalid",
+        COALESCE(SUM(GREATEST(
+          COALESCE(s."eventCount", 0) - COALESCE(p."verifiedSequence", 0), 0
+        )), 0)::bigint AS "backlogEvents",
+        MIN(p."scanStartedAt") FILTER (WHERE p."status" = 'RUNNING') AS "oldestRunningAt",
+        MIN(p."lastSuccessAt") FILTER (WHERE p."status" = 'VALID') AS "oldestSuccessAt"
+      FROM "Tenant" t
+      LEFT JOIN "AuditHistoryVerificationProgress" p ON p."tenantId" = t."id"
+      LEFT JOIN "AuditLedgerState" s ON s."tenantId" = t."id"
     `,
     db.auditHistoryVerificationStats.findUnique({ where: { id: STATS_KEY } })
   ]);
@@ -370,6 +377,7 @@ export async function auditHistoryAggregateMetrics(now = new Date()) {
     invalid: row.invalid.toString(),
     backlogEvents: row.backlogEvents.toString(),
     oldestRunningAgeSeconds: age(row.oldestRunningAt),
+    oldestValidAgeSeconds: age(row.oldestSuccessAt),
     eventsCheckedTotal: stats?.eventsChecked.toString() ?? "0",
     partialChunksTotal: stats?.partialChunks.toString() ?? "0",
     successfulScansTotal: stats?.successfulScans.toString() ?? "0",
