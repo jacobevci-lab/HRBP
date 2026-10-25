@@ -46,8 +46,9 @@ try{
     await page.locator("#local-identifier").waitFor({state:"visible"});
     await page.locator("#local-identifier").fill("audit.manager");
     await page.locator("#local-password").fill(process.env.HRBP_TEST_ADMIN_PASSWORD);
+    const signedIn=page.waitForURL(origin+pagePath,{waitUntil:"commit",timeout:15000});
     await page.locator('.local-auth-card button[type="submit"]').click();
-    await page.waitForURL(origin+pagePath); await waitForAuditLocale(page,pagePath,locale); actor=await identity();
+    await signedIn; await waitForAuditLocale(page,pagePath,locale); actor=await identity();
    });
    schedule=await db.workSchedule.findFirstOrThrow({where:{tenantId:actor.tenantId,active:true}});
    const person=await db.person.create({data:{tenantId:actor.tenantId,givenName:"QA time",familyName:"Report",employeeNumber:randomUUID()}});
