@@ -33,6 +33,9 @@ expect(script, /--acknowledge-external-retention-target/, "export requires expli
 expect(script, /CHECKPOINT_ARCHIVE_RETENTION_POLICY_UNMET/, "external retention floors must fail closed");
 expect(script, /CHECKPOINT_ARCHIVE_RETENTION_EXPIRED/, "expired retained evidence must be visible");
 expect(script, /CHECKPOINT_ARCHIVE_EXPORT_DELAY_EXCEEDED/, "late publication must remain operator-actionable");
+expect(script, /CHECKPOINT_ARCHIVE_FUTURE/, "future-dated archive publication must fail closed");
+expect(script, /CHECKPOINT_ARCHIVE_OUTPUT_UNSAFE/, "world-writable evidence parents must be rejected");
+expect(script, /stat\.mode & 0o002/, "archive publication must inspect world-writable parent permissions");
 
 reject(script, /DATABASE_URL|new Client\(|from ["']pg["']|fetch\(|node:http|node:https|node:net/, "archive export/verify must remain offline and database-independent");
 reject(script, /unlinkSync\(join\(directory, "checkpoint\.json"\)|rmSync\(|force:\s*true/, "archive publication must not silently clean or replace retained evidence");
@@ -41,6 +44,8 @@ reject(script, /rejectUnauthorized\s*:\s*false/, "archive tooling must never int
 expect(tests, /changing signed retention metadata invalidates the archive signature/, "tampered retention metadata needs executable coverage");
 expect(tests, /different valid checkpoint cannot be substituted/, "checkpoint substitution needs executable coverage");
 expect(tests, /bundle publication is no-overwrite/, "no-overwrite archive publication needs executable coverage");
+expect(tests, /future-dated archive publication is rejected/, "future archive timestamps need executable coverage");
+expect(tests, /world-writable archive parents are rejected/, "unsafe archive parents need executable coverage");
 expect(tests, /offline export and verify CLI needs no database connection/, "operator archive CLI must be proven offline");
 expect(checkpoint, /FULL_READ_ONLY_SNAPSHOT/, "archive tooling must remain layered on the independently scanned checkpoint format");
 expect(pkg, /audit-checkpoint-archive\.test\.mjs/, "archive tests must be part of a mandatory package validation path");
