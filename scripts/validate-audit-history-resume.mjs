@@ -20,6 +20,7 @@ const pkg = "package.json";
 const dockerfile = "Dockerfile.onprem";
 const compose = "docker-compose.onprem.yml";
 const envOnprem = ".env.onprem.example";
+const chunkTypes = "lib/audit-history-chunk.d.mts";
 
 expect(monitor, /SCHEDULE_KEY = "audit-full-history"/,
   "full-history verification must have a schedule key independent from the fast tail monitor");
@@ -50,6 +51,12 @@ expect(chunk, /const MAX_PAGE_SIZE = 1000/,
   "history pages must retain an explicit hard upper bound");
 reject(chunk, /\.(?:create|update|updateMany|delete|deleteMany)\(/,
   "the dependency-free chunk verifier must remain read-only");
+expect(chunkTypes, /DataClassification/,
+  "history chunk declarations must preserve the governed audit classification type");
+expect(chunkTypes, /AuditHistoryEventRow/,
+  "history chunk declarations must model the selected audit row shape explicitly");
+reject(chunkTypes, /\bany\b/,
+  "history chunk declarations must not bypass lint/type safety with any");
 
 expect(scheduler, /async persist<T>\(lease: Lease/,
   "scheduler must expose fenced persistence without cursor advancement");
