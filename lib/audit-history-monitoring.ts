@@ -362,7 +362,8 @@ export async function auditHistoryAggregateMetrics(now = new Date()) {
   ]);
   const row = rows[0] ?? {
     trackedTenants: BigInt(0), orphanedProgressRecords: BigInt(0),
-    running: BigInt(0), valid: BigInt(0), invalid: BigInt(0), backlogEvents: BigInt(0), oldestRunningAt: null
+    running: BigInt(0), valid: BigInt(0), invalid: BigInt(0), backlogEvents: BigInt(0),
+    oldestRunningAt: null, oldestSuccessAt: null
   };
   const tracked = Number(row.trackedTenants <= BigInt(Number.MAX_SAFE_INTEGER) ? row.trackedTenants : BigInt(Number.MAX_SAFE_INTEGER));
   const age = (value: Date | null | undefined) =>
