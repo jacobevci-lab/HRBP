@@ -1,0 +1,15 @@
+// Deployment-wide operational scheduler; never exposed through tenant APIs.
+// Cursor keys deliberately are not foreign keys: deleting a tenant must not
+// reset another tenant's verification coverage. No employee payloads or keys.
+model AuditVerificationSchedule {
+  id                   String   @id
+  scheduleVersion      Int      @default(1)
+  cursorTenantId       String?
+  cursorCreatedAt      DateTime?
+  upperTenantId        String?
+  upperCreatedAt       DateTime?
+  cycleStartedAt       DateTime?
+  lastCycleCompletedAt DateTime?
+  leaseToken           String?
+  leaseExpiresAt       DateTime?
+}
