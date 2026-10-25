@@ -907,6 +907,7 @@ jobs:
               !/^hrbp_audit_history_records\{status="VALID"\} [0-9]+$/m.test(text) ||
               !/^hrbp_audit_history_records\{status="INVALID"\} [0-9]+$/m.test(text) ||
               !/^hrbp_audit_history_backlog_events [0-9]+$/m.test(text) ||
+              !/^hrbp_audit_history_oldest_valid_age_seconds [0-9]+$/m.test(text) ||
               !/^hrbp_audit_history_events_checked_total [0-9]+$/m.test(text) ||
               !/^hrbp_audit_history_scans_total\{result="success"\} [0-9]+$/m.test(text) ||
               !/^hrbp_audit_history_scans_total\{result="failure"\} [0-9]+$/m.test(text)) {
