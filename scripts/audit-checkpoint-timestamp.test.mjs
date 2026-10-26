@@ -209,7 +209,8 @@ test("real OpenSSL RFC3161 response verifies against checkpoint and pinned CA tr
     assert.equal(verified.code, "TIMESTAMP_RESPONSE_VALID");
     assert.equal(verified.checkpointSha256.length, 64);
     assert.equal(verified.timestampResponseSha256.length, 64);
-    assert.match(verified.policyOid, /^1\.2\.3\.4\.1$/);
+    assert.ok(["1.2.3.4.1", "tsa_policy1"].includes(verified.policyOid),
+      "OpenSSL may render a registered policy OID using its symbolic object name");
     assert.ok(Number.isFinite(Date.parse(verified.timestampAt)));
     const evidence = JSON.parse(readFileSync(evidencePath, "utf8"));
     assert.equal(evidence.scope, "RFC3161_CHECKPOINT_TIMESTAMP_VERIFICATION");
