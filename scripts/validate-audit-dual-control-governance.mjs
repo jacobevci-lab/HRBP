@@ -27,6 +27,9 @@ expect(approval,/expectedPolicySha256/,"approval policy must be externally diges
 expect(approval,/GOVERNANCE_APPROVAL_DUPLICATE_APPROVER/,"the same approver cannot count twice");
 expect(approval,/HRBP-AUDIT-TRUST-APPROVAL:1\\n/,"approval signatures need domain separation");
 expect(approval,/openSync\(path, "wx", 0o600\)/,"approval evidence must be no-overwrite");
+expect(approval,/effectiveAt = null/,"approval verifier must distinguish current mutations from historical evidence");
+expect(approval,/GOVERNANCE_APPROVAL_AFTER_EFFECTIVE_TIME/,"approvals after a recorded transition must fail closed");
+expect(approval,/GOVERNANCE_APPROVAL_POLICY_WINDOW_MISMATCH/,"proposal windows must stay inside the approved governance policy");
 reject(approval,/DATABASE_URL|new Client\(|from ["']pg["']|fetch\(|node:http|node:https|node:net/,
   "approval workflow must stay offline and application-independent");
 
@@ -34,6 +37,8 @@ expect(approvalTests,/one approval never satisfies a two-person policy/,"one-per
 expect(approvalTests,/same approver cannot sign twice/,"duplicate approval needs executable coverage");
 expect(approvalTests,/authority and target signer keys can be explicitly excluded/,"role separation needs executable coverage");
 expect(approvalTests,/externally pinned policy digest is mandatory/,"policy digest pinning needs executable coverage");
+expect(approvalTests,/historical approval remains valid after policy and proposal expiry/,
+  "historical evidence must remain valid when the transition originally occurred inside the approved windows");
 
 expect(authority,/CHECKPOINT_TRUST_AUTHORITY_INVENTORY/,"authority inventory scope must be fixed");
 expect(authority,/previousInventorySha256/,"authority generations must be hash chained");
@@ -41,6 +46,8 @@ expect(authority,/ROTATE_AUTHORITY/,"planned authority rotation must be explicit
 expect(authority,/RECOVER_AUTHORITY/,"emergency authority recovery must be explicit");
 expect(authority,/status:recovery\?"REVOKED":"RETIRED"/,"recovery and rotation must have distinct historical semantics");
 expect(authority,/verifyGovernanceApprovalBundle/,"authority changes must be dual-control approved");
+expect(authority,/effectiveAt:Date\.parse\(currentManifest\.issuedAt\)/,
+  "authority chain replay must verify approvals at each recorded transition time");
 expect(authority,/forbiddenKeyIds:\[previousActive\.keyId,targetKeyId\]/,
   "old and new authority keys must not approve their own transition");
 expect(authority,/expectedLatestSha256/,"authority inventory latest generation must be externally pinned");
@@ -52,6 +59,8 @@ expect(authorityTests,/planned rotation retires old authority/,"planned authorit
 expect(authorityTests,/emergency recovery revokes old authority/,"emergency recovery needs coverage");
 expect(authorityTests,/current and target authority keys cannot count toward approval quorum/,"authority self-approval must be tested");
 expect(authorityTests,/chain verification detects rollback rewrite gap/,"authority rollback/rewrite must be tested");
+expect(authorityTests,/forensically verifiable after its approval policy expires/,
+  "authority evidence must retain historical validity after governance-policy expiry");
 
 expect(signer,/verifySignerTrustInventoryChainGoverned/,"signer verification must resolve historical authority epochs");
 expect(signer,/--approval-bundle/,"signer mutations must require dual-control approval evidence");
