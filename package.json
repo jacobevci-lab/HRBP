@@ -67,7 +67,7 @@
     "benefits-action-center:validate": "node scripts/validate-benefits-action-center.mjs",
     "lifecycle-analytics:validate": "node scripts/validate-lifecycle-analytics-continuity.mjs",
     "maintenance:validate": "node scripts/validate-maintenance-resilience.mjs",
-    "audit-integrity:validate": "node scripts/validate-audit-integrity-monitor.mjs && node scripts/validate-audit-history-resume.mjs && node --test scripts/audit-integrity-monitoring.test.mjs scripts/audit-full-history-verification.test.mjs scripts/audit-history-chunk.test.mjs scripts/audit-verification-schedule.test.mjs && npm run audit-checkpoint-archive:validate && npm run audit-signer-trust:validate && npm run audit-checkpoint-publication:validate && npm run audit-dual-control:validate",
+    "audit-integrity:validate": "node scripts/validate-audit-integrity-monitor.mjs && node scripts/validate-audit-history-resume.mjs && node --test scripts/audit-integrity-monitoring.test.mjs scripts/audit-full-history-verification.test.mjs scripts/audit-history-chunk.test.mjs scripts/audit-verification-schedule.test.mjs && npm run audit-checkpoint-archive:validate && npm run audit-signer-trust:validate && npm run audit-checkpoint-publication:validate && npm run audit-dual-control:validate && npm run audit-assurance:validate",
     "audit:full:verify": "node scripts/audit-full-history-verification.mjs",
     "hire:validate": "node scripts/validate-hire-conversion.mjs",
     "typecheck": "npm run db:generate && tsc --noEmit",
@@ -116,7 +116,8 @@
     "audit-checkpoint-archive:validate": "node scripts/validate-audit-checkpoint-archive.mjs && node --test scripts/audit-checkpoint-archive.test.mjs",
     "audit-signer-trust:validate": "node scripts/validate-audit-signer-trust-inventory.mjs && node --test scripts/audit-signer-trust-inventory.test.mjs",
     "audit-checkpoint-publication:validate": "node scripts/validate-audit-checkpoint-publication.mjs && node --test scripts/audit-checkpoint-publication.test.mjs scripts/audit-checkpoint-publication-scheduler.test.mjs",
-    "audit-dual-control:validate": "node scripts/validate-audit-dual-control-governance.mjs && node --test scripts/audit-governance-approval.test.mjs scripts/audit-trust-authority-inventory.test.mjs"
+    "audit-dual-control:validate": "node scripts/validate-audit-dual-control-governance.mjs && node --test scripts/audit-governance-approval.test.mjs scripts/audit-trust-authority-inventory.test.mjs",
+    "audit-assurance:validate": "node scripts/validate-audit-assurance-rehearsal.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "6.19.3",
