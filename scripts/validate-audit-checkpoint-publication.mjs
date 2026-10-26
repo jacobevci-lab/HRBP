@@ -7,14 +7,24 @@ const trustPath = "scripts/audit-signer-trust-inventory.mjs";
 const archivePath = "scripts/audit-checkpoint-archive.mjs";
 const packagePath = "package.json";
 const dockerPath = "Dockerfile.onprem";
+const schedulerPath = "scripts/audit-checkpoint-publication-scheduler.mjs";
+const schedulerTestPath = "scripts/audit-checkpoint-publication-scheduler.test.mjs";
+const servicePath = "ops/audit-checkpoint-publication.service.example";
+const timerPath = "ops/audit-checkpoint-publication.timer.example";
+const envPath = "ops/audit-checkpoint-publication.env.example";
 
-const [publication, tests, trust, archive, pkg, dockerfile] = await Promise.all([
+const [publication, tests, trust, archive, pkg, dockerfile, scheduler, schedulerTests, service, timer, env] = await Promise.all([
   readFile(publicationPath, "utf8"),
   readFile(publicationTestPath, "utf8"),
   readFile(trustPath, "utf8"),
   readFile(archivePath, "utf8"),
   readFile(packagePath, "utf8"),
-  readFile(dockerPath, "utf8")
+  readFile(dockerPath, "utf8"),
+  readFile(schedulerPath, "utf8"),
+  readFile(schedulerTestPath, "utf8"),
+  readFile(servicePath, "utf8"),
+  readFile(timerPath, "utf8"),
+  readFile(envPath, "utf8")
 ]);
 
 function expect(source, pattern, message) { assert.match(source, pattern, message); }
@@ -48,9 +58,33 @@ expect(tests, /publication lock is exclusive/, "overlap lock needs executable co
 expect(tests, /existing lock blocks CLI before the database and is not auto-removed/, "ambiguous prior outcome must block automated replay");
 expect(tests, /creates and reads back one governed external bundle/, "successful publication and read-back needs executable coverage");
 
+expect(scheduler, /Exactly one attempt/, "scheduler wrapper must explicitly remain one-shot");
+reject(scheduler, /setInterval\(|while\s*\(true\)|for\s*\(;;\)/, "scheduler wrapper must not contain a hidden retry loop");
+expect(scheduler, /CHECKPOINT_PUBLICATION_SCHEDULER_DISABLED/, "publication scheduler must require explicit enablement");
+expect(scheduler, /CHECKPOINT_PUBLICATION_SCHEDULER_NOT_ACKNOWLEDGED/, "publication scheduler must require explicit operator acknowledgements");
+expect(schedulerTests, /runner failure is propagated after exactly one attempt/, "one-attempt behavior needs executable coverage");
+expect(schedulerTests, /secret-never-forwarded/, "scheduler tests must prove DATABASE_URL is not copied into CLI arguments");
+
+expect(service, /Type=oneshot/, "independent publication service must remain one-shot");
+expect(service, /EnvironmentFile=\/etc\/hrbp-audit-publication\.env/, "service must consume protected operator-host configuration");
+expect(service, /NoNewPrivileges=true/, "service example must enable no-new-privileges");
+expect(service, /ProtectSystem=strict/, "service example must default to a read-only system view");
+reject(service, /^Restart=/m, "service must not automatically replay ambiguous publication outcomes");
+reject(service, /^OnFailure=/m, "service must not configure automatic failure replay");
+
+expect(timer, /OnCalendar=daily/, "example timer must define an explicit cadence");
+expect(timer, /Persistent=true/, "missed cadence must produce at most one systemd catch-up activation");
+expect(timer, /RandomizedDelaySec=5m/, "timer must include jitter");
+reject(timer, /^OnFailure=/m, "timer must not trigger an immediate failure replay");
+
+expect(env, /DATABASE_URL=postgresql:\/\/READ_ONLY_OPERATOR:/, "operator environment example must use a distinct read-only database identity");
+expect(env, /EXPECTED_TRUST_SHA256=CHANGE_ME_64_HEX/, "operator environment must pin the latest trust inventory digest");
+reject(env, /BEGIN PRIVATE KEY|PRIVATE KEY-----/, "environment example must never embed private key material");
+
 expect(trust, /CHECKPOINT_SIGNER_TRUST_INVENTORY/, "publication must remain layered on signer governance");
 expect(archive, /CHECKPOINT_ARCHIVE_MANIFEST/, "publication must remain layered on signed archive retention");
 expect(pkg, /audit-checkpoint-publication\.test\.mjs/, "publication tests must be mandatory");
+expect(pkg, /audit-checkpoint-publication-scheduler\.test\.mjs/, "publication scheduler tests must be mandatory");
 expect(pkg, /validate-audit-checkpoint-publication\.mjs/, "publication static contract must be mandatory");
 reject(dockerfile, /audit-checkpoint-publication\.mjs/, "independent publication tooling must not be bundled into the HRBP application image");
 
