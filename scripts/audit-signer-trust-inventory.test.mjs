@@ -19,6 +19,14 @@ import {
   verifySignerTrustInventoryChain,
   writeSignerTrustInventoryGeneration
 } from "./audit-signer-trust-inventory.mjs";
+import {
+  approveGovernanceProposal,
+  createGovernanceApprovalPolicy,
+  createGovernanceProposal,
+  encodeGovernanceApprovalBundle,
+  encodeGovernanceApprovalPolicy,
+  governanceApprovalPolicySha256
+} from "./audit-governance-approval.mjs";
 
 const tenantId = "trust-ci-tenant";
 const deploymentId = "trust-ci-deployment";
@@ -28,12 +36,39 @@ const otherAuthority = generateKeyPairSync("ed25519");
 const signer1 = generateKeyPairSync("ed25519");
 const signer2 = generateKeyPairSync("ed25519");
 const signer3 = generateKeyPairSync("ed25519");
+const approver1 = generateKeyPairSync("ed25519");
+const approver2 = generateKeyPairSync("ed25519");
 const t0 = Date.parse("2026-10-26T06:00:00.000Z");
 const t1 = t0 + 60_000;
 const t2 = t1 + 60_000;
 
 const sha = value => createHash("sha256").update(encodeSignerTrustInventory(value)).digest("hex");
 const code = expected => error => error?.code === expected;
+const approvalPolicy = createGovernanceApprovalPolicy({
+  approverPublicKeys: [approver1.publicKey, approver2.publicKey],
+  minApprovals: 2,
+  ...context,
+  issuedAt: t0 - 60_000,
+  expiresAt: t0 + 24 * 60 * 60_000
+});
+const approvalPolicySha = governanceApprovalPolicySha256(approvalPolicy);
+function approvals(operation, currentGeneration, currentSha256, targetKeyId, now) {
+  let bundle = {
+    proposal: createGovernanceProposal({
+      ...context,
+      operation,
+      currentGeneration,
+      currentSha256,
+      targetKeyId,
+      now,
+      expiresAt: now + 30 * 60_000
+    }),
+    approvals: []
+  };
+  bundle = approveGovernanceProposal(bundle, approver1.privateKey, now + 1_000);
+  bundle = approveGovernanceProposal(bundle, approver2.privateKey, now + 2_000);
+  return bundle;
+}
 
 function initial(now = t0) {
   return createInitialSignerTrustInventory(authority.privateKey, signer1.publicKey, context, now);
@@ -233,7 +268,7 @@ test("missing generation files are detected instead of silently renumbered", () 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("offline CLI init, rotate and verify require the externally pinned current digest", async () => {
+test("offline CLI init, rotate and verify require dual control plus the externally pinned current digest", async () => {
   const root = mkdtempSync(join(tmpdir(), "hrbp-trust-cli-"));
   try {
     chmodSync(root, 0o700);
@@ -243,11 +278,18 @@ test("offline CLI init, rotate and verify require the externally pinned current 
     const authorityPublic = join(root, "authority-public.pem");
     const signer1Public = join(root, "signer1-public.pem");
     const signer2Public = join(root, "signer2-public.pem");
+    const policyPath = join(root, "approval-policy.json");
+    const initApprovalPath = join(root, "init-approval.json");
+    const rotateApprovalPath = join(root, "rotate-approval.json");
     writeFileSync(authorityPrivate, authority.privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 });
     chmodSync(authorityPrivate, 0o600);
     writeFileSync(authorityPublic, authority.publicKey.export({ type: "spki", format: "pem" }), { mode: 0o644 });
     writeFileSync(signer1Public, signer1.publicKey.export({ type: "spki", format: "pem" }), { mode: 0o644 });
     writeFileSync(signer2Public, signer2.publicKey.export({ type: "spki", format: "pem" }), { mode: 0o644 });
+    writeFileSync(policyPath, encodeGovernanceApprovalPolicy(approvalPolicy), { mode: 0o600 });
+    writeFileSync(initApprovalPath, encodeGovernanceApprovalBundle(
+      approvals("INIT_SIGNER", 0, null, checkpointKeyId(signer1.publicKey), t0)
+    ), { mode: 0o600 });
 
     const initResult = await runSignerTrustInventoryCli([
       "init",
@@ -256,9 +298,16 @@ test("offline CLI init, rotate and verify require the externally pinned current 
       "--inventory-dir", inventoryDir,
       "--authority-private-key-file", authorityPrivate,
       "--signer-public-key-file", signer1Public,
+      "--approval-bundle", initApprovalPath,
+      "--approval-policy", policyPath,
+      "--expected-approval-policy-sha256", approvalPolicySha,
       "--acknowledge-separate-trust-authority"
     ], () => t0);
     assert.equal(initResult.code, "TRUST_INVENTORY_INITIALIZED");
+
+    writeFileSync(rotateApprovalPath, encodeGovernanceApprovalBundle(
+      approvals("ROTATE_SIGNER", 1, initResult.latestSha256, checkpointKeyId(signer2.publicKey), t1)
+    ), { mode: 0o600 });
 
     await assert.rejects(runSignerTrustInventoryCli([
       "rotate",
@@ -268,6 +317,9 @@ test("offline CLI init, rotate and verify require the externally pinned current 
       "--authority-private-key-file", authorityPrivate,
       "--signer-public-key-file", signer2Public,
       "--expected-current-sha256", "0".repeat(64),
+      "--approval-bundle", rotateApprovalPath,
+      "--approval-policy", policyPath,
+      "--expected-approval-policy-sha256", approvalPolicySha,
       "--acknowledge-separate-trust-authority"
     ], () => t1), code("TRUST_INVENTORY_DIGEST_MISMATCH"));
 
@@ -279,6 +331,9 @@ test("offline CLI init, rotate and verify require the externally pinned current 
       "--authority-private-key-file", authorityPrivate,
       "--signer-public-key-file", signer2Public,
       "--expected-current-sha256", initResult.latestSha256,
+      "--approval-bundle", rotateApprovalPath,
+      "--approval-policy", policyPath,
+      "--expected-approval-policy-sha256", approvalPolicySha,
       "--acknowledge-separate-trust-authority"
     ], () => t1);
     assert.equal(rotateResult.code, "TRUST_INVENTORY_ROTATED");
@@ -308,10 +363,16 @@ test("CLI does not accept a signer private key as an enrollment source", async (
     mkdirSync(inventoryDir, { mode: 0o700 });
     const authorityPrivate = join(root, "authority-private.pem");
     const signerPrivate = join(root, "signer-private.pem");
+    const policyPath = join(root, "approval-policy.json");
+    const approvalPath = join(root, "init-approval.json");
     writeFileSync(authorityPrivate, authority.privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 });
     chmodSync(authorityPrivate, 0o600);
     writeFileSync(signerPrivate, signer1.privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 });
     chmodSync(signerPrivate, 0o600);
+    writeFileSync(policyPath, encodeGovernanceApprovalPolicy(approvalPolicy), { mode: 0o600 });
+    writeFileSync(approvalPath, encodeGovernanceApprovalBundle(
+      approvals("INIT_SIGNER", 0, null, checkpointKeyId(signer1.publicKey), t0)
+    ), { mode: 0o600 });
     await assert.rejects(runSignerTrustInventoryCli([
       "init",
       "--tenant-id", tenantId,
@@ -319,6 +380,9 @@ test("CLI does not accept a signer private key as an enrollment source", async (
       "--inventory-dir", inventoryDir,
       "--authority-private-key-file", authorityPrivate,
       "--signer-public-key-file", signerPrivate,
+      "--approval-bundle", approvalPath,
+      "--approval-policy", policyPath,
+      "--expected-approval-policy-sha256", approvalPolicySha,
       "--acknowledge-separate-trust-authority"
     ], () => t0), code("TRUST_INVENTORY_KEY_INVALID"));
   } finally { rmSync(root, { recursive: true, force: true }); }
