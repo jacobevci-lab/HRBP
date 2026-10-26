@@ -20,10 +20,16 @@ import {
 } from "./audit-checkpoint-archive.mjs";
 import {
   createInitialSignerTrustInventory,
+  rebindSignerTrustAuthority,
   revokeSignerTrustInventory,
   rotateSignerTrustInventory,
   writeSignerTrustInventoryGeneration
 } from "./audit-signer-trust-inventory.mjs";
+import {
+  createInitialTrustAuthorityRecord,
+  rotateTrustAuthorityRecord,
+  writeTrustAuthorityRecord
+} from "./audit-trust-authority-chain.mjs";
 
 const tenantId = "archive-ci-tenant";
 const deploymentId = "archive-ci-deployment";
@@ -326,6 +332,91 @@ test("governed archive verification resolves historical signers through the auth
       "--trust-max-age-hours", "48",
       "--max-export-delay-hours", "24"
     ], () => issuedAt + 4 * 60 * 60_000), error => error?.code === "TRUST_INVENTORY_SIGNER_REVOKED");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test("governed archive verification preserves historical evidence across authority rotation", async () => {
+  const root = mkdtempSync(join(tmpdir(), "hrbp-audit-archive-authority-"));
+  try {
+    chmodSync(root, 0o700);
+    const rootAuthority = generateKeyPairSync("ed25519");
+    const nextAuthority = generateKeyPairSync("ed25519");
+    const recoveryAuthority = generateKeyPairSync("ed25519");
+    const saved = await archive();
+
+    const bundleParent = join(root, "external");
+    const bundlePath = join(bundleParent, "bundle");
+    const trustDir = join(root, "trust");
+    const authorityDir = join(root, "authority");
+    mkdirSync(bundleParent, { mode: 0o700 });
+    mkdirSync(trustDir, { mode: 0o700 });
+    mkdirSync(authorityDir, { mode: 0o700 });
+
+    writeAuditCheckpointArchiveBundle(bundlePath, saved.checkpoint, saved.archive);
+
+    const authorityRootPublic = join(root, "authority-root-public.pem");
+    writeFileSync(
+      authorityRootPublic,
+      rootAuthority.publicKey.export({ type: "spki", format: "pem" }),
+      { mode: 0o644 }
+    );
+
+    const authority1 = createInitialTrustAuthorityRecord(
+      rootAuthority.privateKey, recoveryAuthority.publicKey, context, issuedAt - 120_000
+    );
+    const authorityWritten1 = writeTrustAuthorityRecord(authorityDir, authority1);
+
+    const inventory1 = createInitialSignerTrustInventory(
+      rootAuthority.privateKey, keys.publicKey, context, issuedAt - 60_000
+    );
+    writeSignerTrustInventoryGeneration(trustDir, inventory1);
+
+    const authority2 = rotateTrustAuthorityRecord(
+      authority1, rootAuthority.privateKey, nextAuthority.privateKey,
+      context, issuedAt + 30 * 60_000
+    );
+    const authorityWritten2 = writeTrustAuthorityRecord(authorityDir, authority2);
+
+    const inventory2 = rebindSignerTrustAuthority(
+      inventory1, nextAuthority.privateKey, context, issuedAt + 31 * 60_000
+    );
+    const trustWritten2 = writeSignerTrustInventoryGeneration(trustDir, inventory2);
+
+    const verified = await runAuditCheckpointArchiveCli([
+      "verify",
+      "--tenant-id", tenantId,
+      "--deployment-id", deploymentId,
+      "--archive-dir", bundlePath,
+      "--trust-inventory-dir", trustDir,
+      "--trust-authority-chain-dir", authorityDir,
+      "--trust-bootstrap-authority-public-key-file", authorityRootPublic,
+      "--expected-trust-authority-chain-sha256", authorityWritten2.recordSha256,
+      "--trust-authority-chain-max-age-hours", "48",
+      "--expected-trust-sha256", trustWritten2.inventorySha256,
+      "--trust-max-age-hours", "48",
+      "--max-export-delay-hours", "24"
+    ], () => issuedAt + 60 * 60_000);
+
+    assert.equal(verified.code, "CHECKPOINT_ARCHIVE_VALID");
+    assert.equal(verified.trustGeneration, 2);
+    assert.equal(verified.trustAuthorityChainGeneration, 2);
+    assert.equal(verified.trustAuthorityChainSha256, authorityWritten2.recordSha256);
+
+    await assert.rejects(runAuditCheckpointArchiveCli([
+      "verify",
+      "--tenant-id", tenantId,
+      "--deployment-id", deploymentId,
+      "--archive-dir", bundlePath,
+      "--trust-inventory-dir", trustDir,
+      "--trust-authority-chain-dir", authorityDir,
+      "--trust-bootstrap-authority-public-key-file", authorityRootPublic,
+      "--expected-trust-authority-chain-sha256", authorityWritten1.recordSha256,
+      "--trust-authority-chain-max-age-hours", "48",
+      "--expected-trust-sha256", trustWritten2.inventorySha256,
+      "--trust-max-age-hours", "48",
+      "--max-export-delay-hours", "24"
+    ], () => issuedAt + 60 * 60_000), error => error?.code === "AUTHORITY_CHAIN_DIGEST_MISMATCH");
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
