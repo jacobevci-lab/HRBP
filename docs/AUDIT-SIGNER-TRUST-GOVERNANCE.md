@@ -178,15 +178,16 @@ The example systemd unit runs as a dedicated `hrbp-audit` account, uses `UMask=0
 
 ## Remaining assurance work
 
-This milestone provides application-independent signer enrollment/rotation/revocation and a no-retry scheduled publication contract.
+The stacked governance milestone now also provides software-enforced two-person approval, append-only trust-authority rotation/recovery and historical authority resolution. Current signer mutations are bound to approved operation/current generation/current digest/target key evidence, while planned authority rotation and emergency recovery have distinct historical semantics.
 
-It still does not prove:
+Provider-neutral RFC 3161 timestamp request/verification is documented in `docs/AUDIT-TRUSTED-TIMESTAMP.md`.
+
+The software still does not prove:
 
 - HSM/KMS-backed private-key custody;
-- trusted timestamp authority integration;
+- approved production TSA enrollment, root/policy administration and service assurance;
 - Object Lock/WORM enforcement on a real customer storage service;
-- organizational two-person approval or separation of duties;
-- trust-authority key rotation/recovery;
+- human identity proof or the customer's organizational execution of two-person approval;
 - customer-specific legal retention approval;
 - representative customer load and restore/forensic exercises.
 
