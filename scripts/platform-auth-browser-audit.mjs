@@ -70,9 +70,9 @@ try{
      for(const l of state.links)if(l.href?.startsWith('/')&&!l.href.startsWith('//'))links.set(l.href,l);
      if(await page.locator('.theme-toggle').count()){
       const theme=await page.evaluate(()=>document.documentElement.dataset.theme);await page.locator('.theme-toggle').click();const themeChanged=theme!==await page.evaluate(()=>document.documentElement.dataset.theme);await page.locator('.theme-toggle').click();
-      await page.locator('.locale-toggle button').filter({hasText:'TR'}).click();await waitServerLocale(page,path,'tr');await page.waitForLoadState('networkidle');
+      await page.locator('.locale-toggle button').filter({hasText:'TR'}).click();await waitServerLocale(page,path,'tr');
       const tr=await page.evaluate(()=>({selected:document.documentElement.lang==='tr',heading:document.querySelector('.page-content h1')?.textContent,englishWorkspaceLabels:['Survey campaigns','Workforce scenarios','My requests','Anonymity controls'].filter(x=>(document.querySelector('.page-content')?.textContent||'').includes(x))}));
-      await page.locator('.locale-toggle button').filter({hasText:'EN'}).click();await waitServerLocale(page,path,'en');await page.waitForLoadState('networkidle');
+      await page.locator('.locale-toggle button').filter({hasText:'EN'}).click();await waitServerLocale(page,path,'en');
       const englishSelected=await page.evaluate(()=>document.documentElement.lang==='en');
       report.ui.push({path,themeChanged,turkishSelected:tr.selected,englishSelected,turkishHeading:tr.heading,remainingEnglishLabels:tr.englishWorkspaceLabels,principalAfterToggles:(await principal(context)).role});
      }
