@@ -152,6 +152,10 @@ export async function publishIndependentAuditCheckpoint({
     maxAgeMs: trustMaxAgeMs,
     now: trustNow
   });
+  if (authorityChain &&
+      trust.latest.manifest.authorityKeyId !== authorityChain.latest.payload.authorityKeyId) {
+    fail("CHECKPOINT_PUBLICATION_AUTHORITY_NOT_ADOPTED");
+  }
   const signerPublicKey = keyOf(createPublicKey(signerPrivateKey), "public");
   const signerKeyId = checkpointKeyId(signerPublicKey);
   if (trust.activeKeyId === null) fail("CHECKPOINT_PUBLICATION_NO_ACTIVE_SIGNER");
@@ -319,6 +323,10 @@ export async function runAuditCheckpointPublicationCli(argv, {
     maxAgeMs: parsed.trustMaxAgeMs,
     now: preflightNow
   });
+  if (governedAuthorityChain &&
+      preflight.latest.manifest.authorityKeyId !== governedAuthorityChain.latest.payload.authorityKeyId) {
+    fail("CHECKPOINT_PUBLICATION_AUTHORITY_NOT_ADOPTED");
+  }
   if (preflight.activeKeyId !== checkpointKeyId(createPublicKey(signerPrivateKey))) {
     fail(preflight.activeKeyId === null
       ? "CHECKPOINT_PUBLICATION_NO_ACTIVE_SIGNER"
