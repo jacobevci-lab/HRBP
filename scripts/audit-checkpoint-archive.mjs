@@ -13,8 +13,14 @@ import {
 import {
   readSignerTrustInventoryChain,
   resolveCheckpointSigner,
-  verifySignerTrustInventoryChain
+  verifySignerTrustInventoryChainGoverned
 } from "./audit-signer-trust-inventory.mjs";
+import {
+  readAuthorityTrustInventoryChain
+} from "./audit-trust-authority-inventory.mjs";
+import {
+  parseGovernanceApprovalPolicy
+} from "./audit-governance-approval.mjs";
 
 const DOMAIN = "HRBP-AUDIT-CHECKPOINT-ARCHIVE:1\n";
 const MAX_ARCHIVE_FILE = 8192;
@@ -276,8 +282,9 @@ export function auditCheckpointArchiveArgs(argv) {
       ? ["--checkpoint", "--private-key-file", "--max-age-hours", "--retention-days", "--out-dir", "--acknowledge-external-retention-target"]
       : [
           "--archive-dir", "--public-key-file",
-          "--trust-inventory-dir", "--trust-authority-public-key-file",
-          "--expected-trust-sha256", "--trust-max-age-hours",
+          "--trust-inventory-dir", "--expected-trust-sha256", "--trust-max-age-hours",
+          "--authority-inventory-dir", "--authority-policy",
+          "--expected-authority-policy-sha256", "--expected-authority-sha256", "--authority-max-age-hours",
           "--max-export-delay-hours", "--min-retention-until"
         ])
   ]);
@@ -297,8 +304,9 @@ export function auditCheckpointArchiveArgs(argv) {
   if (command === "verify") {
     const direct = Boolean(values["--public-key-file"]);
     const governedFlags = [
-      "--trust-inventory-dir", "--trust-authority-public-key-file",
-      "--expected-trust-sha256", "--trust-max-age-hours"
+      "--trust-inventory-dir", "--expected-trust-sha256", "--trust-max-age-hours",
+      "--authority-inventory-dir", "--authority-policy",
+      "--expected-authority-policy-sha256", "--expected-authority-sha256", "--authority-max-age-hours"
     ];
     const governed = governedFlags.every(flag => Boolean(values[flag]));
     const partialGoverned = governedFlags.some(flag => Boolean(values[flag]));
@@ -310,7 +318,11 @@ export function auditCheckpointArchiveArgs(argv) {
   if (command === "verify" && !isAbsolute(values["--archive-dir"])) fail();
   if (command === "verify" && values["--trust-inventory-dir"] !== undefined &&
       !isAbsolute(values["--trust-inventory-dir"])) fail();
+  if (command === "verify" && values["--authority-inventory-dir"] !== undefined &&
+      !isAbsolute(values["--authority-inventory-dir"])) fail();
   if (values["--expected-trust-sha256"] !== undefined && !HASH.test(values["--expected-trust-sha256"])) fail();
+  if (values["--expected-authority-policy-sha256"] !== undefined && !HASH.test(values["--expected-authority-policy-sha256"])) fail();
+  if (values["--expected-authority-sha256"] !== undefined && !HASH.test(values["--expected-authority-sha256"])) fail();
   const maxAgeMs = command === "export"
     ? integerArg(values["--max-age-hours"], 1, 24 * 365) * 3600_000
     : null;
@@ -323,8 +335,14 @@ export function auditCheckpointArchiveArgs(argv) {
   const trustMaxAgeMs = command === "verify" && values["--trust-max-age-hours"] !== undefined
     ? integerArg(values["--trust-max-age-hours"], 1, 24 * 3650) * 3600_000
     : null;
+  const authorityMaxAgeMs = command === "verify" && values["--authority-max-age-hours"] !== undefined
+    ? integerArg(values["--authority-max-age-hours"], 1, 24 * 3650) * 3600_000
+    : null;
   if (values["--min-retention-until"] !== undefined) strictIso(values["--min-retention-until"]);
-  return { command, values, context, maxAgeMs, requestedRetentionDays, maxExportDelayMs, trustMaxAgeMs };
+  return {
+    command, values, context, maxAgeMs, requestedRetentionDays, maxExportDelayMs,
+    trustMaxAgeMs, authorityMaxAgeMs
+  };
 }
 
 export async function runAuditCheckpointArchiveCli(argv, clock = Date.now) {
@@ -360,14 +378,18 @@ export async function runAuditCheckpointArchiveCli(argv, clock = Date.now) {
     if (!publicPem.toString("ascii").startsWith("-----BEGIN PUBLIC KEY-----")) fail("CHECKPOINT_ARCHIVE_KEY_INVALID");
     publicKey = keyOf(createPublicKey(publicPem), "public");
   } else {
-    const authorityPem = readCheckpointFile(parsed.values["--trust-authority-public-key-file"], { maxBytes: 16_384 });
-    if (!authorityPem.toString("ascii").startsWith("-----BEGIN PUBLIC KEY-----")) fail("CHECKPOINT_ARCHIVE_KEY_INVALID");
-    const authorityPublicKey = keyOf(createPublicKey(authorityPem), "public");
-    trustInventory = verifySignerTrustInventoryChain(
+    const authorityPolicy = parseGovernanceApprovalPolicy(
+      readCheckpointFile(parsed.values["--authority-policy"], { maxBytes: 65_536 }).toString("utf8")
+    );
+    trustInventory = verifySignerTrustInventoryChainGoverned(
       readSignerTrustInventoryChain(parsed.values["--trust-inventory-dir"]),
       {
         ...parsed.context,
-        authorityPublicKey,
+        authorityChain: readAuthorityTrustInventoryChain(parsed.values["--authority-inventory-dir"]),
+        authorityPolicy,
+        expectedAuthorityPolicySha256: parsed.values["--expected-authority-policy-sha256"],
+        expectedAuthoritySha256: parsed.values["--expected-authority-sha256"],
+        authorityMaxAgeMs: parsed.authorityMaxAgeMs,
         expectedLatestSha256: parsed.values["--expected-trust-sha256"],
         maxAgeMs: parsed.trustMaxAgeMs,
         now
@@ -393,7 +415,9 @@ export async function runAuditCheckpointArchiveCli(argv, clock = Date.now) {
     checkpointSha256: manifest.checkpointSha256,
     ...(trustInventory ? {
       trustGeneration: trustInventory.latest.manifest.generation,
-      trustInventorySha256: trustInventory.latestSha256
+      trustInventorySha256: trustInventory.latestSha256,
+      authorityGeneration: trustInventory.authorityGeneration,
+      authorityInventorySha256: trustInventory.authorityInventorySha256
     } : {})
   };
 }
