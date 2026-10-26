@@ -85,7 +85,8 @@ function payloadOf(value) {
   } else {
     if (typeof value.previousRecordSha256 !== "string" || !HASH.test(value.previousRecordSha256) ||
         typeof value.previousAuthorityKeyId !== "string" || !HASH.test(value.previousAuthorityKeyId) ||
-        value.transitionMode === "BOOTSTRAP") fail();
+        value.transitionMode === "BOOTSTRAP" ||
+        value.authorityKeyId === value.previousAuthorityKeyId) fail();
   }
   if (typeof value.authorityKeyId !== "string" || !HASH.test(value.authorityKeyId) ||
       typeof value.recoveryKeyId !== "string" || !HASH.test(value.recoveryKeyId)) fail();
@@ -181,6 +182,9 @@ export function createInitialTrustAuthorityRecord(authorityPrivateKey, recoveryP
 
 function transitionPayload(current, nextAuthorityPublicKey, context, mode, now) {
   const previous = envelopeOf(current);
+  if (previous.payload.subject !== checkpointSubject(context)) {
+    fail("AUTHORITY_CHAIN_SUBJECT_MISMATCH");
+  }
   if (!Number.isSafeInteger(now) || now < 0) fail();
   const nextKeyId = checkpointKeyId(nextAuthorityPublicKey);
   if (nextKeyId === previous.payload.authorityKeyId ||
@@ -430,10 +434,10 @@ function parseFlags(args, command) {
       ? ["--authority-private-key-file", "--recovery-public-key-file"]
       : []),
     ...(command === "rotate"
-      ? ["--current-authority-private-key-file", "--next-authority-private-key-file", "--expected-current-sha256"]
+      ? ["--bootstrap-authority-public-key-file", "--current-authority-private-key-file", "--next-authority-private-key-file", "--expected-current-sha256", "--max-age-hours"]
       : []),
     ...(command === "recover"
-      ? ["--recovery-private-key-file", "--next-authority-private-key-file", "--expected-current-sha256"]
+      ? ["--bootstrap-authority-public-key-file", "--recovery-private-key-file", "--next-authority-private-key-file", "--expected-current-sha256", "--max-age-hours"]
       : [])
   ]);
   const values = {};
@@ -456,8 +460,8 @@ export function trustAuthorityArgs(argv) {
       ? ["--bootstrap-authority-public-key-file", "--expected-latest-sha256", "--max-age-hours"]
       : ["--acknowledge-independent-authority-governance"]),
     ...(command === "init" ? ["--authority-private-key-file", "--recovery-public-key-file"] : []),
-    ...(command === "rotate" ? ["--current-authority-private-key-file", "--next-authority-private-key-file", "--expected-current-sha256"] : []),
-    ...(command === "recover" ? ["--recovery-private-key-file", "--next-authority-private-key-file", "--expected-current-sha256"] : [])
+    ...(command === "rotate" ? ["--bootstrap-authority-public-key-file", "--current-authority-private-key-file", "--next-authority-private-key-file", "--expected-current-sha256", "--max-age-hours"] : []),
+    ...(command === "recover" ? ["--bootstrap-authority-public-key-file", "--recovery-private-key-file", "--next-authority-private-key-file", "--expected-current-sha256", "--max-age-hours"] : [])
   ];
   if (required.some(flag => !values[flag])) fail();
   checkpointSubject({ tenantId: values["--tenant-id"], deploymentId: values["--deployment-id"] });
@@ -468,7 +472,9 @@ export function trustAuthorityArgs(argv) {
     command,
     values,
     context: { tenantId: values["--tenant-id"], deploymentId: values["--deployment-id"] },
-    maxAgeMs: command === "verify" ? parseHours(values["--max-age-hours"]) : null
+    maxAgeMs: command === "verify" || command === "rotate" || command === "recover"
+      ? parseHours(values["--max-age-hours"])
+      : null
   };
 }
 
@@ -504,25 +510,29 @@ export async function runTrustAuthorityCli(argv, clock = Date.now) {
     );
   } else {
     if (!chain.length) fail("AUTHORITY_CHAIN_EMPTY");
-    const current = chain.at(-1);
-    const currentSha = digest(encodeTrustAuthorityRecord(current));
-    if (currentSha !== parsed.values["--expected-current-sha256"]) {
-      fail("AUTHORITY_CHAIN_DIGEST_MISMATCH");
-    }
+    const now = clock();
+    const verified = verifyTrustAuthorityChain(chain, {
+      ...parsed.context,
+      bootstrapAuthorityPublicKey: readPublicKey(parsed.values["--bootstrap-authority-public-key-file"]),
+      expectedLatestSha256: parsed.values["--expected-current-sha256"],
+      maxAgeMs: parsed.maxAgeMs,
+      now
+    });
+    const current = verified.latest;
     next = parsed.command === "rotate"
       ? rotateTrustAuthorityRecord(
           current,
           readPrivateKey(parsed.values["--current-authority-private-key-file"]),
           readPrivateKey(parsed.values["--next-authority-private-key-file"]),
           parsed.context,
-          clock()
+          now
         )
       : recoverTrustAuthorityRecord(
           current,
           readPrivateKey(parsed.values["--recovery-private-key-file"]),
           readPrivateKey(parsed.values["--next-authority-private-key-file"]),
           parsed.context,
-          clock()
+          now
         );
   }
   const written = writeTrustAuthorityRecord(parsed.values["--chain-dir"], next);
