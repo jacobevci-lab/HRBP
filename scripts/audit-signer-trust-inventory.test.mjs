@@ -22,6 +22,7 @@ import {
 } from "./audit-signer-trust-inventory.mjs";
 import {
   createInitialTrustAuthorityRecord,
+  encodeTrustAuthorityRecord,
   rotateTrustAuthorityRecord,
   verifyTrustAuthorityChain
 } from "./audit-trust-authority-chain.mjs";
@@ -346,7 +347,7 @@ test("signer inventory verifies across an authority rotation only after an autho
       ...context,
       bootstrapAuthorityPublicKey: authority.publicKey,
       expectedLatestSha256: createHash("sha256")
-        .update(JSON.stringify(secondAuthority) + "\n").digest("hex"),
+        .update(encodeTrustAuthorityRecord(secondAuthority)).digest("hex"),
       maxAgeMs: 24 * 3600_000,
       now: t1
     }
@@ -366,13 +367,15 @@ test("signer inventory verifies across an authority rotation only after an autho
   assert.equal(verified.latest.manifest.generation, 2);
   assert.equal(verified.activeKeyId, checkpointKeyId(signer1.publicKey));
 
-  assert.throws(() => verifySignerTrustInventoryChain([firstInventory], {
+  const historical = verifySignerTrustInventoryChain([firstInventory], {
     ...context,
     authorityChain,
     expectedLatestSha256: sha(firstInventory),
     maxAgeMs: 24 * 3600_000,
     now: t1
-  }), error => error?.code === "TRUST_INVENTORY_STALE" || error?.code === "TRUST_INVENTORY_AUTHORITY_UNTRUSTED");
+  });
+  assert.equal(historical.latest.manifest.authorityKeyId, checkpointKeyId(authority.publicKey),
+    "authority rotation must not invalidate already trusted historical inventory");
 });
 
 test("authority rebind preserves signer state and chains the previous inventory digest", () => {
