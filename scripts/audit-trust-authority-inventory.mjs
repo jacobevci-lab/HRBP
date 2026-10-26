@@ -177,7 +177,8 @@ function validateTransition(previous,current,policy,expectedPolicySha256,context
         currentManifest.changeType!=="INIT_AUTHORITY"||currentManifest.authorities.length!==1)fail("AUTHORITY_INVENTORY_CHAIN_INVALID");
     verifyGovernanceApprovalBundle(current.approvalBundle,policy,{
       ...context,expectedPolicySha256,operation:"INIT_AUTHORITY",currentGeneration:0,currentSha256:null,
-      targetKeyId:active.keyId,forbiddenKeyIds:[active.keyId],now
+      targetKeyId:active.keyId,forbiddenKeyIds:[active.keyId],now,
+      effectiveAt:Date.parse(currentManifest.issuedAt)
     });
     return;
   }
@@ -206,7 +207,8 @@ function validateTransition(previous,current,policy,expectedPolicySha256,context
   verifyGovernanceApprovalBundle(current.approvalBundle,policy,{
     ...context,expectedPolicySha256,operation:currentManifest.changeType,
     currentGeneration:previous.manifest.generation,currentSha256:currentSha,targetKeyId:target.keyId,
-    forbiddenKeyIds:[previousActive.keyId,target.keyId],now
+    forbiddenKeyIds:[previousActive.keyId,target.keyId],now,
+    effectiveAt:Date.parse(currentManifest.issuedAt)
   });
 }
 export function verifyAuthorityTrustInventoryChain(chain,{
