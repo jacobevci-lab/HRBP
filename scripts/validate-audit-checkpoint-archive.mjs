@@ -36,6 +36,10 @@ expect(script, /CHECKPOINT_ARCHIVE_EXPORT_DELAY_EXCEEDED/, "late publication mus
 expect(script, /CHECKPOINT_ARCHIVE_FUTURE/, "future-dated archive publication must fail closed");
 expect(script, /CHECKPOINT_ARCHIVE_OUTPUT_UNSAFE/, "world-writable evidence parents must be rejected");
 expect(script, /stat\.mode & 0o002/, "archive publication must inspect world-writable parent permissions");
+expect(script, /verifySignerTrustInventoryChainGoverned/, "governed archive verification must traverse signer and authority history");
+expect(script, /readAuthorityTrustInventoryChain/, "archive verification must consume the authority rotation/recovery chain");
+expect(script, /expected-authority-policy-sha256/, "archive verification must externally pin the authority approval policy");
+expect(script, /expected-authority-sha256/, "archive verification must externally pin the authority inventory");
 
 reject(script, /DATABASE_URL|new Client\(|from ["']pg["']|fetch\(|node:http|node:https|node:net/, "archive export/verify must remain offline and database-independent");
 reject(script, /unlinkSync\(join\(directory, "checkpoint\.json"\)|rmSync\(|force:\s*true/, "archive publication must not silently clean or replace retained evidence");
@@ -47,9 +51,12 @@ expect(tests, /bundle publication is no-overwrite/, "no-overwrite archive public
 expect(tests, /future-dated archive publication is rejected/, "future archive timestamps need executable coverage");
 expect(tests, /world-writable archive parents are rejected/, "unsafe archive parents need executable coverage");
 expect(tests, /offline export and verify CLI needs no database connection/, "operator archive CLI must be proven offline");
+expect(tests, /governed archive verification follows authority rotation and recovery semantics/,
+  "archive verifier must cover planned authority rotation and emergency recovery");
 expect(checkpoint, /FULL_READ_ONLY_SNAPSHOT/, "archive tooling must remain layered on the independently scanned checkpoint format");
 expect(pkg, /audit-checkpoint-archive\.test\.mjs/, "archive tests must be part of a mandatory package validation path");
 expect(pkg, /validate-audit-checkpoint-archive\.mjs/, "archive static contract must be mandatory");
-reject(dockerfile, /audit-checkpoint-archive\.mjs|audit-checkpoint\.mjs/, "independent signer/archive tooling must not be bundled into the application on-prem image");
+reject(dockerfile, /audit-checkpoint-archive\.mjs|audit-checkpoint\.mjs|audit-trust-authority-inventory\.mjs|audit-governance-approval\.mjs/,
+  "independent signer/archive/authority tooling must not be bundled into the application on-prem image");
 
 console.log("Audit checkpoint archive contract: offline signed retention bundle, no-overwrite publication and independent operator boundary verified.");
