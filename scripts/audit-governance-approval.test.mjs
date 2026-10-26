@@ -143,6 +143,26 @@ test("expired proposal and inactive policy fail closed",()=>{
   }),code("GOVERNANCE_APPROVAL_POLICY_INACTIVE"));
 });
 
+test("historical approval remains valid after policy and proposal expiry when the transition occurred inside both windows",()=>{
+  const bundle=bundleWith(approver1.privateKey,approver2.privateKey);
+  const result=verifyGovernanceApprovalBundle(bundle,policy,{
+    ...context,expectedPolicySha256:policySha,operation:"ROTATE_SIGNER",
+    currentGeneration:3,currentSha256:"a".repeat(64),targetKeyId:checkpointKeyId(target.publicKey),
+    now:t0+2*24*60*60_000,effectiveAt:t0+10_000
+  });
+  assert.equal(result.approvals,2);
+  assert.equal(result.effectiveAt,new Date(t0+10_000).toISOString());
+});
+
+test("historical verification still rejects a transition outside the approved policy or proposal window",()=>{
+  const bundle=bundleWith(approver1.privateKey,approver2.privateKey);
+  assert.throws(()=>verifyGovernanceApprovalBundle(bundle,policy,{
+    ...context,expectedPolicySha256:policySha,operation:"ROTATE_SIGNER",
+    currentGeneration:3,currentSha256:"a".repeat(64),targetKeyId:checkpointKeyId(target.publicKey),
+    now:t0+2*24*60*60_000,effectiveAt:t0+31*60_000
+  }),code("GOVERNANCE_APPROVAL_PROPOSAL_EXPIRED"));
+});
+
 test("authority and target signer keys can be explicitly excluded from approval quorum",()=>{
   const mixedPolicy=createGovernanceApprovalPolicy({
     approverPublicKeys:[approver1.publicKey,authority.publicKey,target.publicKey],
