@@ -7,7 +7,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fullAuditHash } from "./audit-full-history-verification.mjs";
-import { createAuditCheckpoint, encodeAuditCheckpoint } from "./audit-checkpoint.mjs";
+import { checkpointKeyId, createAuditCheckpoint, encodeAuditCheckpoint } from "./audit-checkpoint.mjs";
 import {
   auditCheckpointArchiveArgs,
   createAuditCheckpointArchive,
