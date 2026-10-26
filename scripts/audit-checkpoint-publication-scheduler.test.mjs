@@ -13,9 +13,13 @@ const base = {
   HRBP_AUDIT_PUBLICATION_DEPLOYMENT_ID: "prod-a",
   HRBP_AUDIT_PUBLICATION_SIGNER_PRIVATE_KEY_FILE: "/secure/signer.pem",
   HRBP_AUDIT_PUBLICATION_TRUST_INVENTORY_DIR: "/secure/trust",
-  HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_PUBLIC_KEY_FILE: "/secure/authority.pem",
   HRBP_AUDIT_PUBLICATION_EXPECTED_TRUST_SHA256: "a".repeat(64),
   HRBP_AUDIT_PUBLICATION_TRUST_MAX_AGE_HOURS: "168",
+  HRBP_AUDIT_PUBLICATION_AUTHORITY_INVENTORY_DIR: "/secure/authority-inventory",
+  HRBP_AUDIT_PUBLICATION_AUTHORITY_POLICY_FILE: "/secure/authority-approval-policy.json",
+  HRBP_AUDIT_PUBLICATION_EXPECTED_AUTHORITY_POLICY_SHA256: "b".repeat(64),
+  HRBP_AUDIT_PUBLICATION_EXPECTED_AUTHORITY_SHA256: "c".repeat(64),
+  HRBP_AUDIT_PUBLICATION_AUTHORITY_MAX_AGE_HOURS: "168",
   HRBP_AUDIT_PUBLICATION_ARCHIVE_ROOT: "/mnt/evidence",
   HRBP_AUDIT_PUBLICATION_RETENTION_DAYS: "2555",
   HRBP_AUDIT_PUBLICATION_ARCHIVE_MAX_AGE_HOURS: "24",
@@ -39,6 +43,9 @@ test("scheduler converts approved environment into one bounded publisher invocat
   assert.deepEqual(args.slice(0, 3), ["run", "--tenant-id", "tenant-a"]);
   assert.ok(args.includes("--acknowledge-read-only-scan"));
   assert.ok(args.includes("--acknowledge-external-retention-target"));
+  assert.ok(args.includes("--authority-inventory-dir"));
+  assert.ok(args.includes("--expected-authority-policy-sha256"));
+  assert.ok(args.includes("--expected-authority-sha256"));
   assert.ok(args.includes("50000"));
   assert.ok(args.includes("250"));
   assert.ok(!args.some(value => value.includes("secret-never-forwarded")));
@@ -61,6 +68,8 @@ test("disabled or unacknowledged scheduler configuration fails before the runner
 test("malformed trust digest and numeric policy inputs fail closed", () => {
   for (const env of [
     { ...base, HRBP_AUDIT_PUBLICATION_EXPECTED_TRUST_SHA256: "not-a-hash" },
+    { ...base, HRBP_AUDIT_PUBLICATION_EXPECTED_AUTHORITY_SHA256: "not-a-hash" },
+    { ...base, HRBP_AUDIT_PUBLICATION_EXPECTED_AUTHORITY_POLICY_SHA256: "not-a-hash" },
     { ...base, HRBP_AUDIT_PUBLICATION_RETENTION_DAYS: "0" },
     { ...base, HRBP_AUDIT_PUBLICATION_TRUST_MAX_AGE_HOURS: "-1" },
     { ...base, HRBP_AUDIT_PUBLICATION_BATCH_SIZE: "2.5" }
