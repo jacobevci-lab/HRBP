@@ -92,7 +92,12 @@ function openssl(args, code) {
     shell: false,
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
-    env: { ...process.env, LC_ALL: "C", LANG: "C" }
+    env: {
+      PATH: process.env.PATH ?? "/usr/bin:/bin",
+      HOME: process.env.HOME ?? "/nonexistent",
+      LC_ALL: "C",
+      LANG: "C"
+    }
   });
   if (result.error || result.status !== 0) fail(code);
   return result.stdout;
@@ -212,9 +217,11 @@ export function verifyArchiveTrustedTimestamp({
         (!Buffer.isBuffer(untrustedChainBytes) || untrustedChainBytes.length < 1 ||
           untrustedChainBytes.length > MAX_TRUST)) ||
       typeof expectedTrustAnchorSha256 !== "string" || !HASH.test(expectedTrustAnchorSha256) ||
-      digest(trustAnchorBytes) !== expectedTrustAnchorSha256 ||
       typeof expectedPolicyOid !== "string" || !OID.test(expectedPolicyOid) ||
       !Number.isSafeInteger(now) || now < 0) fail();
+  if (digest(trustAnchorBytes) !== expectedTrustAnchorSha256) {
+    fail("TRUSTED_TIMESTAMP_TRUST_ANCHOR_MISMATCH");
+  }
   positiveInteger(maxTimestampDelayMs, 1000, MAX_DELAY_MS);
   positiveInteger(maxClockSkewMs, 0, MAX_SKEW_MS);
 
