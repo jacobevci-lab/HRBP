@@ -224,21 +224,21 @@ export function createInitialSignerTrustInventory(authorityPrivateKey, signerPub
   return signManifest(manifest, authorityPrivateKey);
 }
 
-export function rotateSignerTrustInventory(current, authorityPrivateKey, newSignerPublicKey, context, now = Date.now()) {
+function rotateVerifiedSignerTrustInventory(verified, authorityPrivateKey, newSignerPublicKey, context, now) {
   keyOf(authorityPrivateKey, "private");
   keyOf(newSignerPublicKey, "public");
   if (!Number.isSafeInteger(now) || now < 0) fail();
-  const authorityPublicKey = keyOf(createPublicKey(authorityPrivateKey), "public");
-  const verified = verifyEnvelope(current, authorityPublicKey, context, { now });
-  const active = verified.manifest.signingKeys.filter(entry => entry.status === "ACTIVE");
+  const current = envelopeOf(verified);
+  if (current.manifest.subject !== checkpointSubject(context)) fail("TRUST_INVENTORY_SUBJECT_MISMATCH");
+  const active = current.manifest.signingKeys.filter(entry => entry.status === "ACTIVE");
   if (active.length !== 1) fail("TRUST_INVENTORY_NO_ACTIVE_SIGNER");
   const newKeyId = checkpointKeyId(newSignerPublicKey);
-  if (verified.manifest.signingKeys.some(entry => entry.keyId === newKeyId)) {
+  if (current.manifest.signingKeys.some(entry => entry.keyId === newKeyId)) {
     fail("TRUST_INVENTORY_KEY_ALREADY_ENROLLED");
   }
   const issuedAt = new Date(now).toISOString();
-  if (Date.parse(issuedAt) < Date.parse(verified.manifest.issuedAt)) fail("TRUST_INVENTORY_CLOCK_REGRESSION");
-  const signingKeys = verified.manifest.signingKeys.map(entry => entry.keyId === active[0].keyId
+  if (Date.parse(issuedAt) < Date.parse(current.manifest.issuedAt)) fail("TRUST_INVENTORY_CLOCK_REGRESSION");
+  const signingKeys = current.manifest.signingKeys.map(entry => entry.keyId === active[0].keyId
     ? { ...entry, status: "RETIRED", validUntil: issuedAt, retiredAt: issuedAt }
     : entry);
   signingKeys.push({
@@ -252,9 +252,45 @@ export function rotateSignerTrustInventory(current, authorityPrivateKey, newSign
     revokedAt: null
   });
   const manifest = manifestOf({
-    ...verified.manifest,
-    generation: verified.manifest.generation + 1,
-    previousInventorySha256: digest(encodeSignerTrustInventory(verified)),
+    ...current.manifest,
+    authorityKeyId: checkpointKeyId(createPublicKey(authorityPrivateKey)),
+    generation: current.manifest.generation + 1,
+    previousInventorySha256: digest(encodeSignerTrustInventory(current)),
+    issuedAt,
+    signingKeys
+  });
+  return signManifest(manifest, authorityPrivateKey);
+}
+
+export function rotateSignerTrustInventory(current, authorityPrivateKey, newSignerPublicKey, context, now = Date.now()) {
+  keyOf(authorityPrivateKey, "private");
+  const authorityPublicKey = keyOf(createPublicKey(authorityPrivateKey), "public");
+  const verified = verifyEnvelope(current, authorityPublicKey, context, { now });
+  return rotateVerifiedSignerTrustInventory(verified, authorityPrivateKey, newSignerPublicKey, context, now);
+}
+
+function revokeVerifiedSignerTrustInventory(verified, authorityPrivateKey, keyId, context, now) {
+  keyOf(authorityPrivateKey, "private");
+  if (typeof keyId !== "string" || !HASH.test(keyId) || !Number.isSafeInteger(now) || now < 0) fail();
+  const current = envelopeOf(verified);
+  if (current.manifest.subject !== checkpointSubject(context)) fail("TRUST_INVENTORY_SUBJECT_MISMATCH");
+  const target = current.manifest.signingKeys.find(entry => entry.keyId === keyId);
+  if (!target) fail("TRUST_INVENTORY_KEY_NOT_FOUND");
+  if (target.status === "REVOKED") fail("TRUST_INVENTORY_KEY_ALREADY_REVOKED");
+  const issuedAt = new Date(now).toISOString();
+  if (Date.parse(issuedAt) < Date.parse(current.manifest.issuedAt)) fail("TRUST_INVENTORY_CLOCK_REGRESSION");
+  const signingKeys = current.manifest.signingKeys.map(entry => entry.keyId !== keyId ? entry : {
+    ...entry,
+    status: "REVOKED",
+    validUntil: entry.validUntil ?? issuedAt,
+    retiredAt: entry.retiredAt,
+    revokedAt: issuedAt
+  });
+  const manifest = manifestOf({
+    ...current.manifest,
+    authorityKeyId: checkpointKeyId(createPublicKey(authorityPrivateKey)),
+    generation: current.manifest.generation + 1,
+    previousInventorySha256: digest(encodeSignerTrustInventory(current)),
     issuedAt,
     signingKeys
   });
@@ -263,29 +299,9 @@ export function rotateSignerTrustInventory(current, authorityPrivateKey, newSign
 
 export function revokeSignerTrustInventory(current, authorityPrivateKey, keyId, context, now = Date.now()) {
   keyOf(authorityPrivateKey, "private");
-  if (typeof keyId !== "string" || !HASH.test(keyId) || !Number.isSafeInteger(now) || now < 0) fail();
   const authorityPublicKey = keyOf(createPublicKey(authorityPrivateKey), "public");
   const verified = verifyEnvelope(current, authorityPublicKey, context, { now });
-  const target = verified.manifest.signingKeys.find(entry => entry.keyId === keyId);
-  if (!target) fail("TRUST_INVENTORY_KEY_NOT_FOUND");
-  if (target.status === "REVOKED") fail("TRUST_INVENTORY_KEY_ALREADY_REVOKED");
-  const issuedAt = new Date(now).toISOString();
-  if (Date.parse(issuedAt) < Date.parse(verified.manifest.issuedAt)) fail("TRUST_INVENTORY_CLOCK_REGRESSION");
-  const signingKeys = verified.manifest.signingKeys.map(entry => entry.keyId !== keyId ? entry : {
-    ...entry,
-    status: "REVOKED",
-    validUntil: entry.validUntil ?? issuedAt,
-    retiredAt: entry.retiredAt,
-    revokedAt: issuedAt
-  });
-  const manifest = manifestOf({
-    ...verified.manifest,
-    generation: verified.manifest.generation + 1,
-    previousInventorySha256: digest(encodeSignerTrustInventory(verified)),
-    issuedAt,
-    signingKeys
-  });
-  return signManifest(manifest, authorityPrivateKey);
+  return revokeVerifiedSignerTrustInventory(verified, authorityPrivateKey, keyId, context, now);
 }
 
 function assertTrustDirectory(directory) {
@@ -636,7 +652,7 @@ export async function runSignerTrustInventoryCli(argv, clock = Date.now) {
         forbiddenKeyIds: [authorityKeyId, targetKeyId],
         now: clock()
       });
-      next = rotateSignerTrustInventory(
+      next = rotateVerifiedSignerTrustInventory(
         current,
         authorityPrivateKey,
         signerPublicKey,
@@ -655,7 +671,7 @@ export async function runSignerTrustInventoryCli(argv, clock = Date.now) {
         forbiddenKeyIds: [authorityKeyId, targetKeyId],
         now: clock()
       });
-      next = revokeSignerTrustInventory(
+      next = revokeVerifiedSignerTrustInventory(
         current,
         authorityPrivateKey,
         targetKeyId,
