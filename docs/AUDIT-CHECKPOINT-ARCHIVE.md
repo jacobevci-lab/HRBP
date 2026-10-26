@@ -161,3 +161,14 @@ This archive slice supplies cryptographically bound export metadata and provider
 - customer-specific legal/regulatory retention policy approval.
 
 Those controls must be demonstrated before claiming full independent assurance.
+
+
+## Signer trust governance and scheduled publication
+
+The next independent-assurance layer is documented in `docs/AUDIT-SIGNER-TRUST-GOVERNANCE.md`.
+
+It adds an authority-signed, append-only signer trust inventory with externally pinned generation digests, historical validity windows, explicit retirement/revocation, governed archive signer resolution and a separately administered one-shot publication cadence. The checkpoint signer cannot enroll its own replacement, and publication will not connect to the audit database unless the configured signer is the currently active enrolled signer.
+
+The publication service/timer remains outside the HRBP application image. It performs one attempt per timer activation and deliberately leaves ambiguous crash outcomes blocked behind a no-overwrite lock for operator review rather than retrying automatically.
+
+HSM/KMS key custody, trusted timestamping, actual customer WORM/Object Lock enforcement, trust-authority recovery/rotation and customer governance evidence remain outside what this software layer proves.
