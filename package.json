@@ -115,7 +115,7 @@
     "lint:app": "eslint app components lib",
     "audit-checkpoint-archive:validate": "node scripts/validate-audit-checkpoint-archive.mjs && node --test scripts/audit-checkpoint-archive.test.mjs",
     "audit-signer-trust:validate": "node scripts/validate-audit-signer-trust-inventory.mjs && node --test scripts/audit-signer-trust-inventory.test.mjs",
-    "audit-checkpoint-publication:validate": "node scripts/validate-audit-checkpoint-publication.mjs && node --test scripts/audit-checkpoint-publication.test.mjs"
+    "audit-checkpoint-publication:validate": "node scripts/validate-audit-checkpoint-publication.mjs && node --test scripts/audit-checkpoint-publication.test.mjs scripts/audit-checkpoint-publication-scheduler.test.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "6.19.3",
