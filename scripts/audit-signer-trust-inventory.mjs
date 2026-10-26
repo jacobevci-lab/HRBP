@@ -10,6 +10,11 @@ import { pathToFileURL } from "node:url";
 import {
   checkpointKeyId, checkpointSubject, readCheckpointFile
 } from "./audit-checkpoint.mjs";
+import {
+  parseGovernanceApprovalBundle,
+  parseGovernanceApprovalPolicy,
+  verifyGovernanceApprovalBundle
+} from "./audit-governance-approval.mjs";
 
 const DOMAIN = "HRBP-AUDIT-SIGNER-TRUST-INVENTORY:1\n";
 const MAX_FILE = 65_536;
@@ -384,12 +389,21 @@ function readPrivateKey(path) {
   try { return keyOf(createPrivateKey(pem), "private"); }
   finally { pem.fill(0); }
 }
+function readApprovalPolicy(path) {
+  return parseGovernanceApprovalPolicy(readCheckpointFile(path, { maxBytes: 65_536 }).toString("utf8"));
+}
+function readApprovalBundle(path) {
+  return parseGovernanceApprovalBundle(readCheckpointFile(path, { maxBytes: 65_536 }).toString("utf8"));
+}
 function parseFlags(argv, command) {
   const allowed = new Set([
     "--tenant-id", "--deployment-id", "--inventory-dir",
     ...(command === "verify"
       ? ["--authority-public-key-file", "--expected-latest-sha256", "--max-age-hours"]
-      : ["--authority-private-key-file", "--expected-current-sha256", "--acknowledge-separate-trust-authority"]),
+      : [
+          "--authority-private-key-file", "--expected-current-sha256", "--acknowledge-separate-trust-authority",
+          "--approval-bundle", "--approval-policy", "--expected-approval-policy-sha256"
+        ]),
     ...(command === "init" || command === "rotate" ? ["--signer-public-key-file"] : []),
     ...(command === "revoke" ? ["--key-id"] : [])
   ]);
@@ -418,7 +432,10 @@ export function signerTrustInventoryArgs(argv) {
   const required = ["--tenant-id", "--deployment-id", "--inventory-dir",
     ...(command === "verify"
       ? ["--authority-public-key-file", "--expected-latest-sha256", "--max-age-hours"]
-      : ["--authority-private-key-file", "--acknowledge-separate-trust-authority"]),
+      : [
+          "--authority-private-key-file", "--acknowledge-separate-trust-authority",
+          "--approval-bundle", "--approval-policy", "--expected-approval-policy-sha256"
+        ]),
     ...(command === "init" || command === "rotate" ? ["--signer-public-key-file"] : []),
     ...(command === "rotate" || command === "revoke" ? ["--expected-current-sha256"] : []),
     ...(command === "revoke" ? ["--key-id"] : [])];
@@ -428,6 +445,7 @@ export function signerTrustInventoryArgs(argv) {
   if (!isAbsolute(values["--inventory-dir"])) fail();
   if (values["--expected-current-sha256"] !== undefined && !HASH.test(values["--expected-current-sha256"])) fail();
   if (values["--expected-latest-sha256"] !== undefined && !HASH.test(values["--expected-latest-sha256"])) fail();
+  if (values["--expected-approval-policy-sha256"] !== undefined && !HASH.test(values["--expected-approval-policy-sha256"])) fail();
   if (values["--key-id"] !== undefined && !HASH.test(values["--key-id"])) fail();
   return { command, values, context, maxAgeMs: command === "verify" ? maxAge(values["--max-age-hours"]) : null };
 }
@@ -455,36 +473,75 @@ export async function runSignerTrustInventoryCli(argv, clock = Date.now) {
 
   const authorityPrivateKey = readPrivateKey(parsed.values["--authority-private-key-file"]);
   const authorityPublicKey = keyOf(createPublicKey(authorityPrivateKey), "public");
+  const authorityKeyId = checkpointKeyId(authorityPublicKey);
+  const approvalPolicy = readApprovalPolicy(parsed.values["--approval-policy"]);
+  const approvalBundle = readApprovalBundle(parsed.values["--approval-bundle"]);
   const chain = readSignerTrustInventoryChain(directory);
   let next;
   if (parsed.command === "init") {
     if (chain.length) fail("TRUST_INVENTORY_ALREADY_INITIALIZED");
+    const signerPublicKey = readPublicKey(parsed.values["--signer-public-key-file"]);
+    const targetKeyId = checkpointKeyId(signerPublicKey);
+    verifyGovernanceApprovalBundle(approvalBundle, approvalPolicy, {
+      ...parsed.context,
+      expectedPolicySha256: parsed.values["--expected-approval-policy-sha256"],
+      operation: "INIT_SIGNER",
+      currentGeneration: 0,
+      currentSha256: null,
+      targetKeyId,
+      forbiddenKeyIds: [authorityKeyId, targetKeyId],
+      now: clock()
+    });
     next = createInitialSignerTrustInventory(
       authorityPrivateKey,
-      readPublicKey(parsed.values["--signer-public-key-file"]),
+      signerPublicKey,
       parsed.context,
       clock()
     );
   } else {
-    const current = verifySignerTrustInventoryChain(chain, {
+    const verifiedCurrent = verifySignerTrustInventoryChain(chain, {
       ...parsed.context,
       authorityPublicKey,
       expectedLatestSha256: parsed.values["--expected-current-sha256"],
       now: clock()
-    }).latest;
+    });
+    const current = verifiedCurrent.latest;
     if (parsed.command === "rotate") {
+      const signerPublicKey = readPublicKey(parsed.values["--signer-public-key-file"]);
+      const targetKeyId = checkpointKeyId(signerPublicKey);
+      verifyGovernanceApprovalBundle(approvalBundle, approvalPolicy, {
+        ...parsed.context,
+        expectedPolicySha256: parsed.values["--expected-approval-policy-sha256"],
+        operation: "ROTATE_SIGNER",
+        currentGeneration: current.manifest.generation,
+        currentSha256: verifiedCurrent.latestSha256,
+        targetKeyId,
+        forbiddenKeyIds: [authorityKeyId, targetKeyId],
+        now: clock()
+      });
       next = rotateSignerTrustInventory(
         current,
         authorityPrivateKey,
-        readPublicKey(parsed.values["--signer-public-key-file"]),
+        signerPublicKey,
         parsed.context,
         clock()
       );
     } else {
+      const targetKeyId = parsed.values["--key-id"];
+      verifyGovernanceApprovalBundle(approvalBundle, approvalPolicy, {
+        ...parsed.context,
+        expectedPolicySha256: parsed.values["--expected-approval-policy-sha256"],
+        operation: "REVOKE_SIGNER",
+        currentGeneration: current.manifest.generation,
+        currentSha256: verifiedCurrent.latestSha256,
+        targetKeyId,
+        forbiddenKeyIds: [authorityKeyId, targetKeyId],
+        now: clock()
+      });
       next = revokeSignerTrustInventory(
         current,
         authorityPrivateKey,
-        parsed.values["--key-id"],
+        targetKeyId,
         parsed.context,
         clock()
       );
