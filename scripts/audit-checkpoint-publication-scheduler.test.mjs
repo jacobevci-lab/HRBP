@@ -90,3 +90,48 @@ test("runner failure is propagated after exactly one attempt", async () => {
   }), error => error?.code === "CHECKPOINT_PUBLICATION_LOCKED");
   assert.equal(calls, 1);
 });
+
+
+test("scheduler supports authority-chain mode with an externally pinned root and latest digest", () => {
+  const env = { ...base };
+  delete env.HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_PUBLIC_KEY_FILE;
+  Object.assign(env, {
+    HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_CHAIN_DIR: "/secure/authority-chain",
+    HRBP_AUDIT_PUBLICATION_TRUST_BOOTSTRAP_AUTHORITY_PUBLIC_KEY_FILE: "/secure/bootstrap-authority.pem",
+    HRBP_AUDIT_PUBLICATION_EXPECTED_TRUST_AUTHORITY_CHAIN_SHA256: "b".repeat(64),
+    HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_CHAIN_MAX_AGE_HOURS: "168"
+  });
+  const args = auditCheckpointPublicationSchedulerArgs(env);
+  assert.ok(args.includes("--trust-authority-chain-dir"));
+  assert.ok(args.includes("/secure/authority-chain"));
+  assert.ok(args.includes("--trust-bootstrap-authority-public-key-file"));
+  assert.ok(args.includes("--expected-trust-authority-chain-sha256"));
+  assert.ok(args.includes("b".repeat(64)));
+  assert.equal(args.includes("--trust-authority-public-key-file"), false);
+});
+
+test("scheduler rejects mixed or partial authority trust configuration", () => {
+  const mixed = {
+    ...base,
+    HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_CHAIN_DIR: "/secure/authority-chain",
+    HRBP_AUDIT_PUBLICATION_TRUST_BOOTSTRAP_AUTHORITY_PUBLIC_KEY_FILE: "/secure/bootstrap-authority.pem",
+    HRBP_AUDIT_PUBLICATION_EXPECTED_TRUST_AUTHORITY_CHAIN_SHA256: "b".repeat(64),
+    HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_CHAIN_MAX_AGE_HOURS: "168"
+  };
+  assert.throws(() => auditCheckpointPublicationSchedulerArgs(mixed));
+
+  const partial = { ...base };
+  delete partial.HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_PUBLIC_KEY_FILE;
+  partial.HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_CHAIN_DIR = "/secure/authority-chain";
+  assert.throws(() => auditCheckpointPublicationSchedulerArgs(partial));
+
+  const invalidDigest = { ...base };
+  delete invalidDigest.HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_PUBLIC_KEY_FILE;
+  Object.assign(invalidDigest, {
+    HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_CHAIN_DIR: "/secure/authority-chain",
+    HRBP_AUDIT_PUBLICATION_TRUST_BOOTSTRAP_AUTHORITY_PUBLIC_KEY_FILE: "/secure/bootstrap-authority.pem",
+    HRBP_AUDIT_PUBLICATION_EXPECTED_TRUST_AUTHORITY_CHAIN_SHA256: "not-a-digest",
+    HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_CHAIN_MAX_AGE_HOURS: "168"
+  });
+  assert.throws(() => auditCheckpointPublicationSchedulerArgs(invalidDigest));
+});
