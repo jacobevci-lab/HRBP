@@ -180,6 +180,21 @@ test("chain verification detects rollback rewrite gap and stale latest authority
   }),code("AUTHORITY_INVENTORY_STALE"));
 });
 
+test("authority chain remains forensically verifiable after its approval policy expires",()=>{
+  const first=initial();
+  const second=rotateAuthorityTrustInventory(
+    first,authority2.publicKey,policy,
+    approvals("ROTATE_AUTHORITY",1,authorityTrustInventorySha256(first),checkpointKeyId(authority2.publicKey),t1),
+    context,{expectedPolicySha256:policySha,expectedCurrentSha256:authorityTrustInventorySha256(first),now:t1}
+  );
+  const result=verifyAuthorityTrustInventoryChain([first,second],{
+    policy,expectedPolicySha256:policySha,expectedLatestSha256:authorityTrustInventorySha256(second),
+    ...context,maxAgeMs:10*24*60*60_000,now:t0+2*24*60*60_000
+  });
+  assert.equal(result.latest.manifest.generation,2);
+  assert.equal(result.activeKeyId,checkpointKeyId(authority2.publicKey));
+});
+
 test("generation files are append-only and unsafe authority directories fail closed",()=>{
   const root=mkdtempSync(join(tmpdir(),"hrbp-authority-inventory-"));
   try{
