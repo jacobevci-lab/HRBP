@@ -1,0 +1,13 @@
+# Example cadence only. Customer policy may require another schedule.
+[Unit]
+Description=Schedule independent HRBP audit checkpoint publication
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=5m
+AccuracySec=1m
+Unit=hrbp-audit-checkpoint-publication.service
+
+[Install]
+WantedBy=timers.target
