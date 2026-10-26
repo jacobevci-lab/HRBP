@@ -15,6 +15,11 @@ import {
   parseGovernanceApprovalPolicy,
   verifyGovernanceApprovalBundle
 } from "./audit-governance-approval.mjs";
+import {
+  readAuthorityTrustInventoryChain,
+  resolveTrustAuthority,
+  verifyAuthorityTrustInventoryChain
+} from "./audit-trust-authority-inventory.mjs";
 
 const DOMAIN = "HRBP-AUDIT-SIGNER-TRUST-INVENTORY:1\n";
 const MAX_FILE = 65_536;
@@ -364,6 +369,56 @@ export function verifySignerTrustInventoryChain(chain, {
   };
 }
 
+export function verifySignerTrustInventoryChainGoverned(chain, {
+  authorityChain, authorityPolicy, expectedAuthorityPolicySha256, expectedAuthoritySha256,
+  authorityMaxAgeMs, tenantId, deploymentId, expectedLatestSha256, maxAgeMs, now = Date.now()
+}) {
+  if (!Array.isArray(chain) || !chain.length) fail("TRUST_INVENTORY_EMPTY");
+  if (typeof expectedLatestSha256 !== "string" || !HASH.test(expectedLatestSha256)) fail();
+  const context = { tenantId, deploymentId };
+  const authority = verifyAuthorityTrustInventoryChain(authorityChain, {
+    policy: authorityPolicy,
+    expectedPolicySha256: expectedAuthorityPolicySha256,
+    expectedLatestSha256: expectedAuthoritySha256,
+    ...context,
+    maxAgeMs: authorityMaxAgeMs,
+    now
+  });
+  let previousSha = null;
+  let latest;
+  for (let index = 0; index < chain.length; index++) {
+    const raw = envelopeOf(chain[index]);
+    const authorityPublicKey = resolveTrustAuthority(authority.latest, {
+      keyId: raw.manifest.authorityKeyId,
+      issuedAt: raw.manifest.issuedAt
+    });
+    const current = verifyEnvelope(raw, authorityPublicKey, context, { now });
+    if (current.manifest.generation !== index + 1 ||
+        current.manifest.previousInventorySha256 !== previousSha) {
+      fail("TRUST_INVENTORY_CHAIN_INVALID");
+    }
+    previousSha = digest(encodeSignerTrustInventory(current));
+    latest = current;
+  }
+  if (digest(encodeSignerTrustInventory(latest)) !== expectedLatestSha256) {
+    fail("TRUST_INVENTORY_DIGEST_MISMATCH");
+  }
+  const issued = Date.parse(latest.manifest.issuedAt);
+  if (issued > now + 30_000) fail("TRUST_INVENTORY_FUTURE");
+  if (maxAgeMs !== undefined) {
+    if (!Number.isSafeInteger(maxAgeMs) || maxAgeMs < 3600_000 || maxAgeMs > MAX_AGE_MS) fail();
+    if (now - issued > maxAgeMs) fail("TRUST_INVENTORY_STALE");
+  }
+  return {
+    latest,
+    latestSha256: previousSha,
+    activeKeyId: latest.manifest.signingKeys.find(entry => entry.status === "ACTIVE")?.keyId ?? null,
+    authorityGeneration: authority.latest.manifest.generation,
+    authorityInventorySha256: authority.latestSha256,
+    authorityActiveKeyId: authority.activeKeyId
+  };
+}
+
 export function resolveCheckpointSigner(inventory, { keyId, issuedAt }) {
   const value = envelopeOf(inventory);
   if (typeof keyId !== "string" || !HASH.test(keyId)) fail();
@@ -395,14 +450,23 @@ function readApprovalPolicy(path) {
 function readApprovalBundle(path) {
   return parseGovernanceApprovalBundle(readCheckpointFile(path, { maxBytes: 65_536 }).toString("utf8"));
 }
+function readAuthorityPolicy(path) {
+  return parseGovernanceApprovalPolicy(readCheckpointFile(path, { maxBytes: 65_536 }).toString("utf8"));
+}
 function parseFlags(argv, command) {
   const allowed = new Set([
     "--tenant-id", "--deployment-id", "--inventory-dir",
     ...(command === "verify"
-      ? ["--authority-public-key-file", "--expected-latest-sha256", "--max-age-hours"]
+      ? [
+          "--authority-public-key-file", "--expected-latest-sha256", "--max-age-hours",
+          "--authority-inventory-dir", "--authority-policy", "--expected-authority-policy-sha256",
+          "--expected-authority-sha256", "--authority-max-age-hours"
+        ]
       : [
           "--authority-private-key-file", "--expected-current-sha256", "--acknowledge-separate-trust-authority",
-          "--approval-bundle", "--approval-policy", "--expected-approval-policy-sha256"
+          "--approval-bundle", "--approval-policy", "--expected-approval-policy-sha256",
+          "--authority-inventory-dir", "--authority-policy", "--expected-authority-policy-sha256",
+          "--expected-authority-sha256", "--authority-max-age-hours"
         ]),
     ...(command === "init" || command === "rotate" ? ["--signer-public-key-file"] : []),
     ...(command === "revoke" ? ["--key-id"] : [])
@@ -431,10 +495,12 @@ export function signerTrustInventoryArgs(argv) {
   const values = parseFlags(rest, command);
   const required = ["--tenant-id", "--deployment-id", "--inventory-dir",
     ...(command === "verify"
-      ? ["--authority-public-key-file", "--expected-latest-sha256", "--max-age-hours"]
+      ? ["--expected-latest-sha256", "--max-age-hours"]
       : [
           "--authority-private-key-file", "--acknowledge-separate-trust-authority",
-          "--approval-bundle", "--approval-policy", "--expected-approval-policy-sha256"
+          "--approval-bundle", "--approval-policy", "--expected-approval-policy-sha256",
+          "--authority-inventory-dir", "--authority-policy", "--expected-authority-policy-sha256",
+          "--expected-authority-sha256", "--authority-max-age-hours"
         ]),
     ...(command === "init" || command === "rotate" ? ["--signer-public-key-file"] : []),
     ...(command === "rotate" || command === "revoke" ? ["--expected-current-sha256"] : []),
@@ -446,34 +512,81 @@ export function signerTrustInventoryArgs(argv) {
   if (values["--expected-current-sha256"] !== undefined && !HASH.test(values["--expected-current-sha256"])) fail();
   if (values["--expected-latest-sha256"] !== undefined && !HASH.test(values["--expected-latest-sha256"])) fail();
   if (values["--expected-approval-policy-sha256"] !== undefined && !HASH.test(values["--expected-approval-policy-sha256"])) fail();
+  if (values["--expected-authority-policy-sha256"] !== undefined && !HASH.test(values["--expected-authority-policy-sha256"])) fail();
+  if (values["--expected-authority-sha256"] !== undefined && !HASH.test(values["--expected-authority-sha256"])) fail();
   if (values["--key-id"] !== undefined && !HASH.test(values["--key-id"])) fail();
-  return { command, values, context, maxAgeMs: command === "verify" ? maxAge(values["--max-age-hours"]) : null };
+  if (command === "verify") {
+    const direct = Boolean(values["--authority-public-key-file"]);
+    const governedFlags = [
+      "--authority-inventory-dir", "--authority-policy", "--expected-authority-policy-sha256",
+      "--expected-authority-sha256", "--authority-max-age-hours"
+    ];
+    const governed = governedFlags.every(flag => Boolean(values[flag]));
+    const partial = governedFlags.some(flag => Boolean(values[flag]));
+    if (direct === governed || (partial && !governed)) fail();
+  }
+  if (values["--authority-inventory-dir"] !== undefined && !isAbsolute(values["--authority-inventory-dir"])) fail();
+  return {
+    command, values, context,
+    maxAgeMs: command === "verify" ? maxAge(values["--max-age-hours"]) : null,
+    authorityMaxAgeMs: values["--authority-max-age-hours"] !== undefined ? maxAge(values["--authority-max-age-hours"]) : null
+  };
 }
 
 export async function runSignerTrustInventoryCli(argv, clock = Date.now) {
   const parsed = signerTrustInventoryArgs(argv);
   const directory = parsed.values["--inventory-dir"];
   if (parsed.command === "verify") {
-    const authorityPublicKey = readPublicKey(parsed.values["--authority-public-key-file"]);
-    const result = verifySignerTrustInventoryChain(readSignerTrustInventoryChain(directory), {
-      ...parsed.context,
-      authorityPublicKey,
-      expectedLatestSha256: parsed.values["--expected-latest-sha256"],
-      maxAgeMs: parsed.maxAgeMs,
-      now: clock()
-    });
+    let result;
+    if (parsed.values["--authority-public-key-file"]) {
+      const authorityPublicKey = readPublicKey(parsed.values["--authority-public-key-file"]);
+      result = verifySignerTrustInventoryChain(readSignerTrustInventoryChain(directory), {
+        ...parsed.context,
+        authorityPublicKey,
+        expectedLatestSha256: parsed.values["--expected-latest-sha256"],
+        maxAgeMs: parsed.maxAgeMs,
+        now: clock()
+      });
+    } else {
+      result = verifySignerTrustInventoryChainGoverned(readSignerTrustInventoryChain(directory), {
+        ...parsed.context,
+        authorityChain: readAuthorityTrustInventoryChain(parsed.values["--authority-inventory-dir"]),
+        authorityPolicy: readAuthorityPolicy(parsed.values["--authority-policy"]),
+        expectedAuthorityPolicySha256: parsed.values["--expected-authority-policy-sha256"],
+        expectedAuthoritySha256: parsed.values["--expected-authority-sha256"],
+        authorityMaxAgeMs: parsed.authorityMaxAgeMs,
+        expectedLatestSha256: parsed.values["--expected-latest-sha256"],
+        maxAgeMs: parsed.maxAgeMs,
+        now: clock()
+      });
+    }
     return {
       ok: true,
       code: "TRUST_INVENTORY_VALID",
       generation: result.latest.manifest.generation,
       latestSha256: result.latestSha256,
-      activeKeyId: result.activeKeyId
+      activeKeyId: result.activeKeyId,
+      ...(result.authorityGeneration ? {
+        authorityGeneration: result.authorityGeneration,
+        authorityInventorySha256: result.authorityInventorySha256
+      } : {})
     };
   }
 
   const authorityPrivateKey = readPrivateKey(parsed.values["--authority-private-key-file"]);
   const authorityPublicKey = keyOf(createPublicKey(authorityPrivateKey), "public");
   const authorityKeyId = checkpointKeyId(authorityPublicKey);
+  const authorityChain = readAuthorityTrustInventoryChain(parsed.values["--authority-inventory-dir"]);
+  const authorityPolicy = readAuthorityPolicy(parsed.values["--authority-policy"]);
+  const authority = verifyAuthorityTrustInventoryChain(authorityChain, {
+    policy: authorityPolicy,
+    expectedPolicySha256: parsed.values["--expected-authority-policy-sha256"],
+    expectedLatestSha256: parsed.values["--expected-authority-sha256"],
+    ...parsed.context,
+    maxAgeMs: parsed.authorityMaxAgeMs,
+    now: clock()
+  });
+  if (authority.activeKeyId !== authorityKeyId) fail("TRUST_INVENTORY_AUTHORITY_NOT_ACTIVE");
   const approvalPolicy = readApprovalPolicy(parsed.values["--approval-policy"]);
   const approvalBundle = readApprovalBundle(parsed.values["--approval-bundle"]);
   const chain = readSignerTrustInventoryChain(directory);
@@ -499,9 +612,13 @@ export async function runSignerTrustInventoryCli(argv, clock = Date.now) {
       clock()
     );
   } else {
-    const verifiedCurrent = verifySignerTrustInventoryChain(chain, {
+    const verifiedCurrent = verifySignerTrustInventoryChainGoverned(chain, {
       ...parsed.context,
-      authorityPublicKey,
+      authorityChain,
+      authorityPolicy,
+      expectedAuthorityPolicySha256: parsed.values["--expected-authority-policy-sha256"],
+      expectedAuthoritySha256: parsed.values["--expected-authority-sha256"],
+      authorityMaxAgeMs: parsed.authorityMaxAgeMs,
       expectedLatestSha256: parsed.values["--expected-current-sha256"],
       now: clock()
     });
