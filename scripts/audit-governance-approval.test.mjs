@@ -124,38 +124,42 @@ test("proposal binds exact operation current generation digest and target key",(
 });
 
 test("expired proposal and inactive policy fail closed",()=>{
-  const shortProposal=proposal({expiresAt:t0+60_000});
+  const shortProposal=proposal({expiresAt:t0+5*60_000});
   let bundle={proposal:shortProposal,approvals:[]};
-  bundle=approveGovernanceProposal(bundle,approver1.privateKey,t0+10_000);
-  bundle=approveGovernanceProposal(bundle,approver2.privateKey,t0+20_000);
+  bundle=approveGovernanceProposal(bundle,approver1.privateKey,t0+60_000);
+  bundle=approveGovernanceProposal(bundle,approver2.privateKey,t0+2*60_000);
   assert.throws(()=>verifyGovernanceApprovalBundle(bundle,policy,{
     ...context,expectedPolicySha256:policySha,operation:"ROTATE_SIGNER",
-    currentGeneration:3,currentSha256:"a".repeat(64),targetKeyId:checkpointKeyId(target.publicKey),now:t0+120_000
+    currentGeneration:3,currentSha256:"a".repeat(64),targetKeyId:checkpointKeyId(target.publicKey),now:t0+10*60_000
   }),code("GOVERNANCE_APPROVAL_PROPOSAL_EXPIRED"));
 
   const expiredPolicy=createGovernanceApprovalPolicy({
     approverPublicKeys:[approver1.publicKey,approver2.publicKey],
-    minApprovals:2,...context,issuedAt:t0-120_000,expiresAt:t0+30_000
+    minApprovals:2,...context,issuedAt:t0-10*60_000,expiresAt:t0+10*60_000
   });
-  const policyBoundProposal=proposal({now:t0-10_000,expiresAt:t0+20_000});
+  const policyBoundProposal=proposal({now:t0-5*60_000,expiresAt:t0+5*60_000});
   let policyBoundBundle={proposal:policyBoundProposal,approvals:[]};
-  policyBoundBundle=approveGovernanceProposal(policyBoundBundle,approver1.privateKey,t0);
-  policyBoundBundle=approveGovernanceProposal(policyBoundBundle,approver2.privateKey,t0+5_000);
+  policyBoundBundle=approveGovernanceProposal(policyBoundBundle,approver1.privateKey,t0-2*60_000);
+  policyBoundBundle=approveGovernanceProposal(policyBoundBundle,approver2.privateKey,t0-60_000);
   assert.throws(()=>verifyGovernanceApprovalBundle(policyBoundBundle,expiredPolicy,{
     ...context,expectedPolicySha256:governanceApprovalPolicySha256(expiredPolicy),operation:"ROTATE_SIGNER",
-    currentGeneration:3,currentSha256:"a".repeat(64),targetKeyId:checkpointKeyId(target.publicKey),now:t0+120_000
+    currentGeneration:3,currentSha256:"a".repeat(64),targetKeyId:checkpointKeyId(target.publicKey),now:t0+20*60_000
   }),code("GOVERNANCE_APPROVAL_POLICY_INACTIVE"));
 });
 
 test("historical approval remains valid after policy and proposal expiry when the transition occurred inside both windows",()=>{
-  const bundle=bundleWith(approver1.privateKey,approver2.privateKey);
+  const historicalProposal=proposal({now:t0,expiresAt:t0+30*60_000});
+  let bundle={proposal:historicalProposal,approvals:[]};
+  bundle=approveGovernanceProposal(bundle,approver1.privateKey,t0+5*60_000);
+  bundle=approveGovernanceProposal(bundle,approver2.privateKey,t0+6*60_000);
+  const effectiveAt=t0+15*60_000;
   const result=verifyGovernanceApprovalBundle(bundle,policy,{
     ...context,expectedPolicySha256:policySha,operation:"ROTATE_SIGNER",
     currentGeneration:3,currentSha256:"a".repeat(64),targetKeyId:checkpointKeyId(target.publicKey),
-    now:t0+2*24*60*60_000,effectiveAt:t0+120_000
+    now:t0+2*24*60*60_000,effectiveAt
   });
   assert.equal(result.approvals,2);
-  assert.equal(result.effectiveAt,new Date(t0+120_000).toISOString());
+  assert.equal(result.effectiveAt,new Date(effectiveAt).toISOString());
 });
 
 test("historical verification still rejects a transition outside the approved policy or proposal window",()=>{
