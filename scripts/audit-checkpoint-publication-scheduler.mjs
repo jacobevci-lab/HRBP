@@ -34,7 +34,9 @@ export function auditCheckpointPublicationSchedulerArgs(env = process.env) {
   truth(env, "HRBP_AUDIT_PUBLICATION_ACKNOWLEDGE_EXTERNAL_RETENTION_TARGET");
 
   const expectedTrust = required(env, "HRBP_AUDIT_PUBLICATION_EXPECTED_TRUST_SHA256");
-  if (!HASH.test(expectedTrust)) fail();
+  const expectedAuthority = required(env, "HRBP_AUDIT_PUBLICATION_EXPECTED_AUTHORITY_SHA256");
+  const expectedAuthorityPolicy = required(env, "HRBP_AUDIT_PUBLICATION_EXPECTED_AUTHORITY_POLICY_SHA256");
+  if (![expectedTrust, expectedAuthority, expectedAuthorityPolicy].every(value => HASH.test(value))) fail();
 
   const args = [
     "run",
@@ -42,9 +44,13 @@ export function auditCheckpointPublicationSchedulerArgs(env = process.env) {
     "--deployment-id", required(env, "HRBP_AUDIT_PUBLICATION_DEPLOYMENT_ID"),
     "--signer-private-key-file", required(env, "HRBP_AUDIT_PUBLICATION_SIGNER_PRIVATE_KEY_FILE"),
     "--trust-inventory-dir", required(env, "HRBP_AUDIT_PUBLICATION_TRUST_INVENTORY_DIR"),
-    "--trust-authority-public-key-file", required(env, "HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_PUBLIC_KEY_FILE"),
     "--expected-trust-sha256", expectedTrust,
     "--trust-max-age-hours", positive(env, "HRBP_AUDIT_PUBLICATION_TRUST_MAX_AGE_HOURS"),
+    "--authority-inventory-dir", required(env, "HRBP_AUDIT_PUBLICATION_AUTHORITY_INVENTORY_DIR"),
+    "--authority-policy", required(env, "HRBP_AUDIT_PUBLICATION_AUTHORITY_POLICY_FILE"),
+    "--expected-authority-policy-sha256", expectedAuthorityPolicy,
+    "--expected-authority-sha256", expectedAuthority,
+    "--authority-max-age-hours", positive(env, "HRBP_AUDIT_PUBLICATION_AUTHORITY_MAX_AGE_HOURS"),
     "--archive-root", required(env, "HRBP_AUDIT_PUBLICATION_ARCHIVE_ROOT"),
     "--retention-days", positive(env, "HRBP_AUDIT_PUBLICATION_RETENTION_DAYS"),
     "--archive-max-age-hours", positive(env, "HRBP_AUDIT_PUBLICATION_ARCHIVE_MAX_AGE_HOURS"),
