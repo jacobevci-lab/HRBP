@@ -27,6 +27,11 @@ import {
   encodeGovernanceApprovalPolicy,
   governanceApprovalPolicySha256
 } from "./audit-governance-approval.mjs";
+import {
+  createInitialAuthorityTrustInventory,
+  rotateAuthorityTrustInventory,
+  writeAuthorityTrustInventoryGeneration
+} from "./audit-trust-authority-inventory.mjs";
 
 const tenantId = "trust-ci-tenant";
 const deploymentId = "trust-ci-deployment";
@@ -268,25 +273,42 @@ test("missing generation files are detected instead of silently renumbered", () 
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-test("offline CLI init, rotate and verify require dual control plus the externally pinned current digest", async () => {
+test("offline CLI survives authority rotation while enforcing dual control and pinned digests", async () => {
   const root = mkdtempSync(join(tmpdir(), "hrbp-trust-cli-"));
   try {
     chmodSync(root, 0o700);
     const inventoryDir = join(root, "inventory");
+    const authorityDir = join(root, "authority-inventory");
     mkdirSync(inventoryDir, { mode: 0o700 });
+    mkdirSync(authorityDir, { mode: 0o700 });
     const authorityPrivate = join(root, "authority-private.pem");
+    const rotatedAuthorityPrivate = join(root, "authority-rotated-private.pem");
     const authorityPublic = join(root, "authority-public.pem");
     const signer1Public = join(root, "signer1-public.pem");
     const signer2Public = join(root, "signer2-public.pem");
     const policyPath = join(root, "approval-policy.json");
     const initApprovalPath = join(root, "init-approval.json");
     const rotateApprovalPath = join(root, "rotate-approval.json");
+
     writeFileSync(authorityPrivate, authority.privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 });
     chmodSync(authorityPrivate, 0o600);
+    writeFileSync(rotatedAuthorityPrivate, otherAuthority.privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 });
+    chmodSync(rotatedAuthorityPrivate, 0o600);
     writeFileSync(authorityPublic, authority.publicKey.export({ type: "spki", format: "pem" }), { mode: 0o644 });
     writeFileSync(signer1Public, signer1.publicKey.export({ type: "spki", format: "pem" }), { mode: 0o644 });
     writeFileSync(signer2Public, signer2.publicKey.export({ type: "spki", format: "pem" }), { mode: 0o644 });
     writeFileSync(policyPath, encodeGovernanceApprovalPolicy(approvalPolicy), { mode: 0o600 });
+
+    const authorityStartedAt = t0 - 30_000;
+    const authorityInitial = createInitialAuthorityTrustInventory(
+      authority.publicKey,
+      approvalPolicy,
+      approvals("INIT_AUTHORITY", 0, null, checkpointKeyId(authority.publicKey), authorityStartedAt),
+      context,
+      { expectedPolicySha256: approvalPolicySha, now: authorityStartedAt }
+    );
+    const authorityGen1 = writeAuthorityTrustInventoryGeneration(authorityDir, authorityInitial);
+
     writeFileSync(initApprovalPath, encodeGovernanceApprovalBundle(
       approvals("INIT_SIGNER", 0, null, checkpointKeyId(signer1.publicKey), t0)
     ), { mode: 0o600 });
@@ -301,9 +323,34 @@ test("offline CLI init, rotate and verify require dual control plus the external
       "--approval-bundle", initApprovalPath,
       "--approval-policy", policyPath,
       "--expected-approval-policy-sha256", approvalPolicySha,
+      "--authority-inventory-dir", authorityDir,
+      "--authority-policy", policyPath,
+      "--expected-authority-policy-sha256", approvalPolicySha,
+      "--expected-authority-sha256", authorityGen1.inventorySha256,
+      "--authority-max-age-hours", "24",
       "--acknowledge-separate-trust-authority"
     ], () => t0);
     assert.equal(initResult.code, "TRUST_INVENTORY_INITIALIZED");
+
+    const authorityRotated = rotateAuthorityTrustInventory(
+      authorityInitial,
+      otherAuthority.publicKey,
+      approvalPolicy,
+      approvals(
+        "ROTATE_AUTHORITY",
+        1,
+        authorityGen1.inventorySha256,
+        checkpointKeyId(otherAuthority.publicKey),
+        t1 - 10_000
+      ),
+      context,
+      {
+        expectedPolicySha256: approvalPolicySha,
+        expectedCurrentSha256: authorityGen1.inventorySha256,
+        now: t1 - 10_000
+      }
+    );
+    const authorityGen2 = writeAuthorityTrustInventoryGeneration(authorityDir, authorityRotated);
 
     writeFileSync(rotateApprovalPath, encodeGovernanceApprovalBundle(
       approvals("ROTATE_SIGNER", 1, initResult.latestSha256, checkpointKeyId(signer2.publicKey), t1)
@@ -314,12 +361,17 @@ test("offline CLI init, rotate and verify require dual control plus the external
       "--tenant-id", tenantId,
       "--deployment-id", deploymentId,
       "--inventory-dir", inventoryDir,
-      "--authority-private-key-file", authorityPrivate,
+      "--authority-private-key-file", rotatedAuthorityPrivate,
       "--signer-public-key-file", signer2Public,
       "--expected-current-sha256", "0".repeat(64),
       "--approval-bundle", rotateApprovalPath,
       "--approval-policy", policyPath,
       "--expected-approval-policy-sha256", approvalPolicySha,
+      "--authority-inventory-dir", authorityDir,
+      "--authority-policy", policyPath,
+      "--expected-authority-policy-sha256", approvalPolicySha,
+      "--expected-authority-sha256", authorityGen2.inventorySha256,
+      "--authority-max-age-hours", "24",
       "--acknowledge-separate-trust-authority"
     ], () => t1), code("TRUST_INVENTORY_DIGEST_MISMATCH"));
 
@@ -328,12 +380,17 @@ test("offline CLI init, rotate and verify require dual control plus the external
       "--tenant-id", tenantId,
       "--deployment-id", deploymentId,
       "--inventory-dir", inventoryDir,
-      "--authority-private-key-file", authorityPrivate,
+      "--authority-private-key-file", rotatedAuthorityPrivate,
       "--signer-public-key-file", signer2Public,
       "--expected-current-sha256", initResult.latestSha256,
       "--approval-bundle", rotateApprovalPath,
       "--approval-policy", policyPath,
       "--expected-approval-policy-sha256", approvalPolicySha,
+      "--authority-inventory-dir", authorityDir,
+      "--authority-policy", policyPath,
+      "--expected-authority-policy-sha256", approvalPolicySha,
+      "--expected-authority-sha256", authorityGen2.inventorySha256,
+      "--authority-max-age-hours", "24",
       "--acknowledge-separate-trust-authority"
     ], () => t1);
     assert.equal(rotateResult.code, "TRUST_INVENTORY_ROTATED");
@@ -344,13 +401,19 @@ test("offline CLI init, rotate and verify require dual control plus the external
       "--tenant-id", tenantId,
       "--deployment-id", deploymentId,
       "--inventory-dir", inventoryDir,
-      "--authority-public-key-file", authorityPublic,
       "--expected-latest-sha256", rotateResult.latestSha256,
-      "--max-age-hours", "24"
+      "--max-age-hours", "24",
+      "--authority-inventory-dir", authorityDir,
+      "--authority-policy", policyPath,
+      "--expected-authority-policy-sha256", approvalPolicySha,
+      "--expected-authority-sha256", authorityGen2.inventorySha256,
+      "--authority-max-age-hours", "24"
     ], () => t2);
     assert.equal(verifyResult.code, "TRUST_INVENTORY_VALID");
     assert.equal(verifyResult.generation, 2);
     assert.equal(verifyResult.activeKeyId, checkpointKeyId(signer2.publicKey));
+    assert.equal(verifyResult.authorityGeneration, 2);
+    assert.equal(verifyResult.authorityInventorySha256, authorityGen2.inventorySha256);
     assert.ok(!JSON.stringify(verifyResult).includes(root));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
@@ -360,7 +423,9 @@ test("CLI does not accept a signer private key as an enrollment source", async (
   try {
     chmodSync(root, 0o700);
     const inventoryDir = join(root, "inventory");
+    const authorityDir = join(root, "authority-inventory");
     mkdirSync(inventoryDir, { mode: 0o700 });
+    mkdirSync(authorityDir, { mode: 0o700 });
     const authorityPrivate = join(root, "authority-private.pem");
     const signerPrivate = join(root, "signer-private.pem");
     const policyPath = join(root, "approval-policy.json");
@@ -370,6 +435,14 @@ test("CLI does not accept a signer private key as an enrollment source", async (
     writeFileSync(signerPrivate, signer1.privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 });
     chmodSync(signerPrivate, 0o600);
     writeFileSync(policyPath, encodeGovernanceApprovalPolicy(approvalPolicy), { mode: 0o600 });
+    const authorityInitial = createInitialAuthorityTrustInventory(
+      authority.publicKey,
+      approvalPolicy,
+      approvals("INIT_AUTHORITY", 0, null, checkpointKeyId(authority.publicKey), t0 - 30_000),
+      context,
+      { expectedPolicySha256: approvalPolicySha, now: t0 - 30_000 }
+    );
+    const authorityWritten = writeAuthorityTrustInventoryGeneration(authorityDir, authorityInitial);
     writeFileSync(approvalPath, encodeGovernanceApprovalBundle(
       approvals("INIT_SIGNER", 0, null, checkpointKeyId(signer1.publicKey), t0)
     ), { mode: 0o600 });
@@ -383,6 +456,11 @@ test("CLI does not accept a signer private key as an enrollment source", async (
       "--approval-bundle", approvalPath,
       "--approval-policy", policyPath,
       "--expected-approval-policy-sha256", approvalPolicySha,
+      "--authority-inventory-dir", authorityDir,
+      "--authority-policy", policyPath,
+      "--expected-authority-policy-sha256", approvalPolicySha,
+      "--expected-authority-sha256", authorityWritten.inventorySha256,
+      "--authority-max-age-hours", "24",
       "--acknowledge-separate-trust-authority"
     ], () => t0), code("TRUST_INVENTORY_KEY_INVALID"));
   } finally { rmSync(root, { recursive: true, force: true }); }
