@@ -137,7 +137,11 @@ test("expired proposal and inactive policy fail closed",()=>{
     approverPublicKeys:[approver1.publicKey,approver2.publicKey],
     minApprovals:2,...context,issuedAt:t0-120_000,expiresAt:t0+30_000
   });
-  assert.throws(()=>verifyGovernanceApprovalBundle(bundleWith(approver1.privateKey,approver2.privateKey),expiredPolicy,{
+  const policyBoundProposal=proposal({now:t0-10_000,expiresAt:t0+20_000});
+  let policyBoundBundle={proposal:policyBoundProposal,approvals:[]};
+  policyBoundBundle=approveGovernanceProposal(policyBoundBundle,approver1.privateKey,t0);
+  policyBoundBundle=approveGovernanceProposal(policyBoundBundle,approver2.privateKey,t0+5_000);
+  assert.throws(()=>verifyGovernanceApprovalBundle(policyBoundBundle,expiredPolicy,{
     ...context,expectedPolicySha256:governanceApprovalPolicySha256(expiredPolicy),operation:"ROTATE_SIGNER",
     currentGeneration:3,currentSha256:"a".repeat(64),targetKeyId:checkpointKeyId(target.publicKey),now:t0+120_000
   }),code("GOVERNANCE_APPROVAL_POLICY_INACTIVE"));
@@ -148,10 +152,10 @@ test("historical approval remains valid after policy and proposal expiry when th
   const result=verifyGovernanceApprovalBundle(bundle,policy,{
     ...context,expectedPolicySha256:policySha,operation:"ROTATE_SIGNER",
     currentGeneration:3,currentSha256:"a".repeat(64),targetKeyId:checkpointKeyId(target.publicKey),
-    now:t0+2*24*60*60_000,effectiveAt:t0+10_000
+    now:t0+2*24*60*60_000,effectiveAt:t0+120_000
   });
   assert.equal(result.approvals,2);
-  assert.equal(result.effectiveAt,new Date(t0+10_000).toISOString());
+  assert.equal(result.effectiveAt,new Date(t0+120_000).toISOString());
 });
 
 test("historical verification still rejects a transition outside the approved policy or proposal window",()=>{
