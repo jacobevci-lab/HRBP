@@ -30,7 +30,10 @@ const [publication, tests, trust, archive, pkg, dockerfile, scheduler, scheduler
 function expect(source, pattern, message) { assert.match(source, pattern, message); }
 function reject(source, pattern, message) { assert.doesNotMatch(source, pattern, message); }
 
-expect(publication, /verifySignerTrustInventoryChain\(trustChain/, "publication must verify the authority-signed trust chain before scanning");
+expect(publication, /verifySignerTrustInventoryChainGoverned\(trustChain/, "publication must verify signer trust through the rotated authority chain before scanning");
+expect(publication, /expectedAuthorityPolicySha256/, "publication must pin the authority governance policy");
+expect(publication, /expectedAuthoritySha256/, "publication must pin the authority inventory");
+expect(publication, /authorityInventorySha256/, "publication result must retain the verified authority inventory digest");
 expect(publication, /trust\.activeKeyId !== signerKeyId/, "publication must require the configured signer to be the active enrolled signer");
 expect(publication, /resolveCheckpointSigner\(trust\.latest/, "publication must resolve the signed checkpoint back through governed signer validity");
 expect(publication, /createAuditCheckpoint\(/, "publication must create its own complete read-only checkpoint");
@@ -57,6 +60,8 @@ expect(tests, /revoking the only active signer suspends publication without fall
 expect(tests, /publication lock is exclusive/, "overlap lock needs executable coverage");
 expect(tests, /existing lock blocks CLI before the database and is not auto-removed/, "ambiguous prior outcome must block automated replay");
 expect(tests, /creates and reads back one governed external bundle/, "successful publication and read-back needs executable coverage");
+expect(tests, /planned authority rotation preserves publication while emergency recovery invalidates old authority history/,
+  "publication must cover authority rotation and recovery semantics");
 
 expect(scheduler, /Exactly one attempt/, "scheduler wrapper must explicitly remain one-shot");
 reject(scheduler, /setInterval\(|while\s*\(true\)|for\s*\(;;\)/, "scheduler wrapper must not contain a hidden retry loop");
@@ -79,6 +84,9 @@ reject(timer, /^OnFailure=/m, "timer must not trigger an immediate failure repla
 
 expect(env, /DATABASE_URL=postgresql:\/\/READ_ONLY_OPERATOR:/, "operator environment example must use a distinct read-only database identity");
 expect(env, /EXPECTED_TRUST_SHA256=CHANGE_ME_64_HEX/, "operator environment must pin the latest trust inventory digest");
+expect(env, /EXPECTED_AUTHORITY_POLICY_SHA256=CHANGE_ME_64_HEX/, "operator environment must pin the authority approval policy");
+expect(env, /EXPECTED_AUTHORITY_SHA256=CHANGE_ME_64_HEX/, "operator environment must pin the authority inventory");
+reject(env, /TRUST_AUTHORITY_PUBLIC_KEY_FILE/, "publication automation must not remain tied to one fixed authority public key");
 reject(env, /BEGIN PRIVATE KEY|PRIVATE KEY-----/, "environment example must never embed private key material");
 
 expect(trust, /CHECKPOINT_SIGNER_TRUST_INVENTORY/, "publication must remain layered on signer governance");
@@ -86,6 +94,7 @@ expect(archive, /CHECKPOINT_ARCHIVE_MANIFEST/, "publication must remain layered 
 expect(pkg, /audit-checkpoint-publication\.test\.mjs/, "publication tests must be mandatory");
 expect(pkg, /audit-checkpoint-publication-scheduler\.test\.mjs/, "publication scheduler tests must be mandatory");
 expect(pkg, /validate-audit-checkpoint-publication\.mjs/, "publication static contract must be mandatory");
-reject(dockerfile, /audit-checkpoint-publication\.mjs/, "independent publication tooling must not be bundled into the HRBP application image");
+reject(dockerfile, /audit-checkpoint-publication\.mjs|audit-trust-authority-inventory\.mjs|audit-governance-approval\.mjs/,
+  "independent publication/authority governance tooling must not be bundled into the HRBP application image");
 
 console.log("Independent checkpoint publication: governed signer preflight, read-only scan, no-retry lock and archive read-back verified.");
