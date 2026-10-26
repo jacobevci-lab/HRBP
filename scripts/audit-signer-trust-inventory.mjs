@@ -10,6 +10,11 @@ import { pathToFileURL } from "node:url";
 import {
   checkpointKeyId, checkpointSubject, readCheckpointFile
 } from "./audit-checkpoint.mjs";
+import {
+  readTrustAuthorityChain,
+  resolveTrustAuthority,
+  verifyTrustAuthorityChain
+} from "./audit-trust-authority-chain.mjs";
 
 const DOMAIN = "HRBP-AUDIT-SIGNER-TRUST-INVENTORY:1\n";
 const MAX_FILE = 65_536;
@@ -278,6 +283,33 @@ export function revokeSignerTrustInventory(current, authorityPrivateKey, keyId, 
   return signManifest(manifest, authorityPrivateKey);
 }
 
+export function rebindSignerTrustAuthority(current, newAuthorityPrivateKey, context, now = Date.now()) {
+  keyOf(newAuthorityPrivateKey, "private");
+  if (!Number.isSafeInteger(now) || now < 0) fail();
+  const verified = envelopeOf(current);
+  if (verified.manifest.subject !== checkpointSubject(context)) {
+    fail("TRUST_INVENTORY_SUBJECT_MISMATCH");
+  }
+  const newAuthorityPublicKey = keyOf(createPublicKey(newAuthorityPrivateKey), "public");
+  const newAuthorityKeyId = checkpointKeyId(newAuthorityPublicKey);
+  if (newAuthorityKeyId === verified.manifest.authorityKeyId) {
+    fail("TRUST_INVENTORY_AUTHORITY_ALREADY_ACTIVE");
+  }
+  const issuedAt = new Date(now).toISOString();
+  if (Date.parse(issuedAt) < Date.parse(verified.manifest.issuedAt)) {
+    fail("TRUST_INVENTORY_CLOCK_REGRESSION");
+  }
+  const manifest = manifestOf({
+    ...verified.manifest,
+    authorityKeyId: newAuthorityKeyId,
+    generation: verified.manifest.generation + 1,
+    previousInventorySha256: digest(encodeSignerTrustInventory(verified)),
+    issuedAt,
+    signingKeys: verified.manifest.signingKeys
+  });
+  return signManifest(manifest, newAuthorityPrivateKey);
+}
+
 function assertTrustDirectory(directory) {
   if (typeof directory !== "string" || !isAbsolute(directory) || directory === "/" || directory.includes("\0")) fail();
   let stat;
@@ -330,24 +362,31 @@ export function readSignerTrustInventoryChain(directory) {
 }
 
 export function verifySignerTrustInventoryChain(chain, {
-  authorityPublicKey, tenantId, deploymentId, expectedLatestSha256,
+  authorityPublicKey, authorityChain, tenantId, deploymentId, expectedLatestSha256,
   maxAgeMs, now = Date.now()
 }) {
   if (!Array.isArray(chain) || !chain.length) fail("TRUST_INVENTORY_EMPTY");
   if (typeof expectedLatestSha256 !== "string" || !HASH.test(expectedLatestSha256)) fail();
+  if (Boolean(authorityPublicKey) === Boolean(authorityChain)) fail();
   const context = { tenantId, deploymentId };
   let previousSha = null;
   let latest;
+  let latestAuthority;
   for (let index = 0; index < chain.length; index++) {
-    const current = verifyEnvelope(chain[index], authorityPublicKey, context, { now });
+    const raw = envelopeOf(chain[index]);
+    const authority = authorityChain
+      ? resolveTrustAuthority(authorityChain, raw.manifest.issuedAt, raw.manifest.authorityKeyId)
+      : authorityPublicKey;
+    const current = verifyEnvelope(raw, authority, context, { now });
     if (current.manifest.generation !== index + 1 ||
         current.manifest.previousInventorySha256 !== previousSha) {
       fail("TRUST_INVENTORY_CHAIN_INVALID");
     }
     previousSha = digest(encodeSignerTrustInventory(current));
     latest = current;
+    latestAuthority = authority;
   }
-  verifyEnvelope(latest, authorityPublicKey, context, {
+  verifyEnvelope(latest, latestAuthority, context, {
     expectedSha256: expectedLatestSha256,
     now,
     maxAgeMs
@@ -384,12 +423,22 @@ function readPrivateKey(path) {
   try { return keyOf(createPrivateKey(pem), "private"); }
   finally { pem.fill(0); }
 }
+function authorityChainFlagNames() {
+  return [
+    "--authority-chain-dir",
+    "--bootstrap-authority-public-key-file",
+    "--expected-authority-chain-sha256",
+    "--authority-chain-max-age-hours"
+  ];
+}
 function parseFlags(argv, command) {
+  const chainFlags = authorityChainFlagNames();
   const allowed = new Set([
     "--tenant-id", "--deployment-id", "--inventory-dir",
     ...(command === "verify"
-      ? ["--authority-public-key-file", "--expected-latest-sha256", "--max-age-hours"]
-      : ["--authority-private-key-file", "--expected-current-sha256", "--acknowledge-separate-trust-authority"]),
+      ? ["--authority-public-key-file", "--expected-latest-sha256", "--max-age-hours", ...chainFlags]
+      : ["--authority-private-key-file", "--expected-current-sha256", "--acknowledge-separate-trust-authority",
+          ...(command === "init" ? [] : chainFlags)]),
     ...(command === "init" || command === "rotate" ? ["--signer-public-key-file"] : []),
     ...(command === "revoke" ? ["--key-id"] : [])
   ]);
@@ -411,45 +460,91 @@ function maxAge(value) {
   if (!Number.isSafeInteger(ms) || ms < 3600_000 || ms > MAX_AGE_MS) fail();
   return ms;
 }
+function governedAuthorityFlags(values) {
+  const flags = authorityChainFlagNames();
+  const some = flags.some(flag => Boolean(values[flag]));
+  const all = flags.every(flag => Boolean(values[flag]));
+  if (some && !all) fail();
+  return all;
+}
 export function signerTrustInventoryArgs(argv) {
   const [command, ...rest] = argv;
-  if (!["init", "rotate", "revoke", "verify"].includes(command)) fail();
+  if (!["init", "rotate", "revoke", "verify", "adopt-authority"].includes(command)) fail();
   const values = parseFlags(rest, command);
+  const governed = governedAuthorityFlags(values);
   const required = ["--tenant-id", "--deployment-id", "--inventory-dir",
     ...(command === "verify"
-      ? ["--authority-public-key-file", "--expected-latest-sha256", "--max-age-hours"]
+      ? ["--expected-latest-sha256", "--max-age-hours"]
       : ["--authority-private-key-file", "--acknowledge-separate-trust-authority"]),
     ...(command === "init" || command === "rotate" ? ["--signer-public-key-file"] : []),
-    ...(command === "rotate" || command === "revoke" ? ["--expected-current-sha256"] : []),
+    ...(command === "rotate" || command === "revoke" || command === "adopt-authority"
+      ? ["--expected-current-sha256"] : []),
     ...(command === "revoke" ? ["--key-id"] : [])];
   if (required.some(flag => !values[flag])) fail();
+  if (command === "verify") {
+    if (Boolean(values["--authority-public-key-file"]) === governed) fail();
+  } else if (command === "init") {
+    if (governed) fail();
+  } else if (command === "adopt-authority") {
+    if (!governed) fail();
+  }
   const context = { tenantId: values["--tenant-id"], deploymentId: values["--deployment-id"] };
   checkpointSubject(context);
   if (!isAbsolute(values["--inventory-dir"])) fail();
-  if (values["--expected-current-sha256"] !== undefined && !HASH.test(values["--expected-current-sha256"])) fail();
-  if (values["--expected-latest-sha256"] !== undefined && !HASH.test(values["--expected-latest-sha256"])) fail();
+  if (values["--authority-chain-dir"] !== undefined && !isAbsolute(values["--authority-chain-dir"])) fail();
+  for (const flag of ["--expected-current-sha256", "--expected-latest-sha256", "--expected-authority-chain-sha256"]) {
+    if (values[flag] !== undefined && !HASH.test(values[flag])) fail();
+  }
   if (values["--key-id"] !== undefined && !HASH.test(values["--key-id"])) fail();
-  return { command, values, context, maxAgeMs: command === "verify" ? maxAge(values["--max-age-hours"]) : null };
+  return {
+    command,
+    values,
+    context,
+    governed,
+    maxAgeMs: command === "verify" ? maxAge(values["--max-age-hours"]) : null,
+    authorityChainMaxAgeMs: governed ? maxAge(values["--authority-chain-max-age-hours"]) : null
+  };
+}
+function loadGovernedAuthorityChain(parsed, now) {
+  if (!parsed.governed) return null;
+  return verifyTrustAuthorityChain(
+    readTrustAuthorityChain(parsed.values["--authority-chain-dir"]),
+    {
+      ...parsed.context,
+      bootstrapAuthorityPublicKey: readPublicKey(parsed.values["--bootstrap-authority-public-key-file"]),
+      expectedLatestSha256: parsed.values["--expected-authority-chain-sha256"],
+      maxAgeMs: parsed.authorityChainMaxAgeMs,
+      now
+    }
+  );
 }
 
 export async function runSignerTrustInventoryCli(argv, clock = Date.now) {
   const parsed = signerTrustInventoryArgs(argv);
   const directory = parsed.values["--inventory-dir"];
+  const now = clock();
+  const governedAuthorityChain = loadGovernedAuthorityChain(parsed, now);
+
   if (parsed.command === "verify") {
-    const authorityPublicKey = readPublicKey(parsed.values["--authority-public-key-file"]);
     const result = verifySignerTrustInventoryChain(readSignerTrustInventoryChain(directory), {
       ...parsed.context,
-      authorityPublicKey,
+      ...(governedAuthorityChain
+        ? { authorityChain: governedAuthorityChain }
+        : { authorityPublicKey: readPublicKey(parsed.values["--authority-public-key-file"]) }),
       expectedLatestSha256: parsed.values["--expected-latest-sha256"],
       maxAgeMs: parsed.maxAgeMs,
-      now: clock()
+      now
     });
     return {
       ok: true,
       code: "TRUST_INVENTORY_VALID",
       generation: result.latest.manifest.generation,
       latestSha256: result.latestSha256,
-      activeKeyId: result.activeKeyId
+      activeKeyId: result.activeKeyId,
+      ...(governedAuthorityChain ? {
+        authorityChainGeneration: governedAuthorityChain.latest.payload.generation,
+        authorityChainSha256: governedAuthorityChain.latestSha256
+      } : {})
     };
   }
 
@@ -457,47 +552,75 @@ export async function runSignerTrustInventoryCli(argv, clock = Date.now) {
   const authorityPublicKey = keyOf(createPublicKey(authorityPrivateKey), "public");
   const chain = readSignerTrustInventoryChain(directory);
   let next;
+
   if (parsed.command === "init") {
     if (chain.length) fail("TRUST_INVENTORY_ALREADY_INITIALIZED");
     next = createInitialSignerTrustInventory(
       authorityPrivateKey,
       readPublicKey(parsed.values["--signer-public-key-file"]),
       parsed.context,
-      clock()
+      now
     );
   } else {
+    if (!chain.length) fail("TRUST_INVENTORY_EMPTY");
     const current = verifySignerTrustInventoryChain(chain, {
       ...parsed.context,
-      authorityPublicKey,
+      ...(governedAuthorityChain
+        ? { authorityChain: governedAuthorityChain }
+        : { authorityPublicKey }),
       expectedLatestSha256: parsed.values["--expected-current-sha256"],
-      now: clock()
+      now
     }).latest;
+
+    if (governedAuthorityChain &&
+        checkpointKeyId(authorityPublicKey) !== governedAuthorityChain.latest.payload.authorityKeyId) {
+      fail("TRUST_INVENTORY_AUTHORITY_NOT_CURRENT");
+    }
+
     if (parsed.command === "rotate") {
       next = rotateSignerTrustInventory(
         current,
         authorityPrivateKey,
         readPublicKey(parsed.values["--signer-public-key-file"]),
         parsed.context,
-        clock()
+        now
       );
-    } else {
+    } else if (parsed.command === "revoke") {
       next = revokeSignerTrustInventory(
         current,
         authorityPrivateKey,
         parsed.values["--key-id"],
         parsed.context,
-        clock()
+        now
       );
+    } else {
+      if (!governedAuthorityChain) fail();
+      next = rebindSignerTrustAuthority(
+        current,
+        authorityPrivateKey,
+        parsed.context,
+        now
+      );
+      if (next.manifest.authorityKeyId !== governedAuthorityChain.latest.payload.authorityKeyId ||
+          Date.parse(next.manifest.issuedAt) < Date.parse(governedAuthorityChain.latest.payload.effectiveAt)) {
+        fail("TRUST_INVENTORY_AUTHORITY_NOT_CURRENT");
+      }
     }
   }
+
   const written = writeSignerTrustInventoryGeneration(directory, next);
   return {
     ok: true,
     code: parsed.command === "init" ? "TRUST_INVENTORY_INITIALIZED" :
-      parsed.command === "rotate" ? "TRUST_INVENTORY_ROTATED" : "TRUST_INVENTORY_REVOKED",
+      parsed.command === "rotate" ? "TRUST_INVENTORY_ROTATED" :
+      parsed.command === "revoke" ? "TRUST_INVENTORY_REVOKED" : "TRUST_INVENTORY_AUTHORITY_ADOPTED",
     generation: written.generation,
     latestSha256: written.inventorySha256,
-    activeKeyId: next.manifest.signingKeys.find(entry => entry.status === "ACTIVE")?.keyId ?? null
+    activeKeyId: next.manifest.signingKeys.find(entry => entry.status === "ACTIVE")?.keyId ?? null,
+    ...(governedAuthorityChain ? {
+      authorityChainGeneration: governedAuthorityChain.latest.payload.generation,
+      authorityChainSha256: governedAuthorityChain.latestSha256
+    } : {})
   };
 }
 
