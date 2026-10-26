@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import {
-  chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
+  chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -18,6 +18,12 @@ import {
   verifyAuditCheckpointArchive,
   writeAuditCheckpointArchiveBundle
 } from "./audit-checkpoint-archive.mjs";
+import {
+  createInitialSignerTrustInventory,
+  revokeSignerTrustInventory,
+  rotateSignerTrustInventory,
+  writeSignerTrustInventoryGeneration
+} from "./audit-signer-trust-inventory.mjs";
 
 const tenantId = "archive-ci-tenant";
 const deploymentId = "archive-ci-deployment";
@@ -231,6 +237,125 @@ test("CLI parser requires an absolute external target and explicit operator ackn
     "export", "--tenant-id", tenantId, "--deployment-id", deploymentId,
     "--checkpoint", "/tmp/c.json", "--private-key-file", "/tmp/k.pem",
     "--max-age-hours", "24", "--retention-days", "365", "--out-dir", "/tmp/archive"
+  ]));
+});
+
+test("governed archive verification resolves historical signers through the authority-signed inventory", async () => {
+  const root = mkdtempSync(join(tmpdir(), "hrbp-audit-archive-governed-"));
+  try {
+    chmodSync(root, 0o700);
+    const authority = generateKeyPairSync("ed25519");
+    const replacementSigner = generateKeyPairSync("ed25519");
+    const saved = await checkpoint();
+    const checkpointPath = join(root, "checkpoint.json");
+    const privatePath = join(root, "signer-private.pem");
+    const authorityPublicPath = join(root, "authority-public.pem");
+    const bundleParent = join(root, "external");
+    const bundlePath = join(bundleParent, "bundle");
+    const trustDir = join(root, "trust");
+    mkdirSync(bundleParent, { mode: 0o700 });
+    mkdirSync(trustDir, { mode: 0o700 });
+    writeFileSync(checkpointPath, encodeAuditCheckpoint(saved), { mode: 0o600 });
+    writeFileSync(privatePath, keys.privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 });
+    chmodSync(privatePath, 0o600);
+    writeFileSync(authorityPublicPath, authority.publicKey.export({ type: "spki", format: "pem" }), { mode: 0o644 });
+
+    const exported = await runAuditCheckpointArchiveCli([
+      "export",
+      "--tenant-id", tenantId,
+      "--deployment-id", deploymentId,
+      "--checkpoint", checkpointPath,
+      "--private-key-file", privatePath,
+      "--max-age-hours", "24",
+      "--retention-days", "365",
+      "--out-dir", bundlePath,
+      "--acknowledge-external-retention-target"
+    ], () => exportedAt);
+    assert.equal(exported.code, "CHECKPOINT_ARCHIVE_EXPORTED");
+
+    const inventory1 = createInitialSignerTrustInventory(
+      authority.privateKey, keys.publicKey, context, issuedAt - 60_000
+    );
+    const firstWritten = writeSignerTrustInventoryGeneration(trustDir, inventory1);
+
+    const verified1 = await runAuditCheckpointArchiveCli([
+      "verify",
+      "--tenant-id", tenantId,
+      "--deployment-id", deploymentId,
+      "--archive-dir", bundlePath,
+      "--trust-inventory-dir", trustDir,
+      "--trust-authority-public-key-file", authorityPublicPath,
+      "--expected-trust-sha256", firstWritten.inventorySha256,
+      "--trust-max-age-hours", "48",
+      "--max-export-delay-hours", "24"
+    ], () => exportedAt + 60_000);
+    assert.equal(verified1.code, "CHECKPOINT_ARCHIVE_VALID");
+    assert.equal(verified1.trustGeneration, 1);
+    assert.equal(verified1.trustInventorySha256, firstWritten.inventorySha256);
+
+    const inventory2 = rotateSignerTrustInventory(
+      inventory1, authority.privateKey, replacementSigner.publicKey, context, issuedAt + 60 * 60_000
+    );
+    const secondWritten = writeSignerTrustInventoryGeneration(trustDir, inventory2);
+    const verifiedHistorical = await runAuditCheckpointArchiveCli([
+      "verify",
+      "--tenant-id", tenantId,
+      "--deployment-id", deploymentId,
+      "--archive-dir", bundlePath,
+      "--trust-inventory-dir", trustDir,
+      "--trust-authority-public-key-file", authorityPublicPath,
+      "--expected-trust-sha256", secondWritten.inventorySha256,
+      "--trust-max-age-hours", "48",
+      "--max-export-delay-hours", "24"
+    ], () => issuedAt + 2 * 60 * 60_000);
+    assert.equal(verifiedHistorical.code, "CHECKPOINT_ARCHIVE_VALID");
+    assert.equal(verifiedHistorical.trustGeneration, 2);
+
+    const inventory3 = revokeSignerTrustInventory(
+      inventory2, authority.privateKey, saved.payload.keyId, context, issuedAt + 3 * 60 * 60_000
+    );
+    const thirdWritten = writeSignerTrustInventoryGeneration(trustDir, inventory3);
+    await assert.rejects(runAuditCheckpointArchiveCli([
+      "verify",
+      "--tenant-id", tenantId,
+      "--deployment-id", deploymentId,
+      "--archive-dir", bundlePath,
+      "--trust-inventory-dir", trustDir,
+      "--trust-authority-public-key-file", authorityPublicPath,
+      "--expected-trust-sha256", thirdWritten.inventorySha256,
+      "--trust-max-age-hours", "48",
+      "--max-export-delay-hours", "24"
+    ], () => issuedAt + 4 * 60 * 60_000), error => error?.code === "TRUST_INVENTORY_SIGNER_REVOKED");
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("archive verify accepts exactly one trust source mode", () => {
+  assert.throws(() => auditCheckpointArchiveArgs([
+    "verify",
+    "--tenant-id", tenantId,
+    "--deployment-id", deploymentId,
+    "--archive-dir", "/tmp/archive",
+    "--max-export-delay-hours", "24"
+  ]));
+  assert.throws(() => auditCheckpointArchiveArgs([
+    "verify",
+    "--tenant-id", tenantId,
+    "--deployment-id", deploymentId,
+    "--archive-dir", "/tmp/archive",
+    "--public-key-file", "/tmp/signer.pem",
+    "--trust-inventory-dir", "/tmp/trust",
+    "--trust-authority-public-key-file", "/tmp/authority.pem",
+    "--expected-trust-sha256", "a".repeat(64),
+    "--trust-max-age-hours", "24",
+    "--max-export-delay-hours", "24"
+  ]));
+  assert.throws(() => auditCheckpointArchiveArgs([
+    "verify",
+    "--tenant-id", tenantId,
+    "--deployment-id", deploymentId,
+    "--archive-dir", "/tmp/archive",
+    "--trust-inventory-dir", "/tmp/trust",
+    "--max-export-delay-hours", "24"
   ]));
 });
 
