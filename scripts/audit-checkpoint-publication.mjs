@@ -196,7 +196,11 @@ export async function publishIndependentAuditCheckpoint({
     archiveManifestSha256: written.archiveManifestSha256,
     retentionUntil: archive.manifest.retentionUntil,
     trustGeneration: trust.latest.manifest.generation,
-    trustInventorySha256: trust.latestSha256
+    trustInventorySha256: trust.latestSha256,
+    ...(authorityChain ? {
+      trustAuthorityChainGeneration: authorityChain.latest.payload.generation,
+      trustAuthorityChainSha256: authorityChain.latestSha256
+    } : {})
   };
 }
 
