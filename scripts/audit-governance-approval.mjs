@@ -204,27 +204,35 @@ export function approveGovernanceProposal(bundle, approverPrivateKey, now = Date
 }
 export function verifyGovernanceApprovalBundle(bundle, policy, {
   expectedPolicySha256, tenantId, deploymentId, operation, currentGeneration,
-  currentSha256, targetKeyId, forbiddenKeyIds = [], now = Date.now()
+  currentSha256, targetKeyId, forbiddenKeyIds = [], now = Date.now(), effectiveAt = null
 }) {
   const approved = bundleOf(bundle), trusted = policyOf(policy);
   if (typeof expectedPolicySha256 !== "string" || !HASH.test(expectedPolicySha256) ||
       governanceApprovalPolicySha256(trusted) !== expectedPolicySha256) {
     fail("GOVERNANCE_APPROVAL_POLICY_DIGEST_MISMATCH");
   }
-  if (!Number.isSafeInteger(now) || now < 0) fail();
+  if (!Number.isSafeInteger(now) || now < 0 ||
+      (effectiveAt !== null && (!Number.isSafeInteger(effectiveAt) || effectiveAt < 0))) fail();
   const expectedSubject = checkpointSubject({ tenantId, deploymentId });
   if (trusted.subject !== expectedSubject || approved.proposal.subject !== expectedSubject) {
     fail("GOVERNANCE_APPROVAL_SUBJECT_MISMATCH");
   }
-  if (Date.parse(trusted.issuedAt) > now + 30_000 || Date.parse(trusted.expiresAt) < now) {
+  const policyStart = Date.parse(trusted.issuedAt), policyEnd = Date.parse(trusted.expiresAt);
+  const proposal = approved.proposal;
+  const proposalStart = Date.parse(proposal.createdAt), proposalEnd = Date.parse(proposal.expiresAt);
+  if (proposalStart < policyStart - 30_000 || proposalEnd > policyEnd) {
+    fail("GOVERNANCE_APPROVAL_POLICY_WINDOW_MISMATCH");
+  }
+  const referenceAt = effectiveAt ?? now;
+  if (referenceAt > now + 30_000) fail("GOVERNANCE_APPROVAL_FUTURE_EFFECTIVE_TIME");
+  if (policyStart > referenceAt + 30_000 || policyEnd < referenceAt) {
     fail("GOVERNANCE_APPROVAL_POLICY_INACTIVE");
   }
-  const proposal = approved.proposal;
   if (proposal.operation !== operation || proposal.currentGeneration !== currentGeneration ||
       proposal.currentSha256 !== currentSha256 || proposal.targetKeyId !== targetKeyId) {
     fail("GOVERNANCE_APPROVAL_PROPOSAL_MISMATCH");
   }
-  if (Date.parse(proposal.createdAt) > now + 30_000 || Date.parse(proposal.expiresAt) < now) {
+  if (proposalStart > referenceAt + 30_000 || proposalEnd < referenceAt) {
     fail("GOVERNANCE_APPROVAL_PROPOSAL_EXPIRED");
   }
   const forbidden = new Set(forbiddenKeyIds);
@@ -236,10 +244,12 @@ export function verifyGovernanceApprovalBundle(bundle, policy, {
     const approver = approverMap.get(approval.approverKeyId);
     if (!approver) fail("GOVERNANCE_APPROVAL_APPROVER_UNTRUSTED");
     if (forbidden.has(approval.approverKeyId)) fail("GOVERNANCE_APPROVAL_SEPARATION_VIOLATION");
-    if (Date.parse(approval.approvedAt) < Date.parse(proposal.createdAt) - 30_000 ||
-        Date.parse(approval.approvedAt) > Date.parse(proposal.expiresAt)) {
+    const approvedAt = Date.parse(approval.approvedAt);
+    if (approvedAt < proposalStart - 30_000 || approvedAt > proposalEnd ||
+        approvedAt < policyStart - 30_000 || approvedAt > policyEnd) {
       fail("GOVERNANCE_APPROVAL_OUTSIDE_WINDOW");
     }
+    if (approvedAt > referenceAt + 30_000) fail("GOVERNANCE_APPROVAL_AFTER_EFFECTIVE_TIME");
     if (!verify(null, approvalBytes(proposalSha256, approval.approvedAt),
         publicKeyFromSpki(approver.publicKeySpki), Buffer.from(approval.signature, "base64"))) {
       fail("GOVERNANCE_APPROVAL_SIGNATURE_INVALID");
@@ -247,7 +257,12 @@ export function verifyGovernanceApprovalBundle(bundle, policy, {
     validApprovals += 1;
   }
   if (validApprovals < trusted.minApprovals) fail("GOVERNANCE_APPROVAL_QUORUM_UNMET");
-  return { proposal, policySha256: expectedPolicySha256, approvals: validApprovals };
+  return {
+    proposal,
+    policySha256: expectedPolicySha256,
+    approvals: validApprovals,
+    effectiveAt: new Date(referenceAt).toISOString()
+  };
 }
 
 function writeNoReplace(path, text) {
