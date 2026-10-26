@@ -290,7 +290,7 @@ function flags(argv, command) {
   const values = {};
   for (let i=0;i<argv.length;i++) {
     const flag=argv[i];
-    if (!allowed.has(flag) || Object.hasOwn(values,flag)) fail();
+    if (!allowed.has(flag) || (flag !== "--forbidden-key-id" && Object.hasOwn(values,flag))) fail();
     const value=argv[++i];
     if (!value || value.startsWith("--") || value.includes("\0")) fail();
     if (flag === "--forbidden-key-id") {
@@ -311,7 +311,9 @@ export async function runGovernanceApprovalCli(argv, clock = Date.now) {
   const values=flags(rest,command);
   const required=["--tenant-id","--deployment-id",...(command==="request"
     ? ["--out","--operation","--current-generation","--target-key-id","--expires-minutes"]
-    : ["--bundle","--policy","--expected-policy-sha256"])];
+    : command==="approve"
+      ? ["--bundle","--policy","--expected-policy-sha256","--approver-private-key-file","--out"]
+      : ["--bundle","--policy","--expected-policy-sha256","--operation","--current-generation","--target-key-id"])];
   if (required.some(flag=>!values[flag])) fail();
   const context={tenantId:values["--tenant-id"],deploymentId:values["--deployment-id"]};
   checkpointSubject(context);
@@ -320,9 +322,10 @@ export async function runGovernanceApprovalCli(argv, clock = Date.now) {
     const currentSha256=currentGeneration===0?null:values["--current-sha256"];
     if (currentGeneration>0 && (!currentSha256 || !HASH.test(currentSha256))) fail();
     const minutes=integer(values["--expires-minutes"],1,7*24*60);
+    const now=clock();
     const proposal=createGovernanceProposal({
       ...context,operation:values["--operation"],currentGeneration,currentSha256,
-      targetKeyId:values["--target-key-id"],now:clock(),expiresAt:clock()+minutes*60_000
+      targetKeyId:values["--target-key-id"],now,expiresAt:now+minutes*60_000
     });
     writeNoReplace(values["--out"],encodeGovernanceApprovalBundle({proposal,approvals:[]}));
     return {ok:true,code:"GOVERNANCE_APPROVAL_REQUEST_CREATED",requestId:proposal.requestId};
