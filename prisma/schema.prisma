@@ -214,6 +214,7 @@ model Tenant {
   lifecycle           EmployeeLifecycleEvent[]
   audit               AuditEvent[]
   auditLedgerState    AuditLedgerState?
+  auditVerificationProgress AuditVerificationProgress?
   requisitions        Requisition[]
   candidates          Candidate[]
   applications        Application[]
@@ -860,4 +861,60 @@ model AuditLedgerState {
   eventCount BigInt @default(0)
   updatedAt  DateTime @updatedAt
   tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+// Operational verification coverage, not an independently trusted audit checkpoint.
+// A TAIL result confirms only its bounded recent window, never full genesis history.
+model AuditVerificationProgress {
+  tenantId             String @id
+  lastAttemptAt        DateTime
+  lastSuccessAt        DateTime?
+  lastFailureAt        DateTime?
+  lastVerifiedSequence BigInt?
+  lastVerifiedScope    String?
+  lastResult           String
+  checkedEvents        Int @default(0)
+  consecutiveFailures  Int @default(0)
+  tenant               Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([lastSuccessAt, tenantId])
+}
+
+// Cross-run full-history verification progress. This is operational state in the
+// application database, NOT an independent trust anchor. It never stores event
+// payloads; signed checkpoints remain outside this database.
+model AuditHistoryVerificationProgress {
+  tenantId          String @id
+  scanVersion       Int @default(1)
+  scheduleVersion   Int @default(1)
+  status            String
+  targetSequence    BigInt?
+  targetTailHash    String?
+  verifiedSequence  BigInt @default(0)
+  verifiedHash      String?
+  checkedEvents     BigInt @default(0)
+  scanStartedAt     DateTime
+  targetCapturedAt  DateTime
+  lastAttemptAt     DateTime
+  lastSuccessAt     DateTime?
+  lastFailureAt     DateTime?
+  completedAt       DateTime?
+  failureCode       String?
+
+  @@index([status, lastAttemptAt, tenantId], map: "AuditHistoryProgress_status_attempt_tenant_idx")
+  @@index([lastSuccessAt, tenantId], map: "AuditHistoryProgress_success_tenant_idx")
+}
+
+// Deployment-wide monotonic counters for private aggregate monitoring only.
+// Prometheus can derive throughput from eventsChecked without tenant labels.
+model AuditHistoryVerificationStats {
+  id              String @id
+  scanVersion     Int @default(1)
+  eventsChecked   BigInt @default(0)
+  partialChunks   BigInt @default(0)
+  successfulScans BigInt @default(0)
+  failedScans     BigInt @default(0)
+  lastAttemptAt   DateTime?
+  lastSuccessAt   DateTime?
+  lastFailureAt   DateTime?
 }

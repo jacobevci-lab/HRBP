@@ -74,9 +74,9 @@ For another unclassified 503: preserve the failing run ID, selected job and time
 
 The audit-monitoring job checks the integrity verifier's `valid` flag **before** treating an `EMPTY` ledger as healthy. A tenant with a nonzero ledger state and zero matching audit events is therefore **not** quietly skipped: it generates the existing restricted `AUDIT_INTEGRITY_FAILURE` notification for the tenant's authorized administrators. Do not suppress that finding or reset the ledger state.
 
-Each invocation uses a count of the complete tenant universe, then reads only the selected tenant window in stable `createdAt, id` order. The window advances by 15-minute UTC slots (the intended scheduler cadence), not one batch per UTC day. The effective batch size is capped by a **10,000 verified-event** per-invocation budget (excluding one predecessor anchor per tenant), regardless of the configured tenant batch-size request. With the example settings (1,500 events, four tenants), one scheduled job verifies at most 6,000 events plus anchors. All limits are enforced server-side. The `HRBP_AUDIT_INTEGRITY_TENANT_BATCH_SIZE` example default is 4; values above 25 are clamped, and large per-tenant verification limits further reduce the effective batch. No tenant IDs or event payloads are added to maintenance telemetry.
+Each invocation uses the durable `AuditVerificationSchedule` keyset cursor in stable `createdAt, id` order. The cursor and the per-tenant verification receipt are committed in the same fenced transaction; a missed scheduler slot therefore does not discard the tenant position, and new/removed tenants are picked up on the next finite cycle. The effective batch remains capped by a **10,000 verified-event** per-invocation budget (excluding one predecessor anchor per tenant), regardless of the configured tenant batch-size request. With the example settings (1,500 events, four tenants), one selected maintenance run verifies at most 6,000 events plus anchors. The `HRBP_AUDIT_INTEGRITY_TENANT_BATCH_SIZE` example default is 4; values above 25 are clamped. No tenant IDs or event payloads are added to maintenance telemetry.
 
-**Important limits:** this is bounded best-effort rotation, not a persisted verification checkpoint, a proof of full-ledger verification, or a guarantee of coverage after skipped GitHub schedules. A tenant count change between count and selection can shift the ordered window; reconcile coverage through operational monitoring and a separately governed full-ledger verification process. Do not infer that a clean tail verifies older events outside that tail. The 14 October intermittent 503 still requires the separate root-cause investigation in issue #209.
+**Important limits:** this fast monitor still verifies a bounded tail, not the complete historical chain. Durable cursor coverage means skipped wall-clock runs resume safely; it does not turn a tail result into proof that older history is valid. Complete-history coverage is the separate fixed-watermark process below, while independently signed checkpoints remain a different trust domain. The 14 October intermittent 503 still requires the separate root-cause investigation in issue #209.
 
 ## Deployment order
 
@@ -105,7 +105,7 @@ assertions still require exactly-once notification delivery and stale-read
 notification retention. Passing a local Worker test is not a measurement of
 production CPU or memory usage.
 
-## Explicit complete-history audit verification (manual only)
+## Complete-history audit verification: scheduled resumable coverage and manual evidence
 
 The 15-minute `audit-integrity` maintenance job intentionally verifies a bounded **tail** of selected tenant ledgers, not all historical events. A customer-approved operator can additionally run:
 
@@ -116,9 +116,19 @@ docker compose --env-file .env.onprem -f docker-compose.onprem.yml run --rm --no
 
 This command uses the current built `schema` Compose tooling image (the stripped `app` image excludes maintenance scripts), so the private `DATABASE_URL` is available without exposing it to the host. Use `--no-deps` only while the on-prem PostgreSQL stack is already healthy; no service or migration is started by this command. An alternative bare-host `npm run audit:full:verify -- ...` requires an explicitly configured approved `DATABASE_URL`. The scan selects one tenant by a bound SQL parameter, and uses a PostgreSQL `REPEATABLE READ READ ONLY` transaction. It traverses events from genesis using a bounded keyset page and validates sequence, linkage, recomputed content hash and the persisted state tail. Default workload is limited to 50,000 events (maximum 1 million by explicit option), 250 events per query (max 1,000), 45 seconds elapsed and a per-statement timeout. It always rolls back the read-only transaction. A budget, timeout, missing tenant or inconsistent chain exits nonzero; it must never be recorded as a completed verification.
 
-Only aggregate status and sequence/count are printed; SQL errors, employee payloads, tenant IDs and connection strings are never logged. Run only on approved customer infrastructure, outside peak load. It is not part of scheduled maintenance and will not make a production deployment healthy by itself.
+Only aggregate status and sequence/count are printed; SQL errors, employee payloads, tenant IDs and connection strings are never logged. Run the manual command only on approved customer infrastructure, outside peak load. It remains useful for operator investigations and checkpoint creation, and it does not make a production deployment healthy by itself.
 
-**Trust boundary:** An internally hash-linked audit history is not an independently trusted, immutable archive or signed checkpoint. Persistent coverage progress, interruption recovery, historical checkpoint signing and independent verification remain open under #215. Do not delete/rewrite audit events to resolve an integrity error.
+Routine complete-history coverage is now separate from both the fast maintenance job and this manual command. The on-prem `audit-history-scheduler` calls only `/api/internal/audit-history`. Each call processes one bounded page for one tenant against a fixed `eventCount/tailHash` target. Partial progress is committed without advancing the tenant cursor, so the next invocation resumes the same tenant and first revalidates the saved hash anchor. Normal audit appends after the captured target are not blocked and are deferred to the next complete scan.
+
+Operational controls:
+
+- `HRBP_AUDIT_FULL_HISTORY_PAGE_SIZE=250` by default, hard maximum 1,000 events per invocation.
+- `HRBP_AUDIT_HISTORY_SCHEDULER_INTERVAL_SECONDS=900` by default; this is a separate process/cadence from `maintenance-scheduler`.
+- `HRBP_AUDIT_FULL_HISTORY_INTERVAL_HOURS=168` prevents a successfully completed tenant from being rescanned until the weekly interval expires.
+- an unknown POST outcome is **not** immediately replayed; the next normal scheduler cycle resumes from database-fenced state.
+- private metrics expose only aggregate live coverage/backlog/throughput. Progress retained for a deleted tenant is counted separately as orphaned operational evidence and is excluded from live tenant coverage.
+
+**Trust boundary:** `AuditHistoryVerificationProgress` and its target hash live in the same application PostgreSQL trust domain as the ledger. They are operational resume state, not an independently trusted checkpoint. The Ed25519 checkpoint workflow in `docs/AUDIT-CHECKPOINTS.md` still performs its own complete read-only scan on the independently administered signer before signing. Do not delete/rewrite audit events or reset progress to hide an integrity error. #215 remains open for approved external key custody, immutable checkpoint retention/export, evidence-retention policy, representative production load measurements and any required HSM/KMS signer custody.
 
 ## HR service SLA correctness
 
