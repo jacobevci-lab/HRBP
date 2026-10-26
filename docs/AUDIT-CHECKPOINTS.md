@@ -78,7 +78,9 @@ The application now also has a separate resumable full-history verifier for oper
 
 A provider-neutral signed archive/export layer is now documented in `docs/AUDIT-CHECKPOINT-ARCHIVE.md`. It binds the exact checkpoint digest, signer/subject, export time and requested retention deadline in a separately signed manifest and publishes a no-overwrite bundle from the independent operator host. That is **cryptographic retention metadata, not immutable storage enforcement**: actual Object Lock/WORM/vault retention, independently controlled delete permissions and retained storage receipts remain deployment/customer governance work under #215.
 
-Automated **independent checkpoint creation/publication** cadence, signer trust rotation, HSM/KMS support and trusted timestamping also remain future/deployment-governance work. Interrupted application full-history verification itself is resumable across bounded scheduler invocations, but that improves operational coverage only; it does not make the database its own trust anchor. The provider deployment issue #220 and runtime HTTP 503 investigation #209 remain separate.
+Automated independent checkpoint creation/publication, signer trust governance and software-level dual-control authority rotation/recovery are implemented in the stacked audit milestones. Provider-neutral RFC 3161 timestamp request/verification is documented in `docs/AUDIT-TRUSTED-TIMESTAMP.md`.
+
+HSM/KMS-backed custody, approved production TSA enrollment and trust-policy administration, and real customer immutable-storage enforcement remain deployment/customer governance work. Interrupted application full-history verification itself is resumable across bounded scheduler invocations, but that improves operational coverage only; it does not make the database its own trust anchor. The provider deployment issue #220 and runtime HTTP 503 investigation #209 remain separate.
 
 Implementation references: [Node.js 22 crypto signing/key APIs](https://nodejs.org/download/release/v22.18.0/docs/api/crypto.html) and [Node.js filesystem APIs](https://nodejs.org/docs/latest-v22.x/api/fs.html). No new crypto or filesystem package is introduced.
 
@@ -91,4 +93,4 @@ It adds an authority-signed, append-only signer trust inventory with externally 
 
 The publication service/timer remains outside the HRBP application image. It performs one attempt per timer activation and deliberately leaves ambiguous crash outcomes blocked behind a no-overwrite lock for operator review rather than retrying automatically.
 
-HSM/KMS key custody, trusted timestamping, actual customer WORM/Object Lock enforcement, trust-authority recovery/rotation and customer governance evidence remain outside what this software layer proves.
+Software-level dual-control trust-authority rotation/recovery is implemented in the current stacked milestone, and RFC 3161 timestamp integration is documented separately. HSM/KMS custody, approved production TSA operation, actual customer WORM/Object Lock enforcement and customer governance evidence remain outside what this software layer proves.
