@@ -5,6 +5,9 @@ import { computeAuditHash } from "@/lib/audit";
 export type AuditIntegrityResult = {
   checked: number;
   valid: boolean;
+  // Highest confirmed chain sequence for this exact MVCC snapshot; nullable on failure.
+  // A TAIL scope does not attest genesis-to-tail completeness.
+  verifiedThroughSequence: string | null;
   scope: "GENESIS" | "TAIL" | "EMPTY";
   firstEventId: string | null;
   lastEventId: string | null;
@@ -54,6 +57,7 @@ export async function verifyAuditIntegrity(tenantId: string, requestedLimit = 10
     return {
       checked: 0,
       valid: emptyStateValid,
+      verifiedThroughSequence: emptyStateValid ? "0" : null,
       scope: "EMPTY",
       firstEventId: null,
       lastEventId: null,
@@ -67,6 +71,7 @@ export async function verifyAuditIntegrity(tenantId: string, requestedLimit = 10
     return {
       checked: 0,
       valid: false,
+      verifiedThroughSequence: null,
       scope: rows.length > limit ? "TAIL" : "GENESIS",
       firstEventId: null,
       lastEventId: null,
@@ -130,6 +135,7 @@ export async function verifyAuditIntegrity(tenantId: string, requestedLimit = 10
   return {
     checked,
     valid: brokenEventId === null,
+    verifiedThroughSequence: brokenEventId === null ? state.eventCount.toString() : null,
     scope: hasPredecessorAnchor ? "TAIL" : "GENESIS",
     firstEventId: verificationRows[0]?.id ?? null,
     lastEventId: verificationRows.at(-1)?.id ?? null,
