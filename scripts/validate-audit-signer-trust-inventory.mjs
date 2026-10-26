@@ -34,6 +34,12 @@ expect(trust, /TRUST_INVENTORY_NO_ACTIVE_SIGNER/, "rotation must require a curre
 expect(trust, /openSync\(path, "wx", 0o600\)/, "inventory generations must be no-overwrite files");
 expect(trust, /inventory-\$\{String\(generation\(gen\)\)\.padStart\(6, "0"\)\}\.json/, "generation filenames must be deterministic");
 expect(trust, /--acknowledge-separate-trust-authority/, "mutating trust inventory requires explicit authority acknowledgement");
+expect(trust, /--approval-bundle/, "signer mutations must require a dual-control approval bundle");
+expect(trust, /--expected-approval-policy-sha256/, "signer mutations must pin the approval policy externally");
+expect(trust, /verifyGovernanceApprovalBundle/, "signer mutations must verify governance quorum before changing trust");
+expect(trust, /verifySignerTrustInventoryChainGoverned/, "signer trust must support historical authority resolution");
+expect(trust, /TRUST_INVENTORY_AUTHORITY_NOT_ACTIVE/, "mutations must reject a non-active authority private key");
+expect(trust, /expected-authority-sha256/, "signer trust must pin the authority inventory externally");
 expect(trust, /BEGIN PUBLIC KEY/, "signer enrollment must accept public keys, not private signer material");
 expect(trust, /privateKey: true/, "authority private key file must retain strict owner/mode checks");
 
@@ -45,17 +51,18 @@ expect(trustTests, /rotation retires exactly one signer/, "rotation semantics ne
 expect(trustTests, /historical signer resolution honors the rotation validity boundary/, "historical validity windows need executable coverage");
 expect(trustTests, /revocation remains fail-closed/, "revocation needs executable coverage");
 expect(trustTests, /chain rewrite, rollback and generation gaps/, "rollback and chain rewrite need executable coverage");
-expect(trustTests, /externally pinned current digest/, "stale rotation input needs executable coverage");
+expect(trustTests, /externally pinned current digest|survives authority rotation/, "stale rotation input and authority rotation need executable coverage");
 expect(trustTests, /does not accept a signer private key as an enrollment source/, "signer private-key enrollment must be rejected");
 
 expect(archive, /readSignerTrustInventoryChain/, "archive verification must consume the governed trust chain");
 expect(archive, /resolveCheckpointSigner/, "archive verification must resolve signer validity from the inventory");
 expect(archive, /expected-trust-sha256/, "archive verification must pin the trust inventory generation externally");
-expect(archiveTests, /governed archive verification resolves historical signers/, "archive/trust integration needs executable coverage");
+expect(archiveTests, /governed archive verification follows authority rotation and recovery semantics/, "archive/trust/authority integration needs executable coverage");
 expect(archiveTests, /archive verify accepts exactly one trust source mode/, "direct and governed trust modes must be mutually exclusive");
 
 expect(pkg, /audit-signer-trust-inventory\.test\.mjs/, "trust inventory tests must be mandatory");
 expect(pkg, /validate-audit-signer-trust-inventory\.mjs/, "trust inventory static contract must be mandatory");
-reject(dockerfile, /audit-signer-trust-inventory\.mjs/, "independent trust authority tooling must not be bundled in the on-prem app image");
+reject(dockerfile, /audit-signer-trust-inventory\.mjs|audit-trust-authority-inventory\.mjs|audit-governance-approval\.mjs/,
+  "independent signer/authority governance tooling must not be bundled in the on-prem app image");
 
 console.log("Audit signer trust governance: offline authority-signed generations, rotation/revocation and archive signer resolution verified.");
