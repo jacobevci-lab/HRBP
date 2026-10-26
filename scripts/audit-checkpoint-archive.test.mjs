@@ -24,15 +24,62 @@ import {
   rotateSignerTrustInventory,
   writeSignerTrustInventoryGeneration
 } from "./audit-signer-trust-inventory.mjs";
+import {
+  approveGovernanceProposal,
+  createGovernanceApprovalPolicy,
+  createGovernanceProposal,
+  encodeGovernanceApprovalPolicy,
+  governanceApprovalPolicySha256
+} from "./audit-governance-approval.mjs";
+import {
+  authorityTrustInventorySha256,
+  createInitialAuthorityTrustInventory,
+  recoverAuthorityTrustInventory,
+  rotateAuthorityTrustInventory,
+  writeAuthorityTrustInventoryGeneration
+} from "./audit-trust-authority-inventory.mjs";
 
 const tenantId = "archive-ci-tenant";
 const deploymentId = "archive-ci-deployment";
 const context = { tenantId, deploymentId };
 const keys = generateKeyPairSync("ed25519");
 const otherKeys = generateKeyPairSync("ed25519");
+const authority1 = generateKeyPairSync("ed25519");
+const authority2 = generateKeyPairSync("ed25519");
+const approver1 = generateKeyPairSync("ed25519");
+const approver2 = generateKeyPairSync("ed25519");
 const issuedAt = Date.parse("2026-10-25T10:00:00.000Z");
 const exportedAt = issuedAt + 5 * 60_000;
 const DAY_MS = 24 * 60 * 60_000;
+const approvalPolicy = createGovernanceApprovalPolicy({
+  approverPublicKeys: [approver1.publicKey, approver2.publicKey],
+  minApprovals: 2,
+  ...context,
+  issuedAt: issuedAt - 2 * 60 * 60_000,
+  expiresAt: issuedAt + 24 * 60 * 60_000
+});
+const approvalPolicySha = governanceApprovalPolicySha256(approvalPolicy);
+function approvals(operation, currentGeneration, currentSha256, targetKeyId, now) {
+  let bundle = {
+    proposal: createGovernanceProposal({
+      ...context, operation, currentGeneration, currentSha256, targetKeyId,
+      now, expiresAt: now + 30 * 60_000
+    }),
+    approvals: []
+  };
+  bundle = approveGovernanceProposal(bundle, approver1.privateKey, now + 1000);
+  bundle = approveGovernanceProposal(bundle, approver2.privateKey, now + 2000);
+  return bundle;
+}
+function initialAuthority(now = issuedAt - 2 * 60_000) {
+  return createInitialAuthorityTrustInventory(
+    authority1.publicKey,
+    approvalPolicy,
+    approvals("INIT_AUTHORITY", 0, null, checkpointKeyId(authority1.publicKey), now),
+    context,
+    { expectedPolicySha256: approvalPolicySha, now }
+  );
+}
 
 function rows(count, suffix = "") {
   let previousHash = null;
@@ -240,25 +287,26 @@ test("CLI parser requires an absolute external target and explicit operator ackn
   ]));
 });
 
-test("governed archive verification resolves historical signers through the authority-signed inventory", async () => {
+test("governed archive verification follows authority rotation and recovery semantics", async () => {
   const root = mkdtempSync(join(tmpdir(), "hrbp-audit-archive-governed-"));
   try {
     chmodSync(root, 0o700);
-    const authority = generateKeyPairSync("ed25519");
     const replacementSigner = generateKeyPairSync("ed25519");
     const saved = await checkpoint();
     const checkpointPath = join(root, "checkpoint.json");
     const privatePath = join(root, "signer-private.pem");
-    const authorityPublicPath = join(root, "authority-public.pem");
+    const policyPath = join(root, "authority-policy.json");
     const bundleParent = join(root, "external");
     const bundlePath = join(bundleParent, "bundle");
     const trustDir = join(root, "trust");
+    const authorityDir = join(root, "authority");
     mkdirSync(bundleParent, { mode: 0o700 });
     mkdirSync(trustDir, { mode: 0o700 });
+    mkdirSync(authorityDir, { mode: 0o700 });
     writeFileSync(checkpointPath, encodeAuditCheckpoint(saved), { mode: 0o600 });
     writeFileSync(privatePath, keys.privateKey.export({ type: "pkcs8", format: "pem" }), { mode: 0o600 });
     chmodSync(privatePath, 0o600);
-    writeFileSync(authorityPublicPath, authority.publicKey.export({ type: "spki", format: "pem" }), { mode: 0o644 });
+    writeFileSync(policyPath, encodeGovernanceApprovalPolicy(approvalPolicy), { mode: 0o600 });
 
     const exported = await runAuditCheckpointArchiveCli([
       "export",
@@ -273,59 +321,119 @@ test("governed archive verification resolves historical signers through the auth
     ], () => exportedAt);
     assert.equal(exported.code, "CHECKPOINT_ARCHIVE_EXPORTED");
 
+    const authorityInventory1 = initialAuthority();
+    const authorityWritten1 = writeAuthorityTrustInventoryGeneration(authorityDir, authorityInventory1);
     const inventory1 = createInitialSignerTrustInventory(
-      authority.privateKey, keys.publicKey, context, issuedAt - 60_000
+      authority1.privateKey, keys.publicKey, context, issuedAt - 60_000
     );
     const firstWritten = writeSignerTrustInventoryGeneration(trustDir, inventory1);
+
+    const governedArgs = (authoritySha) => [
+      "--trust-inventory-dir", trustDir,
+      "--expected-trust-sha256", firstWritten.inventorySha256,
+      "--trust-max-age-hours", "48",
+      "--authority-inventory-dir", authorityDir,
+      "--authority-policy", policyPath,
+      "--expected-authority-policy-sha256", approvalPolicySha,
+      "--expected-authority-sha256", authoritySha,
+      "--authority-max-age-hours", "48"
+    ];
 
     const verified1 = await runAuditCheckpointArchiveCli([
       "verify",
       "--tenant-id", tenantId,
       "--deployment-id", deploymentId,
       "--archive-dir", bundlePath,
-      "--trust-inventory-dir", trustDir,
-      "--trust-authority-public-key-file", authorityPublicPath,
-      "--expected-trust-sha256", firstWritten.inventorySha256,
-      "--trust-max-age-hours", "48",
+      ...governedArgs(authorityWritten1.inventorySha256),
       "--max-export-delay-hours", "24"
     ], () => exportedAt + 60_000);
     assert.equal(verified1.code, "CHECKPOINT_ARCHIVE_VALID");
     assert.equal(verified1.trustGeneration, 1);
-    assert.equal(verified1.trustInventorySha256, firstWritten.inventorySha256);
+    assert.equal(verified1.authorityGeneration, 1);
 
-    const inventory2 = rotateSignerTrustInventory(
-      inventory1, authority.privateKey, replacementSigner.publicKey, context, issuedAt + 60 * 60_000
+    const rotated = rotateAuthorityTrustInventory(
+      authorityInventory1,
+      authority2.publicKey,
+      approvalPolicy,
+      approvals(
+        "ROTATE_AUTHORITY", 1, authorityWritten1.inventorySha256,
+        checkpointKeyId(authority2.publicKey), issuedAt + 60 * 60_000
+      ),
+      context,
+      {
+        expectedPolicySha256: approvalPolicySha,
+        expectedCurrentSha256: authorityWritten1.inventorySha256,
+        now: issuedAt + 60 * 60_000
+      }
     );
-    const secondWritten = writeSignerTrustInventoryGeneration(trustDir, inventory2);
-    const verifiedHistorical = await runAuditCheckpointArchiveCli([
+    const authorityWritten2 = writeAuthorityTrustInventoryGeneration(authorityDir, rotated);
+    const verifiedAfterRotation = await runAuditCheckpointArchiveCli([
       "verify",
       "--tenant-id", tenantId,
       "--deployment-id", deploymentId,
       "--archive-dir", bundlePath,
-      "--trust-inventory-dir", trustDir,
-      "--trust-authority-public-key-file", authorityPublicPath,
-      "--expected-trust-sha256", secondWritten.inventorySha256,
-      "--trust-max-age-hours", "48",
+      ...governedArgs(authorityWritten2.inventorySha256),
       "--max-export-delay-hours", "24"
     ], () => issuedAt + 2 * 60 * 60_000);
-    assert.equal(verifiedHistorical.code, "CHECKPOINT_ARCHIVE_VALID");
-    assert.equal(verifiedHistorical.trustGeneration, 2);
+    assert.equal(verifiedAfterRotation.code, "CHECKPOINT_ARCHIVE_VALID");
+    assert.equal(verifiedAfterRotation.authorityGeneration, 2);
 
-    const inventory3 = revokeSignerTrustInventory(
-      inventory2, authority.privateKey, saved.payload.keyId, context, issuedAt + 3 * 60 * 60_000
+    const recoveryDir = join(root, "authority-recovery");
+    mkdirSync(recoveryDir, { mode: 0o700 });
+    writeAuthorityTrustInventoryGeneration(recoveryDir, authorityInventory1);
+    const recovered = recoverAuthorityTrustInventory(
+      authorityInventory1,
+      authority2.publicKey,
+      approvalPolicy,
+      approvals(
+        "RECOVER_AUTHORITY", 1, authorityWritten1.inventorySha256,
+        checkpointKeyId(authority2.publicKey), issuedAt + 60 * 60_000
+      ),
+      context,
+      {
+        expectedPolicySha256: approvalPolicySha,
+        expectedCurrentSha256: authorityWritten1.inventorySha256,
+        now: issuedAt + 60 * 60_000
+      }
     );
-    const thirdWritten = writeSignerTrustInventoryGeneration(trustDir, inventory3);
+    const recoveredWritten = writeAuthorityTrustInventoryGeneration(recoveryDir, recovered);
     await assert.rejects(runAuditCheckpointArchiveCli([
       "verify",
       "--tenant-id", tenantId,
       "--deployment-id", deploymentId,
       "--archive-dir", bundlePath,
       "--trust-inventory-dir", trustDir,
-      "--trust-authority-public-key-file", authorityPublicPath,
-      "--expected-trust-sha256", thirdWritten.inventorySha256,
+      "--expected-trust-sha256", firstWritten.inventorySha256,
       "--trust-max-age-hours", "48",
+      "--authority-inventory-dir", recoveryDir,
+      "--authority-policy", policyPath,
+      "--expected-authority-policy-sha256", approvalPolicySha,
+      "--expected-authority-sha256", recoveredWritten.inventorySha256,
+      "--authority-max-age-hours", "48",
       "--max-export-delay-hours", "24"
-    ], () => issuedAt + 4 * 60 * 60_000), error => error?.code === "TRUST_INVENTORY_SIGNER_REVOKED");
+    ], () => issuedAt + 2 * 60 * 60_000), error => error?.code === "AUTHORITY_INVENTORY_KEY_REVOKED");
+
+    const inventory2 = revokeSignerTrustInventory(
+      inventory1, authority1.privateKey, saved.payload.keyId, context, issuedAt + 30 * 60_000
+    );
+    const secondWritten = writeSignerTrustInventoryGeneration(trustDir, inventory2);
+    await assert.rejects(runAuditCheckpointArchiveCli([
+      "verify",
+      "--tenant-id", tenantId,
+      "--deployment-id", deploymentId,
+      "--archive-dir", bundlePath,
+      "--trust-inventory-dir", trustDir,
+      "--expected-trust-sha256", secondWritten.inventorySha256,
+      "--trust-max-age-hours", "48",
+      "--authority-inventory-dir", authorityDir,
+      "--authority-policy", policyPath,
+      "--expected-authority-policy-sha256", approvalPolicySha,
+      "--expected-authority-sha256", authorityWritten2.inventorySha256,
+      "--authority-max-age-hours", "48",
+      "--max-export-delay-hours", "24"
+    ], () => issuedAt + 2 * 60 * 60_000), error => error?.code === "TRUST_INVENTORY_SIGNER_REVOKED");
+
+    assert.equal(checkpointKeyId(replacementSigner.publicKey).length, 64);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -344,9 +452,13 @@ test("archive verify accepts exactly one trust source mode", () => {
     "--archive-dir", "/tmp/archive",
     "--public-key-file", "/tmp/signer.pem",
     "--trust-inventory-dir", "/tmp/trust",
-    "--trust-authority-public-key-file", "/tmp/authority.pem",
     "--expected-trust-sha256", "a".repeat(64),
     "--trust-max-age-hours", "24",
+    "--authority-inventory-dir", "/tmp/authority",
+    "--authority-policy", "/tmp/policy.json",
+    "--expected-authority-policy-sha256", "b".repeat(64),
+    "--expected-authority-sha256", "c".repeat(64),
+    "--authority-max-age-hours", "24",
     "--max-export-delay-hours", "24"
   ]));
   assert.throws(() => auditCheckpointArchiveArgs([
