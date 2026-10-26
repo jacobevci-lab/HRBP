@@ -81,3 +81,14 @@ A provider-neutral signed archive/export layer is now documented in `docs/AUDIT-
 Automated **independent checkpoint creation/publication** cadence, signer trust rotation, HSM/KMS support and trusted timestamping also remain future/deployment-governance work. Interrupted application full-history verification itself is resumable across bounded scheduler invocations, but that improves operational coverage only; it does not make the database its own trust anchor. The provider deployment issue #220 and runtime HTTP 503 investigation #209 remain separate.
 
 Implementation references: [Node.js 22 crypto signing/key APIs](https://nodejs.org/download/release/v22.18.0/docs/api/crypto.html) and [Node.js filesystem APIs](https://nodejs.org/docs/latest-v22.x/api/fs.html). No new crypto or filesystem package is introduced.
+
+
+## Signer trust governance and scheduled publication
+
+The next independent-assurance layer is documented in `docs/AUDIT-SIGNER-TRUST-GOVERNANCE.md`.
+
+It adds an authority-signed, append-only signer trust inventory with externally pinned generation digests, historical validity windows, explicit retirement/revocation, governed archive signer resolution and a separately administered one-shot publication cadence. The checkpoint signer cannot enroll its own replacement, and publication will not connect to the audit database unless the configured signer is the currently active enrolled signer.
+
+The publication service/timer remains outside the HRBP application image. It performs one attempt per timer activation and deliberately leaves ambiguous crash outcomes blocked behind a no-overwrite lock for operator review rather than retrying automatically.
+
+HSM/KMS key custody, trusted timestamping, actual customer WORM/Object Lock enforcement, trust-authority recovery/rotation and customer governance evidence remain outside what this software layer proves.
