@@ -88,6 +88,8 @@ test('the actual browser sweep delegates both locale changes and records English
   assert.match(source, /import \{ waitForAuditLocale as waitServerLocale \} from '\.\/audit-locale-readiness\.mjs'/);
   assert.ok(!source.includes('async function waitServerLocale('), 'No shadowing by the old incomplete helper');
   for (const locale of ['tr', 'en']) assert.ok(source.includes(`await waitServerLocale(page,path,'${locale}')`));
+  assert.ok(!source.includes("waitForLoadState('networkidle')"),
+    'Locale readiness must not be followed by global network-idle gating');
   assert.ok(source.includes("const englishSelected=await page.evaluate(()=>document.documentElement.lang==='en')"));
   assert.ok(source.includes('turkishSelected:tr.selected,englishSelected'));
   assert.ok(source.includes('status:0,principalVerified:false,error:'), 'Readiness failure remains a failed audit row');
