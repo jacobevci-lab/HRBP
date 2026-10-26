@@ -199,12 +199,12 @@ test("offline request approve verify CLI preserves no-overwrite evidence",async(
     ],()=>t0+30_000);
     assert.equal(verified.code,"GOVERNANCE_APPROVAL_VALID");
     assert.equal(verified.approvals,2);
-    assert.throws(()=>runGovernanceApprovalCli([
+    await assert.rejects(runGovernanceApprovalCli([
       "request","--tenant-id",tenantId,"--deployment-id",deploymentId,
       "--out",requestPath,"--operation","ROTATE_SIGNER","--current-generation","3",
       "--current-sha256","a".repeat(64),"--target-key-id",checkpointKeyId(target.publicKey),
       "--expires-minutes","30"
-    ],()=>t0));
+    ],()=>t0), error => error?.code === "GOVERNANCE_APPROVAL_OUTPUT_EXISTS");
     assert.ok(!readFileSync(approved2Path,"utf8").includes(tenantId));
   }finally{rmSync(root,{recursive:true,force:true});}
 });
