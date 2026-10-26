@@ -82,6 +82,7 @@ jobs:
         run: |
           node --test scripts/audit-ledger-concurrency.test.mjs
           node --test scripts/audit-full-history-postgres.test.mjs
+          node --test scripts/audit-assurance-rehearsal.postgres.test.mjs
           node --test scripts/audit-verification-progress.postgres.test.mjs
       - name: Verify governed job-change preview on PostgreSQL
         run: node --test scripts/job-change-impact-preview.postgres.test.mjs
