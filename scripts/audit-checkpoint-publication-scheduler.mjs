@@ -42,7 +42,6 @@ export function auditCheckpointPublicationSchedulerArgs(env = process.env) {
     "--deployment-id", required(env, "HRBP_AUDIT_PUBLICATION_DEPLOYMENT_ID"),
     "--signer-private-key-file", required(env, "HRBP_AUDIT_PUBLICATION_SIGNER_PRIVATE_KEY_FILE"),
     "--trust-inventory-dir", required(env, "HRBP_AUDIT_PUBLICATION_TRUST_INVENTORY_DIR"),
-    "--trust-authority-public-key-file", required(env, "HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_PUBLIC_KEY_FILE"),
     "--expected-trust-sha256", expectedTrust,
     "--trust-max-age-hours", positive(env, "HRBP_AUDIT_PUBLICATION_TRUST_MAX_AGE_HOURS"),
     "--archive-root", required(env, "HRBP_AUDIT_PUBLICATION_ARCHIVE_ROOT"),
@@ -52,6 +51,35 @@ export function auditCheckpointPublicationSchedulerArgs(env = process.env) {
     "--acknowledge-read-only-scan",
     "--acknowledge-external-retention-target"
   ];
+  const directAuthority = typeof env.HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_PUBLIC_KEY_FILE === "string"
+    && env.HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_PUBLIC_KEY_FILE.trim() !== "";
+  const chainNames = [
+    "HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_CHAIN_DIR",
+    "HRBP_AUDIT_PUBLICATION_TRUST_BOOTSTRAP_AUTHORITY_PUBLIC_KEY_FILE",
+    "HRBP_AUDIT_PUBLICATION_EXPECTED_TRUST_AUTHORITY_CHAIN_SHA256",
+    "HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_CHAIN_MAX_AGE_HOURS"
+  ];
+  const chainSome = chainNames.some(name => typeof env[name] === "string" && env[name].trim() !== "");
+  const chainReady = chainNames.every(name => typeof env[name] === "string" && env[name].trim() !== "");
+  if (chainSome && !chainReady || directAuthority === chainReady) {
+    fail("CHECKPOINT_PUBLICATION_SCHEDULER_AUTHORITY_CONFIG_INVALID");
+  }
+  if (directAuthority) {
+    args.push(
+      "--trust-authority-public-key-file",
+      required(env, "HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_PUBLIC_KEY_FILE")
+    );
+  } else {
+    const expectedAuthorityChain = required(env, "HRBP_AUDIT_PUBLICATION_EXPECTED_TRUST_AUTHORITY_CHAIN_SHA256");
+    if (!HASH.test(expectedAuthorityChain)) fail();
+    args.push(
+      "--trust-authority-chain-dir", required(env, "HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_CHAIN_DIR"),
+      "--trust-bootstrap-authority-public-key-file", required(env, "HRBP_AUDIT_PUBLICATION_TRUST_BOOTSTRAP_AUTHORITY_PUBLIC_KEY_FILE"),
+      "--expected-trust-authority-chain-sha256", expectedAuthorityChain,
+      "--trust-authority-chain-max-age-hours", positive(env, "HRBP_AUDIT_PUBLICATION_TRUST_AUTHORITY_CHAIN_MAX_AGE_HOURS")
+    );
+  }
+
   const maxEvents = positive(env, "HRBP_AUDIT_PUBLICATION_MAX_EVENTS", { optional: true });
   const batchSize = positive(env, "HRBP_AUDIT_PUBLICATION_BATCH_SIZE", { optional: true });
   if (maxEvents) args.push("--max-events", maxEvents);
