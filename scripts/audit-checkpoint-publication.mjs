@@ -21,8 +21,10 @@ import {
 import {
   readSignerTrustInventoryChain,
   resolveCheckpointSigner,
-  verifySignerTrustInventoryChain
+  verifySignerTrustInventoryChainGoverned
 } from "./audit-signer-trust-inventory.mjs";
+import { readAuthorityTrustInventoryChain } from "./audit-trust-authority-inventory.mjs";
+import { parseGovernanceApprovalPolicy } from "./audit-governance-approval.mjs";
 
 const HASH = /^[a-f0-9]{64}$/;
 const MAX_TRUST_AGE_MS = 10 * 365 * 24 * 60 * 60_000;
@@ -81,12 +83,8 @@ function readPrivateKey(path) {
   try { return keyOf(createPrivateKey(pem), "private"); }
   finally { pem.fill(0); }
 }
-function readPublicKey(path) {
-  const pem = readCheckpointFile(path, { maxBytes: 16_384 });
-  if (!pem.toString("ascii").startsWith("-----BEGIN PUBLIC KEY-----")) {
-    fail("CHECKPOINT_PUBLICATION_KEY_INVALID");
-  }
-  return keyOf(createPublicKey(pem), "public");
+function readAuthorityPolicy(path) {
+  return parseGovernanceApprovalPolicy(readCheckpointFile(path, { maxBytes: 65_536 }).toString("utf8"));
 }
 function bundleId(checkpoint, archive) {
   const stamp = archive.manifest.exportedAt.replace(/[-:.]/g, "");
@@ -120,7 +118,11 @@ export function releasePublicationLock(lock) {
 export async function publishIndependentAuditCheckpoint({
   client,
   signerPrivateKey,
-  authorityPublicKey,
+  authorityChain,
+  authorityPolicy,
+  expectedAuthorityPolicySha256,
+  expectedAuthoritySha256,
+  authorityMaxAgeMs,
   trustChain,
   expectedTrustSha256,
   trustMaxAgeMs,
@@ -132,16 +134,22 @@ export async function publishIndependentAuditCheckpoint({
   clock = Date.now
 }) {
   keyOf(signerPrivateKey, "private");
-  keyOf(authorityPublicKey, "public");
   safeRoot(archiveRoot);
   if (typeof expectedTrustSha256 !== "string" || !HASH.test(expectedTrustSha256) ||
+      typeof expectedAuthorityPolicySha256 !== "string" || !HASH.test(expectedAuthorityPolicySha256) ||
+      typeof expectedAuthoritySha256 !== "string" || !HASH.test(expectedAuthoritySha256) ||
+      !Number.isSafeInteger(authorityMaxAgeMs) || authorityMaxAgeMs < 3600_000 || authorityMaxAgeMs > MAX_TRUST_AGE_MS ||
       !Number.isSafeInteger(trustMaxAgeMs) || trustMaxAgeMs < 3600_000 || trustMaxAgeMs > MAX_TRUST_AGE_MS ||
       !Number.isSafeInteger(archiveMaxAgeMs) || archiveMaxAgeMs < 3600_000 || archiveMaxAgeMs > MAX_ARCHIVE_AGE_MS ||
       !Number.isSafeInteger(retentionDays) || retentionDays < 1 || retentionDays > 3650) fail();
   const trustNow = clock();
-  const trust = verifySignerTrustInventoryChain(trustChain, {
+  const trust = verifySignerTrustInventoryChainGoverned(trustChain, {
     ...context,
-    authorityPublicKey,
+    authorityChain,
+    authorityPolicy,
+    expectedAuthorityPolicySha256,
+    expectedAuthoritySha256,
+    authorityMaxAgeMs,
     expectedLatestSha256: expectedTrustSha256,
     maxAgeMs: trustMaxAgeMs,
     now: trustNow
@@ -190,7 +198,9 @@ export async function publishIndependentAuditCheckpoint({
     archiveManifestSha256: written.archiveManifestSha256,
     retentionUntil: archive.manifest.retentionUntil,
     trustGeneration: trust.latest.manifest.generation,
-    trustInventorySha256: trust.latestSha256
+    trustInventorySha256: trust.latestSha256,
+    authorityGeneration: trust.authorityGeneration,
+    authorityInventorySha256: trust.authorityInventorySha256
   };
 }
 
@@ -200,8 +210,9 @@ function parseArgs(argv) {
   const allowed = new Set([
     "--tenant-id", "--deployment-id",
     "--signer-private-key-file",
-    "--trust-inventory-dir", "--trust-authority-public-key-file",
-    "--expected-trust-sha256", "--trust-max-age-hours",
+    "--trust-inventory-dir", "--expected-trust-sha256", "--trust-max-age-hours",
+    "--authority-inventory-dir", "--authority-policy",
+    "--expected-authority-policy-sha256", "--expected-authority-sha256", "--authority-max-age-hours",
     "--archive-root", "--retention-days", "--archive-max-age-hours",
     "--lock-file", "--max-events", "--batch-size",
     "--acknowledge-read-only-scan", "--acknowledge-external-retention-target"
@@ -217,13 +228,17 @@ function parseArgs(argv) {
   }
   const required = [
     "--tenant-id", "--deployment-id", "--signer-private-key-file",
-    "--trust-inventory-dir", "--trust-authority-public-key-file",
-    "--expected-trust-sha256", "--trust-max-age-hours",
+    "--trust-inventory-dir", "--expected-trust-sha256", "--trust-max-age-hours",
+    "--authority-inventory-dir", "--authority-policy",
+    "--expected-authority-policy-sha256", "--expected-authority-sha256", "--authority-max-age-hours",
     "--archive-root", "--retention-days", "--archive-max-age-hours",
     "--lock-file", "--acknowledge-read-only-scan", "--acknowledge-external-retention-target"
   ];
   if (required.some(flag => !values[flag])) fail();
-  if (!HASH.test(values["--expected-trust-sha256"])) fail();
+  if (!HASH.test(values["--expected-trust-sha256"]) ||
+      !HASH.test(values["--expected-authority-policy-sha256"]) ||
+      !HASH.test(values["--expected-authority-sha256"]) ||
+      !isAbsolute(values["--authority-inventory-dir"])) fail();
   safeRoot(values["--archive-root"]);
   safeLock(values["--lock-file"]);
   const scanOptions = auditHistoryOptions({
@@ -236,6 +251,7 @@ function parseArgs(argv) {
     context: { tenantId: values["--tenant-id"], deploymentId: values["--deployment-id"] },
     scanOptions,
     trustMaxAgeMs: hours(values["--trust-max-age-hours"], MAX_TRUST_AGE_MS),
+    authorityMaxAgeMs: hours(values["--authority-max-age-hours"], MAX_TRUST_AGE_MS),
     archiveMaxAgeMs: hours(values["--archive-max-age-hours"], MAX_ARCHIVE_AGE_MS),
     retentionDays: days(values["--retention-days"])
   };
@@ -264,13 +280,18 @@ export async function runAuditCheckpointPublicationCli(argv, {
 } = {}) {
   const parsed = parseArgs(argv);
   const signerPrivateKey = readPrivateKey(parsed.values["--signer-private-key-file"]);
-  const authorityPublicKey = readPublicKey(parsed.values["--trust-authority-public-key-file"]);
   const trustChain = readSignerTrustInventoryChain(parsed.values["--trust-inventory-dir"]);
+  const authorityChain = readAuthorityTrustInventoryChain(parsed.values["--authority-inventory-dir"]);
+  const authorityPolicy = readAuthorityPolicy(parsed.values["--authority-policy"]);
 
   // Trust/key validation intentionally happens before any database connection.
-  const preflight = verifySignerTrustInventoryChain(trustChain, {
+  const preflight = verifySignerTrustInventoryChainGoverned(trustChain, {
     ...parsed.context,
-    authorityPublicKey,
+    authorityChain,
+    authorityPolicy,
+    expectedAuthorityPolicySha256: parsed.values["--expected-authority-policy-sha256"],
+    expectedAuthoritySha256: parsed.values["--expected-authority-sha256"],
+    authorityMaxAgeMs: parsed.authorityMaxAgeMs,
     expectedLatestSha256: parsed.values["--expected-trust-sha256"],
     maxAgeMs: parsed.trustMaxAgeMs,
     now: clock()
@@ -288,7 +309,11 @@ export async function runAuditCheckpointPublicationCli(argv, {
     return await publishIndependentAuditCheckpoint({
       client,
       signerPrivateKey,
-      authorityPublicKey,
+      authorityChain,
+      authorityPolicy,
+      expectedAuthorityPolicySha256: parsed.values["--expected-authority-policy-sha256"],
+      expectedAuthoritySha256: parsed.values["--expected-authority-sha256"],
+      authorityMaxAgeMs: parsed.authorityMaxAgeMs,
       trustChain,
       expectedTrustSha256: parsed.values["--expected-trust-sha256"],
       trustMaxAgeMs: parsed.trustMaxAgeMs,
