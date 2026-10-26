@@ -13,10 +13,17 @@ import {
 import {
   createInitialSignerTrustInventory,
   encodeSignerTrustInventory,
+  rebindSignerTrustAuthority,
   revokeSignerTrustInventory,
   rotateSignerTrustInventory,
   writeSignerTrustInventoryGeneration
 } from "./audit-signer-trust-inventory.mjs";
+import {
+  createInitialTrustAuthorityRecord,
+  encodeTrustAuthorityRecord,
+  rotateTrustAuthorityRecord,
+  verifyTrustAuthorityChain
+} from "./audit-trust-authority-chain.mjs";
 import {
   acquirePublicationLock,
   publishIndependentAuditCheckpoint,
@@ -30,6 +37,8 @@ const context = { tenantId, deploymentId };
 const authority = generateKeyPairSync("ed25519");
 const signer1 = generateKeyPairSync("ed25519");
 const signer2 = generateKeyPairSync("ed25519");
+const authority2 = generateKeyPairSync("ed25519");
+const recoveryAuthority = generateKeyPairSync("ed25519");
 const t0 = Date.parse("2026-10-26T07:00:00.000Z");
 const t1 = t0 + 60_000;
 
@@ -300,5 +309,74 @@ test("existing lock blocks CLI before the database and is not auto-removed", asy
     }), error => error?.code === "CHECKPOINT_PUBLICATION_LOCKED");
     assert.equal(connected, false);
     assert.equal(existsSync(lockFile), true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test("authority rotation blocks publication until signer inventory adopts the new authority", async () => {
+  const root = mkdtempSync(join(tmpdir(), "hrbp-publication-authority-"));
+  try {
+    chmodSync(root, 0o700);
+    const archiveRoot = join(root, "archive");
+    mkdirSync(archiveRoot, { mode: 0o700 });
+
+    const firstAuthority = createInitialTrustAuthorityRecord(
+      authority.privateKey, recoveryAuthority.publicKey, context, t0 - 120_000
+    );
+    const firstTrust = initialTrust(t0 - 60_000);
+    const secondAuthority = rotateTrustAuthorityRecord(
+      firstAuthority, authority.privateKey, authority2.privateKey, context, t0
+    );
+    const authorityChain = verifyTrustAuthorityChain([firstAuthority, secondAuthority], {
+      ...context,
+      bootstrapAuthorityPublicKey: authority.publicKey,
+      expectedLatestSha256: createHash("sha256")
+        .update(encodeTrustAuthorityRecord(secondAuthority)).digest("hex"),
+      maxAgeMs: 24 * 3600_000,
+      now: t1
+    });
+
+    const blockedHarness = harness();
+    await assert.rejects(publishIndependentAuditCheckpoint({
+      client: blockedHarness.client,
+      signerPrivateKey: signer1.privateKey,
+      authorityChain,
+      trustChain: [firstTrust],
+      expectedTrustSha256: digest(firstTrust),
+      trustMaxAgeMs: 24 * 3600_000,
+      context,
+      scanOptions: { tenantId, maxEvents: 100, batchSize: 2 },
+      archiveRoot,
+      retentionDays: 365,
+      archiveMaxAgeMs: 3600_000,
+      clock: () => t1
+    }), error => error?.code === "CHECKPOINT_PUBLICATION_AUTHORITY_NOT_ADOPTED");
+    assert.equal(blockedHarness.calls.length, 0);
+
+    const rebound = rebindSignerTrustAuthority(
+      firstTrust, authority2.privateKey, context, t0 + 30_000
+    );
+    const acceptedHarness = harness();
+    const result = await publishIndependentAuditCheckpoint({
+      client: acceptedHarness.client,
+      signerPrivateKey: signer1.privateKey,
+      authorityChain,
+      trustChain: [firstTrust, rebound],
+      expectedTrustSha256: digest(rebound),
+      trustMaxAgeMs: 24 * 3600_000,
+      context,
+      scanOptions: { tenantId, maxEvents: 100, batchSize: 2 },
+      archiveRoot,
+      retentionDays: 365,
+      archiveMaxAgeMs: 3600_000,
+      clock: () => t1
+    });
+    assert.equal(result.code, "CHECKPOINT_PUBLICATION_COMPLETE");
+    assert.equal(result.trustAuthorityChainGeneration, 2);
+    assert.equal(
+      result.trustAuthorityChainSha256,
+      createHash("sha256").update(encodeTrustAuthorityRecord(secondAuthority)).digest("hex")
+    );
+    assert.ok(acceptedHarness.calls.some(call => call.sql.startsWith("BEGIN ")));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
