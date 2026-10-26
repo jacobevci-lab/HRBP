@@ -23,6 +23,10 @@ import {
   resolveCheckpointSigner,
   verifySignerTrustInventoryChain
 } from "./audit-signer-trust-inventory.mjs";
+import {
+  readTrustAuthorityChain,
+  verifyTrustAuthorityChain
+} from "./audit-trust-authority-chain.mjs";
 
 const HASH = /^[a-f0-9]{64}$/;
 const MAX_TRUST_AGE_MS = 10 * 365 * 24 * 60 * 60_000;
@@ -121,6 +125,7 @@ export async function publishIndependentAuditCheckpoint({
   client,
   signerPrivateKey,
   authorityPublicKey,
+  authorityChain,
   trustChain,
   expectedTrustSha256,
   trustMaxAgeMs,
@@ -132,7 +137,8 @@ export async function publishIndependentAuditCheckpoint({
   clock = Date.now
 }) {
   keyOf(signerPrivateKey, "private");
-  keyOf(authorityPublicKey, "public");
+  if (Boolean(authorityPublicKey) === Boolean(authorityChain)) fail();
+  if (authorityPublicKey) keyOf(authorityPublicKey, "public");
   safeRoot(archiveRoot);
   if (typeof expectedTrustSha256 !== "string" || !HASH.test(expectedTrustSha256) ||
       !Number.isSafeInteger(trustMaxAgeMs) || trustMaxAgeMs < 3600_000 || trustMaxAgeMs > MAX_TRUST_AGE_MS ||
@@ -141,7 +147,7 @@ export async function publishIndependentAuditCheckpoint({
   const trustNow = clock();
   const trust = verifySignerTrustInventoryChain(trustChain, {
     ...context,
-    authorityPublicKey,
+    ...(authorityChain ? { authorityChain } : { authorityPublicKey }),
     expectedLatestSha256: expectedTrustSha256,
     maxAgeMs: trustMaxAgeMs,
     now: trustNow
@@ -201,6 +207,8 @@ function parseArgs(argv) {
     "--tenant-id", "--deployment-id",
     "--signer-private-key-file",
     "--trust-inventory-dir", "--trust-authority-public-key-file",
+    "--trust-authority-chain-dir", "--trust-bootstrap-authority-public-key-file",
+    "--expected-trust-authority-chain-sha256", "--trust-authority-chain-max-age-hours",
     "--expected-trust-sha256", "--trust-max-age-hours",
     "--archive-root", "--retention-days", "--archive-max-age-hours",
     "--lock-file", "--max-events", "--batch-size",
@@ -217,13 +225,25 @@ function parseArgs(argv) {
   }
   const required = [
     "--tenant-id", "--deployment-id", "--signer-private-key-file",
-    "--trust-inventory-dir", "--trust-authority-public-key-file",
+    "--trust-inventory-dir",
     "--expected-trust-sha256", "--trust-max-age-hours",
     "--archive-root", "--retention-days", "--archive-max-age-hours",
     "--lock-file", "--acknowledge-read-only-scan", "--acknowledge-external-retention-target"
   ];
   if (required.some(flag => !values[flag])) fail();
   if (!HASH.test(values["--expected-trust-sha256"])) fail();
+  const chainFlags = [
+    "--trust-authority-chain-dir", "--trust-bootstrap-authority-public-key-file",
+    "--expected-trust-authority-chain-sha256", "--trust-authority-chain-max-age-hours"
+  ];
+  const chainReady = chainFlags.every(flag => Boolean(values[flag]));
+  const chainPartial = chainFlags.some(flag => Boolean(values[flag]));
+  const directAuthority = Boolean(values["--trust-authority-public-key-file"]);
+  if (chainPartial && !chainReady || directAuthority === chainReady) fail();
+  if (values["--expected-trust-authority-chain-sha256"] !== undefined &&
+      !HASH.test(values["--expected-trust-authority-chain-sha256"])) fail();
+  if (values["--trust-authority-chain-dir"] !== undefined &&
+      !isAbsolute(values["--trust-authority-chain-dir"])) fail();
   safeRoot(values["--archive-root"]);
   safeLock(values["--lock-file"]);
   const scanOptions = auditHistoryOptions({
@@ -236,6 +256,10 @@ function parseArgs(argv) {
     context: { tenantId: values["--tenant-id"], deploymentId: values["--deployment-id"] },
     scanOptions,
     trustMaxAgeMs: hours(values["--trust-max-age-hours"], MAX_TRUST_AGE_MS),
+    trustAuthorityChainMaxAgeMs: chainReady
+      ? hours(values["--trust-authority-chain-max-age-hours"], MAX_TRUST_AGE_MS)
+      : null,
+    authorityChainMode: chainReady,
     archiveMaxAgeMs: hours(values["--archive-max-age-hours"], MAX_ARCHIVE_AGE_MS),
     retentionDays: days(values["--retention-days"])
   };
@@ -264,16 +288,32 @@ export async function runAuditCheckpointPublicationCli(argv, {
 } = {}) {
   const parsed = parseArgs(argv);
   const signerPrivateKey = readPrivateKey(parsed.values["--signer-private-key-file"]);
-  const authorityPublicKey = readPublicKey(parsed.values["--trust-authority-public-key-file"]);
   const trustChain = readSignerTrustInventoryChain(parsed.values["--trust-inventory-dir"]);
+  const preflightNow = clock();
+  let authorityPublicKey;
+  let governedAuthorityChain = null;
+  if (parsed.authorityChainMode) {
+    governedAuthorityChain = verifyTrustAuthorityChain(
+      readTrustAuthorityChain(parsed.values["--trust-authority-chain-dir"]),
+      {
+        ...parsed.context,
+        bootstrapAuthorityPublicKey: readPublicKey(parsed.values["--trust-bootstrap-authority-public-key-file"]),
+        expectedLatestSha256: parsed.values["--expected-trust-authority-chain-sha256"],
+        maxAgeMs: parsed.trustAuthorityChainMaxAgeMs,
+        now: preflightNow
+      }
+    );
+  } else {
+    authorityPublicKey = readPublicKey(parsed.values["--trust-authority-public-key-file"]);
+  }
 
   // Trust/key validation intentionally happens before any database connection.
   const preflight = verifySignerTrustInventoryChain(trustChain, {
     ...parsed.context,
-    authorityPublicKey,
+    ...(governedAuthorityChain ? { authorityChain: governedAuthorityChain } : { authorityPublicKey }),
     expectedLatestSha256: parsed.values["--expected-trust-sha256"],
     maxAgeMs: parsed.trustMaxAgeMs,
-    now: clock()
+    now: preflightNow
   });
   if (preflight.activeKeyId !== checkpointKeyId(createPublicKey(signerPrivateKey))) {
     fail(preflight.activeKeyId === null
@@ -289,6 +329,7 @@ export async function runAuditCheckpointPublicationCli(argv, {
       client,
       signerPrivateKey,
       authorityPublicKey,
+      authorityChain: governedAuthorityChain,
       trustChain,
       expectedTrustSha256: parsed.values["--expected-trust-sha256"],
       trustMaxAgeMs: parsed.trustMaxAgeMs,
