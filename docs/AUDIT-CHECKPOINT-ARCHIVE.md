@@ -156,7 +156,7 @@ This archive slice supplies cryptographically bound export metadata and provider
 - automated independently controlled publication cadence;
 - public-key enrollment and rotation governance;
 - HSM/KMS private-key custody;
-- trusted timestamp authority integration;
+- approved production TSA enrollment/root/policy governance (the provider-neutral RFC 3161 integration is implemented separately);
 - representative customer evidence-retention testing;
 - customer-specific legal/regulatory retention policy approval.
 
@@ -171,4 +171,6 @@ It adds an authority-signed, append-only signer trust inventory with externally 
 
 The publication service/timer remains outside the HRBP application image. It performs one attempt per timer activation and deliberately leaves ambiguous crash outcomes blocked behind a no-overwrite lock for operator review rather than retrying automatically.
 
-HSM/KMS key custody, trusted timestamping, actual customer WORM/Object Lock enforcement, trust-authority recovery/rotation and customer governance evidence remain outside what this software layer proves.
+Trust-authority rotation/recovery and software-enforced two-person approval are now implemented in the stacked governance milestone. RFC 3161 timestamp integration is documented in `docs/AUDIT-TRUSTED-TIMESTAMP.md`.
+
+HSM/KMS key custody, actual production TSA enrollment/governance, customer WORM/Object Lock enforcement and customer governance evidence remain outside what this software layer proves.
