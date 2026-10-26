@@ -13,12 +13,18 @@ import {
   parseSignerTrustInventory,
   readSignerTrustInventoryChain,
   resolveCheckpointSigner,
+  rebindSignerTrustAuthority,
   revokeSignerTrustInventory,
   rotateSignerTrustInventory,
   runSignerTrustInventoryCli,
   verifySignerTrustInventoryChain,
   writeSignerTrustInventoryGeneration
 } from "./audit-signer-trust-inventory.mjs";
+import {
+  createInitialTrustAuthorityRecord,
+  rotateTrustAuthorityRecord,
+  verifyTrustAuthorityChain
+} from "./audit-trust-authority-chain.mjs";
 
 const tenantId = "trust-ci-tenant";
 const deploymentId = "trust-ci-deployment";
@@ -322,4 +328,62 @@ test("CLI does not accept a signer private key as an enrollment source", async (
       "--acknowledge-separate-trust-authority"
     ], () => t0), code("TRUST_INVENTORY_KEY_INVALID"));
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+
+test("signer inventory verifies across an authority rotation only after an authority rebind generation", () => {
+  const recovery = generateKeyPairSync("ed25519");
+  const firstAuthority = createInitialTrustAuthorityRecord(
+    authority.privateKey, recovery.publicKey, context, t0 - 60_000
+  );
+  const firstInventory = initial(t0);
+  const secondAuthority = rotateTrustAuthorityRecord(
+    firstAuthority, authority.privateKey, otherAuthority.privateKey, context, t1
+  );
+  const authorityChain = verifyTrustAuthorityChain(
+    [firstAuthority, secondAuthority],
+    {
+      ...context,
+      bootstrapAuthorityPublicKey: authority.publicKey,
+      expectedLatestSha256: createHash("sha256")
+        .update(JSON.stringify(secondAuthority) + "\n").digest("hex"),
+      maxAgeMs: 24 * 3600_000,
+      now: t1
+    }
+  );
+
+  const rebound = rebindSignerTrustAuthority(
+    firstInventory, otherAuthority.privateKey, context, t1
+  );
+  const verified = verifySignerTrustInventoryChain([firstInventory, rebound], {
+    ...context,
+    authorityChain,
+    expectedLatestSha256: sha(rebound),
+    maxAgeMs: 24 * 3600_000,
+    now: t1
+  });
+  assert.equal(verified.latest.manifest.authorityKeyId, checkpointKeyId(otherAuthority.publicKey));
+  assert.equal(verified.latest.manifest.generation, 2);
+  assert.equal(verified.activeKeyId, checkpointKeyId(signer1.publicKey));
+
+  assert.throws(() => verifySignerTrustInventoryChain([firstInventory], {
+    ...context,
+    authorityChain,
+    expectedLatestSha256: sha(firstInventory),
+    maxAgeMs: 24 * 3600_000,
+    now: t1
+  }), error => error?.code === "TRUST_INVENTORY_STALE" || error?.code === "TRUST_INVENTORY_AUTHORITY_UNTRUSTED");
+});
+
+test("authority rebind preserves signer state and chains the previous inventory digest", () => {
+  const first = rotated(t1);
+  const rebound = rebindSignerTrustAuthority(first, otherAuthority.privateKey, context, t2);
+  assert.equal(rebound.manifest.generation, first.manifest.generation + 1);
+  assert.equal(rebound.manifest.previousInventorySha256, sha(first));
+  assert.equal(rebound.manifest.authorityKeyId, checkpointKeyId(otherAuthority.publicKey));
+  assert.deepEqual(rebound.manifest.signingKeys, first.manifest.signingKeys);
+  assert.throws(
+    () => rebindSignerTrustAuthority(rebound, otherAuthority.privateKey, context, t2),
+    code("TRUST_INVENTORY_AUTHORITY_ALREADY_ACTIVE")
+  );
 });
