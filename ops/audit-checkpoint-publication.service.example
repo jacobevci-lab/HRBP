@@ -1,0 +1,19 @@
+# Example independent operator-host unit. Review paths/user hardening for the customer host.
+[Unit]
+Description=HRBP independent audit checkpoint publication
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=hrbp-audit
+Group=hrbp-audit
+UMask=0077
+WorkingDirectory=/opt/hrbp-audit-operator
+EnvironmentFile=/etc/hrbp-audit-publication.env
+ExecStart=/usr/bin/node scripts/audit-checkpoint-publication-scheduler.mjs
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/hrbp-audit-publication /mnt/hrbp-audit-evidence

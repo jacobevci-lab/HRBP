@@ -31,11 +31,14 @@ COPY scripts/run-operational-maintenance.mjs ./scripts/run-operational-maintenan
 COPY scripts/onprem-maintenance-state.mjs ./scripts/onprem-maintenance-state.mjs
 COPY scripts/onprem-maintenance-scheduler.mjs ./scripts/onprem-maintenance-scheduler.mjs
 COPY scripts/onprem-maintenance-health.mjs ./scripts/onprem-maintenance-health.mjs
+COPY scripts/run-audit-history-maintenance.mjs ./scripts/run-audit-history-maintenance.mjs
+COPY scripts/onprem-audit-history-scheduler.mjs ./scripts/onprem-audit-history-scheduler.mjs
+COPY scripts/onprem-audit-history-health.mjs ./scripts/onprem-audit-history-health.mjs
 COPY scripts/onprem-maintenance-control.mjs ./scripts/onprem-maintenance-control.mjs
 COPY scripts/onprem-restore-scheduler-state.mjs ./scripts/onprem-restore-scheduler-state.mjs
 COPY lib/maintenance-protocol.mjs ./lib/maintenance-protocol.mjs
-RUN mkdir -p /var/lib/hrbp-scheduler \
-    && chown -R node:node /app /var/lib/hrbp-scheduler
+RUN mkdir -p /var/lib/hrbp-scheduler /var/lib/hrbp-audit-history-scheduler \
+    && chown -R node:node /app /var/lib/hrbp-scheduler /var/lib/hrbp-audit-history-scheduler
 USER node
 HEALTHCHECK --interval=60s --timeout=5s --start-period=90s --retries=3 \
   CMD node scripts/onprem-maintenance-health.mjs

@@ -88,9 +88,34 @@ test('the actual browser sweep delegates both locale changes and records English
   assert.match(source, /import \{ waitForAuditLocale as waitServerLocale \} from '\.\/audit-locale-readiness\.mjs'/);
   assert.ok(!source.includes('async function waitServerLocale('), 'No shadowing by the old incomplete helper');
   for (const locale of ['tr', 'en']) assert.ok(source.includes(`await waitServerLocale(page,path,'${locale}')`));
+  assert.ok(!source.includes("waitForLoadState('networkidle')"),
+    'Locale readiness must not be followed by global network-idle gating');
   assert.ok(source.includes("const englishSelected=await page.evaluate(()=>document.documentElement.lang==='en')"));
   assert.ok(source.includes('turkishSelected:tr.selected,englishSelected'));
   assert.ok(source.includes('status:0,principalVerified:false,error:'), 'Readiness failure remains a failed audit row');
+});
+
+test('leave decision browser uses deterministic locale readiness instead of network idleness', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('./leave-decision-browser-regression.mjs', import.meta.url), 'utf8');
+  assert.match(source, /import \{ waitForAuditLocale \} from '\.\/audit-locale-readiness\.mjs'/);
+  assert.match(source, /waitForAuditLocale\(page, pagePath, locale\)/);
+  assert.ok(!source.includes('networkidle'), 'Leave decision acceptance must not depend on global network silence');
+  assert.match(source, /waitForURL\(origin \+ pagePath, \{ waitUntil: 'commit', timeout: 15000 \}\)/,
+    'Leave login must observe navigation commit before locale/UI readiness');
+  assert.match(source, /waitForNavigation\(\{ waitUntil: 'domcontentloaded', timeout: 15000 \}\)/,
+    'Leave reload must observe DOM commit and then locale/UI readiness');
+});
+
+test('time decision browser uses deterministic locale readiness instead of network idleness', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('./time-decision-browser-regression.mjs', import.meta.url), 'utf8');
+  assert.match(source, /import \{ waitForAuditLocale \} from "\.\/audit-locale-readiness\.mjs"/);
+  assert.match(source, /waitForAuditLocale\(page,pagePath,locale\)/);
+  assert.ok(!source.includes('networkidle'), 'Time decision acceptance must not depend on global network silence');
+  assert.match(source, /waitForURL\(origin\+pagePath,\{waitUntil:"commit",timeout:15000\}\)/,
+    'Login navigation must observe URL commit before locale/UI readiness instead of waiting for the load event');
+  assert.match(source, /waitForNavigation\(\{waitUntil:"domcontentloaded",timeout:15000\}\)/);
 });
 
 test('readiness tests and existing fail-closed browser stages remain mandatory', async () => {
@@ -101,7 +126,7 @@ test('readiness tests and existing fail-closed browser stages remain mandatory',
   for (const name of ['platform-render', 'locale-preference', 'locale-progress', 'core-workspace-resilience', 'core-workspace-browser-wiring', 'module-workspace-resilience', 'leave-validation', 'leave-client-action', 'leave-decision', 'action-center-leave', 'action-center-queue', 'action-center-source-health']) {
     assert.ok(tests.includes(`scripts/${name}.test.mjs`));
   }
-  for (const name of ['platform-auth-browser-audit', 'action-center-source-health-browser', 'leave-decision-browser-regression', 'leave-api-regression', 'leave-browser-regression', 'module-workspace-browser-regression', 'core-workspace-browser-regression', 'platform-remediation-gate']) {
+  for (const name of ['platform-auth-browser-audit', 'action-center-source-health-browser', 'time-decision-browser-regression', 'leave-decision-browser-regression', 'leave-api-regression', 'leave-browser-regression', 'module-workspace-browser-regression', 'core-workspace-browser-regression', 'platform-remediation-gate']) {
     assert.ok(source.includes(`node scripts/${name}.mjs`));
   }
   assert.ok(!source.includes('continue-on-error: true'));
