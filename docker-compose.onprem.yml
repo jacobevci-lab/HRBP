@@ -175,10 +175,44 @@ services:
         condition: service_healthy
     networks: [hrbp_internal]
 
+  audit-history-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.onprem
+      target: scheduler
+    command: ["node", "scripts/onprem-audit-history-scheduler.mjs"]
+    restart: unless-stopped
+    init: true
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      HRBP_AUDIT_HISTORY_URL: http://app:3000/api/internal/audit-history
+      HRBP_MAINTENANCE_TOKEN: ${HRBP_MAINTENANCE_TOKEN:?set HRBP_MAINTENANCE_TOKEN in .env.onprem}
+      HRBP_AUDIT_HISTORY_SCHEDULER_INTERVAL_SECONDS: ${HRBP_AUDIT_HISTORY_SCHEDULER_INTERVAL_SECONDS:-900}
+      HRBP_AUDIT_HISTORY_STATE_DIR: /var/lib/hrbp-audit-history-scheduler
+    volumes:
+      - audit_history_scheduler_state:/var/lib/hrbp-audit-history-scheduler
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    healthcheck:
+      test: ["CMD", "node", "scripts/onprem-audit-history-health.mjs"]
+      interval: 60s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+    depends_on:
+      app:
+        condition: service_healthy
+    networks: [hrbp_internal]
+
 volumes:
   postgres_data:
   object_storage_data:
   scheduler_state:
+  audit_history_scheduler_state:
   clamav_db:
 
 networks:
