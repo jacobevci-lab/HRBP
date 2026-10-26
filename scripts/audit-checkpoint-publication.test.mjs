@@ -12,6 +12,7 @@ import {
 } from "./audit-checkpoint.mjs";
 import {
   createInitialSignerTrustInventory,
+  encodeSignerTrustInventory,
   revokeSignerTrustInventory,
   rotateSignerTrustInventory,
   writeSignerTrustInventoryGeneration
@@ -32,8 +33,6 @@ const signer2 = generateKeyPairSync("ed25519");
 const t0 = Date.parse("2026-10-26T07:00:00.000Z");
 const t1 = t0 + 60_000;
 
-const shaInventory = value =>
-  createHash("sha256").update(JSON.stringify(value) + "\n").digest("hex");
 
 function rows(count = 4) {
   let previousHash = null;
@@ -98,8 +97,7 @@ function initialTrust(now = t0 - 60_000) {
   );
 }
 function digest(value) {
-  const text = JSON.stringify(value) + "\n";
-  return createHash("sha256").update(text).digest("hex");
+  return createHash("sha256").update(encodeSignerTrustInventory(value)).digest("hex");
 }
 
 test("publisher creates and reads back one governed external bundle", async () => {
