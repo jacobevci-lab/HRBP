@@ -60,7 +60,8 @@ export function evaluateAuditPilotGate(packet, { now = Date.now() } = {}) {
   const entries = packet.evidence;
   let passCount = 0;
   if (!Array.isArray(entries) || entries.length !== REQUIRED_GATES.length ||
-      new Set(entries.map(e=>e?.gate)).size !== REQUIRED_GATES.length) {
+      new Set(entries.map(e=>e?.gate)).size !== REQUIRED_GATES.length ||
+      entries.some(e => !isObj(e) || !REQUIRED_GATES.includes(e.gate))) {
     reasons.push("GATE_INVENTORY_INVALID");
   } else {
     for (const gate of REQUIRED_GATES) {
@@ -84,8 +85,8 @@ export function evaluateAuditPilotGate(packet, { now = Date.now() } = {}) {
   }
   const sec = packet.customerSecurityApproval;
   const legal = packet.recordsLegalApproval;
-  if (!approved(sec,now) || sec.reviewerRole !== "CUSTOMER_SECURITY") reasons.push("SECURITY_APPROVAL_MISSING");
-  if (!approved(legal,now) || legal.reviewerRole !== "LEGAL_RECORDS") reasons.push("LEGAL_APPROVAL_MISSING");
+  if (!approved(sec,now) || sec?.reviewerRole !== "CUSTOMER_SECURITY") reasons.push("SECURITY_APPROVAL_MISSING");
+  if (!approved(legal,now) || legal?.reviewerRole !== "LEGAL_RECORDS") reasons.push("LEGAL_APPROVAL_MISSING");
   if (approved(sec,now) && approved(legal,now) &&
       sec.reviewerReference === legal.reviewerReference) reasons.push("APPROVAL_SEPARATION_MISSING");
   return { decision:reasons.length ? "NO_GO" : "READY_FOR_INDEPENDENT_AUTHORIZATION",
