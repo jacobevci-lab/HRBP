@@ -114,20 +114,23 @@ export function parsePilotPacket(input) {
  * POSIX operator-host reader. Bound allocation and bytes read BEFORE JSON parsing.
  * Final-component symlinks, hard links and non-regular files are refused. Parent
  * directories must remain operator-controlled; this is not a sandbox or file lock.
+ * Binary callers may lower the cap or raise it to at most 4 MiB. The packet
+ * reader below retains the original 64 KiB maximum and strict UTF-8 behavior.
  */
-export function readPilotPacket(path) {
+export function readPilotBytes(path, maxBytes = MAX_BYTES) {
   let fd;
   try {
-    if (typeof path !== "string" || !path || path.includes("\0") ||
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 4 * 1024 * 1024 ||
+        typeof path !== "string" || !path || path.includes("\0") ||
         !Number.isInteger(constants.O_NOFOLLOW) || !Number.isInteger(constants.O_NONBLOCK)) {
       throw Error("PACKET_INVALID");
     }
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const before = fstatSync(fd, { bigint: true });
-    if (!before.isFile() || before.nlink !== 1n || before.size < 1n || before.size > BigInt(MAX_BYTES)) {
+    if (!before.isFile() || before.nlink !== 1n || before.size < 1n || before.size > BigInt(maxBytes)) {
       throw Error("PACKET_INVALID");
     }
-    const bytes = Buffer.alloc(MAX_BYTES + 1);
+    const bytes = Buffer.alloc(maxBytes + 1);
     let length = 0;
     while (length < bytes.length) {
       const count = readSync(fd, bytes, length, bytes.length - length, null);
@@ -135,18 +138,26 @@ export function readPilotPacket(path) {
       length += count;
     }
     const after = fstatSync(fd, { bigint: true });
-    if (length > MAX_BYTES || BigInt(length) !== before.size ||
+    if (length > maxBytes || BigInt(length) !== before.size ||
         !after.isFile() || after.nlink !== 1n ||
         ["dev", "ino", "size", "mode", "mtimeNs", "ctimeNs"].some(field => before[field] !== after[field])) {
       throw Error("PACKET_INVALID");
     }
-    const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes.subarray(0, length));
-    return parsePilotPacket(text);
+    return bytes.subarray(0, length);
   } catch {
     // Never expose a supplied path, packet content, or raw filesystem error.
     throw Error("PACKET_INVALID");
   } finally {
     if (fd !== undefined) closeSync(fd);
+  }
+}
+export function readPilotPacket(path) {
+  try {
+    const bytes = readPilotBytes(path);
+    const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+    return parsePilotPacket(text);
+  } catch {
+    throw Error("PACKET_INVALID");
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
