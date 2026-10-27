@@ -4,6 +4,8 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { evaluateAuditPilotGate, readPilotBytes, REQUIRED_GATES } from "./audit-pilot-gate-evaluator.mjs";
 
+import { S3_RETENTION_PROFILE, S3RetentionError, validateS3RetentionRequirements, validateS3RetentionObservation } from "./audit-pilot-s3-retention.mjs";
+
 const ROLES = ["CUSTOMER_SECURITY", "LEGAL_RECORDS"];
 const POLICY_SCOPE = "HRBP_AUDIT_PILOT_TRUST:1";
 const SIGNATURE_SCOPE = "HRBP_AUDIT_PILOT_SIGNATURES:1";
@@ -42,13 +44,17 @@ export function pilotApprovalSigningBytes(policySha256, packetSha256, role, revi
 }
 
 function policyKeys(policy, now) {
+  const retention = policy?.schemaVersion === 2;
   if (!exact(policy, ["schemaVersion", "scope", "packetSha256", "customerReference",
-    "sourceCommitSha", "deployedWorkerVersionId", "validFromUtc", "validUntilUtc", "approvers"]) ||
-      policy.schemaVersion !== 1 || policy.scope !== POLICY_SCOPE || !sha(policy.packetSha256) ||
+    "sourceCommitSha", "deployedWorkerVersionId", "validFromUtc", "validUntilUtc", "approvers",
+      ...(retention ? ["retentionRequirements"] : [])]) ||
+      ![1, 2].includes(policy.schemaVersion) ||
+      policy.scope !== (retention ? "HRBP_AUDIT_PILOT_TRUST:2" : POLICY_SCOPE) || !sha(policy.packetSha256) ||
       !ref(policy.customerReference) || typeof policy.sourceCommitSha !== "string" ||
       !/^[a-f0-9]{40}$/.test(policy.sourceCommitSha) || typeof policy.deployedWorkerVersionId !== "string" ||
       !/^[A-Za-z0-9._:-]{8,128}$/.test(policy.deployedWorkerVersionId) ||
       !Array.isArray(policy.approvers) || policy.approvers.length !== 2) fail("TRUST_POLICY_INVALID");
+  if (retention) validateS3RetentionRequirements(policy.retentionRequirements);
   const from = date(policy.validFromUtc), until = date(policy.validUntilUtc);
   if (from === null || until === null || from > now || until <= now ||
       until <= from || until - from > NINETY_DAYS) fail("TRUST_POLICY_WINDOW_INVALID");
@@ -96,12 +102,16 @@ function signatureCheck(envelope, keys, packetSha256, policySha256) {
 export function verifyPilotEvidence(options) {
   try {
     if (!options || typeof options !== "object" || Array.isArray(options)) fail("EVIDENCE_INPUT_INVALID");
-    const { packetPath, policyPath, expectedPolicySha256, signaturesPath, evidenceDir, now = Date.now() } = options;
+    const { packetPath, policyPath, expectedPolicySha256, signaturesPath, evidenceDir, requiredRetentionProfile, now = Date.now() } = options;
     if (!Number.isSafeInteger(now) || now < 0 || !sha(expectedPolicySha256)) fail("EVIDENCE_INPUT_INVALID");
     const policyBytes = readPilotBytes(policyPath, 16 * 1024);
     if (hash(policyBytes) !== expectedPolicySha256) fail("TRUST_POLICY_DIGEST_MISMATCH");
     const policy = compactJson(policyBytes);
     const keys = policyKeys(policy, now);
+    if (requiredRetentionProfile !== undefined &&
+        (requiredRetentionProfile !== S3_RETENTION_PROFILE || policy.schemaVersion !== 2)) {
+      fail("RETENTION_PROFILE_REQUIRED");
+    }
     const packetBytes = readPilotBytes(packetPath);
     if (hash(packetBytes) !== policy.packetSha256) fail("PACKET_DIGEST_MISMATCH");
     const packet = compactJson(packetBytes);
@@ -128,23 +138,40 @@ export function verifyPilotEvidence(options) {
     })).concat(approvals.map(approval => ({
       name: `${approval.reviewerRole}.bin`, digest: approval.evidenceSha256
     })));
+    const retentionBytes = new Map();
     for (const artifact of artifacts) {
       const bytes = readPilotBytes(join(directory, artifact.name), MAX_ARTIFACT);
       if (hash(bytes) !== artifact.digest) fail("ARTIFACT_DIGEST_MISMATCH");
+      if (policy.schemaVersion === 2 && ["G04.bin", "G05.bin"].includes(artifact.name)) {
+        retentionBytes.set(artifact.name, bytes);
+      }
     }
     const after = lstatSync(directory, { bigint: true });
     if (!after.isDirectory() || ["dev", "ino", "mode", "mtimeNs", "ctimeNs"].some(field => before[field] !== after[field])) {
       fail("EVIDENCE_DIRECTORY_CHANGED");
     }
+    let retentionResult;
+    if (policy.schemaVersion === 2) {
+      // Parse the very same authenticated bytes; never reopen G04/G05 by path.
+      const observed = retentionBytes.get("G04.bin");
+      if (observed.length > 32 * 1024) fail("S3_OBSERVATION_SCHEMA_INVALID");
+      const archive = retentionBytes.get("G05.bin");
+      retentionResult = validateS3RetentionObservation(compactJson(observed), policy.retentionRequirements, {
+        now, reviewedAtUtc: packet.evidence.find(entry => entry.gate === "G04").reviewedAtUtc,
+        approvedRetentionUntilUtc: packet.approvedRetentionUntilUtc,
+        archiveSha256: hash(archive), archiveSizeBytes: archive.length
+      });
+    }
     return {
       decision: "READY_FOR_INDEPENDENT_AUTHORIZATION",
-      assuranceLevel: "PINNED_DUAL_SIGNATURES_AND_FILE_DIGESTS",
-      reasons: [], verifiedSignatures: 2, verifiedArtifacts: 12
+      assuranceLevel: retentionResult ? "PINNED_SIGNATURES_DIGESTS_AND_S3_OBSERVATION_SEMANTICS" : "PINNED_DUAL_SIGNATURES_AND_FILE_DIGESTS",
+      reasons: [], verifiedSignatures: 2, verifiedArtifacts: 12,
+      ...(retentionResult ? { retention: retentionResult } : {})
     };
   } catch (error) {
     return {
       decision: "NO_GO", assuranceLevel: "NOT_VERIFIED",
-      reasons: [error instanceof EvidenceError ? error.code : "EVIDENCE_INPUT_INVALID"],
+      reasons: [(error instanceof EvidenceError || error instanceof S3RetentionError) ? error.code : "EVIDENCE_INPUT_INVALID"],
       verifiedSignatures: 0, verifiedArtifacts: 0
     };
   }
@@ -154,9 +181,10 @@ function cliOptions(argv) {
   const flags = new Map([
     ["--packet", "packetPath"], ["--trust-policy", "policyPath"],
     ["--expected-policy-sha256", "expectedPolicySha256"],
-    ["--signatures", "signaturesPath"], ["--evidence-dir", "evidenceDir"]
+    ["--signatures", "signaturesPath"], ["--evidence-dir", "evidenceDir"],
+    ["--require-retention-profile", "requiredRetentionProfile"]
   ]);
-  if (argv.length !== flags.size * 2) fail("EVIDENCE_INPUT_INVALID");
+  if (![10, 12].includes(argv.length)) fail("EVIDENCE_INPUT_INVALID");
   const options = {};
   for (let index = 0; index < argv.length; index += 2) {
     const name = flags.get(argv[index]), value = argv[index + 1];
@@ -164,6 +192,9 @@ function cliOptions(argv) {
       fail("EVIDENCE_INPUT_INVALID");
     }
     options[name] = value;
+  }
+  if (["packetPath", "policyPath", "expectedPolicySha256", "signaturesPath", "evidenceDir"].some(name => !Object.hasOwn(options, name))) {
+    fail("EVIDENCE_INPUT_INVALID");
   }
   return options;
 }
