@@ -310,7 +310,7 @@ test("wrong controller key evidence digest and expired provider retention fail c
   try {
     chmodSync(root, 0o700);
     const fx = await fixture(root);
-    const providerRetentionUntil = new Date(exportedAt + 40 * DAY_MS).toISOString();
+    const providerRetentionUntil = new Date(exportedAt + 400 * DAY_MS).toISOString();
     const evidence = createRetentionEvidence({
       archiveDir:fx.archiveDir,
       expectedArchiveManifestSha256:fx.archiveManifestSha256,
