@@ -82,3 +82,29 @@ test("input fails on invalid JSON and oversized files",()=>{
   assert.throws(()=>parsePilotPacket("{"));
   assert.throws(()=>parsePilotPacket("x".repeat(65537)));
 });
+
+test("null or missing approvals fail closed without throwing",()=>{
+  for (const replacement of [null, undefined, false, {}, "bad"]) {
+    const p=valid();p.customerSecurityApproval=replacement;
+    assert.doesNotThrow(()=>evalPacket(p));
+    assert.equal(evalPacket(p).decision,"NO_GO");
+    assert.ok(evalPacket(p).reasons.includes("SECURITY_APPROVAL_MISSING"));
+    const q=valid();q.recordsLegalApproval=replacement;
+    assert.doesNotThrow(()=>evalPacket(q));
+    assert.ok(evalPacket(q).reasons.includes("LEGAL_APPROVAL_MISSING"));
+  }
+});
+test("unknown, null, and primitive gate records fail closed without throwing",()=>{
+  for(const replacement of [null, 2, false, "G01", {gate:"G99"}]) {
+    const p=valid();p.evidence[0]=replacement;
+    assert.doesNotThrow(()=>evalPacket(p));
+    assert.equal(evalPacket(p).decision,"NO_GO");
+  }
+});
+test("malformed packet members fail closed regardless of JS type",()=>{
+  for(const replacement of [null, [], 42, "invalid", {}]) {
+    const p=valid();p.evidence=replacement;
+    assert.doesNotThrow(()=>evalPacket(p));
+    assert.equal(evalPacket(p).decision,"NO_GO");
+  }
+});
