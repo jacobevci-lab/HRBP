@@ -106,6 +106,8 @@ Run this only after the approved on-prem application and PostgreSQL are healthy.
 
 This scan does not create an independently signed checkpoint, does not prove that past history could not have been consistently rewritten by a privileged database attacker, and does not persist interrupted-scan progress. Long-term rotation, durable progress and external trust anchors remain required under issue #215. No production audit evidence must be rewritten to obtain a green report.
 
+The scheduled audit-integrity job also records tenant-scoped verification attempts and last confirmed success. Before pilot sign-off, inspect aggregate stale/unverified counts and distinguish TAIL verification from full historical integrity; see [audit coverage](AUDIT-VERIFICATION-COVERAGE.md). A green scheduler invocation is not proof that every tenant was checked or that signed external checkpoints exist.
+
 ## Operations/game-day gates
 
 | ID | Check | Evidence / acceptance |

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { PrismaClient } from '@prisma/client';
+import { probeLogoutGet } from './logout-get-probe.mjs';
 const origin='http://localhost:3100';
 const url=new URL(process.env.DATABASE_URL||'about:blank');
 assert.equal(process.env.HRBP_DISPOSABLE_AUDIT,'true');
@@ -32,8 +33,16 @@ async function login(){return loginAs('audit.employee');}
 try{
  await db.userAccount.update({where:{id:'qa-audit-employee'},data:{active:true,localAuthEnabled:true}});
  const cookie=await login();const row=await db.userAccount.findUnique({where:{id:'qa-audit-employee'}});
- const prefetched=await http('/api/auth/logout','GET',cookie,undefined,{'next-router-prefetch':'1',rsc:'1'});
- check('Logout GET is side-effect-free',prefetched.status===405&&!prefetched.headers.get('set-cookie'));
+ const sessionBefore=await(await http('/api/auth/session','GET',cookie)).json();
+ const logoutAuditWhere={tenantId:row.tenantId,resourceId:row.id,action:'auth.session-logout'};
+ const logoutAuditsBefore=await db.auditEvent.count({where:logoutAuditWhere});
+ const logoutGet=await probeLogoutGet(http,origin,cookie);
+ const sessionAfter=await(await http('/api/auth/session','GET',cookie)).json();
+ const samePrincipal=sessionBefore.authenticated===true&&sessionAfter.authenticated===true&&
+  sessionBefore.user.id===row.id&&sessionAfter.user.id===row.id&&
+  sessionBefore.user.role===sessionAfter.user.role&&sessionBefore.user.tenantId===sessionAfter.user.tenantId;
+ const noLogoutAudit=await db.auditEvent.count({where:logoutAuditWhere})===logoutAuditsBefore;
+ check('Logout GET is side-effect-free',logoutGet.passed&&samePrincipal&&noLogoutAudit,{...logoutGet,samePrincipal,noLogoutAudit});
  const cross=await http('/api/auth/logout','POST',cookie,{}, {origin:'https://other.invalid'});
  check('Cross-origin signout rejected',cross.status===403&&!cross.headers.get('set-cookie'));
  for(const change of [{active:false},{role:'HRBP'},{localAuthEnabled:false},{localPasswordUpdatedAt:new Date()}]){

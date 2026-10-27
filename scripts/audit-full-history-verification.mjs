@@ -51,11 +51,34 @@ function report(code, eventsChecked, lastSequence) {
     lastSequence: lastSequence.toString(), scope: "FULL_READ_ONLY_SNAPSHOT" };
 }
 
-/** Requires a caller-provided query client. No writes or raw event fields are returned. */
-export async function verifyFullAuditHistory(client, input, clock = Date.now) {
+/** Requires a caller-provided query client. No writes or raw event fields are returned.
+ * Optional evidence is for the separate trusted-operator checkpoint tool only.
+ * The caller must authenticate an external anchor before supplying it here.
+ * Default report fields and the existing CLI output remain unchanged.
+ */
+export async function verifyFullAuditHistory(client, input, clock = Date.now, evidence = {}) {
   const { tenantId, maxEvents, batchSize, maxDurationMs } = auditHistoryOptions(input);
   if (!client || typeof client.query !== "function") throw new TypeError("A database client is required.");
+  const { includeVerifiedHead = false, anchor = null } = evidence;
+  if (typeof includeVerifiedHead !== "boolean" || (anchor !== null &&
+      (typeof anchor !== "object" || typeof anchor.sequence !== "string" ||
+       !/^(0|[1-9][0-9]{0,18})$/.test(anchor.sequence) ||
+       BigInt(anchor.sequence) > 9223372036854775807n ||
+       (anchor.sequence === "0" ? anchor.hash !== null : !validHash(anchor.hash))))) {
+    throw new RangeError("Invalid trusted audit checkpoint anchor.");
+  }
+  const anchorSequence = anchor === null ? null : BigInt(anchor.sequence);
   const started = clock();
+  if (!Number.isFinite(started)) throw new RangeError("Invalid audit verification clock.");
+  const expired = () => {
+    const current = clock();
+    return !Number.isFinite(current) || current < started || current - started > maxDurationMs;
+  };
+  function success(code, checked, sequence, hash) {
+    if (expired()) return report("VERIFICATION_TIME_BUDGET_EXCEEDED", checked, sequence);
+    const result = report(code, checked, sequence);
+    return includeVerifiedHead ? { ...result, verifiedHead: { sequence: sequence.toString(), hash } } : result;
+  }
   let began = false;
   try {
     await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
@@ -83,7 +106,7 @@ export async function verifyFullAuditHistory(client, input, clock = Date.now) {
     let previousHash = null;
     let checked = 0;
     while (true) {
-      if (clock() - started > maxDurationMs) return report("VERIFICATION_TIME_BUDGET_EXCEEDED", checked, sequence);
+      if (expired()) return report("VERIFICATION_TIME_BUDGET_EXCEEDED", checked, sequence);
       const limit = Math.min(batchSize, maxEvents - checked + 1);
       const page = await client.query(
         'SELECT "tenantId", "ledgerSequence", "actorId", "action", "resourceType", "resourceId", "purpose", ' +
@@ -94,6 +117,7 @@ export async function verifyFullAuditHistory(client, input, clock = Date.now) {
       if (!Array.isArray(page.rows) || page.rows.length > limit) return report("INVALID_PAGE", checked, sequence);
       if (!page.rows.length) break;
       for (const row of page.rows) {
+        if (expired()) return report("VERIFICATION_TIME_BUDGET_EXCEEDED", checked, sequence);
         if (checked >= maxEvents) return report("VERIFICATION_BUDGET_EXCEEDED", checked, sequence);
         let next;
         try { next = BigInt(row.ledgerSequence); } catch { return report("INVALID_SEQUENCE", checked, sequence); }
@@ -105,17 +129,25 @@ export async function verifyFullAuditHistory(client, input, clock = Date.now) {
         try { expectedHash = fullAuditHash(row, previousHash); }
         catch { return report("INVALID_EVENT_DATA", checked, sequence); }
         if (expectedHash !== row.hash) return report("EVENT_HASH_MISMATCH", checked, sequence);
+        // Compare at the old signed sequence, not the newer tail. Rehashing the
+        // entire database consistently must not defeat a retained external anchor.
+        if (anchorSequence === next && row.hash !== anchor.hash) {
+          return report("CHECKPOINT_HASH_MISMATCH", checked, sequence);
+        }
         checked++;
         sequence = next;
         previousHash = row.hash;
       }
     }
 
-    if (!state) return checked === 0 ? report("VALID_EMPTY", 0, 0n) : report("MISSING_LEDGER_STATE", checked, sequence);
+    if (anchorSequence !== null && sequence < anchorSequence) {
+      return report("CHECKPOINT_SEQUENCE_MISSING", checked, sequence);
+    }
+    if (!state) return checked === 0 ? success("VALID_EMPTY", 0, 0n, null) : report("MISSING_LEDGER_STATE", checked, sequence);
     if (storedCount !== sequence || state.tailHash !== previousHash) {
       return report("LEDGER_TAIL_MISMATCH", checked, sequence);
     }
-    return checked ? report("FULL_CHAIN_VERIFIED", checked, sequence) : report("VALID_EMPTY", checked, sequence);
+    return success(checked ? "FULL_CHAIN_VERIFIED" : "VALID_EMPTY", checked, sequence, previousHash);
   } finally {
     if (began) await client.query("ROLLBACK");
   }
