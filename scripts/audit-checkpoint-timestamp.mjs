@@ -150,7 +150,7 @@ export function verifyTimestampResponse({
   };
 }
 
-export function encodeTimestampEvidence(value) {
+function timestampEvidenceOf(value) {
   const keys = [
     "version","scope","algorithm","checkpointSha256","timestampResponseSha256",
     "trustStoreSha256","policyOid","timestampAt","verifiedAt"
@@ -163,7 +163,7 @@ export function encodeTimestampEvidence(value) {
       value.policyOid.length < 3 || value.policyOid.length > 128 ||
       !Number.isFinite(Date.parse(value.timestampAt)) || new Date(value.timestampAt).toISOString() !== value.timestampAt ||
       !Number.isFinite(Date.parse(value.verifiedAt)) || new Date(value.verifiedAt).toISOString() !== value.verifiedAt) fail();
-  return JSON.stringify({
+  return {
     version:1,scope:EVIDENCE_SCOPE,algorithm:"SHA256",
     checkpointSha256:value.checkpointSha256,
     timestampResponseSha256:value.timestampResponseSha256,
@@ -171,7 +171,17 @@ export function encodeTimestampEvidence(value) {
     policyOid:value.policyOid,
     timestampAt:value.timestampAt,
     verifiedAt:value.verifiedAt
-  })+"\n";
+  };
+}
+export function encodeTimestampEvidence(value) {
+  return JSON.stringify(timestampEvidenceOf(value))+"\n";
+}
+export function parseTimestampEvidence(text) {
+  if (typeof text !== "string" || Buffer.byteLength(text) > 32 * 1024) fail();
+  let value;
+  try { value = timestampEvidenceOf(JSON.parse(text)); } catch { fail(); }
+  if (text !== encodeTimestampEvidence(value)) fail();
+  return value;
 }
 
 function integer(value,min,max) {
