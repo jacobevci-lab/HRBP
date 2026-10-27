@@ -1,0 +1,28 @@
+name: Audit Pilot Gate
+
+on:
+  pull_request: {}
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hrbp-audit-pilot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit-pilot-gate:
+    name: Audit pilot evidence preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Verify offline pilot evidence and CI contract
+        run: npm run audit-pilot:validate

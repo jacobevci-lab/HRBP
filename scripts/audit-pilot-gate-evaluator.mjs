@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { closeSync, constants, fstatSync, openSync, readSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
 export const REQUIRED_GATES = Object.freeze([
@@ -55,7 +55,8 @@ export function evaluateAuditPilotGate(packet, { now = Date.now() } = {}) {
   const retention = date(packet.approvedRetentionUntilUtc);
   if (decisionAt === null || decisionAt > now || now - decisionAt > MAX_AGE_MS ||
       nextReview === null || nextReview <= now || nextReview <= decisionAt ||
-      retention === null || retention <= now) reasons.push("DECISION_WINDOW_INVALID");
+      retention === null || retention <= now || nextReview > retention ||
+      nextReview - decisionAt > MAX_AGE_MS) reasons.push("DECISION_WINDOW_INVALID");
 
   const entries = packet.evidence;
   let passCount = 0;
@@ -69,17 +70,19 @@ export function evaluateAuditPilotGate(packet, { now = Date.now() } = {}) {
       if (!keys(e,["gate","status","sha256","controlledLocator","reviewerRole","reviewerReference","reviewedAtUtc","evidenceType"]) ||
           !DECISIONS.has(e.status) || !sha(e.sha256) ||
           !ref(e.controlledLocator) || !ref(e.reviewerReference) ||
-          typeof e.reviewerRole !== "string" || e.reviewerRole.length < 4 ||
+          typeof e.reviewerRole !== "string" || !/^[A-Z][A-Z0-9_]{3,63}$/.test(e.reviewerRole) ||
           !ref(e.evidenceType) || date(e.reviewedAtUtc) === null ||
-          date(e.reviewedAtUtc) > now || now - date(e.reviewedAtUtc) > MAX_AGE_MS) {
+          date(e.reviewedAtUtc) > now || now - date(e.reviewedAtUtc) > MAX_AGE_MS ||
+          (decisionAt !== null && date(e.reviewedAtUtc) > decisionAt)) {
         reasons.push(gate + "_EVIDENCE_INVALID");
       } else if (e.status !== "PASS") {
         reasons.push(gate + "_NOT_PASS");
       } else {
-        passCount++;
+        const before = reasons.length;
         if (gate === "G01" && e.evidenceType !== "DEPLOYED_REVISION_READBACK") reasons.push("G01_PROVENANCE_TYPE_INVALID");
         if (gate === "G03" && e.evidenceType !== "APPROVED_TSA_RFC3161") reasons.push("G03_TSA_TYPE_INVALID");
         if (gate === "G04" && e.evidenceType !== "INDEPENDENT_PROVIDER_LOCK_READBACK") reasons.push("G04_PROVIDER_PROOF_MISSING");
+        if (reasons.length === before) passCount++;
       }
     }
   }
@@ -89,6 +92,17 @@ export function evaluateAuditPilotGate(packet, { now = Date.now() } = {}) {
   if (!approved(legal,now) || legal?.reviewerRole !== "LEGAL_RECORDS") reasons.push("LEGAL_APPROVAL_MISSING");
   if (approved(sec,now) && approved(legal,now) &&
       sec.reviewerReference === legal.reviewerReference) reasons.push("APPROVAL_SEPARATION_MISSING");
+  // Approval metadata may not predate any evidence it purports to approve.
+  // This checks declaration chronology, not authenticity of the local timestamps.
+  if (decisionAt !== null && Array.isArray(entries) && entries.length === REQUIRED_GATES.length) {
+    const latestReview = Math.max(-Infinity, ...entries.map(e => date(e?.reviewedAtUtc) ?? -Infinity));
+    for (const [name, approval] of [["SECURITY", sec], ["LEGAL", legal]]) {
+      if (approved(approval, now) &&
+          (date(approval.approvedAtUtc) < latestReview || date(approval.approvedAtUtc) > decisionAt)) {
+        reasons.push(name + "_APPROVAL_SEQUENCE_INVALID");
+      }
+    }
+  }
   return { decision:reasons.length ? "NO_GO" : "READY_FOR_INDEPENDENT_AUTHORIZATION",
     reasons, passCount };
 }
@@ -96,10 +110,49 @@ export function parsePilotPacket(input) {
   if (typeof input !== "string" || Buffer.byteLength(input) > MAX_BYTES) throw Error("PACKET_INVALID");
   try { return JSON.parse(input); } catch { throw Error("PACKET_INVALID"); }
 }
+/**
+ * POSIX operator-host reader. Bound allocation and bytes read BEFORE JSON parsing.
+ * Final-component symlinks, hard links and non-regular files are refused. Parent
+ * directories must remain operator-controlled; this is not a sandbox or file lock.
+ */
+export function readPilotPacket(path) {
+  let fd;
+  try {
+    if (typeof path !== "string" || !path || path.includes("\0") ||
+        !Number.isInteger(constants.O_NOFOLLOW) || !Number.isInteger(constants.O_NONBLOCK)) {
+      throw Error("PACKET_INVALID");
+    }
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    const before = fstatSync(fd, { bigint: true });
+    if (!before.isFile() || before.nlink !== 1n || before.size < 1n || before.size > BigInt(MAX_BYTES)) {
+      throw Error("PACKET_INVALID");
+    }
+    const bytes = Buffer.alloc(MAX_BYTES + 1);
+    let length = 0;
+    while (length < bytes.length) {
+      const count = readSync(fd, bytes, length, bytes.length - length, null);
+      if (count === 0) break;
+      length += count;
+    }
+    const after = fstatSync(fd, { bigint: true });
+    if (length > MAX_BYTES || BigInt(length) !== before.size ||
+        !after.isFile() || after.nlink !== 1n ||
+        ["dev", "ino", "size", "mode", "mtimeNs", "ctimeNs"].some(field => before[field] !== after[field])) {
+      throw Error("PACKET_INVALID");
+    }
+    const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes.subarray(0, length));
+    return parsePilotPacket(text);
+  } catch {
+    // Never expose a supplied path, packet content, or raw filesystem error.
+    throw Error("PACKET_INVALID");
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     if (process.argv.length !== 3) throw Error("PACKET_INVALID");
-    const result = evaluateAuditPilotGate(parsePilotPacket(readFileSync(process.argv[2],"utf8")));
+    const result = evaluateAuditPilotGate(readPilotPacket(process.argv[2]));
     console.log(JSON.stringify(result));
     if (result.decision !== "READY_FOR_INDEPENDENT_AUTHORIZATION") process.exitCode = 1;
   } catch {
