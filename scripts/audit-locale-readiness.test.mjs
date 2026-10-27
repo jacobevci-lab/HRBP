@@ -118,6 +118,25 @@ test('time decision browser uses deterministic locale readiness instead of netwo
   assert.match(source, /waitForNavigation\(\{waitUntil:"domcontentloaded",timeout:15000\}\)/);
 });
 
+test('primary platform sweep uses deterministic page readiness instead of network idleness', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('./platform-audit.mjs', import.meta.url), 'utf8');
+  assert.match(source, /import \{ waitForAuditLocale \} from '\.\/audit-locale-readiness\.mjs'/);
+  assert.ok(!source.includes('networkidle'), 'Primary platform acceptance must not wait for global network silence');
+  assert.match(source, /page\.goto\(origin\+path,\{waitUntil:'domcontentloaded',timeout:20000\}\)/);
+  assert.match(source, /page\.goto\(origin\+path,\{waitUntil:'domcontentloaded',timeout:15000\}\)/);
+  assert.match(source, /path==='\/auth\/sign-in'[\s\S]*?page\.locator\('\.auth-screen'\)\.waitFor\(\{state:'visible',timeout:10000\}\)/,
+    'Sign-in readiness must observe the real auth screen');
+  assert.match(source, /app-shell\[data-session-loading="false"\]/,
+    'Authenticated routes must wait for the settled session shell');
+  assert.match(source, /waitForAuditLocale\(page,path,'en'\)/,
+    'Routes with locale controls must observe deterministic English locale completion');
+  assert.match(source, /waitForPrimaryAuditReady\(page,path,role\)/,
+    'Desktop sweep must use the shared readiness helper');
+  assert.match(source, /waitForPrimaryAuditReady\(page,path,'admin'\)/,
+    'Mobile sweep must use the same readiness helper');
+});
+
 test('readiness tests and existing fail-closed browser stages remain mandatory', async () => {
   const { readFile } = await import('node:fs/promises');
   const source = await readFile(new URL('../.github/workflows/platform-regression.yml', import.meta.url), 'utf8');
