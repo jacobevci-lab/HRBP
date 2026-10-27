@@ -8,7 +8,7 @@ const plugin = configRequire('@next/eslint-plugin-next');
 const errors = ['inline-script-id','no-assign-module-variable','no-document-import-in-page','no-duplicate-head','no-head-import-in-document','no-script-component-in-head'];
 const warnings = ['google-font-display','google-font-preconnect','next-script-for-ga','no-async-client-component','no-before-interactive-script-outside-document','no-css-tags','no-head-element','no-html-link-for-pages','no-img-element','no-page-custom-font','no-styled-jsx-in-document','no-sync-scripts','no-title-in-document-head','no-typos','no-unwanted-polyfillio'];
 assert.deepEqual(Object.keys(plugin.rules).sort(), [...errors,...warnings].sort());
-assert.match(require('next/package.json').version,/^15\./,'Do not downgrade the application to remove a tooling dependency.');
+assert.match(require('next/package.json').version,/^16\./,'The application must remain on the supported Next 16 runtime line.');
 assert.match(require('eslint-config-next/package.json').version,/^15\./,'Keep React/TypeScript configuration on the existing major.');
 const actual = await new ESLint().calculateConfigForFile('components/session-indicator.tsx');
 for (const name of [...errors,...warnings]) {
@@ -17,6 +17,13 @@ for (const name of [...errors,...warnings]) {
   assert.equal(actual.rules[key][0],expected,`${key} severity must not be weakened`);
 }
 assert.ok(actual.plugins.react&&actual.plugins['@typescript-eslint'],'Existing React and TypeScript plugins must remain loaded.');
+const actualEngine = new ESLint();
+const [actualReturnFixture] = await actualEngine.lintText(
+  'export default function Page(){ return null; }',
+  { filePath: 'app/lint-compat-return-fixture.jsx' }
+);
+assert.ok(!actualReturnFixture.messages.some(x=>x.fatal),
+  'Actual project config must parse and execute Next rules on return statements without an engine crash.');
 const engine = new ESLint({overrideConfigFile:true,overrideConfig:[{files:['**/*.jsx'],languageOptions:{ecmaVersion:'latest',sourceType:'module',parserOptions:{ecmaFeatures:{jsx:true}}},plugins:{'@next/next':plugin},rules:{...plugin.configs.recommended.rules,...plugin.configs['core-web-vitals'].rules}}]});
 for (const [rule,code] of [
  ['no-assign-module-variable','let module = {};'],
@@ -27,4 +34,4 @@ for (const [rule,code] of [
  assert.ok(result.messages.some(x=>x.ruleId==='@next/next/'+rule),`${rule} must execute and reject its fixture`);
  assert.ok(!result.messages.some(x=>x.fatal), 'The fixture must parse successfully.');
 }
-console.log('Lint compatibility: 21 rules/severities, existing config, Next 15 and three ESLint 9 behavior fixtures verified.');
+console.log('Lint compatibility: 21 rules/severities, actual return-path config execution, Next 16 and three ESLint 9 behavior fixtures verified.');

@@ -6,12 +6,22 @@ import { execFileSync } from 'node:child_process';
 import ts from 'typescript';
 import { chromium } from 'playwright';
 import { PrismaClient, PlatformRole } from '@prisma/client';
+import { waitForAuditLocale } from './audit-locale-readiness.mjs';
 const origin='http://localhost:3100';
 const url=new URL(process.env.DATABASE_URL||'about:blank');
 if(process.env.HRBP_DISPOSABLE_AUDIT!=='true'||!['localhost','127.0.0.1'].includes(url.hostname)||url.pathname!=='/hrbp_audit') throw Error('Disposable loopback hrbp_audit database required');
 const out='.audit'; await mkdir(out,{recursive:true});
 const report={source:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),testedCommit:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),generatedAt:new Date().toISOString(),inventory:{},checks:[],pages:[],links:[],controls:[],uiChecks:[],limitations:['Only disposable seeded data; not production or external-provider verification.','API enumeration checks authorization and invalid input, not every valid transition.','Page renders and links do not prove every enabled button works.','Only explicitly listed workflows receive happy-path write verification.','External providers and links are not contacted.']};
 const emit=(category,data)=>{report.checks.push({category,...data});console.log('AUDIT_CHECK '+JSON.stringify({category,...data}));};
+async function waitForPrimaryAuditReady(page,path,role){
+ if(path==='/auth/sign-in'){
+  await page.locator('.auth-screen').waitFor({state:'visible',timeout:10000});
+  return;
+ }
+ if(role!=='anonymous')await page.locator('.app-shell[data-session-loading="false"]').waitFor({state:'visible',timeout:10000});
+ if(await page.locator('.locale-toggle').count())await waitForAuditLocale(page,path,'en');
+ else await page.locator('body').waitFor({state:'visible',timeout:10000});
+}
 const req=createRequire(import.meta.url);
 function loadTS(file){const code=ts.transpileModule(execFileSync('cat',[file],{encoding:'utf8'}),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const m={exports:{}};new Function('require','module','exports',code)(req,m,m.exports);return m.exports;}
 async function walk(dir){const entries=await readdir(dir,{withFileTypes:true});return(await Promise.all(entries.map(x=>x.isDirectory()?walk(`${dir}/${x.name}`):[`${dir}/${x.name}`]))).flat();}
@@ -82,8 +92,8 @@ try{
   for(const path of [...new Set(routes)]){
    errors=[];failures=[];const start=Date.now();
    try{
-    const response=await page.goto(origin+path,{waitUntil:'networkidle',timeout:20000});
-    await page.locator('.app-shell[data-session-loading="false"]').waitFor({timeout:3000}).catch(()=>{});
+    const response=await page.goto(origin+path,{waitUntil:'domcontentloaded',timeout:20000});
+    await waitForPrimaryAuditReady(page,path,role);
     const dom=await page.evaluate(()=>{const area=document.querySelector('.page-content')||document.body,text=area.innerText||'';return{title:document.title,heading:area.querySelector('h1,h2')?.textContent?.trim().slice(0,120),textSize:text.length,fallback:/could not|unable to|unavailable|failed to|yüklenemedi|erişilemiyor/i.test(text),denied:/access denied|not authorized|not permitted|permission|yetkiniz yok|erişim reddedildi/i.test(text),overflow:document.documentElement.scrollWidth>innerWidth+2,buttons:area.querySelectorAll('button').length,disabledButtons:area.querySelectorAll('button:disabled').length,unnamedButtons:[...area.querySelectorAll('button')].filter(e=>!e.textContent.trim()&&!e.getAttribute('aria-label')&&!e.getAttribute('title')).length,links:[...document.querySelectorAll('a[href]')].map(a=>({href:a.getAttribute('href'),text:a.textContent.trim().slice(0,80)}))};});
     const row={role,path,status:response?.status(),ms:Date.now()-start,...dom,errors:[...new Set(errors)],serverFailures:failures};delete row.links;report.pages.push(row);
     if(role==='admin'||role==='anonymous')for(const link of dom.links)if(link.href?.startsWith('/')&&!link.href.startsWith('//'))linkSet.set(`${role}:${link.href}`,{role,...link,source:path});
@@ -98,7 +108,7 @@ try{
   }
   if(role==='admin'){
    await page.setViewportSize({width:390,height:844});
-   for(const path of [...new Set(routes)].filter(x=>x!=='/auth/sign-in')){try{const r=await page.goto(origin+path,{waitUntil:'networkidle',timeout:15000});const m=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth+2,width:document.documentElement.scrollWidth,viewport:innerWidth}));report.pages.push({role:'admin-mobile',path,status:r?.status(),...m});}catch(e){report.pages.push({role:'admin-mobile',path,status:0,error:e.name});}}
+   for(const path of [...new Set(routes)].filter(x=>x!=='/auth/sign-in')){try{const r=await page.goto(origin+path,{waitUntil:'domcontentloaded',timeout:15000});await waitForPrimaryAuditReady(page,path,'admin');const m=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth+2,width:document.documentElement.scrollWidth,viewport:innerWidth}));report.pages.push({role:'admin-mobile',path,status:r?.status(),...m});}catch(e){report.pages.push({role:'admin-mobile',path,status:0,error:e.name});}}
   }
   await context.close();
  }
