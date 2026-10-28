@@ -1,0 +1,155 @@
+name: Stacked Integration
+
+# Validate integration before a stacked change reaches main. The existing main
+# CI, release, platform and security workflows remain independent and unchanged.
+on:
+  pull_request:
+    branches-ignore: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hrbp-stacked-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  application:
+    name: Stacked application and PostgreSQL
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      DATABASE_URL: postgresql://hrbp:hrbp@localhost:5432/hrbp
+      HRBP_MAINTENANCE_TOKEN: ci-maintenance-token-1234567890
+      HRBP_DOCUMENT_SCAN_TOKEN: ci-document-scan-token-1234567890
+      HRBP_METRICS_TOKEN: ci-metrics-token-12345678901234567890
+      HRBP_SCIM_TOKEN: ci-scim-token-123456789012345678901234
+      HRBP_SCIM_TOKEN_PREVIOUS: ci-scim-previous-token-123456789012345678
+      HRBP_AUTH_TENANT_ID: ci-tenant
+      HRBP_ALLOWED_EMAIL_DOMAINS: example.test
+      HRBP_SCIM_ENABLED: "true"
+      HRBP_SCIM_ALLOW_UNMANAGED_ADOPTION: "true"
+      HRBP_AUDIT_FULL_HISTORY_PAGE_SIZE: "2"
+      HRBP_AUDIT_FULL_HISTORY_INTERVAL_HOURS: "168"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - name: Checkout PR merge candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up repository Node version
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - name: Verify stacked workflow contract
+        run: node --test scripts/stacked-integration-ci.test.mjs
+      - name: Record tested source identities
+        env:
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          MERGE_SHA: ${{ github.sha }}
+        run: |
+          node --input-type=module -e '
+            for (const name of ["CANDIDATE_SHA", "BASE_SHA", "MERGE_SHA"]) {
+              const sha = process.env[name];
+              if (!/^[a-f0-9]{40}$/.test(sha ?? "")) process.exit(1);
+              console.log(`${name}=${sha}`);
+            }
+          '
+          test "$(git rev-parse HEAD)" = "$MERGE_SHA"
+      - name: Install committed dependency graph
+        run: npm ci
+      - name: Start disposable PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql postgresql-contrib
+          fi
+          sudo systemctl start postgresql
+          ready=0
+          for i in {1..30}; do
+            if sudo -u postgres pg_isready >/dev/null 2>&1; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='hrbp'" | grep -q 1; then
+            sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE hrbp LOGIN PASSWORD 'hrbp' CREATEDB"
+          else
+            sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER ROLE hrbp WITH LOGIN PASSWORD 'hrbp' CREATEDB"
+          fi
+          if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_database WHERE datname='hrbp'" | grep -q 1; then
+            sudo -u postgres createdb -O hrbp hrbp
+          fi
+          PGPASSWORD=hrbp psql -h 127.0.0.1 -U hrbp -d hrbp -v ON_ERROR_STOP=1 -c 'SELECT 1'
+      - name: Validate Prisma schema
+        run: npx --no-install prisma validate
+      - name: Verify versioned migration lifecycle
+        run: npm run db:migrate:verify
+      - name: Prepare disposable database from committed migrations
+        run: npm run db:migrate:upgrade
+      - name: Exercise audit integrity on PostgreSQL
+        env:
+          HRBP_DISPOSABLE_AUDIT_LEDGER_TEST: "true"
+        run: |
+          node --test scripts/audit-ledger-concurrency.test.mjs
+          node --test scripts/audit-full-history-postgres.test.mjs
+          node --test scripts/audit-assurance-rehearsal.postgres.test.mjs
+          node --test scripts/audit-verification-progress.postgres.test.mjs
+      - name: Exercise governed lifecycle and identity transactions
+        run: |
+          node --test scripts/job-change-impact-preview.postgres.test.mjs
+          node --test scripts/scheduled-job-changes.postgres.test.mjs
+          node --test scripts/emergency-access.postgres.test.mjs
+          node --test scripts/identity-provider-lifecycle.postgres.test.mjs
+      - name: Type-check application
+        run: npm run typecheck
+      - name: Build application with all existing prebuild checks
+        run: npm run build
+      - name: Build OpenNext Cloudflare bundle
+        run: npm run cf:build
+      - name: Validate Worker packaging without publishing
+        run: npx --no-install wrangler deploy --dry-run
+
+  dependencies:
+    name: Stacked dependency security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout PR merge candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up repository Node version
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .node-version
+      - name: Verify stacked workflow contract
+        run: node --test scripts/stacked-integration-ci.test.mjs
+      - name: Install committed dependency graph
+        run: npm ci
+      - name: Audit production dependency graph
+        run: npm run security:audit:prod
+      - name: Audit complete dependency graph
+        run: npm run security:audit:full
+
+  result:
+    name: Stacked integration result
+    needs: [application, dependencies]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require every integration job to succeed
+        env:
+          APPLICATION_RESULT: ${{ needs.application.result }}
+          DEPENDENCIES_RESULT: ${{ needs.dependencies.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$APPLICATION_RESULT" = success
+          test "$DEPENDENCIES_RESULT" = success
