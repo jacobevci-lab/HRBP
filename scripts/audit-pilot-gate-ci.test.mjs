@@ -5,9 +5,9 @@ import test from "node:test";
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const workflow = readFileSync(new URL("../.github/workflows/audit-pilot-gate.yml", import.meta.url), "utf8");
 
-test("the pilot validation command executes all four test suites without optional failure", () => {
+test("the pilot validation command executes all five test suites without optional failure", () => {
   assert.equal(pkg.scripts["audit-pilot:validate"],
-    "node --test scripts/audit-pilot-gate-evaluator.test.mjs scripts/audit-pilot-gate-ci.test.mjs scripts/audit-pilot-s3-retention.test.mjs scripts/audit-pilot-s3-collector.test.mjs");
+    "node --test scripts/audit-pilot-gate-evaluator.test.mjs scripts/audit-pilot-gate-ci.test.mjs scripts/audit-pilot-s3-retention.test.mjs scripts/audit-pilot-s3-collector.test.mjs scripts/audit-pilot-s3-readback.test.mjs");
 });
 
 test("production prebuild retains the mandatory pilot validation chain", () => {

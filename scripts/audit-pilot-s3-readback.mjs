@@ -10,12 +10,66 @@ export class S3ReadbackError extends Error {
 function requireCondition(condition, code = "COLLECTION_INPUT_INVALID") {
   if (!condition) throw new S3ReadbackError(code);
 }
+const MAX_JSON_BYTES = 64 * 1024;
+const MAX_JSON_DEPTH = 32;
+const MAX_JSON_TOKENS = 8192;
+/** Inspect the original token stream before JSON.parse can discard duplicate names.
+ * This is a bounded lexical guard, NOT a replacement JSON grammar or canonicalizer.
+ * Native JSON.parse still validates grammar and constructs values. Decoded names
+ * are compared per object, including objects in arrays and escaped spellings.
+ */
+function guardJsonTokens(text) {
+  const token = /"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|true|false|null|[{}\[\]:,]/y;
+  const whitespace = /[ \t\r\n]*/y;
+  const containers = [];
+  let offset = 0, count = 0;
+  while (offset < text.length) {
+    whitespace.lastIndex = offset;
+    whitespace.exec(text);
+    offset = whitespace.lastIndex;
+    if (offset === text.length) break;
+    token.lastIndex = offset;
+    const match = token.exec(text);
+    requireCondition(match !== null && ++count <= MAX_JSON_TOKENS, "COLLECTION_JSON_INVALID");
+    const lexeme = match[0];
+    offset = token.lastIndex;
+    if (lexeme === "{" || lexeme === "[") {
+      requireCondition(containers.length < MAX_JSON_DEPTH, "COLLECTION_JSON_INVALID");
+      containers.push({ kind: lexeme, names: new Set() });
+    } else if (lexeme === "}" || lexeme === "]") {
+      requireCondition(containers.at(-1)?.kind === (lexeme === "}" ? "{" : "["), "COLLECTION_JSON_INVALID");
+      containers.pop();
+    } else if (lexeme.startsWith('"')) {
+      const decoded = JSON.parse(lexeme);
+      requireCondition(decoded.isWellFormed(), "COLLECTION_JSON_INVALID");
+      whitespace.lastIndex = offset;
+      whitespace.exec(text);
+      if (text[whitespace.lastIndex] === ":") {
+        const parent = containers.at(-1);
+        requireCondition(parent?.kind === "{" && !parent.names.has(decoded), "COLLECTION_JSON_INVALID");
+        parent.names.add(decoded);
+      }
+    } else if (/^[-0-9]/.test(lexeme)) {
+      requireCondition(Number.isFinite(Number(lexeme)), "COLLECTION_JSON_INVALID");
+    }
+  }
+  requireCondition(containers.length === 0, "COLLECTION_JSON_INVALID");
+}
 export function parseS3CollectionJson(bytes, compact = false) {
-  const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-  const value = JSON.parse(text);
-  requireCondition(object(value) && (!compact || text === JSON.stringify(value) + "\n"), "COLLECTION_JSON_INVALID");
-  requireCondition(!Object.hasOwn(value, "Error") && !Object.hasOwn(value, "Errors"), "AWS_RESPONSE_INVALID");
-  return value;
+  try {
+    requireCondition(bytes instanceof Uint8Array && bytes.byteLength > 0 && bytes.byteLength <= MAX_JSON_BYTES &&
+      typeof compact === "boolean", "COLLECTION_JSON_INVALID");
+    const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+    guardJsonTokens(text);
+    const value = JSON.parse(text);
+    requireCondition(object(value) && (!compact || text === JSON.stringify(value) + "\n"), "COLLECTION_JSON_INVALID");
+    requireCondition(!Object.hasOwn(value, "Error") && !Object.hasOwn(value, "Errors"), "AWS_RESPONSE_INVALID");
+    return value;
+  } catch (error) {
+    if (error instanceof S3ReadbackError) throw error;
+    // Native syntax/UTF-8 errors may contain input snippets; never expose them.
+    throw new S3ReadbackError("COLLECTION_JSON_INVALID");
+  }
 }
 function timestamp(value) {
   // CLI v2 ISO8601 UTC output only. Do not infer missing dates or silently roll invalid calendar days.
