@@ -5,9 +5,9 @@ import test from "node:test";
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const workflow = readFileSync(new URL("../.github/workflows/audit-pilot-gate.yml", import.meta.url), "utf8");
 
-test("the pilot validation command executes all six test suites without optional failure", () => {
+test("the pilot validation command executes all seven test suites without optional failure", () => {
   assert.equal(pkg.scripts["audit-pilot:validate"],
-    "node --test scripts/audit-pilot-gate-evaluator.test.mjs scripts/audit-pilot-gate-ci.test.mjs scripts/audit-pilot-s3-retention.test.mjs scripts/audit-pilot-s3-collector.test.mjs scripts/audit-pilot-s3-readback.test.mjs scripts/audit-pilot-current-trust.test.mjs");
+    "node --test scripts/audit-pilot-gate-evaluator.test.mjs scripts/audit-pilot-gate-ci.test.mjs scripts/audit-pilot-s3-retention.test.mjs scripts/audit-pilot-s3-collector.test.mjs scripts/audit-pilot-s3-readback.test.mjs scripts/audit-pilot-current-trust.test.mjs scripts/audit-pilot-verify.test.mjs");
 });
 
 test("production prebuild retains the mandatory pilot validation chain", () => {
@@ -29,4 +29,8 @@ test("the offline job needs no installation, deployment credentials or writable 
   assert.match(workflow, /^          persist-credentials: false$/m);
   assert.match(workflow, /^          node-version-file: \.node-version$/m);
   assert.doesNotMatch(workflow, /secrets\.|: write\b|npm (ci|install)\b|wrangler|cf:deploy|workflow_run:/);
+});
+
+test("the operator command uses the strict verifier rather than the optional-profile primitive", () => {
+  assert.equal(pkg.scripts["audit-pilot:verify"], "node scripts/audit-pilot-verify.mjs");
 });
