@@ -1,7 +1,8 @@
 name: Stacked Integration
 
 # Validate integration before a stacked change reaches main. The existing main
-# CI, release, platform and security workflows remain independent and unchanged.
+# CI, release and security gates remain independent. Reuse the existing platform
+# regression suite at this same commit; do not maintain a reduced stacked copy.
 on:
   pull_request:
     branches-ignore: [main]
@@ -145,9 +146,15 @@ jobs:
       - name: Audit complete dependency graph
         run: npm run security:audit:full
 
+  platform:
+    name: Stacked browser and platform regression
+    uses: ./.github/workflows/platform-regression.yml
+    permissions:
+      contents: read
+
   result:
     name: Stacked integration result
-    needs: [application, dependencies]
+    needs: [application, dependencies, platform]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -156,8 +163,10 @@ jobs:
         env:
           APPLICATION_RESULT: ${{ needs.application.result }}
           DEPENDENCIES_RESULT: ${{ needs.dependencies.result }}
+          PLATFORM_RESULT: ${{ needs.platform.result }}
         shell: bash
         run: |
           set -euo pipefail
           test "$APPLICATION_RESULT" = success
           test "$DEPENDENCIES_RESULT" = success
+          test "$PLATFORM_RESULT" = success

@@ -6,16 +6,17 @@ import test from "node:test";
 // Declarative regression checks, not a YAML parser or a runtime security sandbox.
 const workflow = readFileSync(new URL("../.github/workflows/stacked-integration.yml", import.meta.url), "utf8");
 const application = workflow.split("  application:\n")[1]?.split("\n  dependencies:\n")[0];
-const dependencies = workflow.split("  dependencies:\n")[1]?.split("\n  result:\n")[0];
+const dependencies = workflow.split("  dependencies:\n")[1]?.split("\n  platform:\n")[0];
+const platform = workflow.split("\n  platform:\n")[1]?.split("\n  result:\n")[0];
 const result = workflow.split("\n  result:\n")[1];
 const checkout = "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803";
 const setup = "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38";
 
-test("stacked PRs trigger integration without altering the independent main workflows", () => {
+test("stacked PRs require integration and the shared platform suite before main", () => {
   assert.match(workflow, /^on:\n  pull_request:\n    branches-ignore: \[main\]\n/m);
   assert.doesNotMatch(workflow, /^\s*(pull_request_target|push|workflow_run|paths|paths-ignore):/m);
   assert.deepEqual([...workflow.matchAll(/^  ([a-z]+):\n    name:/gm)].map(match => match[1]),
-    ["application", "dependencies", "result"]);
+    ["application", "dependencies", "platform", "result"]);
   assert.match(workflow, /^  group: hrbp-stacked-integration-\$\{\{ github.ref \}\}$/m);
 });
 
@@ -80,26 +81,43 @@ test("production and development dependency audits are separate from build succe
 });
 
 test("the aggregate result runs even on failed or skipped dependencies", () => {
-  assert.match(result, /^    needs: \[application, dependencies\]$/m);
+  assert.match(result, /^    needs: \[application, dependencies, platform\]$/m);
   assert.match(result, /^    if: \$\{\{ always\(\) \}\}$/m);
   assert.match(result, /^    timeout-minutes: 2$/m);
   assert.match(result, /^          APPLICATION_RESULT: \$\{\{ needs.application.result \}\}$/m);
   assert.match(result, /^          DEPENDENCIES_RESULT: \$\{\{ needs.dependencies.result \}\}$/m);
+  assert.match(result, /^          PLATFORM_RESULT: \$\{\{ needs.platform.result \}\}$/m);
   assert.doesNotMatch(result, /^\s*(uses|continue-on-error):/m);
 });
 
-test("actual aggregate shell rejects every failure, cancellation, skip or unknown result", () => {
+test("platform reuses the same-commit suite without inputs, secrets or skip conditions", () => {
+  assert.equal(platform.trim(), [
+    "name: Stacked browser and platform regression",
+    "    uses: ./.github/workflows/platform-regression.yml",
+    "    permissions:",
+    "      contents: read"
+  ].join("\n"));
+});
+
+test("actual aggregate shell rejects all 215 non-success combinations", () => {
   const shell = result.split("        run: |\n")[1].split("\n").map(line => line.slice(10)).join("\n");
-  assert.equal(shell.trim(), 'set -euo pipefail\ntest "$APPLICATION_RESULT" = success\ntest "$DEPENDENCIES_RESULT" = success');
-  for (const application of ["success", "failure", "cancelled", "skipped", "", "unknown"]) {
-    for (const dependencies of ["success", "failure", "cancelled", "skipped", "", "unknown"]) {
-      const child = spawnSync("/bin/bash", ["--noprofile", "--norc", "-c", shell], {
-        env: { PATH: "/usr/bin:/bin", APPLICATION_RESULT: application, DEPENDENCIES_RESULT: dependencies },
-        timeout: 2000, maxBuffer: 4096, encoding: "utf8"
-      });
-      assert.equal(child.error, undefined);
-      assert.equal(child.signal, null);
-      assert.equal(child.status, application === "success" && dependencies === "success" ? 0 : 1);
+  assert.equal(shell.trim(), 'set -euo pipefail\ntest "$APPLICATION_RESULT" = success\ntest "$DEPENDENCIES_RESULT" = success\ntest "$PLATFORM_RESULT" = success');
+  const outcomes = ["success", "failure", "cancelled", "skipped", "", "unknown"];
+  let checked = 0;
+  for (const application of outcomes) {
+    for (const dependencies of outcomes) {
+      for (const platform of outcomes) {
+        const child = spawnSync("/bin/bash", ["--noprofile", "--norc", "-c", shell], {
+          env: { PATH: "/usr/bin:/bin", APPLICATION_RESULT: application,
+            DEPENDENCIES_RESULT: dependencies, PLATFORM_RESULT: platform },
+          timeout: 2000, maxBuffer: 4096, encoding: "utf8"
+        });
+        assert.equal(child.error, undefined);
+        assert.equal(child.signal, null);
+        assert.equal(child.status, [application, dependencies, platform].every(value => value === "success") ? 0 : 1);
+        checked++;
+      }
     }
   }
+  assert.equal(checked, 216);
 });
