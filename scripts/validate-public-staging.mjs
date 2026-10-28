@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 
 async function source(path) {
   return readFile(path, "utf8");
@@ -54,6 +55,17 @@ for (const [path, workspacePattern] of sharedPublicPages) {
 if (checks.length) {
   console.error("Public staging contract validation failed:\n");
   for (const check of checks) console.error(`- ${check}`);
+  process.exit(1);
+}
+
+// Preserve the existing route/isolation gates and also exercise rendered preview
+// controls. A failed, killed or unstarted child suite must fail production prebuild.
+const previewTests = spawnSync(process.execPath, ["--test", "scripts/public-core-preview.test.mjs"], {
+  stdio: "inherit",
+  timeout: 30_000
+});
+if (previewTests.error || previewTests.signal || previewTests.status !== 0) {
+  console.error("Public core preview action checks failed.");
   process.exit(1);
 }
 
