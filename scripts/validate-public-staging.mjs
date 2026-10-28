@@ -60,12 +60,12 @@ if (checks.length) {
 
 // Preserve the existing route/isolation gates and also exercise rendered preview
 // controls. A failed, killed or unstarted child suite must fail production prebuild.
-const previewTests = spawnSync(process.execPath, ["--test", "scripts/public-core-preview.test.mjs"], {
+const previewTests = spawnSync(process.execPath, ["--test", "scripts/public-core-preview.test.mjs", "scripts/public-secondary-previews.test.mjs"], {
   stdio: "inherit",
   timeout: 30_000
 });
 if (previewTests.error || previewTests.signal || previewTests.status !== 0) {
-  console.error("Public core preview action checks failed.");
+  console.error("Public preview action checks failed.");
   process.exit(1);
 }
 

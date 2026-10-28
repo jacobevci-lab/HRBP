@@ -186,7 +186,7 @@ test("the mandatory staging validator runs this suite with Node, no shell, and a
   assert.equal(result.seen.length, 1);
   const [command, args, options] = result.seen[0];
   assert.equal(command, "/reviewed/node");
-  assert.deepEqual([...args], ["--test", "scripts/public-core-preview.test.mjs"]);
+  assert.deepEqual([...args], ["--test", "scripts/public-core-preview.test.mjs", "scripts/public-secondary-previews.test.mjs"]);
   assert.equal(options.stdio, "inherit");
   assert.equal(options.timeout, 30_000);
   assert.notEqual(options.shell, true);
