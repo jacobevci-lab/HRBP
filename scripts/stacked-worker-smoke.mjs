@@ -193,6 +193,8 @@ export async function main() {
   const timeout = setTimeout(() => controller.abort(new Error('Worker smoke exceeded 180 seconds.')), 180000);
   let child;
   let launchError;
+  let db;
+  let fixture;
   let tail = '';
   const interrupt = () => controller.abort(new Error('Worker smoke interrupted.'));
   process.on('SIGINT', interrupt);
@@ -214,6 +216,19 @@ export async function main() {
       signal: controller.signal,
       alive: () => !launchError && child.exitCode === null && child.signalCode === null
     });
+    const { fixtureClientOptions, createMaintenanceFixture, verifyMaintenance } = await import('./stacked-worker-maintenance.mjs');
+    const clientOptions = fixtureClientOptions(process.env);
+    const { PrismaClient } = await import('@prisma/client');
+    db = new PrismaClient(clientOptions);
+    fixture = await createMaintenanceFixture(db, process.env);
+    summary.checks.push(...await verifyMaintenance(fixture, {
+      token: MAINTENANCE_TOKEN, signal: controller.signal,
+      alive: () => !launchError && child.exitCode === null && child.signalCode === null
+    }));
+    const postMaintenanceProbe = randomBytes(16).toString('hex');
+    verifyHealth(await request(`/api/health/runtime?probe=${postMaintenanceProbe}`, { signal: controller.signal }),
+      revision, postMaintenanceProbe);
+    summary.checks.push('post-maintenance-health-with-new-probe');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
     for (const value of [METRICS_TOKEN, MAINTENANCE_TOKEN, DATABASE]) tail = tail.split(value).join('[synthetic-ci-value]');
@@ -224,10 +239,20 @@ export async function main() {
     process.off('SIGINT', interrupt);
     process.off('SIGTERM', interrupt);
     try { await stopWorker(child); }
-    finally { await rm(directory, { recursive: true, force: true }); }
+    finally {
+      try { await fixture?.cleanup(); }
+      finally {
+        try { await db?.$disconnect(); }
+        finally { await rm(directory, { recursive: true, force: true }); }
+      }
+    }
   }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(error => { console.error(error.message); process.exitCode = 1; });
+  main().catch(error => {
+    const code = /^[A-Z][A-Z0-9_]{0,80}$/.test(error.message ?? '') ? error.message : 'LOCAL_WORKER_SMOKE_FAILED';
+    console.error(code);
+    process.exitCode = 1;
+  });
 }

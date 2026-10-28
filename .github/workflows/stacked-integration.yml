@@ -45,6 +45,8 @@ jobs:
         run: node --test scripts/stacked-integration-ci.test.mjs
       - name: Verify local Worker smoke guardrails
         run: node --test scripts/stacked-worker-smoke.test.mjs
+      - name: Verify Worker maintenance guardrails
+        run: node --test scripts/stacked-worker-maintenance.test.mjs
       - name: Record tested source identities
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}

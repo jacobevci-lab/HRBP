@@ -35,17 +35,18 @@ The actual aggregate shell is tested over all 36 status pairs.
 ## Local Worker HTTP smoke
 
 Before installation, the application job also runs the dependency-free
-`stacked-worker-smoke.test.mjs` suite. After packaging, the mandatory
+`stacked-worker-smoke.test.mjs` and `stacked-worker-maintenance.test.mjs` suites. After packaging, the mandatory
 `stacked-worker-smoke.mjs` harness starts the installed Wrangler with `dev --local`.
 This is the compiled OpenNext Worker under workerd, not a mocked HTTP application.
 
-The seven checks require two fresh health responses carrying the exact tested
+The initial seven checks require two fresh health responses carrying the exact tested
 merge SHA, reject both missing and incorrect credentials on metrics and audit
 history, and perform an authenticated read of operational metrics. The metrics
 handler queries the migrated disposable PostgreSQL database through the Worker
 Prisma adapter; HTTP 200 alone is insufficient. The success indicator and expected
-audit/notification metric families must exist. No authenticated maintenance POST
-or customer-data write is performed by this harness.
+audit/notification metric families must exist. The harness then runs ten mandatory
+maintenance checks and another fresh health probe: **18 runtime checks** in total.
+No customer-data write is performed.
 
 The harness requires explicit disposable opt-in and the exact CI database URL.
 Its temporary configuration copies only reviewed runtime compatibility settings,
@@ -55,8 +56,9 @@ vars. The child has an allowlisted environment, isolated HOME, empty `.dev.vars`
 and disabled dotenv/process-environment loading. It never overrides the compiled
 build revision. Existing production configuration is not rewritten.
 
-Requests are limited to three fixed loopback paths; redirects are not followed.
-Each request has a five-second timeout and a 512 KiB body limit. Startup retries
+The original three loopback paths retain their five-second timeout and 512 KiB
+body limit. Maintenance requests use a separate exact path/query allowlist, a
+30-second timeout and a 32 KiB JSON limit. Neither transport follows redirects. Startup retries
 only transient unavailability; malformed successful responses and wrong source
 identities fail immediately. The entire harness has a 180-second abort deadline.
 The fixed port must initially be free. Diagnostics retain only a bounded tail;
@@ -77,6 +79,48 @@ is why the harness pins the full local URL instead of trusting the mode alone.
 See https://developers.cloudflare.com/workers/wrangler/commands/workers/ ,
 https://developers.cloudflare.com/hyperdrive/configuration/local-development/
 and https://developers.cloudflare.com/workers/local-development/environment-variables/ .
+
+## Maintenance write/readback regression
+
+After initial Worker readiness and PostgreSQL metrics checks, the harness creates
+one randomly named synthetic tenant and four IN_APP notifications in an atomic
+transaction on the fixed disposable database. No email credentials are available.
+The fixtures are a due pending message, an expired read message, a future pending
+message and a 200-day-old unread delivered message that is still within retention.
+
+Four missing/invalid-token GET/POST cases require HTTP 401; empty, unknown and
+duplicate selectors require HTTP 400. The authenticated capability GET must match
+the shared protocol and supported job inventory. After each of these eight
+requests, direct database readback must show the fixture rows unchanged. This
+checks these run-owned rows, not every table or every tenant in the database.
+
+Only an explicitly selected operational-maintenance POST is executed. The
+legacy selector-free all-jobs POST is refused by the test transport. A successful
+HTTP response and single-job execution envelope are necessary but not sufficient:
+direct Prisma readback must show one delivery attempt with a delivery timestamp,
+no stale lock/error, removal of the expired read message, and byte-for-byte
+snapshot preservation of the future and retained unread rows. A second POST must
+leave all three remaining snapshots unchanged. These are notification delivery
+and retention checks, not coverage of every operational-maintenance domain.
+
+The fixture client uses an explicit pinned local datasource URL with one
+connection, five-second connection/pool timeouts, a ten-second socket timeout,
+and bounded transactions. The opt-in, CI context and exact database/source are
+checked before any fixture write. The runtime HTTP requests share the existing
+180-second cancellation signal and process-liveness checks. Query timeouts and
+runner teardown remain the backstop for database cleanup after cancellation.
+
+Cleanup stops the Worker process group first, deletes only this run's synthetic
+tenant/notifications in a transaction, disconnects Prisma, and removes temporary
+files. Cleanup failure keeps the job unsuccessful. A killed runner relies on
+runner teardown. No global database reset or production database is used. Normal
+CLI errors are bounded codes rather than raw Prisma/SQL/response payloads.
+
+The new dependency-free unit tests include HTTP error responses that still
+mutate data, false success without persisted writes, protected-row corruption,
+re-delivery, cancellation, and an actual loopback redirect denial. Those unit
+fakes are not real Worker evidence: the mandatory post-build CI harness must
+complete on the exact PR merge candidate before runtime success is claimed.
 
 ## Safety and limitations
 
