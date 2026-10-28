@@ -43,6 +43,8 @@ jobs:
           node-version-file: .node-version
       - name: Verify stacked workflow contract
         run: node --test scripts/stacked-integration-ci.test.mjs
+      - name: Verify local Worker smoke guardrails
+        run: node --test scripts/stacked-worker-smoke.test.mjs
       - name: Record tested source identities
         env:
           CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
@@ -114,6 +116,10 @@ jobs:
         run: npm run cf:build
       - name: Validate Worker packaging without publishing
         run: npx --no-install wrangler deploy --dry-run
+      - name: Exercise bundled Worker against disposable PostgreSQL
+        env:
+          HRBP_DISPOSABLE_WORKER_SMOKE: "true"
+        run: node scripts/stacked-worker-smoke.mjs
 
   dependencies:
     name: Stacked dependency security
