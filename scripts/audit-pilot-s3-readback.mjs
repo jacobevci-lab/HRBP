@@ -25,11 +25,11 @@ function guardJsonTokens(text) {
   let offset = 0, count = 0;
   while (offset < text.length) {
     whitespace.lastIndex = offset;
-    whitespace.exec(text);
+    whitespace.test(text);
     offset = whitespace.lastIndex;
     if (offset === text.length) break;
     token.lastIndex = offset;
-    const match = token.exec(text);
+    const match = text.match(token);
     requireCondition(match !== null && ++count <= MAX_JSON_TOKENS, "COLLECTION_JSON_INVALID");
     const lexeme = match[0];
     offset = token.lastIndex;
@@ -43,7 +43,7 @@ function guardJsonTokens(text) {
       const decoded = JSON.parse(lexeme);
       requireCondition(decoded.isWellFormed(), "COLLECTION_JSON_INVALID");
       whitespace.lastIndex = offset;
-      whitespace.exec(text);
+      whitespace.test(text);
       if (text[whitespace.lastIndex] === ":") {
         const parent = containers.at(-1);
         requireCondition(parent?.kind === "{" && !parent.names.has(decoded), "COLLECTION_JSON_INVALID");
