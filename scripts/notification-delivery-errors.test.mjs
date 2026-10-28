@@ -109,6 +109,8 @@ function matches(row, where) {
       if (Object.hasOwn(filter, "notIn")) return !filter.notIn.includes(value);
       if (Object.hasOwn(filter, "lte")) return value !== null && Number(value) <= Number(filter.lte);
       if (Object.hasOwn(filter, "lt")) return value < filter.lt;
+      if (Object.hasOwn(filter, "gte")) return value >= filter.gte;
+      if (Object.hasOwn(filter, "gt")) return value > filter.gt;
       throw new Error("Unimplemented mock predicate: " + key);
     }
     return value === filter;
@@ -130,6 +132,7 @@ function harness(options = {}) {
       },
       async updateMany(query) {
         updates.push(query);
+        if (options.beforeUpdate) await options.beforeUpdate(query, rows);
         if (options.loseClaim && query.data.status === "PROCESSING") return { count: 0 };
         if (options.loseCompletion && query.where.id && query.where.status === "PROCESSING") return { count: 0 };
         let count = 0;
@@ -166,7 +169,7 @@ function harness(options = {}) {
       sends.push(message);
       if (Object.hasOwn(options, "sendError")) throw options.sendError;
     } },
-    "@/lib/runtime-env": { runtimeNumber: (_key, fallback) => fallback },
+    "@/lib/runtime-env": { runtimeNumber: (key, fallback) => options.runtime?.[key] ?? fallback },
     "@/lib/notification-delivery-error": policy
   }, { Date: Clock });
   return { rows, updates, reads, sends, userReads, run: dispatcher.runNotificationDispatcher, setNow: (value) => { now = value; } };
@@ -276,6 +279,146 @@ test("stale-lock diagnostics are fixed codes and future records are unchanged", 
   const future = plain(h.rows[1]); const result = await h.run();
   assert.equal(result.recovered, 1); assert.equal(h.rows[0].lastError, "NOTIFICATION_LOCK_RECOVERED");
   assert.equal(h.rows[0].lockedAt, null); assert.deepEqual(plain(h.rows[1]), future);
+  assert.equal(h.rows[0].status, "DEAD_LETTER"); assert.equal(result.deadLettered, 1);
+});
+
+
+// Stale recovery uses conditional writes, not a read-then-unconditional update.
+// These deterministic interleavings model ownership changes; they are not real DB concurrency tests.
+function stale(overrides = {}) {
+  return candidate({ status: "PROCESSING", attempts: 5, lockedAt: new Date(epoch - 600_000), lastError: sentinel, ...overrides });
+}
+test("exhausted stale locks are dead-lettered without another delivery or attempt reset", async () => {
+  for (const attempts of [5, 6, 20]) for (const channel of ["EMAIL", "IN_APP", "UNSUPPORTED"]) {
+    const h = harness({ rows: [stale({ attempts, channel })] });
+    const result = await h.run();
+    assert.equal(h.rows[0].status, "DEAD_LETTER"); assert.equal(h.rows[0].attempts, attempts);
+    assert.equal(h.rows[0].lockedAt, null); assert.equal(h.rows[0].lastError, "NOTIFICATION_LOCK_RECOVERED");
+    assert.equal(Number(h.rows[0].nextAttemptAt), epoch); assert.equal(h.rows[0].deliveredAt, undefined);
+    assert.equal(result.recovered, 1); assert.equal(result.deadLettered, 1);
+    assert.equal(result.claimed, 0); assert.equal(result.candidates, 0); assert.equal(result.delivered, 0);
+    assert.equal(h.sends.length, 0); assert.equal(h.userReads.length, 0);
+    assert.ok(!JSON.stringify(h.updates).includes("PRIVATE_SENTINEL"));
+  }
+});
+test("stale locks below the attempt limit retain the remaining delivery opportunity", async () => {
+  for (const attempts of [0, 3, 4]) {
+    const h = harness({ rows: [stale({ channel: "IN_APP", attempts })] });
+    const result = await h.run();
+    assert.equal(result.recovered, 1); assert.equal(result.claimed, 1); assert.equal(result.delivered, 1);
+    assert.equal(result.deadLettered, 0); assert.equal(h.rows[0].attempts, attempts + 1);
+    assert.equal(h.rows[0].status, "DELIVERED"); assert.equal(h.rows[0].lockedAt, null);
+  }
+});
+test("recovered retryable SMTP failures retain backoff and the final-attempt limit", async () => {
+  for (const attempts of [1, 3, 4]) {
+    const h = harness({ rows: [stale({ attempts })], sendError: new Error("SMTP_DELIVERY_FAILED") });
+    const result = await h.run(), exhausted = attempts === 4;
+    assert.equal(h.rows[0].attempts, attempts + 1); assert.equal(h.sends.length, 1);
+    assert.equal(h.rows[0].status, exhausted ? "DEAD_LETTER" : "FAILED");
+    assert.equal(h.rows[0].lastError, "SMTP_DELIVERY_FAILED");
+    assert.equal(Number(h.rows[0].nextAttemptAt), epoch + (exhausted ? 0 : 60_000 * 2 ** attempts));
+    assert.equal(result.deadLettered, Number(exhausted)); assert.equal(result.failed, Number(!exhausted));
+  }
+});
+test("recent, future and undated processing locks are not recovered even when exhausted", async () => {
+  const rows = [epoch - 599_999, epoch, epoch + 60_000, null].map((lockedAt, i) => stale({
+    id: `protected-${i}`, lockedAt: lockedAt === null ? null : new Date(lockedAt)
+  }));
+  const h = harness({ rows }), before = plain(h.rows), result = await h.run();
+  assert.deepEqual(plain(h.rows), before); assert.equal(result.recovered, 0);
+  assert.equal(result.deadLettered, 0); assert.equal(result.claimed, 0); assert.equal(h.sends.length, 0);
+});
+test("recovery never rewrites non-processing rows or historical exhausted failures", async () => {
+  const rows = ["PENDING", "FAILED", "DEAD_LETTER", "DELIVERED"].map((status, i) => stale({ id: `state-${i}`, status }));
+  const h = harness({ rows }), before = plain(h.rows), result = await h.run();
+  assert.deepEqual(plain(h.rows), before); assert.equal(result.recovered, 0); assert.equal(result.deadLettered, 0);
+});
+test("mixed tenants and channels preserve recovery and terminal-transition counts", async () => {
+  const h = harness({ rows: [stale({ id: "exhausted-a" }), stale({ id: "exhausted-b", tenantId: "other-tenant", channel: "IN_APP" }),
+    stale({ id: "retryable", attempts: 1, channel: "IN_APP" }), candidate({ id: "unsupported", channel: "UNSUPPORTED" })] });
+  const result = await h.run();
+  assert.equal(result.recovered, 3); assert.equal(result.deadLettered, 3);
+  assert.equal(result.claimed, 2); assert.equal(result.delivered, 1); assert.equal(result.failed, 0);
+  assert.deepEqual(h.rows.map(r => r.status), ["DEAD_LETTER", "DEAD_LETTER", "DELIVERED", "DEAD_LETTER"]);
+  assert.equal(h.rows[1].tenantId, "other-tenant"); assert.equal(h.sends.length, 0);
+});
+test("a repeated recovery pass cannot resend or recount already-terminal records", async () => {
+  const h = harness({ rows: [stale()] }); await h.run();
+  const before = plain(h.rows); h.setNow(epoch + 3_600_000);
+  const result = await h.run();
+  assert.equal(h.rows[0].status, "DEAD_LETTER"); assert.deepEqual(plain(h.rows), before);
+  assert.equal(result.recovered, 0); assert.equal(result.deadLettered, 0); assert.equal(h.sends.length, 0);
+});
+test("recovery and selection share the same configured clamped attempt cap", async () => {
+  for (const [configured, cap] of [[0, 2], [2.9, 2], [3, 3], [19, 19], [99, 20]]) {
+    const h = harness({ runtime: { HRBP_NOTIFICATION_MAX_ATTEMPTS: configured }, rows: [
+      stale({ id: "over", attempts: cap }), stale({ id: "under", attempts: cap - 1, channel: "IN_APP" })
+    ] });
+    const result = await h.run();
+    assert.equal(h.rows[0].status, "DEAD_LETTER"); assert.equal(h.rows[0].attempts, cap);
+    assert.equal(h.rows[1].status, "DELIVERED"); assert.equal(h.rows[1].attempts, cap);
+    assert.equal(result.deadLettered, 1); assert.equal(result.recovered, 2);
+    for (const query of h.reads) assert.equal(query.where.attempts.lt, cap);
+  }
+});
+test("configured lock-window boundary is inclusive and retains the existing clamps", async () => {
+  for (const [configured, minutes] of [[0, 2], [3.9, 3], [999, 120]]) {
+    const cutoff = epoch - minutes * 60_000;
+    const h = harness({ runtime: { HRBP_NOTIFICATION_LOCK_MINUTES: configured }, rows: [
+      stale({ id: "at-boundary", lockedAt: new Date(cutoff) }),
+      stale({ id: "one-ms-recent", lockedAt: new Date(cutoff + 1) })
+    ] });
+    const before = plain(h.rows[1]); const result = await h.run();
+    assert.equal(h.rows[0].status, "DEAD_LETTER"); assert.deepEqual(plain(h.rows[1]), before);
+    assert.equal(result.recovered, 1); assert.equal(result.deadLettered, 1);
+  }
+});
+test("an owner refreshing the lock before the terminal write is not overwritten", async () => {
+  let raced = false;
+  const h = harness({ rows: [stale()], beforeUpdate(query, rows) {
+    if (!raced && !query.where.id && query.data.status === "DEAD_LETTER") {
+      raced = true; rows[0].lockedAt = new Date(epoch);
+    }
+  } });
+  const result = await h.run();
+  assert.equal(raced, true); assert.equal(h.rows[0].status, "PROCESSING");
+  assert.equal(Number(h.rows[0].lockedAt), epoch); assert.equal(h.rows[0].lastError, sentinel);
+  assert.equal(result.recovered, 0); assert.equal(result.deadLettered, 0); assert.equal(h.sends.length, 0);
+});
+test("an owner completing before recovery is not changed back into a failure", async () => {
+  let raced = false;
+  const h = harness({ rows: [stale()], beforeUpdate(query, rows) {
+    if (!raced && !query.where.id && query.data.status === "DEAD_LETTER") {
+      raced = true; Object.assign(rows[0], { status: "DELIVERED", deliveredAt: new Date(epoch), lockedAt: null, lastError: null });
+    }
+  } });
+  const result = await h.run();
+  assert.equal(raced, true); assert.equal(h.rows[0].status, "DELIVERED");
+  assert.equal(Number(h.rows[0].deliveredAt), epoch); assert.equal(h.rows[0].lastError, null);
+  assert.equal(result.recovered, 0); assert.equal(result.deadLettered, 0);
+});
+test("a recovery write error aborts selection and delivery instead of claiming success", async () => {
+  const failure = new Error("synthetic recovery write failure");
+  const h = harness({ rows: [stale()], beforeUpdate(query) {
+    if (!query.where.id && query.data.status === "DEAD_LETTER") throw failure;
+  } });
+  await assert.rejects(h.run(), error => error === failure);
+  assert.equal(h.reads.length, 0); assert.equal(h.sends.length, 0); assert.equal(h.rows[0].status, "PROCESSING");
+});
+test("both recovery writes bind status, expiry and disjoint attempt ranges without resetting attempts", async () => {
+  const h = harness({ rows: [] }); await h.run();
+  assert.equal(h.updates.length, 2);
+  const terminal = h.updates.find(q => q.data.status === "DEAD_LETTER");
+  const retry = h.updates.find(q => q.data.status === "FAILED");
+  for (const query of [terminal, retry]) {
+    assert.ok(query); assert.equal(query.where.status, "PROCESSING");
+    assert.equal(Number(query.where.lockedAt.lte), epoch - 600_000);
+    assert.equal(query.data.lockedAt, null); assert.equal(query.data.lastError, "NOTIFICATION_LOCK_RECOVERED");
+    for (const field of ["attempts", "tenantId", "recipientUserId", "deliveredAt", "payload"]) assert.equal(query.data[field], undefined);
+  }
+  assert.deepEqual(plain(terminal.where.attempts), { gte: 5 });
+  assert.deepEqual(plain(retry.where.attempts), { lt: 5 });
 });
 
 function operationsHarness({ context = { tenantId: "tenant-test" }, allowed = true, errors = [] } = {}) {
