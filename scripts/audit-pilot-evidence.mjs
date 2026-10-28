@@ -6,6 +6,9 @@ import { evaluateAuditPilotGate, readPilotBytes, REQUIRED_GATES } from "./audit-
 
 import { S3_RETENTION_PROFILE, S3RetentionError, validateS3RetentionRequirements, validateS3RetentionObservation } from "./audit-pilot-s3-retention.mjs";
 
+import { S3_COLLECTION_PROFILE, S3ProvenanceError, validateS3CollectionRequirements, verifyS3CollectionProvenance } from "./audit-pilot-s3-provenance.mjs";
+import { S3ReadbackError } from "./audit-pilot-s3-readback.mjs";
+
 const ROLES = ["CUSTOMER_SECURITY", "LEGAL_RECORDS"];
 const POLICY_SCOPE = "HRBP_AUDIT_PILOT_TRUST:1";
 const SIGNATURE_SCOPE = "HRBP_AUDIT_PILOT_SIGNATURES:1";
@@ -44,17 +47,19 @@ export function pilotApprovalSigningBytes(policySha256, packetSha256, role, revi
 }
 
 function policyKeys(policy, now) {
-  const retention = policy?.schemaVersion === 2;
+  const collection = policy?.schemaVersion === 3;
+  const retention = collection || policy?.schemaVersion === 2;
   if (!exact(policy, ["schemaVersion", "scope", "packetSha256", "customerReference",
     "sourceCommitSha", "deployedWorkerVersionId", "validFromUtc", "validUntilUtc", "approvers",
-      ...(retention ? ["retentionRequirements"] : [])]) ||
-      ![1, 2].includes(policy.schemaVersion) ||
-      policy.scope !== (retention ? "HRBP_AUDIT_PILOT_TRUST:2" : POLICY_SCOPE) || !sha(policy.packetSha256) ||
+      ...(retention ? ["retentionRequirements"] : []), ...(collection ? ["collectionRequirements"] : [])]) ||
+      ![1, 2, 3].includes(policy.schemaVersion) ||
+      policy.scope !== (collection ? "HRBP_AUDIT_PILOT_TRUST:3" : retention ? "HRBP_AUDIT_PILOT_TRUST:2" : POLICY_SCOPE) || !sha(policy.packetSha256) ||
       !ref(policy.customerReference) || typeof policy.sourceCommitSha !== "string" ||
       !/^[a-f0-9]{40}$/.test(policy.sourceCommitSha) || typeof policy.deployedWorkerVersionId !== "string" ||
       !/^[A-Za-z0-9._:-]{8,128}$/.test(policy.deployedWorkerVersionId) ||
       !Array.isArray(policy.approvers) || policy.approvers.length !== 2) fail("TRUST_POLICY_INVALID");
   if (retention) validateS3RetentionRequirements(policy.retentionRequirements);
+  if (collection) validateS3CollectionRequirements(policy.collectionRequirements);
   const from = date(policy.validFromUtc), until = date(policy.validUntilUtc);
   if (from === null || until === null || from > now || until <= now ||
       until <= from || until - from > NINETY_DAYS) fail("TRUST_POLICY_WINDOW_INVALID");
@@ -102,15 +107,19 @@ function signatureCheck(envelope, keys, packetSha256, policySha256) {
 export function verifyPilotEvidence(options) {
   try {
     if (!options || typeof options !== "object" || Array.isArray(options)) fail("EVIDENCE_INPUT_INVALID");
-    const { packetPath, policyPath, expectedPolicySha256, signaturesPath, evidenceDir, requiredRetentionProfile, now = Date.now() } = options;
+    const { packetPath, policyPath, expectedPolicySha256, signaturesPath, evidenceDir, requiredRetentionProfile, requiredCollectionProfile, now = Date.now() } = options;
     if (!Number.isSafeInteger(now) || now < 0 || !sha(expectedPolicySha256)) fail("EVIDENCE_INPUT_INVALID");
     const policyBytes = readPilotBytes(policyPath, 16 * 1024);
     if (hash(policyBytes) !== expectedPolicySha256) fail("TRUST_POLICY_DIGEST_MISMATCH");
     const policy = compactJson(policyBytes);
     const keys = policyKeys(policy, now);
     if (requiredRetentionProfile !== undefined &&
-        (requiredRetentionProfile !== S3_RETENTION_PROFILE || policy.schemaVersion !== 2)) {
+        (requiredRetentionProfile !== S3_RETENTION_PROFILE || ![2, 3].includes(policy.schemaVersion))) {
       fail("RETENTION_PROFILE_REQUIRED");
+    }
+    if (requiredCollectionProfile !== undefined &&
+        (requiredCollectionProfile !== S3_COLLECTION_PROFILE || policy.schemaVersion !== 3)) {
+      fail("COLLECTION_PROFILE_REQUIRED");
     }
     const packetBytes = readPilotBytes(packetPath);
     if (hash(packetBytes) !== policy.packetSha256) fail("PACKET_DIGEST_MISMATCH");
@@ -142,16 +151,12 @@ export function verifyPilotEvidence(options) {
     for (const artifact of artifacts) {
       const bytes = readPilotBytes(join(directory, artifact.name), MAX_ARTIFACT);
       if (hash(bytes) !== artifact.digest) fail("ARTIFACT_DIGEST_MISMATCH");
-      if (policy.schemaVersion === 2 && ["G04.bin", "G05.bin"].includes(artifact.name)) {
+      if ([2, 3].includes(policy.schemaVersion) && ["G04.bin", "G05.bin"].includes(artifact.name)) {
         retentionBytes.set(artifact.name, bytes);
       }
     }
-    const after = lstatSync(directory, { bigint: true });
-    if (!after.isDirectory() || ["dev", "ino", "mode", "mtimeNs", "ctimeNs"].some(field => before[field] !== after[field])) {
-      fail("EVIDENCE_DIRECTORY_CHANGED");
-    }
     let retentionResult;
-    if (policy.schemaVersion === 2) {
+    if ([2, 3].includes(policy.schemaVersion)) {
       // Parse the very same authenticated bytes; never reopen G04/G05 by path.
       const observed = retentionBytes.get("G04.bin");
       if (observed.length > 32 * 1024) fail("S3_OBSERVATION_SCHEMA_INVALID");
@@ -162,16 +167,28 @@ export function verifyPilotEvidence(options) {
         archiveSha256: hash(archive), archiveSizeBytes: archive.length
       });
     }
+    let collectionResult;
+    if (policy.schemaVersion === 3) {
+      collectionResult = verifyS3CollectionProvenance(directory, policy.collectionRequirements, policy.retentionRequirements, {
+        observationBytes: retentionBytes.get("G04.bin"), archiveBytes: retentionBytes.get("G05.bin"),
+        reviewedAtUtc: packet.evidence.find(entry => entry.gate === "G04").reviewedAtUtc, now
+      });
+    }
+    const after = lstatSync(directory, { bigint: true });
+    if (!after.isDirectory() || ["dev", "ino", "mode", "mtimeNs", "ctimeNs"].some(field => before[field] !== after[field])) {
+      fail("EVIDENCE_DIRECTORY_CHANGED");
+    }
     return {
       decision: "READY_FOR_INDEPENDENT_AUTHORIZATION",
-      assuranceLevel: retentionResult ? "PINNED_SIGNATURES_DIGESTS_AND_S3_OBSERVATION_SEMANTICS" : "PINNED_DUAL_SIGNATURES_AND_FILE_DIGESTS",
-      reasons: [], verifiedSignatures: 2, verifiedArtifacts: 12,
-      ...(retentionResult ? { retention: retentionResult } : {})
+      assuranceLevel: collectionResult ? "PINNED_SIGNATURES_DIGESTS_S3_SEMANTICS_AND_COLLECTION_PROVENANCE" : retentionResult ? "PINNED_SIGNATURES_DIGESTS_AND_S3_OBSERVATION_SEMANTICS" : "PINNED_DUAL_SIGNATURES_AND_FILE_DIGESTS",
+      reasons: [], verifiedSignatures: 2, verifiedArtifacts: collectionResult ? 19 : 12,
+      ...(retentionResult ? { retention: retentionResult } : {}),
+      ...(collectionResult ? { collection: collectionResult } : {})
     };
   } catch (error) {
     return {
       decision: "NO_GO", assuranceLevel: "NOT_VERIFIED",
-      reasons: [(error instanceof EvidenceError || error instanceof S3RetentionError) ? error.code : "EVIDENCE_INPUT_INVALID"],
+      reasons: [(error instanceof EvidenceError || error instanceof S3RetentionError || error instanceof S3ProvenanceError || error instanceof S3ReadbackError) ? error.code : "EVIDENCE_INPUT_INVALID"],
       verifiedSignatures: 0, verifiedArtifacts: 0
     };
   }
@@ -182,9 +199,10 @@ function cliOptions(argv) {
     ["--packet", "packetPath"], ["--trust-policy", "policyPath"],
     ["--expected-policy-sha256", "expectedPolicySha256"],
     ["--signatures", "signaturesPath"], ["--evidence-dir", "evidenceDir"],
-    ["--require-retention-profile", "requiredRetentionProfile"]
+    ["--require-retention-profile", "requiredRetentionProfile"],
+    ["--require-collection-profile", "requiredCollectionProfile"]
   ]);
-  if (![10, 12].includes(argv.length)) fail("EVIDENCE_INPUT_INVALID");
+  if (![10, 12, 14].includes(argv.length)) fail("EVIDENCE_INPUT_INVALID");
   const options = {};
   for (let index = 0; index < argv.length; index += 2) {
     const name = flags.get(argv[index]), value = argv[index + 1];

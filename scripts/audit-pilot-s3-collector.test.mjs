@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createHash } from "node:crypto";
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
+import { chmodSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -246,4 +246,252 @@ test("importing the collector is inert and unknown normalization operations are 
   const source = readFileSync(new URL("./audit-pilot-s3-collector.mjs", import.meta.url), "utf8");
   assert.match(source, /shell: false/); assert.match(source, /killSignal: "SIGKILL"/);
   assert.doesNotMatch(source, /"(?:put-object|delete-object|put-object-retention|put-bucket-versioning)"/);
+});
+
+import { verifyPilotEvidence } from "./audit-pilot-evidence.mjs";
+import { REQUIRED_GATES } from "./audit-pilot-gate-evaluator.mjs";
+import { S3_COLLECTION_PROFILE } from "./audit-pilot-s3-provenance.mjs";
+
+// Integration fixtures invoke the real collector with local synthetic child processes,
+// then create genuine dual Ed25519 signatures. No live AWS credentials or API are used.
+const rawNames = ["bucketVersioning", "objectLockConfiguration", "headObject", "objectRetention", "legalHold"];
+const verifierCli = fileURLToPath(new URL("./audit-pilot-evidence.mjs", import.meta.url));
+function signedCollection(t) {
+  const fx = fixture(t);
+  assert.equal(collect(fx, { clock: () => fx.now - 10_000 }).ok, true);
+  fx.dir = fx.options.outputDirectory;
+  const roles = ["CUSTOMER_SECURITY", "LEGAL_RECORDS"];
+  fx.keys = roles.map(() => generateKeyPairSync("ed25519"));
+  const reviewedAtUtc = new Date(fx.now - 6000).toISOString();
+  const approvedAtUtc = new Date(fx.now - 4000).toISOString();
+  for (const name of [...REQUIRED_GATES, ...roles]) {
+    if (!["G04", "G05"].includes(name)) writeFileSync(join(fx.dir, `${name}.bin`), Buffer.from(`synthetic evidence ${name}`));
+  }
+  fx.packet = {
+    schemaVersion: 1, customerReference: "customer-test-01", sourceCommitSha: "a".repeat(40),
+    deployedWorkerVersionId: "test-worker-version-01", decisionAtUtc: new Date(fx.now - 2000).toISOString(),
+    nextReviewAtUtc: new Date(fx.now + 86400_000).toISOString(), approvedRetentionUntilUtc: fx.request.requirements.minRetentionUntilUtc,
+    evidence: REQUIRED_GATES.map(gate => ({ gate, status: "PASS", sha256: hash(readFileSync(join(fx.dir, `${gate}.bin`))),
+      controlledLocator: "evidence-locator-01", reviewerRole: "AUDIT_REVIEWER", reviewerReference: "audit-reviewer-01", reviewedAtUtc,
+      evidenceType: gate === "G01" ? "DEPLOYED_REVISION_READBACK" : gate === "G03" ? "APPROVED_TSA_RFC3161" :
+        gate === "G04" ? "INDEPENDENT_PROVIDER_LOCK_READBACK" : "CONTROLLED_EVIDENCE" })),
+    customerSecurityApproval: { reviewerRole: roles[0], reviewerReference: "security-reviewer-01", approvedAtUtc,
+      evidenceSha256: hash(readFileSync(join(fx.dir, `${roles[0]}.bin`))) },
+    recordsLegalApproval: { reviewerRole: roles[1], reviewerReference: "legal-reviewer-01", approvedAtUtc,
+      evidenceSha256: hash(readFileSync(join(fx.dir, `${roles[1]}.bin`))) }
+  };
+  fx.policy = {
+    schemaVersion: 3, scope: "HRBP_AUDIT_PILOT_TRUST:3", packetSha256: "",
+    customerReference: fx.packet.customerReference, sourceCommitSha: fx.packet.sourceCommitSha,
+    deployedWorkerVersionId: fx.packet.deployedWorkerVersionId,
+    validFromUtc: new Date(fx.now - 60_000).toISOString(), validUntilUtc: new Date(fx.now + 86400_000).toISOString(),
+    approvers: roles.map((role, i) => ({ role,
+      reviewerReference: [fx.packet.customerSecurityApproval, fx.packet.recordsLegalApproval][i].reviewerReference,
+      publicKeyPem: fx.keys[i].publicKey.export({ type: "spki", format: "pem" }).toString() })),
+    retentionRequirements: structuredClone(fx.request.requirements),
+    collectionRequirements: { profile: S3_COLLECTION_PROFILE,
+      manifestSha256: hash(readFileSync(join(fx.dir, "collection-manifest.json"))), requestSha256: fx.options.expectedRequestSha256 }
+  };
+  fx.verifyOptions = { packetPath: join(fx.root, "packet.json"), policyPath: join(fx.root, "policy.json"),
+    signaturesPath: join(fx.root, "signatures.json"), evidenceDir: fx.dir, expectedPolicySha256: "", now: fx.now };
+  seal(fx); return fx;
+}
+function seal(fx) {
+  fx.policy.packetSha256 = hash(encode(fx.packet));
+  writeFileSync(fx.verifyOptions.packetPath, encode(fx.packet));
+  const policySha256 = hash(encode(fx.policy));
+  writeFileSync(fx.verifyOptions.policyPath, encode(fx.policy));
+  fx.verifyOptions.expectedPolicySha256 = policySha256;
+  // Deliberately construct the documented payload independently of the implementation helper.
+  const signatures = fx.policy.approvers.map((entry, i) => {
+    const keyId = hash(fx.keys[i].publicKey.export({ type: "spki", format: "der" }));
+    const bytes = Buffer.from("HRBP-AUDIT-PILOT-APPROVAL:1\n" + JSON.stringify([
+      policySha256, fx.policy.packetSha256, entry.role, entry.reviewerReference, keyId
+    ]));
+    return { role: entry.role, reviewerReference: entry.reviewerReference, keyId,
+      signature: sign(null, bytes, fx.keys[i].privateKey).toString("base64") };
+  });
+  writeFileSync(fx.verifyOptions.signaturesPath, encode({ schemaVersion: 1, scope: "HRBP_AUDIT_PILOT_SIGNATURES:1",
+    packetSha256: fx.policy.packetSha256, trustPolicySha256: policySha256, signatures }));
+}
+function changeManifest(fx, mutate) {
+  const path = join(fx.dir, "collection-manifest.json"), value = JSON.parse(readFileSync(path));
+  mutate(value); const bytes = encode(value); writeFileSync(path, bytes);
+  fx.policy.collectionRequirements.manifestSha256 = hash(bytes); seal(fx);
+}
+function rebindFile(fx, name, bytes) {
+  writeFileSync(join(fx.dir, name), bytes);
+  changeManifest(fx, manifest => {
+    Object.assign(manifest.files.find(file => file.name === name), { sha256: hash(bytes), bytes: Buffer.byteLength(bytes) });
+    const operation = manifest.operations.find(item => item.rawFile === name);
+    if (operation) operation.rawSha256 = hash(bytes);
+  });
+}
+function rejectCollection(fx, reason) {
+  const result = verifyPilotEvidence(fx.verifyOptions);
+  assert.equal(result.decision, "NO_GO", JSON.stringify(result));
+  assert.equal(result.verifiedArtifacts, 0);
+  if (reason) assert.deepEqual(result.reasons, [reason]);
+  for (const sensitive of [fx.root, fx.request.requirements.bucket, fx.request.requirements.expectedBucketOwner]) {
+    assert.ok(!JSON.stringify(result).includes(sensitive));
+  }
+}
+function verifierArgs(fx) {
+  return ["--packet", fx.verifyOptions.packetPath, "--trust-policy", fx.verifyOptions.policyPath,
+    "--expected-policy-sha256", fx.verifyOptions.expectedPolicySha256, "--signatures", fx.verifyOptions.signaturesPath,
+    "--evidence-dir", fx.dir];
+}
+
+test("v3 authenticates actual collector output, nineteen files and five raw response projections without executing AWS again", t => {
+  const fx = signedCollection(t);
+  const calls = log(fx).length;
+  const result = verifyPilotEvidence({ ...fx.verifyOptions, requiredRetentionProfile: S3_RETENTION_PROFILE,
+    requiredCollectionProfile: S3_COLLECTION_PROFILE });
+  assert.equal(result.decision, "READY_FOR_INDEPENDENT_AUTHORIZATION", JSON.stringify(result));
+  assert.equal(result.assuranceLevel, "PINNED_SIGNATURES_DIGESTS_S3_SEMANTICS_AND_COLLECTION_PROVENANCE");
+  assert.equal(result.verifiedSignatures, 2); assert.equal(result.verifiedArtifacts, 19);
+  assert.deepEqual(result.collection, { profile: S3_COLLECTION_PROFILE, verifiedFiles: 7, verifiedRawResponses: 5,
+    normalizedObservationMatched: true, providerAttestationVerified: false, lockEnforcementTested: false });
+  assert.equal(result.retention.liveProviderVerified, false); assert.equal(log(fx).length, calls);
+});
+
+for (const name of ["collection-manifest.json", "collection-request.json", ...rawNames.map(op => `${op}.raw.json`)]) {
+  test(`v3 rejects tampering and missing provenance file ${name}`, t => {
+    const fx = signedCollection(t), path = join(fx.dir, name);
+    writeFileSync(path, "changed"); rejectCollection(fx);
+    rmSync(path); rejectCollection(fx);
+  });
+}
+for (const [name, mutate, reason] of [
+  ["unknown field", m => { m.extra = true; }, "S3_COLLECTION_MANIFEST_INVALID"],
+  ["false provider attestation claim", m => { m.providerAttestationVerified = true; }, "S3_COLLECTION_MANIFEST_INVALID"],
+  ["false lock test claim", m => { m.lockEnforcementTested = true; }, "S3_COLLECTION_MANIFEST_INVALID"],
+  ["missing operation", m => { m.operations.pop(); }, "S3_COLLECTION_OPERATIONS_INVALID"],
+  ["reordered operations", m => { m.operations.reverse(); }, "S3_COLLECTION_OPERATIONS_INVALID"],
+  ["duplicate operation", m => { m.operations[1] = m.operations[0]; }, "S3_COLLECTION_OPERATIONS_INVALID"],
+  ["raw path traversal", m => { m.operations[0].rawFile = "../../outside"; }, "S3_COLLECTION_OPERATIONS_INVALID"],
+  ["inventory path traversal", m => { m.files[0].name = "../../outside"; }, "S3_COLLECTION_INVENTORY_INVALID"],
+  ["missing file entry", m => { m.files.pop(); }, "S3_COLLECTION_INVENTORY_INVALID"],
+  ["duplicate file entry", m => { m.files[1] = m.files[0]; }, "S3_COLLECTION_INVENTORY_INVALID"],
+  ["incorrect length", m => { m.files[0].bytes++; }, "S3_COLLECTION_FILE_DIGEST_MISMATCH"],
+  ["incorrect raw digest", m => { m.operations[0].rawSha256 = "a".repeat(64); }, "S3_COLLECTION_RAW_DIGEST_MISMATCH"],
+  ["endpoint substitution", m => { m.endpoint = "https://evil.test"; }, "S3_COLLECTION_REQUEST_MISMATCH"],
+  ["region substitution", m => { m.region = "us-east-1"; }, "S3_COLLECTION_REQUEST_MISMATCH"],
+  ["wrong CLI major", m => { m.awsCliVersion = "aws-cli/1.0.0 Python/test"; }, "S3_COLLECTION_MANIFEST_INVALID"],
+  ["invalid start date", m => { m.startedAtUtc = "not-a-date"; }, "S3_COLLECTION_CHRONOLOGY_INVALID"],
+  ["post-review completion", m => { m.finishedAtUtc = new Date(Date.now() + 86400_000).toISOString(); }, "S3_COLLECTION_CHRONOLOGY_INVALID"],
+  ["backwards operation time", m => { m.operations[0].startedAtUtc = m.finishedAtUtc; m.operations[0].finishedAtUtc = "2000-01-01T00:00:00.000Z"; }, "S3_COLLECTION_CHRONOLOGY_INVALID"]
+]) test(`v3 rejects ${name} even with a newly approved policy pin and valid signatures`, t => {
+  const fx = signedCollection(t); changeManifest(fx, mutate); rejectCollection(fx, reason);
+});
+
+test("v3 rejects raw HEAD contradicting G04 even after every raw digest, manifest pin and signature is refreshed", t => {
+  const fx = signedCollection(t), raw = JSON.parse(readFileSync(join(fx.dir, "headObject.raw.json")));
+  raw.ObjectLockMode = "GOVERNANCE";
+  rebindFile(fx, "headObject.raw.json", JSON.stringify(raw, null, 2));
+  rejectCollection(fx, "S3_COLLECTION_NORMALIZATION_MISMATCH");
+});
+
+test("v3 binds omitted normalized fields too: raw metadata edits cannot reuse an existing manifest pin", t => {
+  const fx = signedCollection(t), raw = JSON.parse(readFileSync(join(fx.dir, "headObject.raw.json")));
+  raw.Metadata.sensitive = "changed private metadata";
+  writeFileSync(join(fx.dir, "headObject.raw.json"), JSON.stringify(raw, null, 2));
+  rejectCollection(fx, "S3_COLLECTION_FILE_DIGEST_MISMATCH");
+});
+
+test("v3 rejects raw error envelopes and malformed UTF-8 even when re-signed", t => {
+  const fx = signedCollection(t);
+  rebindFile(fx, "headObject.raw.json", encode({ Error: { Code: "AccessDenied" } }));
+  rejectCollection(fx, "AWS_RESPONSE_INVALID");
+  rebindFile(fx, "headObject.raw.json", Buffer.from([0xff, 0xfe]));
+  rejectCollection(fx);
+});
+
+test("v3 collection request must match both the enrollment pin and exact retained policy requirements", t => {
+  const fx = signedCollection(t);
+  const request = structuredClone(fx.request); request.requirements.key = "substituted/key";
+  const bytes = encode(request);
+  rebindFile(fx, "collection-request.json", bytes);
+  rejectCollection(fx, "S3_COLLECTION_REQUEST_DIGEST_MISMATCH");
+  fx.policy.collectionRequirements.requestSha256 = hash(bytes);
+  changeManifest(fx, m => { m.requestSha256 = hash(bytes); });
+  rejectCollection(fx, "S3_COLLECTION_REQUEST_MISMATCH");
+});
+
+test("v3 cannot omit collection pins or smuggle them into older policy versions", t => {
+  const fx = signedCollection(t), original = structuredClone(fx.policy);
+  for (const mutate of [p => { delete p.collectionRequirements; }, p => { p.schemaVersion = 2; p.scope = "HRBP_AUDIT_PILOT_TRUST:2"; },
+    p => { p.collectionRequirements.extra = true; }, p => { p.collectionRequirements.profile = "OTHER_PROFILE"; }]) {
+    fx.policy = structuredClone(original); mutate(fx.policy); seal(fx); rejectCollection(fx);
+  }
+});
+
+test("v1 and v2 remain compatible but cannot satisfy a required collection profile", t => {
+  const fx = signedCollection(t);
+  for (const version of [2, 1]) {
+    fx.policy.schemaVersion = version; fx.policy.scope = `HRBP_AUDIT_PILOT_TRUST:${version}`;
+    delete fx.policy.collectionRequirements;
+    if (version === 1) delete fx.policy.retentionRequirements;
+    seal(fx);
+    const legacy = verifyPilotEvidence(fx.verifyOptions);
+    assert.equal(legacy.decision, "READY_FOR_INDEPENDENT_AUTHORIZATION"); assert.equal(legacy.verifiedArtifacts, 12);
+    assert.equal(legacy.collection, undefined);
+    assert.deepEqual(verifyPilotEvidence({ ...fx.verifyOptions, requiredCollectionProfile: S3_COLLECTION_PROFILE }).reasons,
+      ["COLLECTION_PROFILE_REQUIRED"]);
+  }
+});
+
+test("v3 refuses changed manifest without replacing the independently approved policy pin", t => {
+  const fx = signedCollection(t), approved = fx.verifyOptions.expectedPolicySha256;
+  changeManifest(fx, m => { m.awsCliVersion = "aws-cli/2.38.1 Python/test"; });
+  fx.verifyOptions.expectedPolicySha256 = approved; rejectCollection(fx, "TRUST_POLICY_DIGEST_MISMATCH");
+});
+
+test("v3 checks both signatures before reading provenance files", t => {
+  const fx = signedCollection(t);
+  writeFileSync(fx.verifyOptions.signaturesPath, encode({}));
+  rmSync(join(fx.dir, "collection-manifest.json"));
+  rejectCollection(fx, "SIGNATURE_ENVELOPE_INVALID");
+});
+
+test("v3 uses bounded single-link inputs for all provenance data", t => {
+  const fx = signedCollection(t), path = join(fx.dir, "headObject.raw.json"), raw = readFileSync(path);
+  rmSync(path); symlinkSync(fx.options.requestPath, path); rejectCollection(fx);
+  rmSync(path); writeFileSync(path, raw); linkSync(path, join(fx.root, "raw-hardlink")); rejectCollection(fx);
+  rmSync(join(fx.root, "raw-hardlink")); truncateSync(path, 1024 * 1024 * 1024); rejectCollection(fx);
+});
+
+test("v3 CLI authenticates provenance and refuses FIFO without exposing target names or credentials", t => {
+  const fx = signedCollection(t), args = [...verifierArgs(fx), "--require-retention-profile", S3_RETENTION_PROFILE,
+    "--require-collection-profile", S3_COLLECTION_PROFILE];
+  const run = () => spawnSync(process.execPath, [verifierCli, ...args], { encoding: "utf8", timeout: 5000 });
+  const good = run(); assert.equal(good.status, 0); assert.equal(good.stderr, "");
+  assert.equal(JSON.parse(good.stdout).verifiedArtifacts, 19);
+  for (const secret of [fx.root, fx.request.requirements.bucket, fx.request.requirements.key, ...Object.values(credentials)]) {
+    assert.ok(!good.stdout.includes(secret));
+  }
+  const path = join(fx.dir, "headObject.raw.json"); rmSync(path);
+  assert.equal(spawnSync("mkfifo", [path]).status, 0);
+  const bad = run(); assert.equal(bad.error, undefined); assert.equal(bad.status, 1);
+  assert.equal(bad.stderr, ""); assert.equal(JSON.parse(bad.stdout).decision, "NO_GO");
+});
+
+test("collection profile flags reject unknown, duplicate or missing values and legacy downgrade", t => {
+  const fx = signedCollection(t);
+  for (const extra of [["--require-collection-profile", "unknown"], ["--require-collection-profile"],
+    ["--require-collection-profile", S3_COLLECTION_PROFILE, "--require-collection-profile", S3_COLLECTION_PROFILE]]) {
+    const child = spawnSync(process.execPath, [verifierCli, ...verifierArgs(fx), ...extra], { encoding: "utf8", timeout: 5000 });
+    assert.equal(child.status, 1); assert.equal(child.stderr, "");
+  }
+  fx.policy.schemaVersion = 2; fx.policy.scope = "HRBP_AUDIT_PILOT_TRUST:2"; delete fx.policy.collectionRequirements; seal(fx);
+  const child = spawnSync(process.execPath, [verifierCli, ...verifierArgs(fx), "--require-collection-profile", S3_COLLECTION_PROFILE],
+    { encoding: "utf8", timeout: 5000 });
+  assert.equal(child.status, 1); assert.deepEqual(JSON.parse(child.stdout).reasons, ["COLLECTION_PROFILE_REQUIRED"]);
+});
+
+test("offline provenance and shared normalization modules have no subprocess, network or credential imports", () => {
+  for (const name of ["audit-pilot-s3-provenance.mjs", "audit-pilot-s3-readback.mjs"]) {
+    const source = readFileSync(new URL(name, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /node:(?:child_process|https?|net)|\b(?:spawn|exec|fetch)\s*\(|process\.env|s3-collector\.mjs/);
+  }
 });
