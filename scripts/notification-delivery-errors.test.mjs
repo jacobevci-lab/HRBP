@@ -462,6 +462,159 @@ test("operations query limits remain bounded", async () => {
     const h = operationsHarness(); await h.get(query); assert.equal(h.queries.find((q) => q.select).take, limit);
   }
 });
+
+const inputValidation = load("lib/input-validation.ts", {}, { TextDecoder });
+function retryHarness(options = {}) {
+  const context = Object.hasOwn(options, "context") ? options.context : { tenantId: "tenant-test", actorId: "admin-test" };
+  const rows = (options.rows ?? [
+    candidate({ id: "dead-1", status: "DEAD_LETTER" }),
+    candidate({ id: "dead-2", status: "DEAD_LETTER" }),
+    candidate({ id: "failed-1", status: "FAILED" })
+  ]).map((row) => ({ ...row }));
+  const reads = [], writes = [], audits = [];
+  const db = {
+    notificationOutbox: {
+      async findMany(query) {
+        reads.push(query);
+        return rows.filter((row) => matches(row, query.where)).slice(0, query.take ?? rows.length).map((row) => ({ id: row.id }));
+      }
+    },
+    async $transaction(run) {
+      return run({
+        notificationOutbox: {
+          async updateMany(query) {
+            writes.push(query);
+            let count = 0;
+            for (const row of rows) {
+              if (!matches(row, query.where)) continue;
+              count++;
+              Object.assign(row, query.data);
+            }
+            return { count };
+          }
+        }
+      });
+    }
+  };
+  const route = load("app/api/settings/notifications/retry/route.ts", {
+    "@/lib/input-validation": inputValidation,
+    "@prisma/client": { ...enums, DataClassification: { INTERNAL: "INTERNAL" } },
+    "@/lib/audit": { appendAudit: async (_tx, _ctx, event) => { audits.push(event); } },
+    "@/lib/authorization": {
+      can: (_ctx, permission) => { assert.equal(permission, "settings:write"); return options.allowed !== false; },
+      forbidden: () => new Response(null, { status: 403 })
+    },
+    "@/lib/db": { db },
+    "@/lib/request-context": {
+      getRequestContext: async () => context,
+      mutationOriginAllowed: () => options.originAllowed !== false,
+      unauthorized: () => new Response(null, { status: 401 })
+    }
+  }, { Request, Response, URL, TextDecoder });
+  async function post(body, raw) {
+    return route.POST(new Request("https://hrbp.example.test/api/settings/notifications/retry", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "https://hrbp.example.test" },
+      body: raw === undefined ? JSON.stringify(body) : raw
+    }));
+  }
+  return { rows, reads, writes, audits, post };
+}
+test("invalid targeted retry ids fail closed instead of widening to a batch", async () => {
+  for (const id of ["", "   ", null, 7, [], {}, "bad\u0000id"]) {
+    const h = retryHarness();
+    const before = plain(h.rows);
+    const response = await h.post({ id });
+    assert.equal(response.status, 400);
+    assert.equal(h.reads.length, 0);
+    assert.equal(h.writes.length, 0);
+    assert.equal(h.audits.length, 0);
+    assert.deepEqual(plain(h.rows), before);
+  }
+});
+test("missing, ambiguous, malformed and misspelled retry scope never becomes bulk retry", async () => {
+  for (const payload of [{}, { id: "dead-1", batch: true }, { batch: false }, { notificationId: "dead-1" }, { idd: "dead-1" }, { batch: true, typo: 1 }]) {
+    const h = retryHarness();
+    const response = await h.post(payload);
+    assert.equal(response.status, 400);
+    assert.equal(h.reads.length, 0);
+    assert.equal(h.writes.length, 0);
+    assert.equal(h.audits.length, 0);
+  }
+  for (const raw of ["{", "[]", "null", "\"dead-1\""]) {
+    const h = retryHarness();
+    assert.equal((await h.post(undefined, raw)).status, 400);
+    assert.equal(h.reads.length, 0);
+  }
+});
+test("targeted retry stays one-id, tenant-scoped and cannot carry batch options", async () => {
+  const h = retryHarness();
+  assert.equal((await h.post({ id: " dead-1 " })).status, 200);
+  assert.equal(h.rows.find((row) => row.id === "dead-1").status, "PENDING");
+  assert.equal(h.rows.find((row) => row.id === "dead-2").status, "DEAD_LETTER");
+  assert.equal(h.rows.find((row) => row.id === "failed-1").status, "FAILED");
+  assert.equal(h.reads.length, 1);
+  assert.equal(h.reads[0].where.tenantId, "tenant-test");
+  assert.equal(h.reads[0].where.id, "dead-1");
+  assert.deepEqual(plain(h.reads[0].where.status.in), ["DEAD_LETTER", "FAILED"]);
+  assert.equal(h.writes.length, 1);
+  assert.deepEqual(plain(h.writes[0].where.id.in), ["dead-1"]);
+  assert.equal(h.audits.length, 1);
+  assert.equal(h.audits[0].action, "settings.notification-requeued");
+  assert.equal(h.audits[0].resourceId, "dead-1");
+
+  const ambiguous = retryHarness();
+  assert.equal((await ambiguous.post({ id: "dead-1", limit: 1 })).status, 400);
+  assert.equal(ambiguous.reads.length, 0);
+});
+test("explicit batch=true is the only bulk path and remains dead-letter-only and bounded", async () => {
+  const h = retryHarness();
+  const response = await h.post({ batch: true, limit: 1 });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { data: { requeued: 1 } });
+  assert.equal(h.reads.length, 1);
+  assert.equal(h.reads[0].where.tenantId, "tenant-test");
+  assert.equal(h.reads[0].where.status, "DEAD_LETTER");
+  assert.equal(h.reads[0].take, 1);
+  assert.equal(h.rows.filter((row) => row.status === "PENDING").length, 1);
+  assert.equal(h.rows.find((row) => row.id === "failed-1").status, "FAILED");
+  assert.equal(h.audits[0].action, "settings.notifications-dead-letter-requeued");
+  assert.equal(h.audits[0].resourceId, "dead-letter-batch");
+});
+test("batch limits are strict integers and cannot be coerced or silently clamped", async () => {
+  for (const limit of [0, -1, 1.5, 501, "1", null, true, {}, []]) {
+    const h = retryHarness();
+    assert.equal((await h.post({ batch: true, limit })).status, 400);
+    assert.equal(h.reads.length, 0);
+    assert.equal(h.writes.length, 0);
+  }
+  for (const limit of [1, 500]) {
+    const h = retryHarness();
+    assert.equal((await h.post({ batch: true, limit })).status, 200);
+    assert.equal(h.reads[0].take, limit);
+  }
+});
+test("missing targeted rows return 404 without mutation while authorization failures touch no storage", async () => {
+  const missing = retryHarness();
+  const missingResponse = await missing.post({ id: "does-not-exist" });
+  assert.equal(missingResponse.status, 404);
+  assert.equal(missing.reads.length, 1);
+  assert.equal(missing.writes.length, 0);
+  assert.equal(missing.audits.length, 0);
+
+  const unauthenticated = retryHarness({ context: null });
+  assert.equal((await unauthenticated.post({ id: "dead-1" })).status, 401);
+  assert.equal(unauthenticated.reads.length, 0);
+
+  const forbidden = retryHarness({ allowed: false });
+  assert.equal((await forbidden.post({ id: "dead-1" })).status, 403);
+  assert.equal(forbidden.reads.length, 0);
+
+  const badOrigin = retryHarness({ originAllowed: false });
+  assert.equal((await badOrigin.post({ id: "dead-1" })).status, 403);
+  assert.equal(badOrigin.reads.length, 0);
+});
+
 test("production prebuild still invokes existing validation plus this executable suite", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
   assert.ok(pkg.scripts.prebuild.split(" && ").includes("npm run notification-operations:validate"));
