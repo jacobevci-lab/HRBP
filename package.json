@@ -80,7 +80,7 @@
     "cf:preview": "npm run typecheck && opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "cf:deploy": "npm run typecheck && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
-    "notification-operations:validate": "node scripts/validate-notification-operations.mjs",
+    "notification-operations:validate": "node scripts/validate-notification-operations.mjs && node --test scripts/notification-delivery-errors.test.mjs",
     "connection-metadata:validate": "node scripts/validate-connection-metadata.mjs",
     "connection-validation:validate": "node scripts/validate-connection-validation-gate.mjs && node --test scripts/identity-runtime-binding.test.mjs scripts/identity-provider-auth-policy.test.mjs scripts/provider-bound-oidc-session.test.mjs scripts/oidc-transaction-binding.test.mjs",
     "action-center-history:validate": "node scripts/validate-action-center-history.mjs",

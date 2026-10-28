@@ -8,17 +8,13 @@ import { db } from "@/lib/db";
 import { notificationEmailBatchSize, notificationEmailPolicyAllows } from "@/lib/notification-email-config";
 import { sendSmtpNotification } from "@/lib/smtp-notification-provider";
 import { runtimeNumber } from "@/lib/runtime-env";
+import { notificationDeliveryErrorCode } from "@/lib/notification-delivery-error";
 
 function retryDelayMs(attempt: number) {
   const baseSeconds = Math.min(3600, Math.max(10, Math.floor(runtimeNumber("HRBP_NOTIFICATION_RETRY_BASE_SECONDS", 60))));
   const maxSeconds = Math.min(86_400, Math.max(baseSeconds, Math.floor(runtimeNumber("HRBP_NOTIFICATION_RETRY_MAX_SECONDS", 3600))));
   const exponential = baseSeconds * Math.pow(2, Math.max(0, attempt - 1));
   return Math.min(maxSeconds, exponential) * 1000;
-}
-
-function errorMessage(error: unknown) {
-  const value = error instanceof Error ? error.message : String(error);
-  return value.replace(/s+/g, " ").trim().slice(0, 1200) || "Unknown notification delivery error";
 }
 
 function platformRole(value: string): PlatformRole | null {
@@ -34,7 +30,7 @@ async function recoverStaleLocks(now: Date) {
       status: NotificationOutboxStatus.FAILED,
       lockedAt: null,
       nextAttemptAt: now,
-      lastError: "Recovered stale notification dispatcher lock"
+      lastError: "NOTIFICATION_LOCK_RECOVERED"
     }
   });
   return result.count;
@@ -279,7 +275,7 @@ export async function runNotificationDispatcher() {
       });
       if (completion.count === 1) delivered += 1;
     } catch (error) {
-      const boundedError = errorMessage(error);
+      const boundedError = notificationDeliveryErrorCode(error);
       const nonRetryable = ["EMAIL_NOTIFICATION_POLICY_BLOCKED", "SMTP_RECIPIENT_INVALID", "NOTIFICATION_CHANNEL_UNSUPPORTED"].includes(boundedError);
       const deadLetter = nonRetryable || attempt >= maxAttempts;
       const now = new Date();
