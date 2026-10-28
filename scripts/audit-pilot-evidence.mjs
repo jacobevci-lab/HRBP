@@ -8,7 +8,11 @@ import { S3_RETENTION_PROFILE, S3RetentionError, validateS3RetentionRequirements
 
 import { S3_COLLECTION_PROFILE, S3ProvenanceError, validateS3CollectionRequirements, verifyS3CollectionProvenance } from "./audit-pilot-s3-provenance.mjs";
 import { S3ReadbackError } from "./audit-pilot-s3-readback.mjs";
+import { CurrentTrustError, currentTrustRequested, verifyPilotCurrentTrust } from "./audit-pilot-current-trust.mjs";
 
+const OPTION_NAMES = new Set(["packetPath", "policyPath", "expectedPolicySha256", "signaturesPath", "evidenceDir", "now",
+  "requiredRetentionProfile", "requiredCollectionProfile", "requiredTrustStateProfile", "trustStatePath",
+  "expectedTrustStateSha256", "minimumTrustSequence"]);
 const ROLES = ["CUSTOMER_SECURITY", "LEGAL_RECORDS"];
 const POLICY_SCOPE = "HRBP_AUDIT_PILOT_TRUST:1";
 const SIGNATURE_SCOPE = "HRBP_AUDIT_PILOT_SIGNATURES:1";
@@ -106,7 +110,11 @@ function signatureCheck(envelope, keys, packetSha256, policySha256) {
 /** Offline verifier. No provider APIs, key enrollment, private-key reads or deployment. */
 export function verifyPilotEvidence(options) {
   try {
-    if (!options || typeof options !== "object" || Array.isArray(options)) fail("EVIDENCE_INPUT_INVALID");
+    if (!options || typeof options !== "object" || Array.isArray(options) ||
+        ![Object.prototype, null].includes(Object.getPrototypeOf(options)) ||
+        Reflect.ownKeys(options).some(name => !OPTION_NAMES.has(name) ||
+          !Object.hasOwn(Object.getOwnPropertyDescriptor(options, name), "value"))) fail("EVIDENCE_INPUT_INVALID");
+    const checkCurrentTrust = currentTrustRequested(options);
     const { packetPath, policyPath, expectedPolicySha256, signaturesPath, evidenceDir, requiredRetentionProfile, requiredCollectionProfile, now = Date.now() } = options;
     if (!Number.isSafeInteger(now) || now < 0 || !sha(expectedPolicySha256)) fail("EVIDENCE_INPUT_INVALID");
     const policyBytes = readPilotBytes(policyPath, 16 * 1024);
@@ -137,6 +145,10 @@ export function verifyPilotEvidence(options) {
     }
     // Verify both role-bound signatures BEFORE opening any evidence files.
     signatureCheck(compactJson(readPilotBytes(signaturesPath, 4096)), keys, policy.packetSha256, expectedPolicySha256);
+    const currentTrust = checkCurrentTrust ? verifyPilotCurrentTrust(options, {
+      policySha256: expectedPolicySha256, customerReference: policy.customerReference,
+      keyIds: [...keys.values()].map(entry => entry.keyId), decisionAtUtc: packet.decisionAtUtc, now
+    }) : undefined;
     if (typeof evidenceDir !== "string" || !evidenceDir || evidenceDir.includes("\0")) fail("EVIDENCE_DIRECTORY_INVALID");
     const directory = resolve(evidenceDir);
     const before = lstatSync(directory, { bigint: true });
@@ -183,12 +195,13 @@ export function verifyPilotEvidence(options) {
       assuranceLevel: collectionResult ? "PINNED_SIGNATURES_DIGESTS_S3_SEMANTICS_AND_COLLECTION_PROVENANCE" : retentionResult ? "PINNED_SIGNATURES_DIGESTS_AND_S3_OBSERVATION_SEMANTICS" : "PINNED_DUAL_SIGNATURES_AND_FILE_DIGESTS",
       reasons: [], verifiedSignatures: 2, verifiedArtifacts: collectionResult ? 19 : 12,
       ...(retentionResult ? { retention: retentionResult } : {}),
-      ...(collectionResult ? { collection: collectionResult } : {})
+      ...(collectionResult ? { collection: collectionResult } : {}),
+      ...(currentTrust ? { currentTrust } : {})
     };
   } catch (error) {
     return {
       decision: "NO_GO", assuranceLevel: "NOT_VERIFIED",
-      reasons: [(error instanceof EvidenceError || error instanceof S3RetentionError || error instanceof S3ProvenanceError || error instanceof S3ReadbackError) ? error.code : "EVIDENCE_INPUT_INVALID"],
+      reasons: [(error instanceof EvidenceError || error instanceof S3RetentionError || error instanceof S3ProvenanceError || error instanceof S3ReadbackError || error instanceof CurrentTrustError) ? error.code : "EVIDENCE_INPUT_INVALID"],
       verifiedSignatures: 0, verifiedArtifacts: 0
     };
   }
@@ -200,16 +213,21 @@ function cliOptions(argv) {
     ["--expected-policy-sha256", "expectedPolicySha256"],
     ["--signatures", "signaturesPath"], ["--evidence-dir", "evidenceDir"],
     ["--require-retention-profile", "requiredRetentionProfile"],
-    ["--require-collection-profile", "requiredCollectionProfile"]
+    ["--require-collection-profile", "requiredCollectionProfile"],
+    ["--require-trust-state-profile", "requiredTrustStateProfile"], ["--trust-state", "trustStatePath"],
+    ["--expected-trust-state-sha256", "expectedTrustStateSha256"], ["--minimum-trust-sequence", "minimumTrustSequence"]
   ]);
-  if (![10, 12, 14].includes(argv.length)) fail("EVIDENCE_INPUT_INVALID");
+  if (argv.length < 10 || argv.length > 22 || argv.length % 2 !== 0) fail("EVIDENCE_INPUT_INVALID");
   const options = {};
   for (let index = 0; index < argv.length; index += 2) {
     const name = flags.get(argv[index]), value = argv[index + 1];
     if (!name || Object.hasOwn(options, name) || !value || value.startsWith("--") || value.includes("\0")) {
       fail("EVIDENCE_INPUT_INVALID");
     }
-    options[name] = value;
+    if (name === "minimumTrustSequence") {
+      if (!/^[1-9][0-9]{0,15}$/.test(value) || !Number.isSafeInteger(Number(value))) fail("EVIDENCE_INPUT_INVALID");
+      options[name] = Number(value);
+    } else options[name] = value;
   }
   if (["packetPath", "policyPath", "expectedPolicySha256", "signaturesPath", "evidenceDir"].some(name => !Object.hasOwn(options, name))) {
     fail("EVIDENCE_INPUT_INVALID");
