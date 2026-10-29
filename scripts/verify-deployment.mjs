@@ -1,10 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { appendFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { normalizedRevision, RELEASE_PROTOCOL_VERSION } from '../lib/runtime-health.mjs';
+import { normalizedProviderVersionId, normalizedRevision, RELEASE_PROTOCOL_VERSION } from '../lib/runtime-health.mjs';
 
 const MAX_BYTES = 8192;
-export function deploymentConfig({ origin, expectedRevision, localSmoke = false, timeoutMs = 10000 }) {
+export function deploymentConfig({ origin, expectedRevision, expectedProviderVersionId = null, requireProviderVersion = false, localSmoke = false, timeoutMs = 10000 }) {
   let url;
   try { url = new URL(origin); } catch { throw new Error('Invalid verification origin.'); }
   const loopback = localSmoke && url.protocol === 'http:' && ['127.0.0.1', '[::1]'].includes(url.hostname);
@@ -13,8 +13,16 @@ export function deploymentConfig({ origin, expectedRevision, localSmoke = false,
   }
   const expected = normalizedRevision(expectedRevision);
   if (!expected) throw new Error('A full 40-character expected commit SHA is required.');
+  if (typeof requireProviderVersion !== 'boolean') throw new Error('Invalid provider-version requirement.');
+  const suppliedProviderVersion = expectedProviderVersionId === null || expectedProviderVersionId === undefined || expectedProviderVersionId === ''
+    ? null
+    : normalizedProviderVersionId(expectedProviderVersionId);
+  if (expectedProviderVersionId !== null && expectedProviderVersionId !== undefined && expectedProviderVersionId !== '' && !suppliedProviderVersion) {
+    throw new Error('A canonical provider version UUID is required.');
+  }
+  if (requireProviderVersion && !suppliedProviderVersion) throw new Error('Provider version verification is required.');
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000) throw new Error('Invalid verification timeout.');
-  return { origin: url.origin, expectedRevision: expected, timeoutMs };
+  return { origin: url.origin, expectedRevision: expected, expectedProviderVersionId: suppliedProviderVersion, requireProviderVersion, timeoutMs };
 }
 
 async function boundedJson(response) {
@@ -40,15 +48,16 @@ async function boundedJson(response) {
 }
 
 /** Exactly one anonymous GET. Does not log in, trigger maintenance, retry or follow redirects. */
-export async function verifyDeployment({ origin, expectedRevision, localSmoke = false, timeoutMs = 10000,
-  fetchImpl = globalThis.fetch, nonce = () => randomBytes(16).toString('hex') }) {
-  const config = deploymentConfig({ origin, expectedRevision, localSmoke, timeoutMs });
+export async function verifyDeployment({ origin, expectedRevision, expectedProviderVersionId = null, requireProviderVersion = false,
+  localSmoke = false, timeoutMs = 10000, fetchImpl = globalThis.fetch, nonce = () => randomBytes(16).toString('hex') }) {
+  const config = deploymentConfig({ origin, expectedRevision, expectedProviderVersionId, requireProviderVersion, localSmoke, timeoutMs });
   const probe = nonce();
   if (typeof probe !== 'string' || !/^[a-f0-9]{32}$/.test(probe)) throw new Error('Invalid probe nonce.');
   const url = new URL('/api/health/runtime', config.origin);
   url.searchParams.set('probe', probe);
   const result = { success: false, code: 'UNCONFIRMED', expectedRevision: config.expectedRevision,
-    observedRevision: null, httpStatus: null, scope: 'runtime-and-release-only' };
+    observedRevision: null, expectedProviderVersionId: config.expectedProviderVersionId,
+    observedProviderVersionId: null, httpStatus: null, scope: 'runtime-and-release-only' };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
@@ -79,22 +88,41 @@ export async function verifyDeployment({ origin, expectedRevision, localSmoke = 
     result.observedRevision = normalizedRevision(body.release.revision);
     if (!result.observedRevision) return { ...result, code: 'RELEASE_UNIDENTIFIED' };
     if (result.observedRevision !== config.expectedRevision) return { ...result, code: 'REVISION_MISMATCH' };
+    if (config.expectedProviderVersionId) {
+      result.observedProviderVersionId = normalizedProviderVersionId(body.release.providerVersionId);
+      if (!result.observedProviderVersionId) return { ...result, code: 'PROVIDER_VERSION_UNIDENTIFIED' };
+      if (result.observedProviderVersionId !== config.expectedProviderVersionId) return { ...result, code: 'PROVIDER_VERSION_MISMATCH' };
+      return { ...result, success: true, code: 'REVISION_AND_PROVIDER_VERSION_MATCH' };
+    }
     return { ...result, success: true, code: 'REVISION_MATCH' };
   } finally { clearTimeout(timeout); }
 }
 
 export function deploymentSummary(result) {
   // Only allowlisted result fields are emitted, never response bodies/URLs or exceptions.
-  return ['## Deployed revision verification', '', `Result: **${result.success ? 'matched' : 'not confirmed'}** (${result.code})`, '',
-    `Expected: \`${result.expectedRevision}\``, `Observed: \`${result.observedRevision || 'unidentified'}\``,
-    `HTTP: ${result.httpStatus ?? 'unavailable'}`, '',
-    'Scope: anonymous runtime response and build revision only. Database, login, provider integrations and business workflows are NOT verified.', ''].join('\n');
+  const lines = ['## Deployed revision verification', '', `Result: **${result.success ? 'matched' : 'not confirmed'}** (${result.code})`, '',
+    `Expected revision: \`${result.expectedRevision}\``, `Observed revision: \`${result.observedRevision || 'unidentified'}\``];
+  if (result.expectedProviderVersionId) {
+    lines.push(`Expected provider version: \`${result.expectedProviderVersionId}\``,
+      `Observed provider version: \`${result.observedProviderVersionId || 'unidentified'}\``);
+  }
+  lines.push(`HTTP: ${result.httpStatus ?? 'unavailable'}`, '',
+    'Scope: one anonymous fresh runtime response; source revision and, when required, Cloudflare Worker Version ID only. Database, migration state, login, provider build logs, integrations and business workflows are NOT verified.', '');
+  return lines.join('\n');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const report = await verifyDeployment({ origin: process.env.HRBP_VERIFY_ORIGIN,
-      expectedRevision: process.env.HRBP_EXPECTED_REVISION });
+    const flag = process.env.HRBP_REQUIRE_PROVIDER_VERSION;
+    if (flag !== undefined && flag !== '' && flag !== 'true' && flag !== 'false') {
+      throw new Error('Invalid provider-version requirement.');
+    }
+    const report = await verifyDeployment({
+      origin: process.env.HRBP_VERIFY_ORIGIN,
+      expectedRevision: process.env.HRBP_EXPECTED_REVISION,
+      expectedProviderVersionId: process.env.HRBP_EXPECTED_PROVIDER_VERSION_ID,
+      requireProviderVersion: flag === 'true'
+    });
     console.log(JSON.stringify(report));
     if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, deploymentSummary(report));
     if (!report.success) process.exitCode = 1;
