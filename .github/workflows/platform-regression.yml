@@ -1,5 +1,6 @@
 name: Platform Regression
 on:
+  workflow_call:
   pull_request:
     branches: [main]
   push:
@@ -13,6 +14,9 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
     env:
       DATABASE_URL: postgresql://hrbp:disposable-audit-only@127.0.0.1:5432/hrbp_audit
       CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: postgresql://hrbp:disposable-audit-only@127.0.0.1:5432/hrbp_audit
@@ -21,10 +25,46 @@ jobs:
       HRBP_AUTH_TENANT_ID: tenant-acme-global
       NEXT_TELEMETRY_DISABLED: 1
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .node-version
+      - name: Verify stacked and platform workflow contracts
+        run: node --test scripts/stacked-integration-ci.test.mjs scripts/stacked-platform-ci.test.mjs
+      - name: Record platform source identity
+        env:
+          TESTED_SHA: ${{ github.sha }}
+          CANDIDATE_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          node --input-type=module -e '
+            import { execFileSync } from "node:child_process";
+            import { mkdirSync, writeFileSync } from "node:fs";
+            const env = process.env;
+            const sha = /^[a-f0-9]{40}$/;
+            const pr = env.GITHUB_EVENT_NAME === "pull_request";
+            if (env.CI !== "true" || env.GITHUB_ACTIONS !== "true" ||
+                !["pull_request", "push"].includes(env.GITHUB_EVENT_NAME) ||
+                !sha.test(env.TESTED_SHA ?? "") ||
+                (pr && (!sha.test(env.CANDIDATE_SHA ?? "") || !sha.test(env.BASE_SHA ?? "")))) {
+              throw new Error("PLATFORM_SOURCE_IDENTITY_INVALID");
+            }
+            const actual = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+            if (actual !== env.TESTED_SHA) throw new Error("PLATFORM_SOURCE_IDENTITY_MISMATCH");
+            const evidence = {
+              scope: "ci-local-platform-regression-only",
+              testedRevision: actual,
+              candidateRevision: pr ? env.CANDIDATE_SHA : null,
+              baseRevision: pr ? env.BASE_SHA : null,
+              releaseAuthorized: false,
+              productionDeployed: false
+            };
+            mkdirSync(".audit", { recursive: true });
+            writeFileSync(".audit/source-identity.json", JSON.stringify(evidence, null, 2) + "\n", { flag: "wx" });
+            console.log(JSON.stringify(evidence));
+          '
       - name: Start PostgreSQL for regression audit
         shell: bash
         run: |
@@ -114,7 +154,7 @@ jobs:
           node scripts/platform-remediation-gate.mjs
       - name: Preserve complete audit evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: hrbp-platform-audit
           path: .audit/

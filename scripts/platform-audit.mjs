@@ -82,8 +82,11 @@ try{
   for(const path of [...new Set(routes)]){
    errors=[];failures=[];const start=Date.now();
    try{
-    const response=await page.goto(origin+path,{waitUntil:'networkidle',timeout:20000});
+    const response=await page.goto(origin+path,{waitUntil:'load',timeout:25000});
     await page.locator('.app-shell[data-session-loading="false"]').waitFor({timeout:3000}).catch(()=>{});
+    // Observe late hydration/API failures without requiring global network quiescence;
+    // live modules may legitimately keep background requests active.
+    await page.waitForTimeout(250);
     const dom=await page.evaluate(()=>{const area=document.querySelector('.page-content')||document.body,text=area.innerText||'';return{title:document.title,heading:area.querySelector('h1,h2')?.textContent?.trim().slice(0,120),textSize:text.length,fallback:/could not|unable to|unavailable|failed to|yüklenemedi|erişilemiyor/i.test(text),denied:/access denied|not authorized|not permitted|permission|yetkiniz yok|erişim reddedildi/i.test(text),overflow:document.documentElement.scrollWidth>innerWidth+2,buttons:area.querySelectorAll('button').length,disabledButtons:area.querySelectorAll('button:disabled').length,unnamedButtons:[...area.querySelectorAll('button')].filter(e=>!e.textContent.trim()&&!e.getAttribute('aria-label')&&!e.getAttribute('title')).length,links:[...document.querySelectorAll('a[href]')].map(a=>({href:a.getAttribute('href'),text:a.textContent.trim().slice(0,80)}))};});
     const row={role,path,status:response?.status(),ms:Date.now()-start,...dom,errors:[...new Set(errors)],serverFailures:failures};delete row.links;report.pages.push(row);
     if(role==='admin'||role==='anonymous')for(const link of dom.links)if(link.href?.startsWith('/')&&!link.href.startsWith('//'))linkSet.set(`${role}:${link.href}`,{role,...link,source:path});
@@ -98,7 +101,7 @@ try{
   }
   if(role==='admin'){
    await page.setViewportSize({width:390,height:844});
-   for(const path of [...new Set(routes)].filter(x=>x!=='/auth/sign-in')){try{const r=await page.goto(origin+path,{waitUntil:'networkidle',timeout:15000});const m=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth+2,width:document.documentElement.scrollWidth,viewport:innerWidth}));report.pages.push({role:'admin-mobile',path,status:r?.status(),...m});}catch(e){report.pages.push({role:'admin-mobile',path,status:0,error:e.name});}}
+   for(const path of [...new Set(routes)].filter(x=>x!=='/auth/sign-in')){try{const r=await page.goto(origin+path,{waitUntil:'load',timeout:25000});await page.locator('.app-shell[data-session-loading="false"]').waitFor({timeout:3000}).catch(()=>{});await page.waitForTimeout(150);const m=await page.evaluate(()=>({overflow:document.documentElement.scrollWidth>innerWidth+2,width:document.documentElement.scrollWidth,viewport:innerWidth}));report.pages.push({role:'admin-mobile',path,status:r?.status(),...m});}catch(e){report.pages.push({role:'admin-mobile',path,status:0,error:e.name});}}
   }
   await context.close();
  }

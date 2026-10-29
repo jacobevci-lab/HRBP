@@ -1,6 +1,7 @@
 import { NotificationOutboxStatus } from "@prisma/client";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { notificationDeliveryErrorCode } from "@/lib/notification-delivery-error";
 import { getRequestContext, unauthorized } from "@/lib/request-context";
 
 const operationalStatuses = [
@@ -60,7 +61,11 @@ export async function GET(request: Request) {
         deadLetter: counts.DEAD_LETTER ?? 0,
         delivered: counts.DELIVERED ?? 0
       },
-      items
+      items: items.map((item) => ({
+        ...item,
+        // Also minimize historical diagnostics written before the dispatcher guard.
+        lastError: item.lastError === null ? null : notificationDeliveryErrorCode(item.lastError)
+      }))
     }
   }, { headers: { "cache-control": "no-store" } });
 }
