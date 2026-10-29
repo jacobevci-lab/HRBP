@@ -122,7 +122,7 @@
     "audit-retention:validate": "node scripts/validate-audit-retention-evidence.mjs && node --test scripts/audit-retention-evidence.test.mjs",
     "audit-pilot:validate": "node --test scripts/audit-pilot-gate-evaluator.test.mjs scripts/audit-pilot-gate-ci.test.mjs scripts/audit-pilot-s3-retention.test.mjs scripts/audit-pilot-s3-collector.test.mjs scripts/audit-pilot-s3-readback.test.mjs scripts/audit-pilot-current-trust.test.mjs scripts/audit-pilot-verify.test.mjs",
     "audit-pilot:verify": "node scripts/audit-pilot-verify.mjs",
-    "deployment-verification:validate": "node --test scripts/deployment-verification.test.mjs scripts/provider-version-verification.test.mjs"
+    "deployment-verification:validate": "node --test scripts/deployment-verification.test.mjs scripts/provider-version-verification.test.mjs scripts/provider-check-verification.test.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "6.19.3",

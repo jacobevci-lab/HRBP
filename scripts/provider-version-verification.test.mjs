@@ -102,20 +102,24 @@ test("Cloudflare Version Metadata is configured but local Worker smoke deliberat
   assert.doesNotMatch(smoke, /version_metadata\s*:/);
 });
 
-test("manual Release Verification requires an independently supplied provider Version ID", () => {
+test("manual Release Verification requires independently supplied provider build and Version IDs", () => {
   const workflow = readFileSync(".github/workflows/release-verification.yml", "utf8");
+  assert.match(workflow, /expected_provider_build_id:\n\s+description:/);
+  assert.match(workflow, /expected_provider_build_id:[\s\S]{0,180}required: true/);
   assert.match(workflow, /expected_provider_version_id:\n\s+description:/);
   assert.match(workflow, /expected_provider_version_id:[\s\S]{0,180}required: true/);
+  assert.match(workflow, /HRBP_EXPECTED_PROVIDER_BUILD_ID: \$\{\{ inputs\.expected_provider_build_id \}\}/);
   assert.match(workflow, /HRBP_EXPECTED_PROVIDER_VERSION_ID: \$\{\{ inputs\.expected_provider_version_id \}\}/);
   assert.match(workflow, /HRBP_REQUIRE_PROVIDER_VERSION: "true"/);
   assert.match(workflow, /run: npm run deployment-verification:validate/);
+  assert.match(workflow, /run: node scripts\/verify-provider-check\.mjs/);
   assert.match(workflow, /run: node scripts\/verify-deployment\.mjs/);
 });
 
 test("production prebuild keeps provider-version verification mandatory", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
   assert.equal(pkg.scripts["deployment-verification:validate"],
-    "node --test scripts/deployment-verification.test.mjs scripts/provider-version-verification.test.mjs");
+    "node --test scripts/deployment-verification.test.mjs scripts/provider-version-verification.test.mjs scripts/provider-check-verification.test.mjs");
   assert.ok(pkg.scripts.prebuild.split(" && ").includes("npm run deployment-verification:validate"));
 });
 
