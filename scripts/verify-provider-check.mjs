@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { normalizedProviderVersionId, normalizedRevision } from '../lib/runtime-health.mjs';
 
 const MAX_BYTES = 128 * 1024;
+const MAX_SUMMARY_CHARS = 8192;
 export const CLOUDFLARE_CHECK_NAME = 'Workers Builds: hrbp';
 export const CLOUDFLARE_APP_ID = 85455;
 export const CLOUDFLARE_APP_SLUG = 'cloudflare-workers-and-pages';
@@ -17,17 +18,19 @@ function validToken(value) {
   return typeof value === 'string' && value.length >= 1 && value.length <= 4096 && !/[\u0000-\u0020\u007f]/.test(value) ? value : null;
 }
 
-export function providerCheckConfig({ repository, expectedRevision, expectedBuildId, token, timeoutMs = 10000 }) {
+export function providerCheckConfig({ repository, expectedRevision, expectedBuildId, expectedVersionId, token, timeoutMs = 10000 }) {
   const repo = validRepository(repository);
   const revision = normalizedRevision(expectedRevision);
   const buildId = normalizedProviderVersionId(expectedBuildId);
+  const versionId = normalizedProviderVersionId(expectedVersionId);
   const auth = validToken(token);
   if (!repo) throw new Error('Invalid GitHub repository.');
   if (!revision) throw new Error('A full 40-character expected commit SHA is required.');
   if (!buildId) throw new Error('A canonical provider build UUID is required.');
+  if (!versionId) throw new Error('A canonical provider version UUID is required.');
   if (!auth) throw new Error('A GitHub checks-read token is required.');
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000) throw new Error('Invalid provider-check timeout.');
-  return { repository: repo, expectedRevision: revision, expectedBuildId: buildId, token: auth, timeoutMs };
+  return { repository: repo, expectedRevision: revision, expectedBuildId: buildId, expectedVersionId: versionId, token: auth, timeoutMs };
 }
 
 async function boundedJson(response) {
@@ -53,6 +56,13 @@ async function boundedJson(response) {
   }
 }
 
+function providerVersionFromSummary(summary) {
+  if (typeof summary !== 'string' || summary.length > MAX_SUMMARY_CHARS) return null;
+  const matches = [...summary.matchAll(/(?:^|\n)Version ID: ([a-f0-9-]{36})(?=\n|$)/gi)];
+  if (matches.length !== 1) return null;
+  return normalizedProviderVersionId(matches[0][1]);
+}
+
 function candidateIdentity(check, config) {
   return check && typeof check === 'object' &&
     check.name === CLOUDFLARE_CHECK_NAME &&
@@ -68,8 +78,10 @@ export function evaluateProviderChecks(payload, config) {
     code: 'PROVIDER_CHECK_UNCONFIRMED',
     expectedRevision: config.expectedRevision,
     expectedBuildId: config.expectedBuildId,
+    expectedProviderVersionId: config.expectedVersionId,
     observedCheckRunId: null,
     observedConclusion: null,
+    observedProviderVersionId: null,
     providerAppId: CLOUDFLARE_APP_ID
   };
   if (!payload || typeof payload !== 'object' || !Array.isArray(payload.check_runs) || payload.check_runs.length > 10) {
@@ -91,13 +103,17 @@ export function evaluateProviderChecks(payload, config) {
   if (check.status !== 'completed' || check.conclusion !== 'success') {
     return { ...safe, code: 'PROVIDER_BUILD_NOT_SUCCESSFUL' };
   }
-  return { ...safe, success: true, code: 'PROVIDER_BUILD_SUCCESS_CONFIRMED' };
+  const observedVersion = providerVersionFromSummary(check.output?.summary);
+  if (!observedVersion) return { ...safe, code: 'PROVIDER_CHECK_VERSION_UNIDENTIFIED' };
+  const versionSafe = { ...safe, observedProviderVersionId: observedVersion };
+  if (observedVersion !== config.expectedVersionId) return { ...versionSafe, code: 'PROVIDER_CHECK_VERSION_MISMATCH' };
+  return { ...versionSafe, success: true, code: 'PROVIDER_BUILD_AND_VERSION_SUCCESS_CONFIRMED' };
 }
 
 /** Read-only GitHub Checks API lookup. Never follows redirects or logs provider output/token values. */
-export async function verifyProviderCheck({ repository, expectedRevision, expectedBuildId, token, timeoutMs = 10000,
+export async function verifyProviderCheck({ repository, expectedRevision, expectedBuildId, expectedVersionId, token, timeoutMs = 10000,
   fetchImpl = globalThis.fetch }) {
-  const config = providerCheckConfig({ repository, expectedRevision, expectedBuildId, token, timeoutMs });
+  const config = providerCheckConfig({ repository, expectedRevision, expectedBuildId, expectedVersionId, token, timeoutMs });
   const [owner, name] = config.repository.split('/');
   const url = new URL(`https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/commits/${config.expectedRevision}/check-runs`);
   url.searchParams.set('check_name', CLOUDFLARE_CHECK_NAME);
@@ -107,7 +123,8 @@ export async function verifyProviderCheck({ repository, expectedRevision, expect
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   const base = { success: false, code: 'PROVIDER_CHECK_UNCONFIRMED', expectedRevision: config.expectedRevision,
-    expectedBuildId: config.expectedBuildId, observedCheckRunId: null, observedConclusion: null, providerAppId: CLOUDFLARE_APP_ID };
+    expectedBuildId: config.expectedBuildId, expectedProviderVersionId: config.expectedVersionId,
+    observedCheckRunId: null, observedConclusion: null, observedProviderVersionId: null, providerAppId: CLOUDFLARE_APP_ID };
   try {
     let response;
     try {
@@ -144,10 +161,12 @@ export function providerCheckSummary(result) {
     `Result: **${result.success ? 'confirmed' : 'not confirmed'}** (${result.code})`, '',
     `Expected source: \`${result.expectedRevision}\``,
     `Expected build: \`${result.expectedBuildId}\``,
+    `Expected provider version: \`${result.expectedProviderVersionId}\``,
     `Cloudflare GitHub App ID: \`${result.providerAppId}\``,
     `Observed check run: \`${result.observedCheckRunId || 'unidentified'}\``,
-    `Observed conclusion: \`${result.observedConclusion || 'unidentified'}\``, '',
-    'Scope: GitHub Checks metadata from the Cloudflare Workers and Pages App only. Cloudflare build-log contents, account configuration, quota, permissions and deployed runtime version are NOT verified by this step.', ''].join('\n');
+    `Observed conclusion: \`${result.observedConclusion || 'unidentified'}\``,
+    `Observed provider version: \`${result.observedProviderVersionId || 'unidentified'}\``, '',
+    'Scope: GitHub Checks metadata from the Cloudflare Workers and Pages App only. Cloudflare build-log contents, account configuration, quota, permissions and deployed runtime traffic allocation are NOT verified by this step.', ''].join('\n');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -156,6 +175,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       repository: process.env.GITHUB_REPOSITORY,
       expectedRevision: process.env.HRBP_EXPECTED_REVISION,
       expectedBuildId: process.env.HRBP_EXPECTED_PROVIDER_BUILD_ID,
+      expectedVersionId: process.env.HRBP_EXPECTED_PROVIDER_VERSION_ID,
       token: process.env.GITHUB_TOKEN
     });
     console.log(JSON.stringify(report));

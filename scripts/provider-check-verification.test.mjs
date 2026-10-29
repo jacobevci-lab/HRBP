@@ -5,9 +5,11 @@ import { CLOUDFLARE_APP_ID, providerCheckConfig, providerCheckSummary, verifyPro
 
 const SHA = 'a'.repeat(40);
 const BUILD = '11111111-2222-4333-8444-555555555555';
-const OTHER = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+const VERSION = '2dcda87c-1cf4-4072-9739-214e95136994';
+const OTHER_BUILD = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee';
+const OTHER_VERSION = 'bbbbbbbb-cccc-4ddd-8eee-ffffffffffff';
 const TOKEN = 'github-checks-read-token';
-const base = { repository: 'jacobevci-lab/HRBP', expectedRevision: SHA, expectedBuildId: BUILD, token: TOKEN };
+const base = { repository: 'jacobevci-lab/HRBP', expectedRevision: SHA, expectedBuildId: BUILD, expectedVersionId: VERSION, token: TOKEN };
 function check(changes = {}) {
   return {
     id: 123456,
@@ -16,6 +18,7 @@ function check(changes = {}) {
     status: 'completed',
     conclusion: 'success',
     external_id: BUILD,
+    output: { summary: `\nBuild ID: [${BUILD}](https://dash.cloudflare.example/build)\nScript: [hrbp](https://dash.cloudflare.example/script)\nVersion ID: ${VERSION}\n` },
     app: { id: 85455, slug: 'cloudflare-workers-and-pages', owner: { login: 'cloudflare' } },
     ...changes
   };
@@ -25,10 +28,11 @@ function reply(check_runs = [check()], status = 200, headers = {}) {
     headers: { 'content-type': 'application/json; charset=utf-8', ...headers } });
 }
 
-test('configuration validates repo, exact revision, build UUID, token and timeout before network access', () => {
+test('configuration validates repo, exact revision, build/version UUIDs, token and timeout before network access', () => {
   assert.equal(providerCheckConfig(base).expectedBuildId, BUILD);
+  assert.equal(providerCheckConfig(base).expectedVersionId, VERSION);
   for (const extra of [
-    { repository: '../other' }, { expectedRevision: 'short' }, { expectedBuildId: 'latest' },
+    { repository: '../other' }, { expectedRevision: 'short' }, { expectedBuildId: 'latest' }, { expectedVersionId: 'latest' },
     { token: '' }, { token: 'bad token' }, { timeoutMs: 0 }, { timeoutMs: 30001 }, { timeoutMs: 1.5 }
   ]) assert.throws(() => providerCheckConfig({ ...base, ...extra }));
 });
@@ -54,8 +58,9 @@ test('read-only request is pinned to exact GitHub commit, Cloudflare check name 
   }});
   assert.equal(calls, 1);
   assert.deepEqual(result, {
-    success: true, code: 'PROVIDER_BUILD_SUCCESS_CONFIRMED', expectedRevision: SHA, expectedBuildId: BUILD,
-    observedCheckRunId: 123456, observedConclusion: 'success', providerAppId: 85455
+    success: true, code: 'PROVIDER_BUILD_AND_VERSION_SUCCESS_CONFIRMED', expectedRevision: SHA, expectedBuildId: BUILD,
+    expectedProviderVersionId: VERSION, observedCheckRunId: 123456, observedConclusion: 'success',
+    observedProviderVersionId: VERSION, providerAppId: 85455
   });
 });
 
@@ -81,10 +86,24 @@ test('same build id from wrong app, wrong source or malformed check id is reject
 });
 
 test('wrong build id is not substituted and duplicate matching build ids fail closed', async () => {
-  const missing = await verifyProviderCheck({ ...base, fetchImpl: async () => reply([check({ external_id: OTHER })]) });
+  const missing = await verifyProviderCheck({ ...base, fetchImpl: async () => reply([check({ external_id: OTHER_BUILD })]) });
   assert.equal(missing.code, 'PROVIDER_CHECK_NOT_FOUND');
   const duplicate = await verifyProviderCheck({ ...base, fetchImpl: async () => reply([check(), check({ id: 123457 })]) });
   assert.equal(duplicate.code, 'PROVIDER_CHECK_AMBIGUOUS');
+});
+
+test('provider check Version ID must be present exactly once and equal the independently supplied Version ID', async () => {
+  const cases = [
+    [{ output: { summary: `Build ID: ${BUILD}\n` } }, 'PROVIDER_CHECK_VERSION_UNIDENTIFIED'],
+    [{ output: { summary: 'Version ID: not-a-uuid\n' } }, 'PROVIDER_CHECK_VERSION_UNIDENTIFIED'],
+    [{ output: { summary: `Version ID: ${VERSION}\nVersion ID: ${VERSION}\n` } }, 'PROVIDER_CHECK_VERSION_UNIDENTIFIED'],
+    [{ output: { summary: `Version ID: ${OTHER_VERSION}\n` } }, 'PROVIDER_CHECK_VERSION_MISMATCH']
+  ];
+  for (const [changed, code] of cases) {
+    const result = await verifyProviderCheck({ ...base, fetchImpl: async () => reply([check(changed)]) });
+    assert.equal(result.success, false);
+    assert.equal(result.code, code);
+  }
 });
 
 test('HTTP, content-type, malformed, oversized and network failures stay bounded', async () => {
@@ -105,9 +124,9 @@ test('HTTP, content-type, malformed, oversized and network failures stay bounded
 });
 
 test('response inventory is bounded and arbitrary provider output never appears in result or summary', async () => {
-  const tooMany = await verifyProviderCheck({ ...base, fetchImpl: async () => reply(Array.from({length: 11}, (_,i)=>check({id:100+i, external_id:OTHER}))) });
+  const tooMany = await verifyProviderCheck({ ...base, fetchImpl: async () => reply(Array.from({length: 11}, (_,i)=>check({id:100+i, external_id:OTHER_BUILD}))) });
   assert.equal(tooMany.code, 'PROVIDER_CHECK_RESPONSE_INVALID');
-  const raw = check({ output: { summary: 'PRIVATE_PROVIDER_LOG token=secret' }, details_url: 'https://private.invalid/value' });
+  const raw = check({ output: { summary: `PRIVATE_PROVIDER_LOG token=secret\nVersion ID: ${VERSION}\n` }, details_url: 'https://private.invalid/value' });
   const result = await verifyProviderCheck({ ...base, fetchImpl: async () => reply([raw]) });
   const summary = providerCheckSummary(result);
   assert.equal(result.success, true);
@@ -123,6 +142,7 @@ test('manual Release Verification binds provider build success before runtime Ve
   assert.match(workflow, /expected_provider_build_id:[\s\S]{0,180}required: true/);
   assert.match(workflow, /^    permissions:\n      contents: read\n      checks: read$/m);
   assert.match(workflow, /HRBP_EXPECTED_PROVIDER_BUILD_ID: \$\{\{ inputs\.expected_provider_build_id \}\}/);
+  assert.match(workflow, /HRBP_EXPECTED_PROVIDER_VERSION_ID: \$\{\{ inputs\.expected_provider_version_id \}\}/);
   assert.match(workflow, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
   const providerStep = workflow.indexOf('run: node scripts/verify-provider-check.mjs');
   const runtimeStep = workflow.indexOf('run: node scripts/verify-deployment.mjs');
