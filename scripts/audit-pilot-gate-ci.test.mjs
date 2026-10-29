@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
@@ -44,6 +44,20 @@ test("third-party actions are immutable reviewed revisions, never movable tags o
     assert.match(ref, /^[a-f0-9]{40}$/, "action ref must be a full commit SHA");
   }
   assert.doesNotMatch(workflow, /uses:\s*[^\s]+@(v\d+|main|master|latest)\b/);
+});
+
+test("every third-party workflow action is pinned to an immutable full commit SHA", () => {
+  const workflowDir = new URL("../.github/workflows/", import.meta.url);
+  for (const name of readdirSync(workflowDir).filter((entry) => /\\.ya?ml$/.test(entry))) {
+    const source = readFileSync(new URL(name, workflowDir), "utf8");
+    for (const match of source.matchAll(/^\\s*(?:- )?uses:\\s*([^\\s#]+).*$/gm)) {
+      const use = match[1];
+      if (use.startsWith("./")) continue;
+      const separator = use.lastIndexOf("@");
+      assert.ok(separator > 0, name + ": third-party action must include an immutable revision");
+      assert.match(use.slice(separator + 1), /^[a-f0-9]{40}$/, name + ": " + use + " must use a full commit SHA");
+    }
+  }
 });
 
 test("the operator command uses the strict verifier rather than the optional-profile primitive", () => {

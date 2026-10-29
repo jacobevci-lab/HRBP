@@ -154,7 +154,7 @@ jobs:
           node scripts/platform-remediation-gate.mjs
       - name: Preserve complete audit evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: hrbp-platform-audit
           path: .audit/
