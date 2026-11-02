@@ -11,6 +11,12 @@ const families = read("app/api/job-architecture/families/route.ts");
 const levels = read("app/api/job-architecture/levels/route.ts");
 const profiles = read("app/api/job-architecture/profiles/route.ts");
 const positions = read("app/api/positions/route.ts");
+const workspace = read("components/job-architecture-workspace.tsx");
+const admin = read("components/job-architecture-admin.tsx");
+const jobPage = read("app/module/job-architecture/page.tsx");
+const coreWorkspace = read("components/core-hr-live-workspace.tsx");
+const newPositionPage = read("app/module/positions/new/page.tsx");
+const positionForm = read("components/position-create-form.tsx");
 const pkg = JSON.parse(read("package.json"));
 
 for (const model of ["JobFamily", "JobLevel", "JobProfile", "JobProfileSkillRequirement"]) {
@@ -49,6 +55,25 @@ assert.match(positions, /jobProfileId: jobProfile\?\.id \?\? null/);
 assert.match(positions, /jobFamily: jobProfile\?\.family\.name \?\? jobFamily/);
 assert.match(positions, /grade: jobProfile\?\.level\.code \?\? grade/);
 assert.match(positions, /JOB_PROFILE_NOT_FOUND/);
+
+assert.match(jobPage, /<AppShell><JobArchitectureWorkspace\/><\/AppShell>/);
+assert.match(workspace, /getServerRequestContext\(\)/);
+assert.match(workspace, /can\(ctx, "job-architecture:read"\)/);
+assert.match(workspace, /can\(ctx, "job-architecture:write"\)/);
+assert.match(workspace, /tenantId: ctx\.tenantId/);
+assert.match(workspace, /JobArchitectureAdmin/);
+assert.match(admin, /\/api\/job-architecture\/families/);
+assert.match(admin, /\/api\/job-architecture\/levels/);
+assert.match(admin, /\/api\/job-architecture\/profiles/);
+assert.match(admin, /skillRequirements:/);
+assert.match(coreWorkspace, /href="\/module\/job-architecture"/);
+assert.match(newPositionPage, /getServerRequestContext\(\)/);
+assert.match(newPositionPage, /can\(ctx, "positions:write"\)/);
+assert.match(newPositionPage, /tenantId: ctx\.tenantId/);
+assert.doesNotMatch(newPositionPage, /workspaceTenantId/);
+assert.match(positionForm, /jobProfileId/);
+assert.match(positionForm, /selectedProfile/);
+assert.match(positionForm, /Legacy job family fallback/);
 
 for (const table of ["JobFamily", "JobLevel", "JobProfile", "JobProfileSkillRequirement"]) {
   assert.match(migration, new RegExp('CREATE TABLE "' + table + '"'));

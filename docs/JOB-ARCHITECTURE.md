@@ -31,11 +31,16 @@ Existing `Position.jobFamily` and `Position.grade` fields are retained during mi
 
 This increment is additive. No existing position is automatically remapped and no historical free-text family/grade value is rewritten. A later Migration Center workflow will propose mappings, validate them, preview impact and require an explicit operator action before historical positions receive structured profile references.
 
+## Administration experience
+
+Authenticated users with `job-architecture:read` can open **Positions → Job Architecture** without adding another top-level navigation item. The workspace exposes current families, career levels, profiles, mapped positions and skill requirements. Users with `job-architecture:write` can create governed family, level and profile records, including bounded skill requirements.
+
+The Position creation page resolves organization units and active/effective Job Profiles from the signed tenant context. It no longer reads tenant options through the public workspace fallback. Selecting a structured profile disables manual family/grade entry and the server remains the authority for the canonical snapshot values.
+
 ## Next slices
 
-1. Job Architecture administration workspace.
-2. Profile retirement/version lifecycle.
-3. Salary bands and compensation architecture.
-4. Migration Center mapping from legacy family/grade values.
-5. Workforce planning and recruiting references to Job Profile.
-6. Skills-gap analysis from Job Profile requirements versus governed employee skill evidence.
+1. Profile retirement/version lifecycle.
+2. Salary bands and compensation architecture.
+3. Migration Center mapping from legacy family/grade values.
+4. Workforce planning and recruiting references to Job Profile.
+5. Skills-gap analysis from Job Profile requirements versus governed employee skill evidence.
