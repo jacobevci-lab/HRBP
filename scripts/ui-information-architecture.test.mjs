@@ -72,6 +72,6 @@ test("new navigation and shortcut styling is responsive and loaded before the fi
 
 test("production prebuild keeps UI information architecture validation mandatory", () => {
   assert.equal(pkg.scripts["ui-shell:validate"],
-    "node --test scripts/ui-shell-navigation.test.mjs scripts/ui-information-architecture.test.mjs scripts/manager-hub-ui.test.mjs scripts/hr-operations-hub-ui.test.mjs scripts/employee-home-ui.test.mjs scripts/enterprise-view-ui.test.mjs scripts/admin-studio-ui.test.mjs scripts/employee-360-ui.test.mjs");
+    "node --test scripts/ui-shell-navigation.test.mjs scripts/ui-information-architecture.test.mjs scripts/manager-hub-ui.test.mjs scripts/hr-operations-hub-ui.test.mjs scripts/employee-home-ui.test.mjs scripts/enterprise-view-ui.test.mjs scripts/admin-studio-ui.test.mjs scripts/employee-360-ui.test.mjs scripts/recruiting-workspace-ui.test.mjs");
   assert.ok(pkg.scripts.prebuild.split(" && ").includes("npm run ui-shell:validate"));
 });
