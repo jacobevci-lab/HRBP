@@ -4,6 +4,7 @@ import {
   MAX_PROFILE_SKILL_REQUIREMENTS,
   normalizeArchitectureCode,
   normalizeJobProfileCreateStatus,
+  normalizeJobProfileLifecycleAction,
   normalizeLevelRank,
   normalizeSkillRequirements
 } from "../lib/job-architecture-input.mjs";
@@ -50,4 +51,10 @@ test("skill requirements are bounded, unique and use reviewed proficiency values
       skillId: "skill-" + i, targetProficiency: "AWARENESS"
     }))
   ]) assert.equal(normalizeSkillRequirements(value), null);
+});
+
+test("profile lifecycle accepts only explicit ACTIVATE or RETIRE actions", () => {
+  assert.equal(normalizeJobProfileLifecycleAction(" activate "), "ACTIVATE");
+  assert.equal(normalizeJobProfileLifecycleAction("RETIRE"), "RETIRE");
+  for (const value of ["DELETE", "DRAFT", "", null, 1, {}]) assert.equal(normalizeJobProfileLifecycleAction(value), null);
 });

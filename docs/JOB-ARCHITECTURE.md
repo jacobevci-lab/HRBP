@@ -23,7 +23,8 @@ Existing `Position.jobFamily` and `Position.grade` fields are retained during mi
 - Mutations require same-origin protection and append audit evidence.
 - Profiles cannot reference inactive or cross-tenant families, levels or skills.
 - Profile code/date ranges cannot overlap.
-- New profiles may be DRAFT or ACTIVE; RETIRED is reserved for a later governed lifecycle transition.
+- Future-dated profiles are created as DRAFT. ACTIVE creation is allowed only when the profile is already inside its effective date window.
+- Lifecycle is explicit and terminal in this slice: DRAFT → ACTIVE → RETIRED. Activation revalidates active family, level and skill dependencies. Retirement ends the profile immediately; existing Position references remain historical and new assignments are blocked.
 - Position assignment accepts only an ACTIVE profile effective at the mutation time.
 - Skill requirements are bounded to 50 unique skills and use the existing reviewed proficiency taxonomy.
 
@@ -39,7 +40,7 @@ The Position creation page resolves organization units and active/effective Job 
 
 ## Next slices
 
-1. Profile retirement/version lifecycle.
+1. Job Profile version creation / supersession for future structural changes.
 2. Salary bands and compensation architecture.
 3. Migration Center mapping from legacy family/grade values.
 4. Workforce planning and recruiting references to Job Profile.

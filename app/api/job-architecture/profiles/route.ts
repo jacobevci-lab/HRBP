@@ -76,6 +76,10 @@ export async function POST(request: Request) {
   if (effectiveTo && effectiveTo < effectiveFrom) {
     return Response.json({ error: "effectiveTo cannot be earlier than effectiveFrom." }, { status: 400 });
   }
+  const now = new Date();
+  if (status === "ACTIVE" && (effectiveFrom > now || (effectiveTo && effectiveTo < now))) {
+    return Response.json({ error: "ACTIVE profiles must be inside their effective date window. Create future profiles as DRAFT and activate them when effective." }, { status: 400 });
+  }
   if (skillRequirements === null) {
     return Response.json({ error: "skillRequirements must be a bounded unique list of valid skill requirements." }, { status: 400 });
   }

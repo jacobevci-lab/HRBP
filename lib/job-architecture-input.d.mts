@@ -9,3 +9,5 @@ export function normalizeArchitectureCode(value: unknown): string | null;
 export function normalizeLevelRank(value: unknown): number | null;
 export function normalizeJobProfileCreateStatus(value: unknown): NormalizedJobProfileCreateStatus | null;
 export function normalizeSkillRequirements(value: unknown): NormalizedSkillRequirement[] | null;
+export type NormalizedJobProfileLifecycleAction = "ACTIVATE" | "RETIRE";
+export function normalizeJobProfileLifecycleAction(value: unknown): NormalizedJobProfileLifecycleAction | null;

@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { getServerLocale } from "@/lib/i18n-server";
 import { getServerRequestContext } from "@/lib/server-session";
 import { JobArchitectureAdmin } from "@/components/job-architecture-admin";
+import { JobProfileLifecycleActions } from "@/components/job-profile-lifecycle-actions";
 
 function c(locale: "en" | "tr", en: string, tr: string) { return locale === "tr" ? tr : en; }
 function date(value: Date | null, locale: "en" | "tr") {
@@ -76,7 +77,7 @@ export async function JobArchitectureWorkspace() {
 
     <section className="card enterprise-table-card">
       <div className="table-title"><div><h3>{c(locale,"Job profiles","İş profilleri")}</h3><p>{c(locale,"Effective-dated role definitions connect family, career level, skills and positions.","Geçerlilik tarihli rol tanımları iş ailesi, kariyer seviyesi, yetkinlik ve pozisyonları bağlar.")}</p></div><span>{profiles.length} {c(locale,"profiles","profil")}</span></div>
-      <div className="table-wrap"><table className="enterprise-table"><thead><tr><th>{c(locale,"Profile","Profil")}</th><th>{c(locale,"Family","İş ailesi")}</th><th>{c(locale,"Level","Seviye")}</th><th>{c(locale,"Skills","Yetkinlikler")}</th><th>{c(locale,"Positions","Pozisyonlar")}</th><th>{c(locale,"Effective","Geçerlilik")}</th><th>{c(locale,"Status","Durum")}</th></tr></thead><tbody>
+      <div className="table-wrap"><table className="enterprise-table"><thead><tr><th>{c(locale,"Profile","Profil")}</th><th>{c(locale,"Family","İş ailesi")}</th><th>{c(locale,"Level","Seviye")}</th><th>{c(locale,"Skills","Yetkinlikler")}</th><th>{c(locale,"Positions","Pozisyonlar")}</th><th>{c(locale,"Effective","Geçerlilik")}</th><th>{c(locale,"Status","Durum")}</th>{canWrite ? <th>{c(locale,"Lifecycle","Yaşam döngüsü")}</th> : null}</tr></thead><tbody>
         {profiles.length ? profiles.map((profile) => <tr key={profile.id}>
           <td><strong className="cell-strong">{profile.title}</strong><small className="cell-sub">{profile.code}</small></td>
           <td>{profile.family.name}<small className="cell-sub">{profile.family.code}</small></td>
@@ -85,7 +86,8 @@ export async function JobArchitectureWorkspace() {
           <td>{profile._count.positions}</td>
           <td>{date(profile.effectiveFrom, locale)} → {date(profile.effectiveTo, locale)}</td>
           <td><em className={`pill ${profile.status.toLowerCase()}`}>{profile.status}</em></td>
-        </tr>) : <tr><td colSpan={7} style={{ textAlign: "center", padding: 28 }}>{c(locale,"No job profiles configured yet.","Henüz iş profili tanımlanmadı.")}</td></tr>}
+          {canWrite ? <td><JobProfileLifecycleActions id={profile.id} status={profile.status}/></td> : null}
+        </tr>) : <tr><td colSpan={canWrite ? 8 : 7} style={{ textAlign: "center", padding: 28 }}>{c(locale,"No job profiles configured yet.","Henüz iş profili tanımlanmadı.")}</td></tr>}
       </tbody></table></div>
     </section>
 
