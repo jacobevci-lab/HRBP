@@ -47,3 +47,13 @@ test("manager primary team destination opens the dedicated Manager Hub", () => {
   });
   assert.deepEqual(items.find((item) => item.id === "people"), { id: "people", slug: "manager", label: "team" });
 });
+
+test("HR Operations gets a dedicated operational quick-access destination", () => {
+  const items = primaryShellDestinations({
+    authenticated: true,
+    role: "HR_OPERATIONS",
+    capabilities: ["people:read", "analytics:read", "settings:read"]
+  });
+  assert.deepEqual(items.find((item) => item.id === "operations"),
+    { id: "operations", slug: "hr-operations", label: "operations" });
+});

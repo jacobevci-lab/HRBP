@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, ChevronDown, ClipboardCheck, LayoutDashboard, Menu, Plus, Settings, Sparkles, UsersRound, X } from "lucide-react";
+import { Activity, BarChart3, ChevronDown, ClipboardCheck, LayoutDashboard, Menu, Plus, Settings, Sparkles, UsersRound, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { navigation } from "@/lib/navigation";
 import { GlobalSearch } from "@/components/global-search";
@@ -62,13 +62,15 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const primaryIcons = {
     home: LayoutDashboard,
     work: ClipboardCheck,
+    operations: Activity,
     people: UsersRound,
     insights: BarChart3,
     admin: Settings
   } as const;
-  const primaryLabel = (label: "home" | "work" | "team" | "people" | "insights" | "admin") => {
+  const primaryLabel = (label: "home" | "work" | "operations" | "team" | "people" | "insights" | "admin") => {
     if (label === "home") return t("nav.commandCenter");
     if (label === "work") return t("shell.myWork");
+    if (label === "operations") return t("shell.operations");
     if (label === "team") return t("shell.myTeam");
     if (label === "insights") return t("shell.insights");
     if (label === "admin") return t("shell.administration");
