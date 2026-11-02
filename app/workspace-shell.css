@@ -198,3 +198,49 @@ html[data-theme="dark"] .workspace-shortcut:hover{box-shadow:0 8px 24px rgba(0,0
 .admin-studio-boundary p{font-size:8.8px;line-height:1.5;color:var(--muted);margin:3px 0 0}
 @media(max-width:1050px){.admin-studio-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.admin-studio-grid{grid-template-columns:1fr}}
+
+/* Employee 360 master-detail */
+.employee-360-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:14px;align-items:start}
+.employee-360-rail{position:sticky;top:88px;padding:14px;display:grid;gap:13px;max-height:calc(100vh - 106px);overflow:auto}
+.employee-360-back{width:max-content;display:inline-flex;align-items:center;gap:3px;text-decoration:none;color:var(--muted);font-size:8.5px;font-weight:750}
+.employee-360-back:hover{color:var(--accent)}
+.employee-360-rail-identity{display:grid;grid-template-columns:48px minmax(0,1fr);gap:10px;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.employee-360-rail-identity .employee-avatar{width:48px;height:48px;border-radius:13px;font-size:13px}
+.employee-360-rail-identity h2{font-size:14px;margin:3px 0 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.employee-360-rail-identity p{font-size:9px;color:var(--muted);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.employee-360-rail-meta{display:grid;gap:8px}
+.employee-360-rail-meta>div{display:grid;grid-template-columns:18px minmax(0,1fr);gap:7px;align-items:start}
+.employee-360-rail-meta>div>svg{color:var(--accent);margin-top:1px}
+.employee-360-rail-meta span{display:flex;flex-direction:column;min-width:0}
+.employee-360-rail-meta small{font-size:7.5px;color:var(--muted)}
+.employee-360-rail-meta strong{font-size:9px;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.employee-360-rail-nav{display:grid;gap:3px;padding:7px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.employee-360-rail-nav a{min-height:34px;padding:7px 8px;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:7px;text-decoration:none;color:var(--muted);font-size:9px;font-weight:750}
+.employee-360-rail-nav a:hover{background:var(--surface-soft);color:var(--text)}
+.employee-360-rail-nav a.active{background:var(--accent-soft);color:var(--accent)}
+.employee-360-rail-nav small{font-size:7px;color:inherit}
+.employee-360-access{display:grid;gap:7px}
+.employee-360-access>div:not(.employee-360-access-line):not(.employee-360-critical){display:grid;grid-template-columns:18px minmax(0,1fr);gap:7px;align-items:center}
+.employee-360-access>div>svg{color:var(--accent)}
+.employee-360-access>div>span{display:flex;flex-direction:column}
+.employee-360-access small{font-size:7.5px;color:var(--muted)}
+.employee-360-access strong{font-size:8.5px}
+.employee-360-access-line{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:8px;padding-top:4px}
+.employee-360-access-line>span{color:var(--muted)}
+.employee-360-critical{display:flex;align-items:center;gap:5px;padding:7px 8px;border-radius:8px;background:var(--warning-bg);color:var(--warning-fg);font-size:8px;font-weight:800}
+.employee-360-main{min-width:0;display:grid;gap:14px}
+.employee-360-main-head{min-height:76px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.employee-360-main-head h2{font-size:17px;letter-spacing:-.3px;margin:3px 0 2px}
+.employee-360-main-head p{font-size:9.5px;color:var(--muted);margin:0}
+.employee-360-main>.profile-grid,.employee-360-main>.employee-detail-stack,.employee-360-main>.enterprise-stats,.employee-360-main>.card{margin:0}
+@media(max-width:1040px){
+  .employee-360-layout{grid-template-columns:1fr}
+  .employee-360-rail{position:static;max-height:none}
+  .employee-360-rail-nav{display:flex;overflow:auto;white-space:nowrap}
+  .employee-360-rail-nav a{flex:0 0 auto;min-width:110px}
+  .employee-360-rail-meta{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:620px){
+  .employee-360-rail-meta{grid-template-columns:1fr}
+  .employee-360-main-head{align-items:flex-start;flex-direction:column}
+}

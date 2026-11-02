@@ -7,6 +7,7 @@ import { getServerRequestContext } from "@/lib/server-session";
 import { getServerLocale } from "@/lib/i18n-server";
 import type { Locale } from "@/lib/i18n";
 import { CompensationRequestForm, ManagerAssignmentForm } from "@/components/employee-360-actions";
+import { Employee360Rail } from "@/components/employee-360-rail";
 import { EnterpriseViewToolbar } from "@/components/enterprise-view-toolbar";
 
 function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
@@ -87,11 +88,44 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, personId, 
     const person = await getEmployee360Data(personId, { tenantId, includeCompensation: canReadCompensation, includeDocuments: canReadDocuments, includeManagerOptions: canWritePeople });
     if (!person) return <div className="card"><div className="empty-state"><h3>{c(locale,"No employee record found","Çalışan kaydı bulunamadı")}</h3><p>{c(locale,"Select a person from the People directory.","Çalışan dizininden bir kişi seçin.")}</p><Link className="secondary-button" href="/module/people">{c(locale,"Open People","Çalışanları aç")}</Link></div></div>;
     const activeTab = tab && employeeTabs.has(tab) ? tab : "overview";
-    const tabHref = (value: string) => `/module/employee-360?person=${encodeURIComponent(person.id)}&tab=${value}`;
     const currentCompensation = person.compensationHistory[0];
-    const tabs: [string,string][] = [["overview",c(locale,"Overview","Genel Bakış")],["employment",c(locale,"Employment","İstihdam")],["compensation",c(locale,"Compensation","Ücret")],["documents",c(locale,"Documents","Dokümanlar")],["history",c(locale,"History","Geçmiş")]];
+    const tabs = [
+      { value: "overview", label: c(locale,"Overview","Genel Bakış") },
+      { value: "employment", label: c(locale,"Employment","İstihdam") },
+      { value: "compensation", label: c(locale,"Compensation","Ücret") },
+      { value: "documents", label: c(locale,"Documents","Dokümanlar") },
+      { value: "history", label: c(locale,"History","Geçmiş") }
+    ];
+    const activeTabLabel = tabs.find((item) => item.value === activeTab)?.label ?? tabs[0].label;
 
-    return <><div className="employee-hero card"><div className="employee-avatar">{person.initials}</div><div className="employee-identity"><div className="identity-top"><h2>{person.name}</h2><em className={`pill ${person.status.toLowerCase().replaceAll(" ", "-")}`}>{localStatus(locale,person.status)}</em></div><p>{person.position} · {person.department}</p><div className="identity-meta"><span>{person.employeeNumber}</span><span>{person.positionCode}</span><span>{person.location}</span><span>{c(locale,"Manager","Yönetici")}: {person.manager}</span><span>{person.workEmail}</span>{person.criticalPosition ? <span>{c(locale,"Critical position","Kritik pozisyon")}</span> : null}</div></div><Link className="secondary-button" href="/module/people">{c(locale,"Back to people","Çalışanlara dön")}</Link></div><div className="profile-tabs">{tabs.map(([value,label]) => <Link key={value} className={activeTab === value ? "active" : ""} href={tabHref(value)}>{label}</Link>)}</div>
+    return <div className="employee-360-layout">
+      <Employee360Rail
+        locale={locale}
+        person={{
+          id: person.id,
+          initials: person.initials,
+          name: person.name,
+          employeeNumber: person.employeeNumber,
+          position: person.position,
+          positionCode: person.positionCode,
+          department: person.department,
+          location: person.location,
+          manager: person.manager,
+          workEmail: person.workEmail,
+          status: localStatus(locale, person.status),
+          classification: localStatus(locale, person.classification),
+          criticalPosition: person.criticalPosition
+        }}
+        activeTab={activeTab}
+        tabs={tabs}
+        canReadCompensation={canReadCompensation}
+        canReadDocuments={canReadDocuments}
+      />
+      <main className="employee-360-main">
+        <section className="employee-360-main-head">
+          <div><span className="section-kicker">{activeTabLabel}</span><h2>{person.name}</h2><p>{person.position} · {person.department}</p></div>
+          <em className={`pill ${person.status.toLowerCase().replaceAll(" ", "-")}`}>{localStatus(locale,person.status)}</em>
+        </section>
 
     {activeTab === "overview" ? <div className="profile-grid"><div className="card profile-card"><div className="table-title"><div><h3>{c(locale,"Employment","İstihdam")}</h3><p>{c(locale,"Current effective record","Güncel geçerli kayıt")}</p></div></div><dl><div><dt>{c(locale,"Position","Pozisyon")}</dt><dd>{person.position}</dd></div><div><dt>{c(locale,"Department","Departman")}</dt><dd>{person.department}</dd></div><div><dt>{c(locale,"Job family","İş ailesi")}</dt><dd>{person.jobFamily}</dd></div><div><dt>{c(locale,"Grade","Seviye")}</dt><dd>{person.grade}</dd></div><div><dt>{c(locale,"Start date","Başlangıç tarihi")}</dt><dd>{person.startDate}</dd></div><div><dt>{c(locale,"Manager","Yönetici")}</dt><dd>{person.manager}</dd></div><div><dt>{c(locale,"Direct reports","Doğrudan bağlı çalışanlar")}</dt><dd>{person.directReports}</dd></div></dl></div><div className="card profile-card"><div className="table-title"><div><h3>{c(locale,"Lifecycle","Yaşam döngüsü")}</h3><p>{c(locale,"Immutable effective-dated business history","Değiştirilemez, geçerlilik tarihli iş geçmişi")}</p></div></div><div className="profile-timeline">{person.lifecycle.slice(0, 7).map((event) => <div key={event.id}><i/><span><strong>{localEvent(locale,event.type)}{event.scheduled ? c(locale," · Scheduled"," · Planlandı") : ""}</strong><small>{event.summary} · {event.date}</small></span></div>)}</div></div><div className="card profile-card security-card"><div className="table-title"><div><h3>{c(locale,"Data access","Veri erişimi")}</h3><p>{c(locale,"Classification & policy context","Sınıflandırma & politika bağlamı")}</p></div></div><div className="security-status"><ShieldCheck size={20}/><div><strong>{localStatus(locale,person.classification)}</strong><small>{c(locale,"Golden employee record","Çalışan ana kaydı")}</small></div></div><div className="mini-policy"><span>{c(locale,"Compensation","Ücret")}</span><strong>{canReadCompensation ? c(locale,"Authorized","Yetkili") : c(locale,"Restricted","Kısıtlı")}</strong></div><div className="mini-policy"><span>{c(locale,"Documents","Dokümanlar")}</span><strong>{canReadDocuments ? c(locale,"Authorized","Yetkili") : c(locale,"Restricted","Kısıtlı")}</strong></div><div className="mini-policy"><span>{c(locale,"ER cases","Çalışan ilişkileri vakaları")}</span><strong>{c(locale,"Case wall","Vaka duvarı")}</strong></div><div className="mini-policy"><span>{c(locale,"Audit logging","Denetim kaydı")}</span><strong>{c(locale,"Enabled","Aktif")}</strong></div></div></div> : null}
 
@@ -101,7 +135,7 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, personId, 
 
     {activeTab === "documents" ? canReadDocuments ? <div className="card enterprise-table-card"><div className="table-title"><div><h3>{c(locale,"Employee documents","Çalışan dokümanları")}</h3><p>{c(locale,"Metadata only. Object access remains separately policy-controlled.","Yalnızca metadata. Nesne erişimi ayrıca politika kontrollüdür.")}</p></div><span>{c(locale,`${person.documents.length} objects`,`${person.documents.length} nesne`)}</span></div><div className="table-wrap"><table className="enterprise-table"><thead><tr><th>{c(locale,"Document","Doküman")}</th><th>{c(locale,"Purpose","Amaç")}</th><th>{c(locale,"Classification","Sınıflandırma")}</th><th>{c(locale,"Status","Durum")}</th><th>{c(locale,"Created","Oluşturma")}</th><th>{c(locale,"Retention / expiry","Saklama / son kullanma")}</th></tr></thead><tbody>{person.documents.length ? person.documents.map((document) => <tr key={document.id}><td><span className="document-name"><FileText size={15}/><strong>{document.fileName}</strong></span><small className="cell-sub">{document.contentType}</small></td><td>{document.purpose}</td><td><em className={`classification ${document.classification.toLowerCase().replaceAll(" ", "-")}`}>{localStatus(locale,document.classification)}</em></td><td>{localStatus(locale,document.status)}</td><td>{document.createdAt}</td><td>{document.retentionUntil}<small className="cell-sub">{c(locale,"Expires","Son kullanma")}: {document.expiresAt}</small></td></tr>) : <EmptyRow message={c(locale,"No employee documents are stored.","Saklanan çalışan dokümanı bulunmuyor.")} colSpan={6}/>}</tbody></table></div></div> : <AccessDenied title={c(locale,"Documents are restricted","Dokümanlar kısıtlı")} detail={c(locale,"Employee document metadata requires an authenticated role with documents:read permission. Object download remains a separate authorization decision.","Çalışan doküman metadatası documents:read yetkisine sahip kimliği doğrulanmış bir rol gerektirir. Nesne indirme ayrı bir yetkilendirme kararıdır.")}/> : null}
 
-    {activeTab === "history" ? <div className="card profile-card employee-history-card"><div className="table-title"><div><h3>{c(locale,"Employee lifecycle ledger","Çalışan yaşam döngüsü kaydı")}</h3><p>{c(locale,"Effective-dated events provide a durable career timeline.","Geçerlilik tarihli olaylar kalıcı bir kariyer zaman çizelgesi sağlar.")}</p></div><span>{c(locale,`${person.lifecycle.length} events`,`${person.lifecycle.length} olay`)}</span></div><div className="profile-timeline">{person.lifecycle.length ? person.lifecycle.map((event) => <div key={event.id}><i/><span><strong>{localEvent(locale,event.type)}{event.scheduled ? c(locale," · Scheduled"," · Planlandı") : ""}</strong><small>{event.summary} · {event.date}</small></span></div>) : <p className="employee-empty-copy">{c(locale,"No lifecycle events recorded yet.","Henüz yaşam döngüsü olayı kaydedilmedi.")}</p>}</div></div> : null}</>;
+    {activeTab === "history" ? <div className="card profile-card employee-history-card"><div className="table-title"><div><h3>{c(locale,"Employee lifecycle ledger","Çalışan yaşam döngüsü kaydı")}</h3><p>{c(locale,"Effective-dated events provide a durable career timeline.","Geçerlilik tarihli olaylar kalıcı bir kariyer zaman çizelgesi sağlar.")}</p></div><span>{c(locale,`${person.lifecycle.length} events`,`${person.lifecycle.length} olay`)}</span></div><div className="profile-timeline">{person.lifecycle.length ? person.lifecycle.map((event) => <div key={event.id}><i/><span><strong>{localEvent(locale,event.type)}{event.scheduled ? c(locale," · Scheduled"," · Planlandı") : ""}</strong><small>{event.summary} · {event.date}</small></span></div>) : <p className="employee-empty-copy">{c(locale,"No lifecycle events recorded yet.","Henüz yaşam döngüsü olayı kaydedilmedi.")}</p>}</div></div> : null}</main></div>;
   }
   return null;
 }
