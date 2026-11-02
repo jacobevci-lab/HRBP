@@ -209,6 +209,10 @@ model Tenant {
   employments         Employment[]
   orgUnits            OrganizationUnit[]
   positions           Position[]
+  jobFamilies         JobFamily[]
+  jobLevels           JobLevel[]
+  jobProfiles         JobProfile[]
+  jobProfileSkills    JobProfileSkillRequirement[]
   cases               EmployeeCase[]
   documents           DocumentRecord[]
   lifecycle           EmployeeLifecycleEvent[]
@@ -336,6 +340,7 @@ model Position {
   title        String
   jobFamily    String?
   grade        String?
+  jobProfileId String?
   location     String?
   status       PositionStatus @default(OPEN)
   critical     Boolean @default(false)
@@ -343,6 +348,7 @@ model Position {
   validTo      DateTime?
   tenant       Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   orgUnit      OrganizationUnit @relation(fields: [orgUnitId], references: [id], onDelete: Restrict)
+  jobProfile   JobProfile? @relation(fields: [jobProfileId], references: [id], onDelete: SetNull)
   employments  Employment[]
   requisitions Requisition[]
   scheduledChangeSources ScheduledPositionChange[] @relation("ScheduledPositionChangeSource")
@@ -350,6 +356,7 @@ model Position {
 
   @@unique([tenantId, positionCode, validFrom])
   @@index([tenantId, status, validTo])
+  @@index([tenantId, jobProfileId])
 }
 
 model Employment {

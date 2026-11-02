@@ -1,0 +1,79 @@
+enum JobProfileStatus {
+  DRAFT
+  ACTIVE
+  RETIRED
+}
+
+model JobFamily {
+  id          String   @id @default(cuid())
+  tenantId    String
+  code        String
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  profiles    JobProfile[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active, name])
+}
+
+model JobLevel {
+  id          String   @id @default(cuid())
+  tenantId    String
+  code        String
+  name        String
+  rank        Int
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  profiles    JobProfile[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, active, rank])
+}
+
+model JobProfile {
+  id                String           @id @default(cuid())
+  tenantId          String
+  code              String
+  title             String
+  familyId          String
+  levelId           String
+  description       String?
+  status            JobProfileStatus @default(DRAFT)
+  effectiveFrom     DateTime
+  effectiveTo       DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  family            JobFamily        @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  level             JobLevel         @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  skillRequirements JobProfileSkillRequirement[]
+  positions         Position[]
+
+  @@unique([tenantId, code, effectiveFrom])
+  @@index([tenantId, status, effectiveTo])
+  @@index([tenantId, familyId, levelId])
+}
+
+model JobProfileSkillRequirement {
+  id                String           @id @default(cuid())
+  tenantId          String
+  jobProfileId      String
+  skillId           String
+  targetProficiency SkillProficiency
+  required          Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  jobProfile        JobProfile       @relation(fields: [jobProfileId], references: [id], onDelete: Cascade)
+  skill             Skill            @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@unique([jobProfileId, skillId])
+  @@index([tenantId, skillId, targetProficiency])
+}
