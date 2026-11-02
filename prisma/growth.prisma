@@ -260,6 +260,7 @@ model Skill {
   employments            EmploymentSkill[]
   developmentAssignments LearningAssignment[] @relation("LearningDevelopmentSkill")
   developmentPlans       DevelopmentPlan[] @relation("DevelopmentPlanFocusSkill")
+  jobProfileRequirements JobProfileSkillRequirement[]
 
   @@unique([tenantId, code])
   @@index([tenantId, active, category])
