@@ -72,7 +72,7 @@ CREATE INDEX "JobProfile_tenantId_familyId_levelId_idx" ON "JobProfile"("tenantI
 
 CREATE UNIQUE INDEX "JobProfileSkillRequirement_jobProfileId_skillId_key"
   ON "JobProfileSkillRequirement"("jobProfileId", "skillId");
-CREATE INDEX "JobProfileSkillRequirement_tenantId_skillId_targetProficiency_idx"
+CREATE INDEX "JobProfileSkillRequirement_tenantId_skillId_targetProficien_idx"
   ON "JobProfileSkillRequirement"("tenantId", "skillId", "targetProficiency");
 
 CREATE INDEX "Position_tenantId_jobProfileId_idx" ON "Position"("tenantId", "jobProfileId");
