@@ -43,7 +43,7 @@ test("Manager Hub prioritizes work, team attention and governed deep links", () 
 });
 
 test("manager primary navigation points to the dedicated hub rather than generic People", () => {
-  assert.match(shellNav, /slug: role === "MANAGER" \? "manager" : "people"/);
+  assert.match(shellNav, /slug: role === "MANAGER" \? "manager" : role === "EMPLOYEE" \? "me" : "people"/);
 });
 
 test("Manager Hub follows the existing responsive Warm Enterprise surface", () => {
