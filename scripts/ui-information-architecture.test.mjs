@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 
 const shell = readFileSync("components/app-shell.tsx", "utf8");
 const dashboard = readFileSync("components/dashboard.tsx", "utf8");
+const modulePage = readFileSync("app/module/[slug]/page.tsx", "utf8");
+const myWork = readFileSync("components/workflow-action-center.tsx", "utf8");
 const shortcuts = readFileSync("components/dashboard-workspace-shortcuts.tsx", "utf8");
 const i18n = readFileSync("lib/i18n.ts", "utf8");
 const css = readFileSync("app/workspace-shell.css", "utf8");
@@ -38,6 +40,18 @@ test("dashboard renders role-prioritized workspaces before generic workforce pan
   }
 });
 
+test("My Work is the default workflow experience and administration is explicitly separated", () => {
+  assert.match(modulePage, /workflowAdminMode = workflowAdminVisible && lifecycleMode === "admin"/);
+  assert.match(modulePage, /showAdministrationLink=\{workflowAdminVisible\}/);
+  assert.match(modulePage, /<details className="my-work-history-panel">/);
+  assert.match(modulePage, /<ModuleLanding slug="workflows" query=\{query\} tab="admin"\/>/);
+  assert.match(myWork, /My Work/);
+  assert.match(myWork, /What needs your attention now\?/);
+  assert.match(myWork, /className="my-work-source-panel"/);
+  assert.match(myWork, /defaultOpen=\{domainFilterActive\}/);
+  assert.match(myWork, /href="\/module\/workflows\?mode=admin"/);
+});
+
 test("shell labels are localized and the synthetic dashboard brief is not presented as AI-generated", () => {
   for (const key of ["shell.quickAccess","shell.productAreas","shell.myWork","shell.myTeam","shell.insights","shell.administration"]) {
     assert.equal(i18n.split('"' + key + '"').length - 1, 2, key + " must exist in EN and TR");
@@ -47,7 +61,7 @@ test("shell labels are localized and the synthetic dashboard brief is not presen
 });
 
 test("new navigation and shortcut styling is responsive and loaded before the final theme contract", () => {
-  for (const selector of [".nav-primary", ".nav-disclosure", ".workspace-shortcuts", ".workspace-shortcut"]) {
+  for (const selector of [".nav-primary", ".nav-disclosure", ".workspace-shortcuts", ".workspace-shortcut", ".my-work-source-panel", ".my-work-history-panel"]) {
     assert.match(css, new RegExp(selector.replace(".", "\\.")));
   }
   assert.match(css, /@media\(max-width:520px\)/);

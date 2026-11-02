@@ -106,7 +106,7 @@ function actionNotificationSubject(item: LifecycleActionItem) {
   return null;
 }
 
-export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initialFilter }: { initialTaskId?: string; initialInstanceId?: string; initialFilter?: string }) {
+export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initialFilter, showAdministrationLink = false }: { initialTaskId?: string; initialInstanceId?: string; initialFilter?: string; showAdministrationLink?: boolean }) {
   const { locale } = useLocale();
   const [items, setItems] = useState<LifecycleActionItem[]>([]);
   const [summary, setSummary] = useState<ActionSummary>(emptySummary);
@@ -648,17 +648,22 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
     return locale === "tr" ? "Normal" : "Normal";
   }
 
+  const domainFilterActive = !["all", "critical", "overdue", "due-soon"].includes(filter);
+
   return (
-    <section className="workflow-action-center card" aria-busy={loading} data-queue-state={loading ? "loading" : queueFailure ? "unavailable" : "ready"} data-source-state={loading || queueFailure ? "unverified" : sourceHealth?.state ?? "unknown"}>
-      <div className="workflow-action-head">
+    <section className="workflow-action-center card my-work-center" aria-busy={loading} data-queue-state={loading ? "loading" : queueFailure ? "unavailable" : "ready"} data-source-state={loading || queueFailure ? "unverified" : sourceHealth?.state ?? "unknown"}>
+      <div className="workflow-action-head my-work-head">
         <div>
-          <span className="section-kicker">{locale === "tr" ? "Yaşam döngüsü aksiyon merkezi" : "Lifecycle action center"}</span>
-          <h3>{locale === "tr" ? "Bekleyen işlerim ve operasyonel blokajlar" : "My pending work and operational blockers"}</h3>
-          <p>{locale === "tr" ? "İş akışlarını, işe alım onaylarını, işe başlatma ve işten ayrılış kontrollerini, İK hizmet taleplerini, kısıtlı çalışan ilişkileri aksiyonlarını, doküman yaşam döngüsünü, iş-ücret ve yan hak kontrollerini ve gelişim aksiyonlarını tek yetkili kuyrukta takip et." : "Track workflows, recruiting approvals, onboarding and offboarding controls, HR service requests, restricted employee-relations actions, document lifecycle, work-pay and benefits controls, and growth actions in one authorized queue."}</p>
+          <span className="section-kicker">{locale === "tr" ? "İşlerim" : "My Work"}</span>
+          <h3>{locale === "tr" ? "Şimdi ne dikkatini gerektiriyor?" : "What needs your attention now?"}</h3>
+          <p>{locale === "tr" ? "Kritik, geciken ve yakında süresi dolacak kararları önce gör. Kaynak sistem veya modül ayrıntısını yalnız ihtiyaç duyduğunda filtrele." : "Start with critical, overdue and near-due decisions. Filter by source or product area only when you need the extra detail."}</p>
         </div>
-        <button className="secondary-button" type="button" onClick={() => void refresh()} disabled={loading}>
-          <RefreshCw size={15}/>{locale === "tr" ? "Yenile" : "Refresh"}
-        </button>
+        <div className="my-work-head-actions">
+          {showAdministrationLink ? <Link className="secondary-button" href="/module/workflows?mode=admin">{locale === "tr" ? "İş akışı yönetimi" : "Workflow administration"}<ExternalLink size={13}/></Link> : null}
+          <button className="secondary-button" type="button" onClick={() => void refresh()} disabled={loading}>
+            <RefreshCw size={15}/>{locale === "tr" ? "Yenile" : "Refresh"}
+          </button>
+        </div>
       </div>
 
       <div className="workflow-action-metrics">
@@ -676,7 +681,9 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         </button>
       </div>
 
-      <div className="workflow-action-source-filters" role="group" aria-label={locale === "tr" ? "Kaynak filtresi" : "Source filter"}>
+      <details className="my-work-source-panel" defaultOpen={domainFilterActive}>
+        <summary><span><SlidersHorizontal size={14}/>{locale === "tr" ? "Ürün alanına göre filtrele" : "Filter by product area"}</span><small>{domainFilterActive ? (locale === "tr" ? "Aktif domain filtresi" : "Domain filter active") : (locale === "tr" ? "Opsiyonel" : "Optional")}</small></summary>
+        <div className="workflow-action-source-filters" role="group" aria-label={locale === "tr" ? "Kaynak filtresi" : "Source filter"}>
         <button type="button" className={filter === "workflow" ? "active" : ""} onClick={() => setFilter("workflow")}>{locale === "tr" ? "İş akışı" : "Workflow"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.workflow}</strong></button>
         <button type="button" className={filter === "recruiting" ? "active" : ""} onClick={() => setFilter("recruiting")}><BriefcaseBusiness size={14}/>{locale === "tr" ? "İşe Alım" : "Recruiting"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.recruiting}</strong></button>
         <button type="button" className={filter === "policies" ? "active" : ""} onClick={() => setFilter("policies")}><BookOpenCheck size={14}/>{locale === "tr" ? "Politikalar" : "Policies"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.policies}</strong></button>
@@ -697,7 +704,8 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         <button type="button" className={filter === "learning" ? "active" : ""} onClick={() => setFilter("learning")}><BookOpenCheck size={14}/>{locale === "tr" ? "Eğitim" : "Learning"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.learning}</strong></button>
         <button type="button" className={filter === "development-plan" ? "active" : ""} onClick={() => setFilter("development-plan")}><Target size={14}/>{locale === "tr" ? "Gelişim" : "Development"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.developmentPlans}</strong></button>
         <button type="button" className={filter === "succession" ? "active" : ""} onClick={() => setFilter("succession")}><UsersRound size={14}/>{locale === "tr" ? "Yedekleme" : "Succession"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.succession}</strong></button>
-      </div>
+        </div>
+      </details>
 
       <div className="workflow-action-refine">
         <label className="workflow-action-search">

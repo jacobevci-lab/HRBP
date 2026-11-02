@@ -48,3 +48,32 @@ html[data-theme="dark"] .workspace-shortcut:hover{box-shadow:0 8px 24px rgba(0,0
 @media(max-width:520px){
   .workspace-shortcuts-grid{grid-template-columns:1fr}
 }
+
+/* My Work hierarchy: urgency first, domain detail on demand. */
+.my-work-center{padding:18px}
+.my-work-head{align-items:center}
+.my-work-head h3{font-size:17px;letter-spacing:-.2px}
+.my-work-head p{max-width:760px;font-size:10.5px}
+.my-work-head-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.my-work-source-panel{margin:0 0 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-soft)}
+.my-work-source-panel>summary{list-style:none;min-height:40px;padding:9px 11px;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer}
+.my-work-source-panel>summary::-webkit-details-marker{display:none}
+.my-work-source-panel>summary>span{display:flex;align-items:center;gap:7px;font-size:9.5px;font-weight:800;color:var(--text)}
+.my-work-source-panel>summary>span svg{color:var(--accent)}
+.my-work-source-panel>summary>small{font-size:8px;color:var(--muted);font-weight:700}
+.my-work-source-panel[open]>summary{border-bottom:1px solid var(--line)}
+.my-work-source-panel .workflow-action-source-filters{margin:0;padding:10px;background:var(--surface)}
+.my-work-history-panel{margin:0 0 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.my-work-history-panel>summary{list-style:none;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer}
+.my-work-history-panel>summary::-webkit-details-marker{display:none}
+.my-work-history-panel>summary span{font-size:10.5px;font-weight:800;color:var(--text)}
+.my-work-history-panel>summary small{font-size:8.5px;color:var(--muted)}
+.my-work-history-panel[open]>summary{border-bottom:1px solid var(--line)}
+.my-work-history-panel .workflow-decision-history{margin:0;border:0;box-shadow:none;border-radius:0 0 12px 12px}
+.my-work-admin-return{display:flex;justify-content:flex-start;margin:0 0 12px}
+
+@media(max-width:800px){
+  .my-work-head-actions{width:100%}
+  .my-work-head-actions .secondary-button{flex:1;justify-content:center}
+  .my-work-history-panel>summary{align-items:flex-start;flex-direction:column;gap:3px}
+}
