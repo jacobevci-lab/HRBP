@@ -16,7 +16,7 @@ test("authenticated primary navigation remains capability-aware", () => {
   }), [
     { id: "home", slug: "dashboard", label: "home" },
     { id: "work", slug: "workflows", label: "work" },
-    { id: "people", slug: "people", label: "team" },
+    { id: "people", slug: "manager", label: "team" },
     { id: "insights", slug: "analytics", label: "insights" }
   ]);
   const admin = primaryShellDestinations({
@@ -37,4 +37,13 @@ test("role workspace preferences prioritize work rather than module inventory", 
 test("unknown roles get a conservative generic workspace", () => {
   assert.deepEqual(roleWorkspacePreferences("NEW_ROLE"), ["workflows", "people", "documents", "policies"]);
   assert.deepEqual(roleWorkspacePreferences(null), ["workflows", "people", "documents", "policies"]);
+});
+
+test("manager primary team destination opens the dedicated Manager Hub", () => {
+  const items = primaryShellDestinations({
+    authenticated: true,
+    role: "MANAGER",
+    capabilities: ["people:read"]
+  });
+  assert.deepEqual(items.find((item) => item.id === "people"), { id: "people", slug: "manager", label: "team" });
 });

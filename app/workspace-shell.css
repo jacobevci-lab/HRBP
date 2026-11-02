@@ -77,3 +77,24 @@ html[data-theme="dark"] .workspace-shortcut:hover{box-shadow:0 8px 24px rgba(0,0
   .my-work-head-actions .secondary-button{flex:1;justify-content:center}
   .my-work-history-panel>summary{align-items:flex-start;flex-direction:column;gap:3px}
 }
+
+/* Manager Hub */
+.manager-hub{display:grid;gap:14px}
+.manager-hub-heading{margin-bottom:0}
+.manager-hub-stats{margin-bottom:0}
+.manager-hub-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.manager-hub-action{min-height:68px;padding:11px 12px;display:grid;grid-template-columns:34px minmax(0,1fr) 15px;align-items:center;gap:9px;text-decoration:none;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);transition:transform .14s ease,border-color .14s ease}
+.manager-hub-action:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 30%,var(--line))}
+.manager-hub-action>svg:first-child{width:34px;height:34px;padding:8px;border-radius:9px;background:var(--accent-soft);color:var(--accent)}
+.manager-hub-action>span{display:flex;flex-direction:column;min-width:0}
+.manager-hub-action strong{font-size:10.5px}
+.manager-hub-action small{font-size:8.5px;color:var(--muted);margin-top:2px}
+.manager-hub-action>svg:last-child{color:var(--muted-2)}
+.manager-hub-team{margin-bottom:0}
+.manager-attention-row td{background:color-mix(in srgb,var(--orange) 4%,var(--surface))}
+.manager-hub-restricted{padding:24px;display:flex;align-items:flex-start;gap:12px}
+.manager-hub-restricted>svg{color:var(--accent);flex:0 0 auto}
+.manager-hub-restricted h3{margin:0 0 5px}
+.manager-hub-restricted p{margin:0;color:var(--muted);font-size:10.5px;line-height:1.5}
+@media(max-width:1120px){.manager-hub-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.manager-hub-actions{grid-template-columns:1fr}}
