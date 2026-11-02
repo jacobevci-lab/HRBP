@@ -20,6 +20,7 @@ import "./notifications.css";
 import "./workflows.css";
 import "./global-search.css";
 import "./dashboard-actions.css";
+import "./workspace-shell.css";
 import "./settings-live.css";
 import "./settings-connections.css";
 import "./connection-lifecycle.css";

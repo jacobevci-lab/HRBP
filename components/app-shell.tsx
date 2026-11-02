@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, Menu, Plus, Sparkles, X } from "lucide-react";
+import { BarChart3, ChevronDown, ClipboardCheck, LayoutDashboard, Menu, Plus, Settings, Sparkles, UsersRound, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { navigation } from "@/lib/navigation";
 import { GlobalSearch } from "@/components/global-search";
@@ -13,6 +13,7 @@ import { TopbarAccount } from "@/components/topbar-account";
 import { LocaleProvider, useLocale } from "@/components/locale-provider";
 import { LocaleToggle } from "@/components/locale-toggle";
 import { NotificationCenter } from "@/components/notification-center";
+import { primaryShellDestinations } from "@/lib/ui-shell-navigation.mjs";
 
 function initials(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -47,6 +48,32 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
     }))
     .filter((group) => group.items.length > 0), [authenticated, loading, navigationCapabilities]);
   const workspaceName = session?.user?.tenantName?.trim() || "HRBP One";
+  const primaryDestinations = useMemo(() => primaryShellDestinations({
+    authenticated,
+    role: session?.user?.role,
+    capabilities: [...navigationCapabilities]
+  }), [authenticated, navigationCapabilities, session?.user?.role]);
+  const productNavigation = useMemo(() => visibleNavigation
+    .map((group) => ({ ...group, items: group.items.filter((item) => item.slug !== "dashboard") }))
+    .filter((group) => group.items.length > 0), [visibleNavigation]);
+
+  const hrefForSlug = (slug: string) => slug === "dashboard" ? "/" : `/module/${slug}`;
+  const activeHref = (href: string) => pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+  const primaryIcons = {
+    home: LayoutDashboard,
+    work: ClipboardCheck,
+    people: UsersRound,
+    insights: BarChart3,
+    admin: Settings
+  } as const;
+  const primaryLabel = (label: "home" | "work" | "team" | "people" | "insights" | "admin") => {
+    if (label === "home") return t("nav.commandCenter");
+    if (label === "work") return t("shell.myWork");
+    if (label === "team") return t("shell.myTeam");
+    if (label === "insights") return t("shell.insights");
+    if (label === "admin") return t("shell.administration");
+    return t("nav.people");
+  };
 
   return (
     <div className="app-shell" data-session-loading={loading ? "true" : "false"}>
@@ -64,21 +91,35 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <ChevronDown size={15}/>
         </div>
         <nav className="nav-scroll">
-          {visibleNavigation.map((group) => (
-            <div className="nav-group" key={group.labelKey}>
-              <div className="nav-label">{t(group.labelKey)}</div>
-              {group.items.map((item) => {
-                const href = item.slug === "dashboard" ? "/" : `/module/${item.slug}`;
-                const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
-                const Icon = item.icon;
-                return (
-                  <Link key={item.slug} href={href} className={`nav-item ${active ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
+          <div className="nav-primary">
+            <div className="nav-label">{t("shell.quickAccess")}</div>
+            {primaryDestinations.map((item) => {
+              const href = hrefForSlug(item.slug);
+              const active = activeHref(href);
+              const Icon = primaryIcons[item.id];
+              return <Link key={item.id} href={href} className={`nav-item nav-primary-item ${active ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
+                <Icon size={17} strokeWidth={1.8}/><span>{primaryLabel(item.label)}</span>
+              </Link>;
+            })}
+          </div>
+          <div className="nav-separator"/>
+          <div className="nav-label nav-product-label">{t("shell.productAreas")}</div>
+          {productNavigation.map((group) => {
+            const groupActive = group.items.some((item) => activeHref(hrefForSlug(item.slug)));
+            return <details className="nav-group nav-disclosure" key={group.labelKey} defaultOpen={groupActive}>
+              <summary><span>{t(group.labelKey)}</span><ChevronDown size={14}/></summary>
+              <div className="nav-disclosure-items">
+                {group.items.map((item) => {
+                  const href = hrefForSlug(item.slug);
+                  const active = activeHref(href);
+                  const Icon = item.icon;
+                  return <Link key={item.slug} href={href} className={`nav-item ${active ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
                     <Icon size={17} strokeWidth={1.8}/><span>{t(item.labelKey)}</span>{item.badge && <em>{item.badge}</em>}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+                  </Link>;
+                })}
+              </div>
+            </details>;
+          })}
         </nav>
         <div className="sidebar-footer"><SessionIndicator/></div>
       </aside>

@@ -1,0 +1,50 @@
+/* Persona-first shell and workspace navigation. Warm Enterprise tokens remain authoritative. */
+.nav-primary{padding-top:5px}
+.nav-primary .nav-label{padding-top:2px}
+.nav-primary-item{font-weight:700;color:#c0c7c0}
+.nav-primary-item svg{color:#87988e}
+.nav-primary-item.active{background:color-mix(in srgb,var(--accent) 16%,#1b211d);box-shadow:inset 3px 0 0 var(--orange)}
+.nav-separator{height:1px;margin:12px 8px 11px;background:#30362f}
+.nav-product-label{padding-bottom:4px}
+.nav-disclosure{margin:3px 0 5px}
+.nav-disclosure>summary{list-style:none;min-height:31px;padding:7px 10px;display:flex;align-items:center;justify-content:space-between;gap:8px;color:#7f8980;font-size:9px;text-transform:uppercase;letter-spacing:1px;font-weight:800;cursor:pointer;border-radius:7px}
+.nav-disclosure>summary::-webkit-details-marker{display:none}
+.nav-disclosure>summary:hover{background:#222823;color:#b7c0b7}
+.nav-disclosure>summary svg{transition:transform .16s ease;flex:0 0 auto}
+.nav-disclosure[open]>summary{color:#aeb8ae}
+.nav-disclosure[open]>summary svg{transform:rotate(180deg)}
+.nav-disclosure-items{padding:1px 0 3px}
+.nav-disclosure:not([open]) .nav-disclosure-items{display:none}
+.nav-disclosure .nav-item{margin-left:4px;padding-left:12px}
+.nav-disclosure .nav-item.active{background:#29352f}
+
+.workspace-shortcuts{display:grid;grid-template-columns:minmax(220px,.72fr) minmax(0,1.8fr);gap:14px;align-items:stretch;margin-bottom:14px}
+.workspace-shortcuts-copy{padding:17px 18px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 8%,var(--surface)),var(--surface));box-shadow:var(--shadow)}
+.workspace-shortcuts-copy h2{font-size:15px;letter-spacing:-.25px;margin:5px 0 5px;color:var(--text)}
+.workspace-shortcuts-copy p{font-size:10.5px;line-height:1.55;color:var(--muted);margin:0;max-width:420px}
+.workspace-shortcuts-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.workspace-shortcut{min-width:0;min-height:66px;padding:11px 12px;display:grid;grid-template-columns:34px minmax(0,1fr) 15px;align-items:center;gap:9px;text-decoration:none;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);transition:transform .14s ease,border-color .14s ease,box-shadow .14s ease}
+.workspace-shortcut:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 30%,var(--line));box-shadow:0 8px 24px rgba(18,28,26,.07)}
+.workspace-shortcut-icon{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent)}
+.workspace-shortcut>span:nth-child(2){display:flex;flex-direction:column;min-width:0}
+.workspace-shortcut strong{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.workspace-shortcut small{font-size:8.5px;color:var(--muted);margin-top:2px}
+.workspace-shortcut>svg{color:var(--muted-2)}
+
+html[data-theme="dark"] .nav-separator{background:#2b302b}
+html[data-theme="dark"] .nav-primary-item{color:#c8cec8}
+html[data-theme="dark"] .nav-primary-item.active{background:#26312b}
+html[data-theme="dark"] .nav-disclosure>summary:hover{background:#202620}
+html[data-theme="dark"] .workspace-shortcuts-copy{background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 9%,var(--surface)),var(--surface))}
+html[data-theme="dark"] .workspace-shortcut:hover{box-shadow:0 8px 24px rgba(0,0,0,.18)}
+
+@media(max-width:1180px){
+  .workspace-shortcuts{grid-template-columns:1fr}
+  .workspace-shortcuts-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  .workspace-shortcuts-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:520px){
+  .workspace-shortcuts-grid{grid-template-columns:1fr}
+}

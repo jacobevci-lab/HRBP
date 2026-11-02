@@ -6,6 +6,7 @@ import { getDashboardLifecycleAttentionSafe } from "@/lib/dashboard-lifecycle-at
 import { getServerLocale } from "@/lib/i18n-server";
 import { translate, type Locale, type TranslationKey } from "@/lib/i18n";
 import { getServerSessionClaims } from "@/lib/server-session";
+import { DashboardWorkspaceShortcuts } from "@/components/dashboard-workspace-shortcuts";
 
 function dayLabel(locale: Locale) {
   return new Intl.DateTimeFormat(locale === "tr" ? "tr-TR" : "en-GB", {
@@ -101,6 +102,8 @@ export async function Dashboard() {
           {links.settings ? <Link className="secondary-button" href={links.settings}>{t("dashboard.customize")}</Link> : null}
         </div>
       </section>
+
+      <DashboardWorkspaceShortcuts ctx={ctx} locale={locale}/>
 
       {degraded ? <section className="card" style={{ marginBottom: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
         <CircleAlert size={18} style={{ flex: "0 0 auto", marginTop: 1, color: "var(--orange)" }}/>
