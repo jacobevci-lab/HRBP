@@ -67,3 +67,13 @@ test("employee primary people destination becomes self-service My Profile", () =
   assert.deepEqual(items.find((item) => item.id === "people"),
     { id: "people", slug: "me", label: "me" });
 });
+
+test("settings-capable users enter Administration through Admin Studio", () => {
+  const items = primaryShellDestinations({
+    authenticated: true,
+    role: "TENANT_ADMIN",
+    capabilities: ["settings:read"]
+  });
+  assert.deepEqual(items.find((item) => item.id === "admin"),
+    { id: "admin", slug: "admin", label: "admin" });
+});

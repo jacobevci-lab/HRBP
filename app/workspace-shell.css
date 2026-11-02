@@ -177,3 +177,24 @@ html[data-theme="dark"] .workspace-shortcut:hover{box-shadow:0 8px 24px rgba(0,0
   .enterprise-view-toolbar>.secondary-button{justify-content:center}
   .enterprise-view-count{width:100%;margin-left:0;padding:3px 2px 0}
 }
+
+/* Admin Studio */
+.admin-studio{display:grid;gap:16px}
+.admin-studio-section{display:grid;gap:9px}
+.admin-studio-section-head{display:flex;align-items:end;justify-content:space-between;gap:12px}
+.admin-studio-section-head h2{font-size:14px;margin:4px 0 0;color:var(--text)}
+.admin-studio-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+.admin-studio-card{min-height:118px;padding:14px;display:grid;grid-template-columns:40px minmax(0,1fr) 16px;align-items:start;gap:10px;text-decoration:none;color:var(--text);background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);transition:transform .14s ease,border-color .14s ease,box-shadow .14s ease}
+.admin-studio-card:hover{transform:translateY(-1px);border-color:color-mix(in srgb,var(--accent) 30%,var(--line));box-shadow:0 9px 26px rgba(18,28,26,.07)}
+.admin-studio-icon{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent)}
+.admin-studio-card-copy{display:flex;flex-direction:column;min-width:0}
+.admin-studio-card-copy strong{font-size:11px}
+.admin-studio-card-copy small{font-size:8.8px;line-height:1.5;color:var(--muted);margin-top:4px}
+.admin-studio-card-copy em{width:max-content;max-width:100%;font-style:normal;font-size:7.8px;font-weight:800;margin-top:9px;padding:4px 7px;border-radius:999px;background:var(--neutral-bg);color:var(--neutral-fg)}
+.admin-studio-card>svg{color:var(--muted-2);margin-top:12px}
+.admin-studio-boundary{padding:13px 14px;display:flex;align-items:flex-start;gap:9px;background:var(--accent-soft)!important}
+.admin-studio-boundary>svg{color:var(--accent);flex:0 0 auto}
+.admin-studio-boundary strong{font-size:10px}
+.admin-studio-boundary p{font-size:8.8px;line-height:1.5;color:var(--muted);margin:3px 0 0}
+@media(max-width:1050px){.admin-studio-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.admin-studio-grid{grid-template-columns:1fr}}
