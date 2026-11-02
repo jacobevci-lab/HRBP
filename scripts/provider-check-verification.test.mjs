@@ -145,13 +145,14 @@ test('manual Release Verification binds provider build success before runtime Ve
   assert.match(workflow, /HRBP_EXPECTED_PROVIDER_VERSION_ID: \$\{\{ inputs\.expected_provider_version_id \}\}/);
   assert.match(workflow, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
   const providerStep = workflow.indexOf('run: node scripts/verify-provider-check.mjs');
+  const activeDeploymentStep = workflow.indexOf('run: node scripts/verify-cloudflare-deployment.mjs');
   const runtimeStep = workflow.indexOf('run: node scripts/verify-deployment.mjs');
-  assert.ok(providerStep > 0 && runtimeStep > providerStep);
+  assert.ok(providerStep > 0 && activeDeploymentStep > providerStep && runtimeStep > activeDeploymentStep);
 });
 
 test('mandatory deployment contract includes provider-check tests', () => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
   assert.equal(pkg.scripts['deployment-verification:validate'],
-    'node --test scripts/deployment-verification.test.mjs scripts/provider-version-verification.test.mjs scripts/provider-check-verification.test.mjs');
+    'node --test scripts/deployment-verification.test.mjs scripts/provider-version-verification.test.mjs scripts/provider-check-verification.test.mjs scripts/cloudflare-deployment-verification.test.mjs');
   assert.ok(pkg.scripts.prebuild.split(' && ').includes('npm run deployment-verification:validate'));
 });

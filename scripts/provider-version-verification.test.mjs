@@ -113,13 +113,14 @@ test("manual Release Verification requires independently supplied provider build
   assert.match(workflow, /HRBP_REQUIRE_PROVIDER_VERSION: "true"/);
   assert.match(workflow, /run: npm run deployment-verification:validate/);
   assert.match(workflow, /run: node scripts\/verify-provider-check\.mjs/);
+  assert.match(workflow, /run: node scripts\/verify-cloudflare-deployment\.mjs/);
   assert.match(workflow, /run: node scripts\/verify-deployment\.mjs/);
 });
 
 test("production prebuild keeps provider-version verification mandatory", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
   assert.equal(pkg.scripts["deployment-verification:validate"],
-    "node --test scripts/deployment-verification.test.mjs scripts/provider-version-verification.test.mjs scripts/provider-check-verification.test.mjs");
+    "node --test scripts/deployment-verification.test.mjs scripts/provider-version-verification.test.mjs scripts/provider-check-verification.test.mjs scripts/cloudflare-deployment-verification.test.mjs");
   assert.ok(pkg.scripts.prebuild.split(" && ").includes("npm run deployment-verification:validate"));
 });
 

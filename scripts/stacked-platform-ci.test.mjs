@@ -88,7 +88,7 @@ test("runtime secrets are generated and masked, not copied from production", () 
 test("committed dependencies, Chromium and independent native download calibration remain required", () => {
   const install = run("Install application and isolated browser tooling");
   assert.match(install, /^npm ci > \.audit\/install.log 2>&1$/m);
-  assert.match(install, /^npm install --no-save --package-lock=false playwright@1\.56\.1 > \.audit\/playwright-install.log 2>&1$/m);
+  assert.match(install, /^npm install --no-save --package-lock=false playwright@1\.60\.0 > \.audit\/playwright-install.log 2>&1$/m);
   assert.match(install, /^npx playwright install --with-deps chromium > \.audit\/browser-install.log 2>&1$/m);
   assert.equal(run("Verify native download observation independently of application code").trim(),
     "node --test scripts/audit-download-observer.test.mjs\nnode scripts/native-download-calibration.mjs");
