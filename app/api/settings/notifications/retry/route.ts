@@ -1,4 +1,4 @@
-import { readJsonObject } from "@/lib/input-validation";
+import { asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { DataClassification, NotificationOutboxStatus } from "@prisma/client";
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
@@ -11,18 +11,43 @@ export async function POST(request: Request) {
   if (!can(ctx, "settings:write")) return forbidden();
   if (!mutationOriginAllowed(request)) return Response.json({ error: "Mutation origin is not allowed." }, { status: 403 });
 
-  let body: { limit?: unknown; id?: unknown } = {};
+  let body: { limit?: unknown; id?: unknown; batch?: unknown } | null = null;
   try {
-    body = await readJsonObject(request) as { limit?: unknown; id?: unknown };
-  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
+    body = await readJsonObject(request) as { limit?: unknown; id?: unknown; batch?: unknown } | null;
   } catch {
-    // An empty body uses the safe default batch size.
+    body = null;
+  }
+  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
+
+  const allowedBodyFields = new Set(["id", "batch", "limit"]);
+  if (Object.keys(body).some((key) => !allowedBodyFields.has(key))) {
+    return Response.json({ error: "Only id or an explicit dead-letter batch request is supported." }, { status: 400 });
   }
 
-  const requestedLimit = Number(body.limit ?? 100);
-  const limit = Number.isFinite(requestedLimit) ? Math.min(500, Math.max(1, Math.floor(requestedLimit))) : 100;
-  const requestedId = typeof body.id === "string" ? body.id.trim() : "";
-  if (requestedId && requestedId.length > 128) return Response.json({ error: "A valid notification id is required." }, { status: 400 });
+  const hasRequestedId = Object.hasOwn(body, "id");
+  const hasBatch = Object.hasOwn(body, "batch");
+  if (hasRequestedId === hasBatch) {
+    return Response.json({ error: "Choose exactly one retry scope: id or batch." }, { status: 400 });
+  }
+
+  let requestedId: string | null = null;
+  let limit = 100;
+  if (hasRequestedId) {
+    requestedId = asIdentifier(body.id, 128);
+    if (!requestedId || Object.hasOwn(body, "limit")) {
+      return Response.json({ error: "A valid notification id without batch options is required." }, { status: 400 });
+    }
+  } else {
+    if (body.batch !== true) {
+      return Response.json({ error: "Batch retry requires batch=true." }, { status: 400 });
+    }
+    if (Object.hasOwn(body, "limit")) {
+      if (typeof body.limit !== "number" || !Number.isSafeInteger(body.limit) || body.limit < 1 || body.limit > 500) {
+        return Response.json({ error: "Batch limit must be an integer from 1 to 500." }, { status: 400 });
+      }
+      limit = body.limit;
+    }
+  }
   const retryableStatuses = [NotificationOutboxStatus.DEAD_LETTER, NotificationOutboxStatus.FAILED];
   const ids = requestedId
     ? (await db.notificationOutbox.findMany({

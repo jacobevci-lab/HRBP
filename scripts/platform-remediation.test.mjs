@@ -76,3 +76,16 @@ test('signout renderers use explicit POST forms, never Next links',()=>{for(cons
 test('source has no unbounded direct request.json in API handlers',()=>{for(const f of files('app/api').filter(f=>f.endsWith('.ts')))assert.doesNotMatch(readFileSync(f,'utf8'),/request\.json\(/,f);});
 
 test('helper context types unwrap asynchronous account verification',()=>{for(const f of files('app').filter(f=>f.endsWith('.ts')))assert.doesNotMatch(readFileSync(f,'utf8'),/NonNullable<ReturnType<typeof getRequestContext>>/,f);});
+
+
+test('platform route sweep does not mistake long-lived background requests for navigation failure',()=>{
+  const source=readFileSync('scripts/platform-audit.mjs','utf8');
+  assert.doesNotMatch(source,/page\.goto\(origin\+path,\{waitUntil:'networkidle'/);
+  assert.equal((source.match(/page\.goto\(origin\+path,\{waitUntil:'load',timeout:25000\}/g)||[]).length,2);
+  assert.match(source,/app-shell\[data-session-loading="false"\][\s\S]{0,180}waitFor\(\{timeout:3000\}\)/);
+  assert.match(source,/Observe late hydration\/API failures without requiring global network quiescence/);
+  assert.match(source,/page\.waitForTimeout\(250\)/);
+  assert.match(source,/page\.waitForTimeout\(150\)/);
+  assert.match(source,/page\.on\('pageerror',[\s\S]{0,260}page\.on\('response'/);
+  assert.match(source,/if\(row\.errors\.length\|\|row\.serverFailures\.length\|\|row\.status>=500\)/);
+});

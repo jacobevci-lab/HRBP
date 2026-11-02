@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { notificationEmailBatchSize, notificationEmailPolicyAllows } from "@/lib/notification-email-config";
 import { sendSmtpNotification } from "@/lib/smtp-notification-provider";
 import { runtimeNumber } from "@/lib/runtime-env";
+import { notificationDeliveryErrorCode } from "@/lib/notification-delivery-error";
 
 function retryDelayMs(attempt: number) {
   const baseSeconds = Math.min(3600, Math.max(10, Math.floor(runtimeNumber("HRBP_NOTIFICATION_RETRY_BASE_SECONDS", 60))));
@@ -16,28 +17,35 @@ function retryDelayMs(attempt: number) {
   return Math.min(maxSeconds, exponential) * 1000;
 }
 
-function errorMessage(error: unknown) {
-  const value = error instanceof Error ? error.message : String(error);
-  return value.replace(/s+/g, " ").trim().slice(0, 1200) || "Unknown notification delivery error";
-}
-
 function platformRole(value: string): PlatformRole | null {
   return (Object.values(PlatformRole) as string[]).includes(value) ? value as PlatformRole : null;
 }
 
-async function recoverStaleLocks(now: Date) {
+async function recoverStaleLocks(now: Date, maxAttempts: number) {
   const lockMinutes = Math.min(120, Math.max(2, Math.floor(runtimeNumber("HRBP_NOTIFICATION_LOCK_MINUTES", 10))));
   const staleBefore = new Date(now.getTime() - lockMinutes * 60_000);
-  const result = await db.notificationOutbox.updateMany({
-    where: { status: NotificationOutboxStatus.PROCESSING, lockedAt: { lte: staleBefore } },
+  // A final-attempt crash must not leave FAILED work that selection can never
+  // claim. Each conditional write rechecks ownership state and the same cutoff.
+  const expired: Prisma.NotificationOutboxWhereInput = { status: NotificationOutboxStatus.PROCESSING, lockedAt: { lte: staleBefore } };
+  const exhausted = await db.notificationOutbox.updateMany({
+    where: { ...expired, attempts: { gte: maxAttempts } },
+    data: {
+      status: NotificationOutboxStatus.DEAD_LETTER,
+      lockedAt: null,
+      nextAttemptAt: now,
+      lastError: "NOTIFICATION_LOCK_RECOVERED"
+    }
+  });
+  const retryable = await db.notificationOutbox.updateMany({
+    where: { ...expired, attempts: { lt: maxAttempts } },
     data: {
       status: NotificationOutboxStatus.FAILED,
       lockedAt: null,
       nextAttemptAt: now,
-      lastError: "Recovered stale notification dispatcher lock"
+      lastError: "NOTIFICATION_LOCK_RECOVERED"
     }
   });
-  return result.count;
+  return { recovered: exhausted.count + retryable.count, deadLettered: exhausted.count };
 }
 
 type NotificationCandidate = {
@@ -194,7 +202,7 @@ export async function runNotificationDispatcher() {
   const maxBatch = Math.min(500, Math.max(10, Math.floor(runtimeNumber("HRBP_NOTIFICATION_BATCH_SIZE", 100))));
   const emailBatch = notificationEmailBatchSize();
   const maxAttempts = Math.min(20, Math.max(2, Math.floor(runtimeNumber("HRBP_NOTIFICATION_MAX_ATTEMPTS", 5))));
-  const recovered = await recoverStaleLocks(startedAt);
+  const recovery = await recoverStaleLocks(startedAt, maxAttempts);
 
   const baseWhere: Prisma.NotificationOutboxWhereInput = {
     status: { in: [NotificationOutboxStatus.PENDING, NotificationOutboxStatus.FAILED] },
@@ -231,7 +239,8 @@ export async function runNotificationDispatcher() {
   let claimed = 0;
   let delivered = 0;
   let failed = 0;
-  let deadLettered = 0;
+  // Include terminal recovery transitions even though they require no new claim.
+  let deadLettered = recovery.deadLettered;
 
   for (const candidate of candidates) {
     const claimedAt = new Date();
@@ -279,7 +288,7 @@ export async function runNotificationDispatcher() {
       });
       if (completion.count === 1) delivered += 1;
     } catch (error) {
-      const boundedError = errorMessage(error);
+      const boundedError = notificationDeliveryErrorCode(error);
       const nonRetryable = ["EMAIL_NOTIFICATION_POLICY_BLOCKED", "SMTP_RECIPIENT_INVALID", "NOTIFICATION_CHANNEL_UNSUPPORTED"].includes(boundedError);
       const deadLetter = nonRetryable || attempt >= maxAttempts;
       const now = new Date();
@@ -307,7 +316,7 @@ export async function runNotificationDispatcher() {
   return {
     startedAt: startedAt.toISOString(),
     completedAt: new Date().toISOString(),
-    recovered,
+    recovered: recovery.recovered,
     candidates: candidates.length,
     inAppCandidates: inAppCandidates.length,
     emailCandidates: emailCandidates.length,
