@@ -106,7 +106,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <div className="nav-label nav-product-label">{t("shell.productAreas")}</div>
           {productNavigation.map((group) => {
             const groupActive = group.items.some((item) => activeHref(hrefForSlug(item.slug)));
-            return <details className="nav-group nav-disclosure" key={group.labelKey} defaultOpen={groupActive}>
+            return <details className="nav-group nav-disclosure" key={group.labelKey} open={groupActive ? true : undefined}>
               <summary><span>{t(group.labelKey)}</span><ChevronDown size={14}/></summary>
               <div className="nav-disclosure-items">
                 {group.items.map((item) => {

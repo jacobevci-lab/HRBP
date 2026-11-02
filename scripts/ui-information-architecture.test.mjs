@@ -19,7 +19,7 @@ test("shell separates quick work destinations from the product catalog", () => {
   assert.match(shell, /shell\.productAreas/);
   assert.match(shell, /item\.slug !== "dashboard"/);
   assert.match(shell, /<details className="nav-group nav-disclosure"/);
-  assert.match(shell, /defaultOpen=\{groupActive\}/);
+  assert.match(shell, /open=\{groupActive \? true : undefined\}/);
 });
 
 test("primary navigation remains capability-aware and public staging does not gain privileged shortcuts", () => {
@@ -48,7 +48,7 @@ test("My Work is the default workflow experience and administration is explicitl
   assert.match(myWork, /My Work/);
   assert.match(myWork, /What needs your attention now\?/);
   assert.match(myWork, /className="my-work-source-panel"/);
-  assert.match(myWork, /defaultOpen=\{domainFilterActive\}/);
+  assert.match(myWork, /open=\{domainFilterActive \? true : undefined\}/);
   assert.match(myWork, /href="\/module\/workflows\?mode=admin"/);
 });
 

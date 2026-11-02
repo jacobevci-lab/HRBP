@@ -681,7 +681,7 @@ export function WorkflowActionCenter({ initialTaskId, initialInstanceId, initial
         </button>
       </div>
 
-      <details className="my-work-source-panel" defaultOpen={domainFilterActive}>
+      <details className="my-work-source-panel" open={domainFilterActive ? true : undefined}>
         <summary><span><SlidersHorizontal size={14}/>{locale === "tr" ? "Ürün alanına göre filtrele" : "Filter by product area"}</span><small>{domainFilterActive ? (locale === "tr" ? "Aktif domain filtresi" : "Domain filter active") : (locale === "tr" ? "Opsiyonel" : "Optional")}</small></summary>
         <div className="workflow-action-source-filters" role="group" aria-label={locale === "tr" ? "Kaynak filtresi" : "Source filter"}>
         <button type="button" className={filter === "workflow" ? "active" : ""} onClick={() => setFilter("workflow")}>{locale === "tr" ? "İş akışı" : "Workflow"} <strong>{loading || queueFailure || hasIncompleteSources ? "—" : summary.workflow}</strong></button>
