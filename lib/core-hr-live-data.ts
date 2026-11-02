@@ -44,6 +44,24 @@ function enumLabel(value: string) {
     .join(" ");
 }
 
+function normalizedEmploymentStatus(value?: string): EmploymentStatus | null {
+  const normalized = value?.trim().toUpperCase();
+  if (normalized === EmploymentStatus.ACTIVE) return EmploymentStatus.ACTIVE;
+  if (normalized === EmploymentStatus.PREBOARDING) return EmploymentStatus.PREBOARDING;
+  if (normalized === EmploymentStatus.LEAVE) return EmploymentStatus.LEAVE;
+  return null;
+}
+
+function normalizedPositionStatus(value?: string): PositionStatus | null {
+  const normalized = value?.trim().toUpperCase();
+  if (normalized === PositionStatus.OPEN) return PositionStatus.OPEN;
+  if (normalized === PositionStatus.PLANNED) return PositionStatus.PLANNED;
+  if (normalized === PositionStatus.FILLED) return PositionStatus.FILLED;
+  if (normalized === PositionStatus.FROZEN) return PositionStatus.FROZEN;
+  if (normalized === PositionStatus.CLOSED) return PositionStatus.CLOSED;
+  return null;
+}
+
 export type LivePersonRow = {
   id: string;
   employeeNumber: string;
@@ -65,31 +83,30 @@ export type PeopleWorkspaceData = {
   onLeave: number;
   dataQuality: number;
   needsReview: number;
+  filteredTotal: number;
   people: LivePersonRow[];
 };
 
-export async function getPeopleWorkspaceData(query = "", tenantId?: string): Promise<PeopleWorkspaceData> {
+export async function getPeopleWorkspaceData(query = "", tenantId?: string, status?: string): Promise<PeopleWorkspaceData> {
   return withDb(async (db) => {
     const tenant = await resolveTenant(db, tenantId);
     if (!tenant) {
-      return { tenantName: "Workspace", active: 0, preboarding: 0, onLeave: 0, dataQuality: 100, needsReview: 0, people: [] };
+      return { tenantName: "Workspace", active: 0, preboarding: 0, onLeave: 0, dataQuality: 100, needsReview: 0, filteredTotal: 0, people: [] };
     }
 
     const scope = await resolvePeopleScope(db, tenant.id);
     const employmentScope = employmentPrimaryKeyFilter(scope);
-    const personScope: Prisma.PersonWhereInput = scope === null
+    const statusFilter = normalizedEmploymentStatus(status);
+    const normalized = query.trim().slice(0, 160);
+    const listEmploymentWhere: Prisma.EmploymentWhereInput = {
+      tenantId: tenant.id,
+      ...employmentScope,
+      status: statusFilter ?? { not: EmploymentStatus.TERMINATED }
+    };
+    const listPersonScope: Prisma.PersonWhereInput = scope === null && !statusFilter
       ? {}
-      : {
-          employments: {
-            some: {
-              tenantId: tenant.id,
-              status: { not: EmploymentStatus.TERMINATED },
-              ...employmentScope
-            }
-          }
-        };
-    const normalized = query.trim();
-    const where: Prisma.PersonWhereInput = { tenantId: tenant.id, ...personScope };
+      : { employments: { some: listEmploymentWhere } };
+    const where: Prisma.PersonWhereInput = { tenantId: tenant.id, ...listPersonScope };
     if (normalized) {
       where.OR = [
         { givenName: { contains: normalized, mode: "insensitive" } },
@@ -99,8 +116,16 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string): Pro
       ];
     }
 
-    const scopedEmploymentBase = { tenantId: tenant.id, ...employmentScope };
-    const [people, active, preboarding, onLeave, qualityRows] = await Promise.all([
+    const scopedEmploymentBase: Prisma.EmploymentWhereInput = { tenantId: tenant.id, ...employmentScope };
+    const qualityEmploymentWhere: Prisma.EmploymentWhereInput = {
+      ...scopedEmploymentBase,
+      status: { not: EmploymentStatus.TERMINATED }
+    };
+    const qualityPersonScope: Prisma.PersonWhereInput = scope === null
+      ? {}
+      : { employments: { some: qualityEmploymentWhere } };
+
+    const [people, filteredTotal, active, preboarding, onLeave, qualityRows] = await Promise.all([
       db.person.findMany({
         where,
         orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
@@ -112,7 +137,7 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string): Pro
           familyName: true,
           workEmail: true,
           employments: {
-            where: { status: { not: EmploymentStatus.TERMINATED }, ...scopedEmploymentBase },
+            where: listEmploymentWhere,
             orderBy: { startDate: "desc" },
             take: 1,
             select: {
@@ -130,15 +155,16 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string): Pro
           }
         }
       }),
+      db.person.count({ where }),
       db.employment.count({ where: { ...scopedEmploymentBase, status: EmploymentStatus.ACTIVE } }),
       db.employment.count({ where: { ...scopedEmploymentBase, status: EmploymentStatus.PREBOARDING } }),
       db.employment.count({ where: { ...scopedEmploymentBase, status: EmploymentStatus.LEAVE } }),
       db.person.findMany({
-        where: { tenantId: tenant.id, ...personScope },
+        where: { tenantId: tenant.id, ...qualityPersonScope },
         select: {
           workEmail: true,
           employments: {
-            where: { status: { not: EmploymentStatus.TERMINATED }, ...scopedEmploymentBase },
+            where: qualityEmploymentWhere,
             orderBy: { startDate: "desc" },
             take: 1,
             select: { positionId: true }
@@ -157,6 +183,7 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string): Pro
       onLeave,
       dataQuality,
       needsReview,
+      filteredTotal,
       people: people.map((person) => {
         const employment = person.employments[0];
         const position = employment?.position;
@@ -280,42 +307,62 @@ export type PositionsWorkspaceData = {
   open: number;
   planned: number;
   critical: number;
+  filteredTotal: number;
   rows: LivePositionRow[];
 };
 
-export async function getPositionsWorkspaceData(tenantId?: string): Promise<PositionsWorkspaceData> {
+export async function getPositionsWorkspaceData(query = "", tenantId?: string, status?: string): Promise<PositionsWorkspaceData> {
   return withDb(async (db) => {
     const tenant = await resolveTenant(db, tenantId);
-    if (!tenant) return { positions: 0, filled: 0, open: 0, planned: 0, critical: 0, rows: [] };
+    if (!tenant) return { positions: 0, filled: 0, open: 0, planned: 0, critical: 0, filteredTotal: 0, rows: [] };
     const scope = await resolvePeopleScope(db, tenant.id);
+    const normalized = query.trim().slice(0, 160);
+    const statusFilter = normalizedPositionStatus(status);
+    const baseWhere: Prisma.PositionWhereInput = { tenantId: tenant.id, validTo: null };
+    const where: Prisma.PositionWhereInput = { ...baseWhere };
+    if (statusFilter) where.status = statusFilter;
+    if (normalized) {
+      where.OR = [
+        { positionCode: { contains: normalized, mode: "insensitive" } },
+        { title: { contains: normalized, mode: "insensitive" } },
+        { location: { contains: normalized, mode: "insensitive" } },
+        { orgUnit: { name: { contains: normalized, mode: "insensitive" } } }
+      ];
+    }
 
-    const positions = await db.position.findMany({
-      where: { tenantId: tenant.id, validTo: null },
-      orderBy: { positionCode: "asc" },
-      select: {
-        id: true,
-        positionCode: true,
-        title: true,
-        grade: true,
-        location: true,
-        status: true,
-        critical: true,
-        orgUnit: { select: { name: true } },
-        employments: {
-          where: { status: { not: EmploymentStatus.TERMINATED }, ...employmentPrimaryKeyFilter(scope) },
-          orderBy: { startDate: "desc" },
-          take: 1,
-          select: { person: { select: { givenName: true, familyName: true } } }
+    const [positions, filteredTotal, allPositions] = await Promise.all([
+      db.position.findMany({
+        where,
+        orderBy: { positionCode: "asc" },
+        take: 500,
+        select: {
+          id: true,
+          positionCode: true,
+          title: true,
+          grade: true,
+          location: true,
+          status: true,
+          critical: true,
+          orgUnit: { select: { name: true } },
+          employments: {
+            where: { status: { not: EmploymentStatus.TERMINATED }, ...employmentPrimaryKeyFilter(scope) },
+            orderBy: { startDate: "desc" },
+            take: 1,
+            select: { person: { select: { givenName: true, familyName: true } } }
+          }
         }
-      }
-    });
+      }),
+      db.position.count({ where }),
+      db.position.findMany({ where: baseWhere, select: { status: true, critical: true } })
+    ]);
 
     return {
-      positions: positions.length,
-      filled: positions.filter((position) => position.status === PositionStatus.FILLED).length,
-      open: positions.filter((position) => position.status === PositionStatus.OPEN).length,
-      planned: positions.filter((position) => position.status === PositionStatus.PLANNED).length,
-      critical: positions.filter((position) => position.critical).length,
+      positions: allPositions.length,
+      filled: allPositions.filter((position) => position.status === PositionStatus.FILLED).length,
+      open: allPositions.filter((position) => position.status === PositionStatus.OPEN).length,
+      planned: allPositions.filter((position) => position.status === PositionStatus.PLANNED).length,
+      critical: allPositions.filter((position) => position.critical).length,
+      filteredTotal,
       rows: positions.map((position) => ({
         id: position.id,
         code: position.positionCode,

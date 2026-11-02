@@ -67,16 +67,16 @@ const descriptions: Record<string, { en: string; tr: string }> = {
   }
 };
 
-type WorkspaceProps = { slug: string; query?: string; personId?: string; tab?: string };
+type WorkspaceProps = { slug: string; query?: string; status?: string; personId?: string; tab?: string };
 
 /** Only live implementations belong in this authenticated dispatcher.
  * Rendering/import failures propagate intact to Next's route error boundary.
  * Anonymous catalog previews are handled before entering this function. */
-async function renderLiveWorkspace({ slug, query = "", personId, tab }: WorkspaceProps): Promise<ReactNode> {
+async function renderLiveWorkspace({ slug, query = "", status, personId, tab }: WorkspaceProps): Promise<ReactNode> {
   switch (slug) {
     case "people": case "organization": case "positions": case "employee-360": {
       const { CoreHRLiveWorkspace } = await import("@/components/core-hr-live-workspace");
-      return await CoreHRLiveWorkspace({ slug, query, personId, tab });
+      return await CoreHRLiveWorkspace({ slug, query, status, personId, tab });
     }
     case "documents": case "audit": {
       const { GovernanceLiveWorkspace } = await import("@/components/governance-live-workspace");
@@ -105,7 +105,7 @@ async function renderLiveWorkspace({ slug, query = "", personId, tab }: Workspac
   }
 }
 
-export async function ModuleLanding({ slug, query = "", personId, tab }: WorkspaceProps) {
+export async function ModuleLanding({ slug, query = "", status, personId, tab }: WorkspaceProps) {
   const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   if (!ctx) return <PublicModuleLanding slug={slug}/>;
   const item = navigation.flatMap(group => group.items).find(entry => entry.slug === slug);
@@ -119,7 +119,7 @@ export async function ModuleLanding({ slug, query = "", personId, tab }: Workspa
     <section className="card module-table"><div className="empty-state"><h3>{locale === "tr" ? "Erişim kısıtlı" : "Access is restricted"}</h3><p>{locale === "tr" ? "Mevcut rolünüz bu çalışma alanının veri erişim yetkisini içermiyor." : "Your current role does not include this workspace's data access capability."}</p></div></section>
   </section>;
 
-  const content = await renderLiveWorkspace({ slug, query, personId, tab });
+  const content = await renderLiveWorkspace({ slug, query, status, personId, tab });
   if (content === null || content === undefined) throw new Error("Live workspace returned no content.");
   const createHref = slug === "people" && can(ctx, "people:read") && can(ctx, "people:write")
     ? "/module/people/new"
