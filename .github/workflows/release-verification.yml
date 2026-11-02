@@ -48,6 +48,8 @@ jobs:
       HRBP_EXPECTED_PROVIDER_BUILD_ID: ${{ inputs.expected_provider_build_id }}
       HRBP_EXPECTED_PROVIDER_VERSION_ID: ${{ inputs.expected_provider_version_id }}
       HRBP_REQUIRE_PROVIDER_VERSION: "true"
+      HRBP_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.HRBP_CLOUDFLARE_ACCOUNT_ID }}
+      HRBP_CLOUDFLARE_METADATA_READ_TOKEN: ${{ secrets.HRBP_CLOUDFLARE_METADATA_READ_TOKEN }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -59,5 +61,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/verify-provider-check.mjs
+      - name: Confirm expected Version ID is the sole active Cloudflare deployment
+        run: node scripts/verify-cloudflare-deployment.mjs
       - name: One anonymous read-only probe of deployed revision and provider Version ID
         run: node scripts/verify-deployment.mjs

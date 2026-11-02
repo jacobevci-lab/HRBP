@@ -18,8 +18,10 @@ After an authorized operator has evidence of a successful provider build/deploym
 4. Manually run **Release Verification**, supplying all three values.
 5. The live job first queries GitHub Checks read-only for that exact source commit. It accepts only the latest matching check from GitHub App ID `85455`, slug `cloudflare-workers-and-pages`, owner `cloudflare`, with the exact build ID and a completed `success` conclusion.
 6. The successful official check must contain exactly one canonical `Version ID: <uuid>` line, and that Version ID must equal the independently supplied expected Version ID.
-7. Only after provider build **and provider-reported Version ID** match does the job perform one anonymous, no-cache GET to the runtime-health endpoint.
-8. Runtime success requires the fresh response to contain both the expected source revision and the same exact provider Version ID.
+7. Only after provider build **and provider-reported Version ID** match does the job query Cloudflare's Workers Deployments API using a dedicated metadata-read token.
+8. The latest actively serving deployment must contain exactly one version: the expected Version ID at **100% traffic**. Traffic splits, a different active version, malformed deployment metadata or unavailable read access fail closed.
+9. Only after the provider check and active-deployment checks match does the job perform one anonymous, no-cache GET to the runtime-health endpoint.
+10. Runtime success requires the fresh response to contain both the expected source revision and the same exact provider Version ID.
 
 The GitHub provider-check request deliberately does not use a `status=completed` filter: an in-progress latest provider check must not be hidden behind an older completed success. Provider output text and dashboard URLs are never copied into verification results or summaries.
 
@@ -27,7 +29,9 @@ A missing, malformed or different provider Version ID fails closed. The operator
 
 ## Assurance boundary
 
-Together, the two checks bind four facts: the exact source revision, the official Cloudflare Build ID, the Version ID reported by that successful provider check, and the Version Metadata ID observed from the responding Worker. They still do not prove the contents of provider build logs, deployment permissions, quota state, database migration compatibility, 100% traffic allocation during gradual deployments, customer acceptance, or business-workflow correctness.
+Together, the three checks bind five facts: the exact source revision, the official Cloudflare Build ID, the Version ID reported by that successful provider check, the latest Cloudflare deployment carrying that Version ID at 100% traffic, and the Version Metadata ID observed from the responding Worker. They still do not prove the contents of provider build logs, account configuration, quota state, database migration compatibility, customer acceptance, or business-workflow correctness.
+
+The Cloudflare API token used for the deployment lookup should be a dedicated read-only token. Cloudflare documents Workers Metadata Read-Only (or another accepted Workers read permission) as sufficient for listing deployments; no deployment/upload permission is required by this verifier.
 
 Issue #220 still requires sanitized provider failure/success evidence and any approved operational database/migration checks before closure.
 
