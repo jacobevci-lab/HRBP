@@ -57,3 +57,13 @@ test("HR Operations gets a dedicated operational quick-access destination", () =
   assert.deepEqual(items.find((item) => item.id === "operations"),
     { id: "operations", slug: "hr-operations", label: "operations" });
 });
+
+test("employee primary people destination becomes self-service My Profile", () => {
+  const items = primaryShellDestinations({
+    authenticated: true,
+    role: "EMPLOYEE",
+    capabilities: ["people:read"]
+  });
+  assert.deepEqual(items.find((item) => item.id === "people"),
+    { id: "people", slug: "me", label: "me" });
+});

@@ -67,11 +67,12 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
     insights: BarChart3,
     admin: Settings
   } as const;
-  const primaryLabel = (label: "home" | "work" | "operations" | "team" | "people" | "insights" | "admin") => {
+  const primaryLabel = (label: "home" | "work" | "operations" | "team" | "me" | "people" | "insights" | "admin") => {
     if (label === "home") return t("nav.commandCenter");
     if (label === "work") return t("shell.myWork");
     if (label === "operations") return t("shell.operations");
     if (label === "team") return t("shell.myTeam");
+    if (label === "me") return t("shell.myProfile");
     if (label === "insights") return t("shell.insights");
     if (label === "admin") return t("shell.administration");
     return t("nav.people");

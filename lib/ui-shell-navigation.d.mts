@@ -1,7 +1,7 @@
 export type PrimaryShellDestination = {
   id: "home" | "work" | "operations" | "people" | "insights" | "admin";
   slug: string;
-  label: "home" | "work" | "operations" | "team" | "people" | "insights" | "admin";
+  label: "home" | "work" | "operations" | "team" | "me" | "people" | "insights" | "admin";
 };
 export function primaryShellDestinations(input: {
   authenticated: boolean;

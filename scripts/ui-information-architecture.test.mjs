@@ -53,7 +53,7 @@ test("My Work is the default workflow experience and administration is explicitl
 });
 
 test("shell labels are localized and the synthetic dashboard brief is not presented as AI-generated", () => {
-  for (const key of ["shell.quickAccess","shell.productAreas","shell.myWork","shell.operations","shell.myTeam","shell.insights","shell.administration"]) {
+  for (const key of ["shell.quickAccess","shell.productAreas","shell.myWork","shell.operations","shell.myTeam","shell.myProfile","shell.insights","shell.administration"]) {
     assert.equal(i18n.split('"' + key + '"').length - 1, 2, key + " must exist in EN and TR");
   }
   assert.match(i18n, /"dashboard\.aiMorningBrief": "Today's focus"/);
@@ -72,6 +72,6 @@ test("new navigation and shortcut styling is responsive and loaded before the fi
 
 test("production prebuild keeps UI information architecture validation mandatory", () => {
   assert.equal(pkg.scripts["ui-shell:validate"],
-    "node --test scripts/ui-shell-navigation.test.mjs scripts/ui-information-architecture.test.mjs scripts/manager-hub-ui.test.mjs scripts/hr-operations-hub-ui.test.mjs");
+    "node --test scripts/ui-shell-navigation.test.mjs scripts/ui-information-architecture.test.mjs scripts/manager-hub-ui.test.mjs scripts/hr-operations-hub-ui.test.mjs scripts/employee-home-ui.test.mjs");
   assert.ok(pkg.scripts.prebuild.split(" && ").includes("npm run ui-shell:validate"));
 });
