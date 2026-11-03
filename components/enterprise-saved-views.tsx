@@ -17,7 +17,7 @@ import type {
 import type { Locale } from "@/lib/i18n";
 
 function sameState(left: EnterpriseViewState, right: EnterpriseViewState) {
-  if (left.query !== right.query || left.status !== right.status || left.columnsCustomized !== right.columnsCustomized || left.density !== right.density || left.sortKey !== right.sortKey || left.sortDirection !== right.sortDirection) return false;
+  if (left.query !== right.query || left.status !== right.status || left.columnsCustomized !== right.columnsCustomized || left.density !== right.density || left.sortKey !== right.sortKey || left.sortDirection !== right.sortDirection || left.pageSize !== right.pageSize) return false;
   if (!left.columnsCustomized) return true;
   return left.columns.length === right.columns.length && left.columns.every((value, index) => value === right.columns[index]);
 }
@@ -82,7 +82,8 @@ export function EnterpriseSavedViews({
             view.state.status ? view.state.status : null,
             view.state.columnsCustomized ? (tr ? `${view.state.columns.length} sütun` : `${view.state.columns.length} columns`) : (tr ? "varsayılan sütunlar" : "default columns"),
             view.state.density === "compact" ? (tr ? "kompakt" : "compact") : (tr ? "rahat" : "comfortable"),
-            view.state.sortKey ? `${view.state.sortKey} ${view.state.sortDirection === "desc" ? "↓" : "↑"}` : null
+            view.state.sortKey ? `${view.state.sortKey} ${view.state.sortDirection === "desc" ? "↓" : "↑"}` : null,
+            tr ? `${view.state.pageSize}/sayfa` : `${view.state.pageSize}/page`
           ].filter(Boolean).join(" · ");
           return <div className={`enterprise-saved-view-row ${active ? "active" : ""}`} key={view.id}>
             <Link href={view.href}>
@@ -107,6 +108,7 @@ export function EnterpriseSavedViews({
         <input type="hidden" name="density" value={current.density}/>
         <input type="hidden" name="sort" value={current.sortKey ?? ""}/>
         <input type="hidden" name="dir" value={current.sortDirection}/>
+        <input type="hidden" name="pageSize" value={current.pageSize}/>
         {current.columns.map((column) => <input key={column} type="hidden" name="columns" value={column}/>)}
         <label>
           <span>{tr ? "Mevcut görünümü kaydet" : "Save current view"}</span>
