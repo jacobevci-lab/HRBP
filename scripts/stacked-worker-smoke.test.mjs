@@ -223,7 +223,7 @@ test('workflow cannot omit or conditionally skip the unit guardrails and bundled
   const workflow = readFileSync(new URL('../.github/workflows/stacked-integration.yml', import.meta.url), 'utf8');
   const app = workflow.split('  application:\n')[1].split('\n  dependencies:\n')[0];
   const commands = ['node --test scripts/stacked-worker-smoke.test.mjs', 'npm ci',
-    'npm run db:migrate:upgrade', 'npm run cf:build', 'npx --no-install wrangler deploy --dry-run',
+    'npm run db:migrate:upgrade', 'env -u DATABASE_URL npm run cf:build', 'npx --no-install wrangler deploy --dry-run',
     'node scripts/stacked-worker-smoke.mjs'];
   let previous = -1;
   for (const command of commands) {
@@ -232,6 +232,7 @@ test('workflow cannot omit or conditionally skip the unit guardrails and bundled
     previous = index;
   }
   assert.match(app, /HRBP_DISPOSABLE_WORKER_SMOKE: "true"/);
+  assert.match(app, /env -u DATABASE_URL npm run cf:build/);
   assert.doesNotMatch(app, /^\s*(if|continue-on-error):/m);
   const script = readFileSync(new URL('./stacked-worker-smoke.mjs', import.meta.url), 'utf8');
   assert.match(script, /'dev', '--local', '--ip', '127.0.0.1'/);
