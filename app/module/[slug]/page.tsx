@@ -70,6 +70,10 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const density = search.density === "compact" ? "compact" as const : "comfortable" as const;
   const sortKey = typeof search.sort === "string" ? search.sort.slice(0, 40) : undefined;
   const sortDirection = search.dir === "desc" ? "desc" as const : "asc" as const;
+  const requestedPage = typeof search.page === "string" ? Number.parseInt(search.page, 10) : 1;
+  const pageNumber = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, 10000) : 1;
+  const requestedPageSize = typeof search.pageSize === "string" ? Number.parseInt(search.pageSize, 10) : 50;
+  const pageSize = requestedPageSize === 25 || requestedPageSize === 100 ? requestedPageSize : 50;
   const employeeRelationsCaseId = typeof search.case === "string" ? search.case : undefined;
   const employeeRelationsActionId = typeof search.action === "string" ? search.action : undefined;
   const employeeRelationsAppealId = typeof search.appeal === "string" ? search.appeal : undefined;
@@ -115,7 +119,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
 
   return (
     <AppShell>
-      <ModuleLanding slug={slug} query={query} status={statusFilter} columns={columnFilter} columnsCustomized={columnsCustomized} density={density} sortKey={sortKey} sortDirection={sortDirection} personId={personId} tab={slug === "policies" ? lifecycleMode : tab}/>
+      <ModuleLanding slug={slug} query={query} status={statusFilter} columns={columnFilter} columnsCustomized={columnsCustomized} density={density} sortKey={sortKey} sortDirection={sortDirection} page={pageNumber} pageSize={pageSize} personId={personId} tab={slug === "policies" ? lifecycleMode : tab}/>
       {slug === "offboarding" && can(ctx, "offboarding:write") ? <OffboardingClearanceLoader/> : null}
       {slug === "employee-relations" ? <details id="er-lifecycle" className="service-governance-panel" open={Boolean(query || employeeRelationsCaseId || employeeRelationsActionId || employeeRelationsAppealId)}>
         <summary><span><strong>{locale === "tr" ? "Vaka yaşam döngüsü & kapanış" : "Case lifecycle & closure"}</strong><small>{locale === "tr" ? "Çözüm, düzeltici aksiyon ve itiraz kontrollerini gerektiğinde açın." : "Open resolution, corrective-action and appeal controls when needed."}</small></span><span>Case Wall</span></summary>
