@@ -96,8 +96,9 @@ function assertViewAccess(ctx: RequestContext, moduleKey: EnterpriseViewModule) 
   if (!can(ctx, definitions[moduleKey].capability)) throw new Error("VIEW_FORBIDDEN");
 }
 
-function isMissingTable(error: unknown) {
-  return Boolean(error && typeof error === "object" && (error as { code?: string }).code === "P2021");
+function isPreferenceSchemaUnavailable(error: unknown) {
+  const code = error && typeof error === "object" ? (error as { code?: string }).code : undefined;
+  return code === "P2021" || code === "P2022";
 }
 
 export async function listSavedEnterpriseViews(ctx: RequestContext, moduleKey: EnterpriseViewModule): Promise<SavedEnterpriseViewSummary[]> {
@@ -131,7 +132,7 @@ export async function listSavedEnterpriseViews(ctx: RequestContext, moduleKey: E
   } catch (error) {
     // Mixed-version deploy safety: absence of the preference table must not take
     // People/Positions offline. Writes remain unavailable until migrations land.
-    if (isMissingTable(error)) return [];
+    if (isPreferenceSchemaUnavailable(error)) return [];
     throw error;
   }
 }
