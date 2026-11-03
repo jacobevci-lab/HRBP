@@ -35,7 +35,12 @@ function BulkButton({ operation, disabled, children }: {
   </button>;
 }
 
-export function PositionBulkActionForm({ locale, children }: { locale: Locale; children: React.ReactNode }) {
+export function PositionBulkActionForm({ locale, enabled, children }: { locale: Locale; enabled: boolean; children: React.ReactNode }) {
+  if (!enabled) return <>{children}</>;
+  return <EnabledPositionBulkActionForm locale={locale}>{children}</EnabledPositionBulkActionForm>;
+}
+
+function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; children: React.ReactNode }) {
   const tr = locale === "tr";
   const initial: PositionBulkActionState = { ok: false };
   const [state, action] = useActionState(positionBulkCriticalityAction, initial);
