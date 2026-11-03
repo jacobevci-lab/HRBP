@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Columns3, List, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowUpDown, Columns3, List, Search, SlidersHorizontal, X } from "lucide-react";
 import { EnterpriseSavedViews } from "@/components/enterprise-saved-views";
 import type { Locale } from "@/lib/i18n";
 import type {
@@ -20,6 +20,9 @@ export function EnterpriseViewToolbar({
   columns,
   columnsCustomized,
   density,
+  sortOptions,
+  sortKey,
+  sortDirection,
   savedViews,
   shownCount,
   totalCount,
@@ -35,6 +38,9 @@ export function EnterpriseViewToolbar({
   columns: string[];
   columnsCustomized: boolean;
   density: "comfortable" | "compact";
+  sortOptions: EnterpriseViewOption[];
+  sortKey?: string;
+  sortDirection: "asc" | "desc";
   savedViews: SavedEnterpriseViewSummary[];
   shownCount: number;
   totalCount: number;
@@ -42,8 +48,8 @@ export function EnterpriseViewToolbar({
 }) {
   const tr = locale === "tr";
   const selectedColumns = new Set(columns);
-  const filtered = Boolean(query || status || columnsCustomized || density === "compact");
-  const current = { query, status, columns, columnsCustomized, density };
+  const filtered = Boolean(query || status || columnsCustomized || density === "compact" || sortKey);
+  const current = { query, status, columns, columnsCustomized, density, sortKey, sortDirection };
 
   return <div className="enterprise-view-toolbar">
     <form className="enterprise-view-controls" action={basePath} method="get">
@@ -72,6 +78,17 @@ export function EnterpriseViewToolbar({
         <select name="density" defaultValue={density} aria-label={tr ? "Tablo yoğunluğu" : "Table density"}>
           <option value="comfortable">{tr ? "Rahat" : "Comfortable"}</option>
           <option value="compact">{tr ? "Kompakt" : "Compact"}</option>
+        </select>
+      </label>
+      <label className="enterprise-view-sort">
+        <ArrowUpDown size={14}/>
+        <select name="sort" defaultValue={sortKey ?? ""} aria-label={tr ? "Sıralama alanı" : "Sort field"}>
+          <option value="">{tr ? "Varsayılan sıra" : "Default order"}</option>
+          {sortOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <select name="dir" defaultValue={sortDirection} aria-label={tr ? "Sıralama yönü" : "Sort direction"}>
+          <option value="asc">{tr ? "Artan ↑" : "Ascending ↑"}</option>
+          <option value="desc">{tr ? "Azalan ↓" : "Descending ↓"}</option>
         </select>
       </label>
       <button className="secondary-button" type="submit">{tr ? "Uygula" : "Apply"}</button>
