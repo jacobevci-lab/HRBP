@@ -38,7 +38,7 @@ test("Talent cockpit links assessment evidence to succession and learning withou
   assert.match(focus, /\/module\/succession/);
   assert.match(focus, /\/module\/learning/);
   assert.match(focus, /Human-reviewed performance × potential; no opaque score/);
-  assert.match(live, /AI scoring[^]*value="Off"/);
+  assert.match(live, /label=\{c\(locale,"AI scoring","AI puanlama"\)\} value=\{c\(locale,"Off","Kapalı"\)\}/);
   assert.match(live, /No autonomous employee scoring/);
 });
 
