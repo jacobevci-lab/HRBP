@@ -216,6 +216,18 @@ html[data-theme="dark"] .workspace-shortcut:hover{box-shadow:0 8px 24px rgba(0,0
 .enterprise-save-view-spinner{width:12px;height:12px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:enterprise-view-spin .7s linear infinite}
 @keyframes enterprise-view-spin{to{transform:rotate(360deg)}}
 .enterprise-view-count{margin-left:auto;padding:0 7px;font-size:8.5px;color:var(--muted);white-space:nowrap}
+.position-bulk-form{display:grid;gap:8px}
+.position-bulk-bar{min-height:52px;padding:8px 10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow)}
+.position-bulk-bar>div:first-child{min-width:128px;display:flex;flex-direction:column}
+.position-bulk-bar>div:first-child span{font-size:7.8px;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);font-weight:800}
+.position-bulk-bar>div:first-child strong{font-size:9.5px;margin-top:2px}
+.position-bulk-actions{display:flex;gap:6px;flex-wrap:wrap}
+.position-bulk-button{height:34px!important;min-height:34px!important}
+.position-bulk-success,.position-bulk-error{margin-left:auto;font-size:8px;line-height:1.4}
+.position-bulk-success{color:var(--success-fg)}
+.position-bulk-error{color:var(--danger-fg)}
+.position-bulk-select{width:42px!important;min-width:42px!important;text-align:center!important;padding-left:8px!important;padding-right:8px!important}
+.position-bulk-select input{width:15px;height:15px;margin:0;accent-color:var(--accent);cursor:pointer}
 @media(max-width:760px){
   .enterprise-view-toolbar{align-items:stretch}
   .enterprise-view-controls{width:100%;flex-basis:100%}
@@ -229,6 +241,11 @@ html[data-theme="dark"] .workspace-shortcut:hover{box-shadow:0 8px 24px rgba(0,0
   .enterprise-saved-views>summary{justify-content:center}
   .enterprise-saved-view-popover{left:0;right:auto;width:min(340px,calc(100vw - 32px))}
   .enterprise-view-count{width:100%;margin-left:0;padding:3px 2px 0}
+  .position-bulk-bar{align-items:stretch}
+  .position-bulk-bar>div:first-child{width:100%}
+  .position-bulk-actions{width:100%}
+  .position-bulk-actions .secondary-button{flex:1;justify-content:center}
+  .position-bulk-success,.position-bulk-error{width:100%;margin-left:0}
 }
 
 /* Admin Studio */
