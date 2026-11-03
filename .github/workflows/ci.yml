@@ -98,7 +98,7 @@ jobs:
         run: node scripts/validate-ci-registry-fallback.mjs
       - run: npm run typecheck
       - run: npm run build
-      - run: npm run cf:build
+      - run: env -u DATABASE_URL npm run cf:build
       - name: Validate Cloudflare deploy bundle without publishing
         run: npx wrangler deploy --dry-run
       - name: Validate on-prem Compose and build runtime image
