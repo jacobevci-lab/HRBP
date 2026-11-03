@@ -45,7 +45,10 @@ export function GlobalSearch() {
         inputRef.current?.focus();
         setOpen(true);
       }
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        setActiveIndex(0);
+      }
     };
     window.addEventListener("keydown", onShortcut);
     return () => window.removeEventListener("keydown", onShortcut);
@@ -136,6 +139,7 @@ export function GlobalSearch() {
           ref={inputRef}
           role="combobox"
           aria-autocomplete="list"
+          aria-haspopup="listbox"
           value={query}
           placeholder={searchLabel}
           aria-label={searchLabel}
