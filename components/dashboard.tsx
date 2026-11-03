@@ -95,10 +95,10 @@ export async function Dashboard() {
 
   return (
     <>
-      <section className="page-heading">
+      <section className="page-heading dashboard-command-heading">
         <div><div className="eyebrow">{dayLabel(locale)}</div><h1>{greeting(locale)}, {firstName}.</h1><p>{degraded ? t("dashboard.safeSignals") : t("dashboard.liveSignals", { tenant: data.tenantName })}</p></div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {degraded ? <button className="secondary-button" disabled><CircleAlert size={15}/> {t("dashboard.safeFallback")}</button> : null}
+          {degraded ? <span className="secondary-button module-state-badge"><CircleAlert size={15}/> {t("dashboard.safeFallback")}</span> : null}
           {links.settings ? <Link className="secondary-button" href={links.settings}>{t("dashboard.customize")}</Link> : null}
         </div>
       </section>
@@ -110,7 +110,7 @@ export async function Dashboard() {
         <div><strong style={{ display: "block", fontSize: 11 }}>{t("dashboard.liveUnavailable")}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5, color: "var(--muted)" }}>{t("dashboard.fallbackDetail")}</p></div>
       </section> : null}
 
-      <section className="ai-brief">
+      <section className="ai-brief dashboard-focus-brief">
         <div className="ai-orb"><Sparkles size={20}/></div>
         <div className="ai-copy"><div className="section-kicker">{t("dashboard.aiMorningBrief")}</div><h2>{t("dashboard.aiHeadline")}</h2><p>{t("dashboard.aiDetail", { starters: data.upcomingStarters, positions: data.criticalOpenPositions, cases: data.openCases })}</p></div>
         {links.ai ? <Link href={links.ai}>{t("dashboard.viewFullBrief")} <ChevronRight size={16}/></Link> : null}
