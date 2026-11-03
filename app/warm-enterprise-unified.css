@@ -323,6 +323,14 @@ html[data-theme="dark"]{
 .enterprise-saved-view-row{border-radius:9px!important}
 .enterprise-save-view-form input[name="name"]{height:38px!important;border-radius:10px!important}
 .enterprise-save-view-button{height:38px!important;min-height:38px!important}
+.position-bulk-bar{
+  min-height:58px!important;
+  padding:9px 10px!important;
+  border-radius:14px!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.position-bulk-button{height:38px!important;min-height:38px!important;border-radius:10px!important}
+.position-bulk-select input{accent-color:var(--accent)}
 .enterprise-view-count{font-size:9px!important;font-weight:700}
 
 /* Data panels and tables */
