@@ -23,6 +23,7 @@ export function EnterpriseViewToolbar({
   sortOptions,
   sortKey,
   sortDirection,
+  pageSize,
   savedViews,
   shownCount,
   totalCount,
@@ -41,6 +42,7 @@ export function EnterpriseViewToolbar({
   sortOptions: EnterpriseViewOption[];
   sortKey?: string;
   sortDirection: "asc" | "desc";
+  pageSize: 25 | 50 | 100;
   savedViews: SavedEnterpriseViewSummary[];
   shownCount: number;
   totalCount: number;
@@ -49,7 +51,7 @@ export function EnterpriseViewToolbar({
   const tr = locale === "tr";
   const selectedColumns = new Set(columns);
   const filtered = Boolean(query || status || columnsCustomized || density === "compact" || sortKey);
-  const current = { query, status, columns, columnsCustomized, density, sortKey, sortDirection };
+  const current = { query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize };
 
   return <div className="enterprise-view-toolbar">
     <form className="enterprise-view-controls" action={basePath} method="get">
@@ -78,6 +80,14 @@ export function EnterpriseViewToolbar({
         <select name="density" defaultValue={density} aria-label={tr ? "Tablo yoğunluğu" : "Table density"}>
           <option value="comfortable">{tr ? "Rahat" : "Comfortable"}</option>
           <option value="compact">{tr ? "Kompakt" : "Compact"}</option>
+        </select>
+      </label>
+      <label className="enterprise-view-page-size">
+        <List size={14}/>
+        <select name="pageSize" defaultValue={pageSize} aria-label={tr ? "Sayfa başına satır" : "Rows per page"}>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
         </select>
       </label>
       <label className="enterprise-view-sort">
