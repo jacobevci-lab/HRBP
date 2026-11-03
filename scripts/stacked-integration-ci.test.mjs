@@ -62,13 +62,14 @@ test("application runs migrations and the real PostgreSQL audit and domain cases
 });
 
 test("typecheck, full prebuild, Next build and OpenNext packaging remain mandatory", () => {
-  const commands = ["npm run typecheck", "npm run build", "npm run cf:build", "npx --no-install wrangler deploy --dry-run"];
+  const commands = ["npm run typecheck", "npm run build", "env -u DATABASE_URL npm run cf:build", "npx --no-install wrangler deploy --dry-run"];
   let position = -1;
   for (const command of commands) {
     const next = application.indexOf(`run: ${command}\n`);
     assert.ok(next > position, `missing or reordered mandatory build: ${command}`);
     position = next;
   }
+  assert.match(application, /env -u DATABASE_URL npm run cf:build/);
   assert.doesNotMatch(application, /--ignore-scripts|--skip|SKIP_|DISABLE_|npm exec.*next|npx next|npm run build --/);
 });
 
