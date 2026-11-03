@@ -77,7 +77,8 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
     action={action}
     className="position-bulk-form"
     onChange={(event) => {
-      const target = event.target as HTMLInputElement;
+      if (!(event.target instanceof HTMLInputElement)) return;
+      const target = event.target;
       if (target.matches("[data-position-select-all]")) {
         formRef.current?.querySelectorAll<HTMLInputElement>('input[name="positionIds"]').forEach((input) => {
           input.checked = target.checked;
