@@ -8,6 +8,7 @@ const data = readFileSync("lib/core-hr-live-data.ts", "utf8");
 const moduleLanding = readFileSync("components/module-landing.tsx", "utf8");
 const modulePage = readFileSync("app/module/[slug]/page.tsx", "utf8");
 const css = readFileSync("app/workspace-shell.css", "utf8");
+const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
 
 test("shared enterprise toolbar uses URL-native query and status filters", () => {
   assert.match(toolbar, /<div className="enterprise-view-toolbar">/);
@@ -18,6 +19,9 @@ test("shared enterprise toolbar uses URL-native query and status filters", () =>
   assert.match(toolbar, /name="columnsMode" value="custom"/);
   assert.match(toolbar, /name="columns"/);
   assert.match(toolbar, /enterprise-column-picker/);
+  assert.match(toolbar, /name="density"/);
+  assert.match(toolbar, /value="comfortable"/);
+  assert.match(toolbar, /value="compact"/);
   assert.match(toolbar, /<EnterpriseSavedViews/);
   assert.match(toolbar, /savedViews=\{savedViews\}/);
   assert.match(toolbar, /href=\{basePath\}/);
@@ -63,12 +67,23 @@ test("filtered totals are server-derived and route filter input is bounded", () 
   assert.match(modulePage, /Array\.isArray\(search\.columns\)/);
   assert.match(modulePage, /rawColumns\.slice\(0, 12\)/);
   assert.match(modulePage, /search\.columnsMode === "custom"/);
+  assert.match(modulePage, /search\.density === "compact"/);
   assert.match(moduleLanding, /columns\?: string\[\]/);
-  assert.match(moduleLanding, /CoreHRLiveWorkspace\(\{ slug, query, status, columns, columnsCustomized, personId, tab \}\)/);
+  assert.match(moduleLanding, /density\?: "comfortable" \| "compact"/);
+  assert.match(moduleLanding, /CoreHRLiveWorkspace\(\{ slug, query, status, columns, columnsCustomized, density, personId, tab \}\)/);
 });
 
 test("enterprise view controls are responsive Warm Enterprise surfaces", () => {
-  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-controls", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-column-picker", ".enterprise-column-options", ".enterprise-saved-views", ".enterprise-saved-view-popover", ".enterprise-view-count"]) {
+  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-controls", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-view-density", ".enterprise-column-picker", ".enterprise-column-options", ".enterprise-saved-views", ".enterprise-saved-view-popover", ".enterprise-view-count"]) {
     assert.match(css, new RegExp(selector.replace(".", "\\.")));
   }
+});
+
+
+test("compact density is URL-native, persisted by the workspace and uses sticky enterprise headers", () => {
+  assert.ok((workspace.match(/density=\{density\}/g) ?? []).length >= 2);
+  assert.ok((workspace.match(/enterprise-density-\$\{density\}/g) ?? []).length >= 2);
+  assert.match(unified, /\.enterprise-table-card \.enterprise-table thead th/);
+  assert.match(unified, /position:sticky/);
+  assert.match(unified, /\.enterprise-density-compact \.enterprise-table td/);
 });
