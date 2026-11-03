@@ -288,6 +288,8 @@ model SavedEnterpriseView {
   columns           String[] @default([])
   columnsCustomized Boolean  @default(false)
   density           String   @default("comfortable")
+  sortKey           String?
+  sortDirection     String   @default("asc")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
