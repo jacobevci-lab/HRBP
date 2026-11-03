@@ -295,7 +295,7 @@ html[data-theme="dark"]{
   border-radius:14px!important;
   box-shadow:var(--panel-shadow)!important;
 }
-.enterprise-view-search,.enterprise-view-filter,.enterprise-view-density,.enterprise-column-picker>summary{
+.enterprise-view-search,.enterprise-view-filter,.enterprise-view-density,.enterprise-view-sort,.enterprise-column-picker>summary{
   height:38px!important;
   border-radius:10px!important;
 }
