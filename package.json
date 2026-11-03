@@ -76,7 +76,7 @@
     "db:generate": "prisma generate --schema=prisma",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "cf:build": "npm run typecheck && opennextjs-cloudflare build",
+    "cf:build": "node scripts/cloudflare-build.mjs",
     "cf:preview": "npm run typecheck && opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "cf:deploy": "npm run typecheck && opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
