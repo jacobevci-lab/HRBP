@@ -62,6 +62,22 @@ function normalizedPositionStatus(value?: string): PositionStatus | null {
   return null;
 }
 
+type EnterpriseSortDirection = "asc" | "desc";
+
+function peopleOrderBy(sortKey?: string, sortDirection: EnterpriseSortDirection = "asc"): Prisma.PersonOrderByWithRelationInput[] {
+  const direction = sortDirection === "desc" ? "desc" as const : "asc" as const;
+  if (sortKey === "employeeNumber") return [{ employeeNumber: direction }, { familyName: "asc" }, { givenName: "asc" }];
+  return [{ familyName: direction }, { givenName: direction }, { employeeNumber: "asc" }];
+}
+
+function positionOrderBy(sortKey?: string, sortDirection: EnterpriseSortDirection = "asc"): Prisma.PositionOrderByWithRelationInput[] {
+  const direction = sortDirection === "desc" ? "desc" as const : "asc" as const;
+  if (sortKey === "title") return [{ title: direction }, { positionCode: "asc" }];
+  if (sortKey === "status") return [{ status: direction }, { positionCode: "asc" }];
+  if (sortKey === "critical") return [{ critical: direction }, { positionCode: "asc" }];
+  return [{ positionCode: direction }, { title: "asc" }];
+}
+
 export type LivePersonRow = {
   id: string;
   employeeNumber: string;
@@ -87,7 +103,7 @@ export type PeopleWorkspaceData = {
   people: LivePersonRow[];
 };
 
-export async function getPeopleWorkspaceData(query = "", tenantId?: string, status?: string): Promise<PeopleWorkspaceData> {
+export async function getPeopleWorkspaceData(query = "", tenantId?: string, status?: string, sortKey?: string, sortDirection: EnterpriseSortDirection = "asc"): Promise<PeopleWorkspaceData> {
   return withDb(async (db) => {
     const tenant = await resolveTenant(db, tenantId);
     if (!tenant) {
@@ -128,7 +144,7 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string, stat
     const [people, filteredTotal, active, preboarding, onLeave, qualityRows] = await Promise.all([
       db.person.findMany({
         where,
-        orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
+        orderBy: peopleOrderBy(sortKey, sortDirection),
         take: 250,
         select: {
           id: true,
@@ -311,7 +327,7 @@ export type PositionsWorkspaceData = {
   rows: LivePositionRow[];
 };
 
-export async function getPositionsWorkspaceData(query = "", tenantId?: string, status?: string): Promise<PositionsWorkspaceData> {
+export async function getPositionsWorkspaceData(query = "", tenantId?: string, status?: string, sortKey?: string, sortDirection: EnterpriseSortDirection = "asc"): Promise<PositionsWorkspaceData> {
   return withDb(async (db) => {
     const tenant = await resolveTenant(db, tenantId);
     if (!tenant) return { positions: 0, filled: 0, open: 0, planned: 0, critical: 0, filteredTotal: 0, rows: [] };
@@ -333,7 +349,7 @@ export async function getPositionsWorkspaceData(query = "", tenantId?: string, s
     const [positions, filteredTotal, allPositions] = await Promise.all([
       db.position.findMany({
         where,
-        orderBy: { positionCode: "asc" },
+        orderBy: positionOrderBy(sortKey, sortDirection),
         take: 500,
         select: {
           id: true,
