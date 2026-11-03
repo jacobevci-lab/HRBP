@@ -9,6 +9,8 @@ export type EnterpriseViewState = {
   columns: string[];
   columnsCustomized: boolean;
   density: "comfortable" | "compact";
+  sortKey?: string;
+  sortDirection: "asc" | "desc";
 };
 export type SavedEnterpriseViewSummary = {
   id: string;
@@ -23,18 +25,21 @@ const definitions: Record<EnterpriseViewModule, {
   basePath: string;
   statuses: ReadonlySet<string>;
   columns: ReadonlySet<string>;
+  sorts: ReadonlySet<string>;
 }> = {
   people: {
     capability: "people:read",
     basePath: "/module/people",
     statuses: new Set(["ACTIVE", "PREBOARDING", "LEAVE"]),
-    columns: new Set(["position", "department", "location", "status", "start"])
+    columns: new Set(["position", "department", "location", "status", "start"]),
+    sorts: new Set(["name", "employeeNumber"])
   },
   positions: {
     capability: "positions:read",
     basePath: "/module/positions",
     statuses: new Set(["OPEN", "PLANNED", "FILLED", "FROZEN", "CLOSED"]),
-    columns: new Set(["organization", "grade", "location", "incumbent", "status", "critical"])
+    columns: new Set(["organization", "grade", "location", "incumbent", "status", "critical"]),
+    sorts: new Set(["code", "title", "status", "critical"])
   }
 };
 
@@ -59,6 +64,8 @@ export function sanitizeEnterpriseViewState(moduleKey: EnterpriseViewModule, inp
   columns?: unknown;
   columnsCustomized?: unknown;
   density?: unknown;
+  sortKey?: unknown;
+  sortDirection?: unknown;
 }): EnterpriseViewState {
   const definition = definitions[moduleKey];
   const query = typeof input.query === "string" ? input.query.trim().slice(0, 160) : "";
@@ -70,12 +77,16 @@ export function sanitizeEnterpriseViewState(moduleKey: EnterpriseViewModule, inp
     .map((value) => value.trim().slice(0, 40))
     .filter((value) => definition.columns.has(value)))]
     .slice(0, 12);
+  const sortCandidate = typeof input.sortKey === "string" ? input.sortKey.trim().slice(0, 40) : "";
+  const sortKey = definition.sorts.has(sortCandidate) ? sortCandidate : undefined;
   return {
     query,
     status,
     columns,
     columnsCustomized: input.columnsCustomized === true,
-    density: input.density === "compact" ? "compact" : "comfortable"
+    density: input.density === "compact" ? "compact" : "comfortable",
+    sortKey,
+    sortDirection: sortKey && input.sortDirection === "desc" ? "desc" : "asc"
   };
 }
 
@@ -88,6 +99,10 @@ export function buildEnterpriseViewHref(moduleKey: EnterpriseViewModule, state: 
     for (const column of state.columns) params.append("columns", column);
   }
   if (state.density === "compact") params.set("density", "compact");
+  if (state.sortKey) {
+    params.set("sort", state.sortKey);
+    if (state.sortDirection === "desc") params.set("dir", "desc");
+  }
   const source = params.toString();
   return source ? `${definitions[moduleKey].basePath}?${source}` : definitions[moduleKey].basePath;
 }
@@ -116,7 +131,9 @@ export async function listSavedEnterpriseViews(ctx: RequestContext, moduleKey: E
         status: true,
         columns: true,
         columnsCustomized: true,
-        density: true
+        density: true,
+        sortKey: true,
+        sortDirection: true
       }
     });
     return rows.map((row) => {
@@ -125,7 +142,9 @@ export async function listSavedEnterpriseViews(ctx: RequestContext, moduleKey: E
         status: row.status,
         columns: row.columns,
         columnsCustomized: row.columnsCustomized,
-        density: row.density
+        density: row.density,
+        sortKey: row.sortKey,
+        sortDirection: row.sortDirection
       });
       return { id: row.id, name: row.name, moduleKey, state, href: buildEnterpriseViewHref(moduleKey, state) };
     });
@@ -174,7 +193,9 @@ export async function upsertSavedEnterpriseView(
         status: state.status ?? null,
         columns: state.columns,
         columnsCustomized: state.columnsCustomized,
-        density: state.density
+        density: state.density,
+        sortKey: state.sortKey ?? null,
+        sortDirection: state.sortDirection
       },
       update: {
         name: parsedName.name,
@@ -182,7 +203,9 @@ export async function upsertSavedEnterpriseView(
         status: state.status ?? null,
         columns: state.columns,
         columnsCustomized: state.columnsCustomized,
-        density: state.density
+        density: state.density,
+        sortKey: state.sortKey ?? null,
+        sortDirection: state.sortDirection
       },
       select: { id: true }
     });
