@@ -20,7 +20,7 @@ CREATE TABLE "SavedEnterpriseView" (
   CONSTRAINT "SavedEnterpriseView_status_check" CHECK ("status" IS NULL OR char_length("status") <= 40)
 );
 
-CREATE UNIQUE INDEX "SavedEnterpriseView_tenantId_userId_moduleKey_normalizedName_key"
+CREATE UNIQUE INDEX "SavedEnterpriseView_tenantId_userId_moduleKey_normalizedNam_key"
   ON "SavedEnterpriseView"("tenantId", "userId", "moduleKey", "normalizedName");
 
 CREATE INDEX "SavedEnterpriseView_tenantId_userId_moduleKey_updatedAt_idx"
