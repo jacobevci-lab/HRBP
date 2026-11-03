@@ -14,6 +14,9 @@ test("shared enterprise toolbar uses URL-native query and status filters", () =>
   assert.match(toolbar, /name="q"/);
   assert.match(toolbar, /maxLength=\{160\}/);
   assert.match(toolbar, /name="status"/);
+  assert.match(toolbar, /name="columnsMode" value="custom"/);
+  assert.match(toolbar, /name="columns"/);
+  assert.match(toolbar, /enterprise-column-picker/);
   assert.match(toolbar, /href=\{basePath\}/);
   assert.match(toolbar, /shownCount/);
   assert.match(toolbar, /totalCount/);
@@ -25,6 +28,10 @@ test("People and Positions use the same governed table controls", () => {
   assert.match(workspace, /basePath="\/module\/positions"/);
   assert.match(workspace, /getPeopleWorkspaceData\(query, tenantId, status\)/);
   assert.match(workspace, /getPositionsWorkspaceData\(query, tenantId, status\)/);
+  assert.match(workspace, /peopleColumnOptions/);
+  assert.match(workspace, /positionColumnOptions/);
+  assert.match(workspace, /visiblePeopleColumns\.has\("position"\)/);
+  assert.match(workspace, /visiblePositionColumns\.has\("organization"\)/);
 });
 
 test("status filters are allowlisted and relationship scope remains part of database predicates", () => {
@@ -46,12 +53,15 @@ test("filtered totals are server-derived and route filter input is bounded", () 
   assert.match(data, /db\.person\.count\(\{ where \}\)/);
   assert.match(data, /db\.position\.count\(\{ where \}\)/);
   assert.match(modulePage, /search\.status === "string" \? search\.status\.slice\(0, 40\)/);
-  assert.match(moduleLanding, /status\?: string/);
-  assert.match(moduleLanding, /CoreHRLiveWorkspace\(\{ slug, query, status, personId, tab \}\)/);
+  assert.match(modulePage, /Array\.isArray\(search\.columns\)/);
+  assert.match(modulePage, /rawColumns\.slice\(0, 12\)/);
+  assert.match(modulePage, /search\.columnsMode === "custom"/);
+  assert.match(moduleLanding, /columns\?: string\[\]/);
+  assert.match(moduleLanding, /CoreHRLiveWorkspace\(\{ slug, query, status, columns, columnsCustomized, personId, tab \}\)/);
 });
 
 test("enterprise view controls are responsive Warm Enterprise surfaces", () => {
-  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-view-count"]) {
+  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-column-picker", ".enterprise-column-options", ".enterprise-view-count"]) {
     assert.match(css, new RegExp(selector.replace(".", "\\.")));
   }
 });
