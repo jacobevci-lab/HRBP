@@ -26,7 +26,9 @@ function readViewState(formData: FormData, moduleKey: "people" | "positions") {
     status: formData.get("status"),
     columns: formData.getAll("columns"),
     columnsCustomized: formData.get("columnsMode") === "custom",
-    density: formData.get("density")
+    density: formData.get("density"),
+    sortKey: formData.get("sort"),
+    sortDirection: formData.get("dir")
   });
 }
 
