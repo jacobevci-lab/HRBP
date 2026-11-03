@@ -25,9 +25,13 @@ function Stat({ label, value, meta, icon: Icon }: { label: string; value: string
 function EmptyRow({ message, colSpan }: { message: string; colSpan: number }) { return <tr><td colSpan={colSpan} style={{ textAlign: "center", padding: "28px" }}>{message}</td></tr>; }
 function AccessDenied({ title, detail }: { title: string; detail: string }) { return <div className="card employee-restricted-card"><LockKeyhole size={22}/><div><h3>{title}</h3><p>{detail}</p></div></div>; }
 function formatMoney(locale: Locale, currency: string, amount: string) { const value = Number(amount); if (!Number.isFinite(value)) return `${currency} ${amount}`; try { return new Intl.NumberFormat(locale === "tr" ? "tr-TR" : "en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(value); } catch { return `${currency} ${value.toLocaleString(locale === "tr" ? "tr-TR" : "en-US", { maximumFractionDigits: 0 })}`; } }
+function resolveVisibleColumns(options: { value: string }[], requested: string[], customized: boolean) {
+  const allowed = new Set(options.map((option) => option.value));
+  return new Set(customized ? requested.filter((value) => allowed.has(value)) : options.map((option) => option.value));
+}
 const employeeTabs = new Set(["overview", "employment", "compensation", "documents", "history"]);
 
-export async function CoreHRLiveWorkspace({ slug, query = "", status, personId, tab }: { slug: string; query?: string; status?: string; personId?: string; tab?: string }) {
+export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = [], columnsCustomized = false, personId, tab }: { slug: string; query?: string; status?: string; columns?: string[]; columnsCustomized?: boolean; personId?: string; tab?: string }) {
   const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   const tenantId = ctx?.tenantId;
 
@@ -39,16 +43,27 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, personId, 
       { value: "PREBOARDING", label: c(locale,"Preboarding","İşe başlamadan önce") },
       { value: "LEAVE", label: c(locale,"On leave","İzinde") }
     ];
+    const peopleColumnOptions = [
+      { value: "position", label: c(locale,"Position","Pozisyon") },
+      { value: "department", label: c(locale,"Department","Departman") },
+      { value: "location", label: c(locale,"Location","Lokasyon") },
+      { value: "status", label: c(locale,"Status","Durum") },
+      { value: "start", label: c(locale,"Start date","Başlangıç") }
+    ];
+    const visiblePeopleColumns = resolveVisibleColumns(peopleColumnOptions, columns, columnsCustomized);
     return <><div className="enterprise-stats"><Stat label={c(locale,"Active workers","Aktif çalışanlar")} value={String(data.active)} meta={c(locale,"Current employment records","Mevcut istihdam kayıtları")} icon={UsersRound}/><Stat label={c(locale,"Preboarding","İşe başlamadan önce")} value={String(data.preboarding)} meta={c(locale,"Accepted future starters","Kabul edilmiş gelecek başlangıçlar")} icon={UserCheck}/><Stat label={c(locale,"On leave","İzinde")} value={String(data.onLeave)} meta={c(locale,"Current leave status","Mevcut izin durumu")} icon={Clock3}/><Stat label={c(locale,"Data quality","Veri kalitesi")} value={`${data.dataQuality.toFixed(1)}%`} meta={c(locale,`${data.needsReview} records need review`,`${data.needsReview} kayıt inceleme bekliyor`)} icon={BadgeCheck}/></div><EnterpriseViewToolbar
       basePath="/module/people"
       locale={locale}
       query={query}
       status={status}
       statusOptions={peopleStatusOptions}
+      columnOptions={peopleColumnOptions}
+      columns={columns}
+      columnsCustomized={columnsCustomized}
       shownCount={data.people.length}
       totalCount={data.filteredTotal}
       searchPlaceholder={c(locale,"Search name, employee ID or work email…","Ad, çalışan no veya iş e-postasında ara…")}
-    /><div className="card enterprise-table-card"><div className="table-title"><div><h3>{c(locale,"People directory","Çalışan dizini")}</h3><p>{c(locale,"Live golden employee records from PostgreSQL with current effective-dated assignment.","PostgreSQL'den güncel, geçerlilik tarihli atamalarla canlı çalışan ana kayıtları.")}</p></div><span>{c(locale,`${data.filteredTotal} matched`,`${data.filteredTotal} eşleşme`)}</span></div><div className="table-wrap"><table className="enterprise-table"><thead><tr><th>{c(locale,"Employee","Çalışan")}</th><th>{c(locale,"Position","Pozisyon")}</th><th>{c(locale,"Department","Departman")}</th><th>{c(locale,"Location","Lokasyon")}</th><th>{c(locale,"Status","Durum")}</th><th>{c(locale,"Start date","Başlangıç")}</th><th/></tr></thead><tbody>{data.people.length ? data.people.map((person) => <tr key={person.id}><td><div className="enterprise-person"><span>{person.initials}</span><div><strong>{person.name}</strong><small>{person.employeeNumber} · {person.workEmail}</small></div></div></td><td><strong className="cell-strong">{person.position}</strong><small className="cell-sub">{person.positionCode}</small></td><td>{person.department}</td><td>{person.location}</td><td><em className={`pill ${person.status.toLowerCase().replaceAll(" ", "-")}`}>{localStatus(locale,person.status)}</em></td><td>{person.startDate}</td><td><Link className="row-action" href={`/module/employee-360?person=${encodeURIComponent(person.id)}`} aria-label={c(locale,`Open ${person.name}`,`${person.name} kaydını aç`)}><ChevronRight size={15}/></Link></td></tr>) : <EmptyRow message={c(locale,"No people match this search.","Bu aramayla eşleşen çalışan bulunamadı.")} colSpan={7}/>}</tbody></table></div></div></>;
+    /><div className="card enterprise-table-card"><div className="table-title"><div><h3>{c(locale,"People directory","Çalışan dizini")}</h3><p>{c(locale,"Live golden employee records from PostgreSQL with current effective-dated assignment.","PostgreSQL'den güncel, geçerlilik tarihli atamalarla canlı çalışan ana kayıtları.")}</p></div><span>{c(locale,`${data.filteredTotal} matched`,`${data.filteredTotal} eşleşme`)}</span></div><div className="table-wrap"><table className="enterprise-table"><thead><tr><th>{c(locale,"Employee","Çalışan")}</th>{visiblePeopleColumns.has("position") ? <th>{c(locale,"Position","Pozisyon")}</th> : null}{visiblePeopleColumns.has("department") ? <th>{c(locale,"Department","Departman")}</th> : null}{visiblePeopleColumns.has("location") ? <th>{c(locale,"Location","Lokasyon")}</th> : null}{visiblePeopleColumns.has("status") ? <th>{c(locale,"Status","Durum")}</th> : null}{visiblePeopleColumns.has("start") ? <th>{c(locale,"Start date","Başlangıç")}</th> : null}<th/></tr></thead><tbody>{data.people.length ? data.people.map((person) => <tr key={person.id}><td><div className="enterprise-person"><span>{person.initials}</span><div><strong>{person.name}</strong><small>{person.employeeNumber} · {person.workEmail}</small></div></div></td>{visiblePeopleColumns.has("position") ? <td><strong className="cell-strong">{person.position}</strong><small className="cell-sub">{person.positionCode}</small></td> : null}{visiblePeopleColumns.has("department") ? <td>{person.department}</td> : null}{visiblePeopleColumns.has("location") ? <td>{person.location}</td> : null}{visiblePeopleColumns.has("status") ? <td><em className={`pill ${person.status.toLowerCase().replaceAll(" ", "-")}`}>{localStatus(locale,person.status)}</em></td> : null}{visiblePeopleColumns.has("start") ? <td>{person.startDate}</td> : null}<td><Link className="row-action" href={`/module/employee-360?person=${encodeURIComponent(person.id)}`} aria-label={c(locale,`Open ${person.name}`,`${person.name} kaydını aç`)}><ChevronRight size={15}/></Link></td></tr>) : <EmptyRow message={c(locale,"No people match this search.","Bu aramayla eşleşen çalışan bulunamadı.")} colSpan={2 + visiblePeopleColumns.size}/>}</tbody></table></div></div></>;
   }
 
   if (slug === "organization") {
@@ -67,16 +82,28 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, personId, 
       { value: "FROZEN", label: c(locale,"Frozen","Donduruldu") },
       { value: "CLOSED", label: c(locale,"Closed","Kapalı") }
     ];
+    const positionColumnOptions = [
+      { value: "organization", label: c(locale,"Organization","Organizasyon") },
+      { value: "grade", label: c(locale,"Grade","Seviye") },
+      { value: "location", label: c(locale,"Location","Lokasyon") },
+      { value: "incumbent", label: c(locale,"Incumbent","Mevcut çalışan") },
+      { value: "status", label: c(locale,"Status","Durum") },
+      { value: "critical", label: c(locale,"Critical","Kritik") }
+    ];
+    const visiblePositionColumns = resolveVisibleColumns(positionColumnOptions, columns, columnsCustomized);
     return <><div className="enterprise-stats"><Stat label={c(locale,"Positions","Pozisyonlar")} value={String(data.positions)} meta={c(locale,`${data.filled} filled`,`${data.filled} dolu`)} icon={BriefcaseBusiness}/><Stat label={c(locale,"Open","Açık")} value={String(data.open)} meta={c(locale,"Available for recruiting","İşe alıma uygun")} icon={CircleAlert}/><Stat label={c(locale,"Planned","Planlanan")} value={String(data.planned)} meta={c(locale,"Future workforce plan","Gelecek iş gücü planı")} icon={Clock3}/><Stat label={c(locale,"Critical roles","Kritik roller")} value={String(data.critical)} meta={c(locale,"Business continuity scoped","İş sürekliliği kapsamında")} icon={ShieldCheck}/></div><EnterpriseViewToolbar
       basePath="/module/positions"
       locale={locale}
       query={query}
       status={status}
       statusOptions={positionStatusOptions}
+      columnOptions={positionColumnOptions}
+      columns={columns}
+      columnsCustomized={columnsCustomized}
       shownCount={data.rows.length}
       totalCount={data.filteredTotal}
       searchPlaceholder={c(locale,"Search code, title, organization or location…","Kod, unvan, organizasyon veya lokasyonda ara…")}
-    /><div className="card enterprise-table-card"><div className="table-title"><div><h3>{c(locale,"Position register","Pozisyon envanteri")}</h3><p>{c(locale,"Live budgeted seats exist independently from incumbents.","Bütçelenmiş kadrolar mevcut çalışanlardan bağımsız olarak yönetilir.")}</p></div><span>{c(locale,`${data.filteredTotal} matched`,`${data.filteredTotal} eşleşme`)}</span></div><div className="table-wrap"><table className="enterprise-table"><thead><tr><th>{c(locale,"Position","Pozisyon")}</th><th>{c(locale,"Organization","Organizasyon")}</th><th>{c(locale,"Grade","Seviye")}</th><th>{c(locale,"Location","Lokasyon")}</th><th>{c(locale,"Incumbent","Mevcut çalışan")}</th><th>{c(locale,"Status","Durum")}</th><th>{c(locale,"Critical","Kritik")}</th></tr></thead><tbody>{data.rows.length ? data.rows.map((position) => <tr key={position.id}><td><strong className="cell-strong">{position.title}</strong><small className="cell-sub">{position.code}</small></td><td>{position.org}</td><td>{position.grade}</td><td>{position.location}</td><td>{position.incumbent}</td><td><em className={`pill ${position.status.toLowerCase().replaceAll(" ", "-")}`}>{localStatus(locale,position.status)}</em></td><td>{position.critical ? <span className="critical-badge"><ShieldCheck size={13}/> {c(locale,"Yes","Evet")}</span> : "—"}</td></tr>) : <EmptyRow message={c(locale,"No positions are configured.","Tanımlı pozisyon bulunmuyor.")} colSpan={7}/>}</tbody></table></div></div></>;
+    /><div className="card enterprise-table-card"><div className="table-title"><div><h3>{c(locale,"Position register","Pozisyon envanteri")}</h3><p>{c(locale,"Live budgeted seats exist independently from incumbents.","Bütçelenmiş kadrolar mevcut çalışanlardan bağımsız olarak yönetilir.")}</p></div><span>{c(locale,`${data.filteredTotal} matched`,`${data.filteredTotal} eşleşme`)}</span></div><div className="table-wrap"><table className="enterprise-table"><thead><tr><th>{c(locale,"Position","Pozisyon")}</th>{visiblePositionColumns.has("organization") ? <th>{c(locale,"Organization","Organizasyon")}</th> : null}{visiblePositionColumns.has("grade") ? <th>{c(locale,"Grade","Seviye")}</th> : null}{visiblePositionColumns.has("location") ? <th>{c(locale,"Location","Lokasyon")}</th> : null}{visiblePositionColumns.has("incumbent") ? <th>{c(locale,"Incumbent","Mevcut çalışan")}</th> : null}{visiblePositionColumns.has("status") ? <th>{c(locale,"Status","Durum")}</th> : null}{visiblePositionColumns.has("critical") ? <th>{c(locale,"Critical","Kritik")}</th> : null}</tr></thead><tbody>{data.rows.length ? data.rows.map((position) => <tr key={position.id}><td><strong className="cell-strong">{position.title}</strong><small className="cell-sub">{position.code}</small></td>{visiblePositionColumns.has("organization") ? <td>{position.org}</td> : null}{visiblePositionColumns.has("grade") ? <td>{position.grade}</td> : null}{visiblePositionColumns.has("location") ? <td>{position.location}</td> : null}{visiblePositionColumns.has("incumbent") ? <td>{position.incumbent}</td> : null}{visiblePositionColumns.has("status") ? <td><em className={`pill ${position.status.toLowerCase().replaceAll(" ", "-")}`}>{localStatus(locale,position.status)}</em></td> : null}{visiblePositionColumns.has("critical") ? <td>{position.critical ? <span className="critical-badge"><ShieldCheck size={13}/> {c(locale,"Yes","Evet")}</span> : "—"}</td> : null}</tr>) : <EmptyRow message={c(locale,"No positions are configured.","Tanımlı pozisyon bulunmuyor.")} colSpan={1 + visiblePositionColumns.size}/>}</tbody></table></div></div></>;
   }
 
   if (slug === "employee-360") {
