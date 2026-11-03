@@ -12,6 +12,7 @@ test("Cloudflare Worker Previews are explicitly enabled and production bindings 
   assert.equal(wrangler.previews.vars?.HRBP_LOCAL_AUTH_ENABLED, "false");
   assert.equal(wrangler.previews.vars?.HRBP_AUTH_TENANT_ID, "tenant-acme-global");
   assert.equal(wrangler.previews.hyperdrive, undefined, "Preview must not silently reuse production Hyperdrive.");
+  assert.equal(wrangler.previews.version_metadata?.binding, "CF_VERSION_METADATA");
   assert.ok(Array.isArray(wrangler.hyperdrive) && wrangler.hyperdrive.length === 1, "Production Hyperdrive remains top-level only.");
 });
 
