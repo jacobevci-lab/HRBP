@@ -14,6 +14,7 @@ CREATE TABLE "SavedEnterpriseView" (
   "density" TEXT NOT NULL DEFAULT 'comfortable',
   "sortKey" TEXT,
   "sortDirection" TEXT NOT NULL DEFAULT 'asc',
+  "pageSize" INTEGER NOT NULL DEFAULT 50,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "SavedEnterpriseView_pkey" PRIMARY KEY ("id"),
@@ -23,7 +24,8 @@ CREATE TABLE "SavedEnterpriseView" (
   CONSTRAINT "SavedEnterpriseView_status_check" CHECK ("status" IS NULL OR char_length("status") <= 40),
   CONSTRAINT "SavedEnterpriseView_density_check" CHECK ("density" IN ('comfortable', 'compact')),
   CONSTRAINT "SavedEnterpriseView_sort_key_check" CHECK ("sortKey" IS NULL OR char_length("sortKey") <= 40),
-  CONSTRAINT "SavedEnterpriseView_sort_direction_check" CHECK ("sortDirection" IN ('asc', 'desc'))
+  CONSTRAINT "SavedEnterpriseView_sort_direction_check" CHECK ("sortDirection" IN ('asc', 'desc')),
+  CONSTRAINT "SavedEnterpriseView_page_size_check" CHECK ("pageSize" IN (25, 50, 100))
 );
 
 CREATE UNIQUE INDEX "SavedEnterpriseView_tenantId_userId_moduleKey_normalizedNam_key"
