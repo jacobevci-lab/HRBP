@@ -6,6 +6,12 @@ const css = readFileSync("app/workspace-shell.css", "utf8");
 const shell = readFileSync("components/app-shell.tsx", "utf8");
 const myWork = readFileSync("components/workflow-action-center.tsx", "utf8");
 const employee360 = readFileSync("components/employee-360-rail.tsx", "utf8");
+const moduleLanding = readFileSync("components/module-landing.tsx", "utf8");
+const publicModule = readFileSync("components/public-module-landing.tsx", "utf8");
+const coreWorkspace = readFileSync("components/core-hr-live-workspace.tsx", "utf8");
+const growthModule = readFileSync("components/growth-module-page.tsx", "utf8");
+const workPayModule = readFileSync("components/work-pay-module-page.tsx", "utf8");
+const governanceModule = readFileSync("components/governance-planning-module-page.tsx", "utf8");
 
 test("all major cockpit links receive a visible keyboard focus treatment", () => {
   for (const selector of [
@@ -61,4 +67,18 @@ test("wide data surfaces contain horizontal overscroll rather than forcing page 
 test("Employee 360 section navigation remains semantic navigation rather than click-only divs", () => {
   assert.match(employee360, /<nav className="employee-360-rail-nav"/);
   assert.match(employee360, /<Link key=\{tab\.value\}/);
+});
+
+
+test("module state indicators are semantic text badges rather than disabled fake actions", () => {
+  for (const source of [moduleLanding, publicModule, coreWorkspace, growthModule, workPayModule, governanceModule]) {
+    assert.doesNotMatch(source, /<button className="secondary-button" disabled>/);
+  }
+  assert.match(moduleLanding, /module-state-badge/);
+  assert.match(publicModule, /module-state-badge/);
+  assert.match(coreWorkspace, /Current hierarchy/);
+  assert.ok((growthModule.match(/module-state-badge/g) ?? []).length >= 3);
+  assert.ok((workPayModule.match(/module-state-badge/g) ?? []).length >= 3);
+  assert.ok((governanceModule.match(/module-state-badge/g) ?? []).length >= 3);
+  assert.match(css, /\.module-state-badge\{cursor:default!important;user-select:none;pointer-events:none\}/);
 });
