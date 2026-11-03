@@ -21,6 +21,7 @@ import { SettingsLivePage } from "@/components/settings-live-page";
 import { WorkflowActionCenter } from "@/components/workflow-action-center";
 import { WorkPayModulePage } from "@/components/work-pay-module-page";
 import { can } from "@/lib/authorization";
+import { isHRServiceSelfServiceRole } from "@/lib/hr-service-access";
 import { getServerRequestContext } from "@/lib/server-session";
 import { getServerLocale } from "@/lib/i18n-server";
 
@@ -110,9 +111,18 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
     <AppShell>
       <ModuleLanding slug={slug} query={query} status={statusFilter} personId={personId} tab={slug === "policies" ? lifecycleMode : tab}/>
       {slug === "offboarding" && can(ctx, "offboarding:write") ? <OffboardingClearanceLoader/> : null}
-      {slug === "employee-relations" ? <EmployeeRelationsCaseLifecyclePanel focus={{ query, caseId: employeeRelationsCaseId, actionId: employeeRelationsActionId, appealId: employeeRelationsAppealId }}/> : null}
-      {slug === "hr-service" ? <HRServiceLifecyclePanel focus={query}/> : null}
-      {slug === "hr-service" ? <HRServiceEscalationPanel filterValue={escalation}/> : null}
+      {slug === "employee-relations" ? <details id="er-lifecycle" className="service-governance-panel" open={Boolean(query || employeeRelationsCaseId || employeeRelationsActionId || employeeRelationsAppealId)}>
+        <summary><span><strong>{locale === "tr" ? "Vaka yaşam döngüsü & kapanış" : "Case lifecycle & closure"}</strong><small>{locale === "tr" ? "Çözüm, düzeltici aksiyon ve itiraz kontrollerini gerektiğinde açın." : "Open resolution, corrective-action and appeal controls when needed."}</small></span><span>Case Wall</span></summary>
+        <div className="service-governance-panel-body"><EmployeeRelationsCaseLifecyclePanel focus={{ query, caseId: employeeRelationsCaseId, actionId: employeeRelationsActionId, appealId: employeeRelationsAppealId }}/></div>
+      </details> : null}
+      {slug === "hr-service" ? <details id="hr-service-lifecycle" className="service-governance-panel" open={Boolean(query)}>
+        <summary><span><strong>{locale === "tr" ? "Hizmet yaşam döngüsü & yanıtlar" : "Service lifecycle & replies"}</strong><small>{locale === "tr" ? "Geçiş geçmişi, SLA duraklamaları ve yönetişimli aksiyonları gerektiğinde açın." : "Open transition history, SLA pauses and governed actions when needed."}</small></span><span>{locale === "tr" ? "Yönetişimli" : "Governed"}</span></summary>
+        <div className="service-governance-panel-body"><HRServiceLifecyclePanel focus={query}/></div>
+      </details> : null}
+      {slug === "hr-service" && !isHRServiceSelfServiceRole(ctx.role) ? <details id="hr-service-escalation" className="service-governance-panel" open={Boolean(escalation)}>
+        <summary><span><strong>{locale === "tr" ? "SLA eskalasyon operasyonları" : "SLA escalation operations"}</strong><small>{locale === "tr" ? "Uyarı, ihlal ve kritik eskalasyonları gerektiğinde açın." : "Open warning, breached and severe escalation queues when needed."}</small></span><span>SLA</span></summary>
+        <div className="service-governance-panel-body"><HRServiceEscalationPanel filterValue={escalation}/></div>
+      </details> : null}
     </AppShell>
   );
 }
