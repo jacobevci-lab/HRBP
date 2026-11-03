@@ -4,6 +4,7 @@ import { can, type Capability } from "@/lib/authorization";
 import { getServerLocale } from "@/lib/i18n-server";
 import type { Locale } from "@/lib/i18n";
 import { getServerRequestContext } from "@/lib/server-session";
+import { GrowthWorkspaceFocus } from "@/components/growth-workspace-focus";
 
 type GrowthSlug = "benefits" | "performance" | "talent" | "succession" | "learning";
 type GrowthWriteSlug = Exclude<GrowthSlug, "performance">;
@@ -194,12 +195,39 @@ export async function GrowthModulePage({ slug, focusId }: { slug: GrowthSlug; fo
       }
     }
 
+    const focusEnabled = slug === "performance" || slug === "talent";
+    const showParticipantFocus = slug === "performance" && Boolean(participant);
+    const showAdministrationFocus = (slug === "performance" || slug === "talent") && Boolean(operations || lifecycle);
+    const canReadLearning = can(ctx, "learning:read");
+    const canReadSuccession = can(ctx, "succession:read");
+
     return <AppShell>
       <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> {c(locale, "Governed live data", "Yönetişimli canlı veri")}</button></div></section>
-      {liveWorkspace}
-      {participant}
-      {operations}
-      {lifecycle}
+      {focusEnabled ? <GrowthWorkspaceFocus
+        slug={slug}
+        locale={locale}
+        showParticipant={showParticipantFocus}
+        showAdministration={showAdministrationFocus}
+        canReadLearning={canReadLearning}
+        canReadSuccession={canReadSuccession}
+      /> : null}
+
+      <div id={focusEnabled ? "growth-overview" : undefined}>{liveWorkspace}</div>
+
+      {slug === "performance" && participant ? <section id="growth-participant-actions" className="growth-personal-actions">
+        <div className="growth-section-head"><div><span className="section-kicker">{c(locale, "My actions", "Aksiyonlarım")}</span><h3>{c(locale, "Review and goal work assigned to you", "Size atanmış değerlendirme ve hedef işleri")}</h3><p>{c(locale, "Participant identity scope remains enforced by the existing performance controls.", "Katılımcı kimlik kapsamı mevcut performans kontrolleri tarafından uygulanmaya devam eder.")}</p></div></div>
+        {participant}
+      </section> : participant}
+
+      {(slug === "performance" || slug === "talent") && operations ? <details id="growth-governed-admin" className="growth-governed-panel">
+        <summary><span><strong>{c(locale, "Governed administration", "Yönetişimli yönetim")}</strong><small>{c(locale, "Open write tools only when you need to administer the domain.", "Yazma araçlarını yalnız alanı yönetmeniz gerektiğinde açın.")}</small></span><span>{writeCapability ?? ""}</span></summary>
+        <div className="growth-governed-panel-body">{operations}</div>
+      </details> : operations}
+
+      {slug === "talent" && lifecycle ? <details id="growth-governance" className="growth-governed-panel">
+        <summary><span><strong>{c(locale, "Talent governance & development", "Yetenek yönetişimi & gelişim")}</strong><small>{c(locale, "Human assessments, development plans and learning handoff remain explicit.", "İnsan değerlendirmeleri, gelişim planları ve öğrenme devri açık biçimde korunur.")}</small></span><span>{c(locale, "Human-owned", "İnsan sahipliğinde")}</span></summary>
+        <div className="growth-governed-panel-body">{lifecycle}</div>
+      </details> : lifecycle}
     </AppShell>;
   } catch (error) {
     console.error(`[HRBP] Dedicated ${slug} workspace failed; protected fallback activated.`, error);
