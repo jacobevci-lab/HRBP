@@ -91,8 +91,8 @@ test("enterprise view controls are responsive Warm Enterprise surfaces", () => {
 
 
 test("compact density is URL-native, persisted by the workspace and uses sticky enterprise headers", () => {
-  assert.ok((workspace.match(/density=\{density\}/g) ?? []).length >= 2);
-  assert.ok((workspace.match(/enterprise-density-\$\{density\}/g) ?? []).length >= 2);
+  assert.ok((workspace.match(/density=\{currentView\.density\}/g) ?? []).length >= 2);
+  assert.ok((workspace.match(/enterprise-density-\$\{currentView\.density\}/g) ?? []).length >= 2);
   assert.match(unified, /\.enterprise-table-card \.enterprise-table thead th/);
   assert.match(unified, /position:sticky/);
   assert.match(unified, /\.enterprise-density-compact \.enterprise-table td/);
