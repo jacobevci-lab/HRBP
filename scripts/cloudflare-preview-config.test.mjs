@@ -36,6 +36,7 @@ test("Cloudflare build uses a loopback-only fallback and never requires a produc
   const build = readFileSync("scripts/cloudflare-build.mjs", "utf8");
   assert.equal(pkg.scripts?.["cf:build"], "node scripts/cloudflare-build.mjs");
   assert.match(build, /process\.env\.DATABASE_URL \|\| "postgresql:\/\/build:build@127\.0\.0\.1:5432\/hrbp_build"/);
+  assert.match(build, /npm_config_ignore_scripts: "true"/);
   assert.match(build, /run\(npm, \["run", "typecheck"\]\)/);
   assert.match(build, /run\(openNext, \["build"\]\)/);
   assert.doesNotMatch(build, /fornostsecurity|neon\.tech|amazonaws\.com|supabase\.co/i);
