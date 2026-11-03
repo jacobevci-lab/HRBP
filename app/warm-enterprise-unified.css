@@ -415,6 +415,10 @@ html[data-theme="dark"]{
   .topbar{padding-inline:15px!important}
   .page-content{padding:20px 16px 36px!important}
 }
+@media(max-width:760px){
+  .enterprise-table-card .table-wrap{max-height:none}
+}
+
 @media(max-width:620px){
   .page-heading.module-heading,.manager-hub-heading{
     min-height:0;
