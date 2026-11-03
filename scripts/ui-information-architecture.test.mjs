@@ -72,7 +72,7 @@ test("new navigation and shortcut styling is responsive and loaded before the fi
 
 test("production prebuild keeps UI information architecture validation mandatory", () => {
   assert.equal(pkg.scripts["ui-shell:validate"],
-    "node --test scripts/ui-shell-navigation.test.mjs scripts/ui-information-architecture.test.mjs scripts/manager-hub-ui.test.mjs scripts/hr-operations-hub-ui.test.mjs scripts/employee-home-ui.test.mjs scripts/enterprise-view-ui.test.mjs scripts/admin-studio-ui.test.mjs scripts/employee-360-ui.test.mjs scripts/recruiting-workspace-ui.test.mjs scripts/compensation-workspace-ui.test.mjs scripts/growth-workspace-ui.test.mjs scripts/lifecycle-workspaces-ui.test.mjs scripts/service-case-workspaces-ui.test.mjs scripts/ui-interaction-consistency.test.mjs scripts/preview-static-controls.test.mjs");
+    "node --test scripts/ui-shell-navigation.test.mjs scripts/ui-information-architecture.test.mjs scripts/manager-hub-ui.test.mjs scripts/hr-operations-hub-ui.test.mjs scripts/employee-home-ui.test.mjs scripts/enterprise-view-ui.test.mjs scripts/enterprise-saved-views.test.mjs scripts/admin-studio-ui.test.mjs scripts/employee-360-ui.test.mjs scripts/recruiting-workspace-ui.test.mjs scripts/compensation-workspace-ui.test.mjs scripts/growth-workspace-ui.test.mjs scripts/lifecycle-workspaces-ui.test.mjs scripts/service-case-workspaces-ui.test.mjs scripts/ui-interaction-consistency.test.mjs scripts/preview-static-controls.test.mjs");
   assert.ok(pkg.scripts.prebuild.split(" && ").includes("npm run ui-shell:validate"));
 });
 
