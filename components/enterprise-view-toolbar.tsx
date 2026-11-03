@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Columns3, Search, SlidersHorizontal, X } from "lucide-react";
+import { Columns3, List, Search, SlidersHorizontal, X } from "lucide-react";
 import { EnterpriseSavedViews } from "@/components/enterprise-saved-views";
 import type { Locale } from "@/lib/i18n";
 import type {
@@ -19,6 +19,7 @@ export function EnterpriseViewToolbar({
   columnOptions,
   columns,
   columnsCustomized,
+  density,
   savedViews,
   shownCount,
   totalCount,
@@ -33,6 +34,7 @@ export function EnterpriseViewToolbar({
   columnOptions: EnterpriseViewOption[];
   columns: string[];
   columnsCustomized: boolean;
+  density: "comfortable" | "compact";
   savedViews: SavedEnterpriseViewSummary[];
   shownCount: number;
   totalCount: number;
@@ -40,8 +42,8 @@ export function EnterpriseViewToolbar({
 }) {
   const tr = locale === "tr";
   const selectedColumns = new Set(columns);
-  const filtered = Boolean(query || status || columnsCustomized);
-  const current = { query, status, columns, columnsCustomized };
+  const filtered = Boolean(query || status || columnsCustomized || density === "compact");
+  const current = { query, status, columns, columnsCustomized, density };
 
   return <div className="enterprise-view-toolbar">
     <form className="enterprise-view-controls" action={basePath} method="get">
@@ -65,6 +67,13 @@ export function EnterpriseViewToolbar({
           <small>{tr ? "Ana kayıt sütunu her zaman görünür." : "The primary record column is always visible."}</small>
         </div>
       </details>
+      <label className="enterprise-view-density">
+        <List size={14}/>
+        <select name="density" defaultValue={density} aria-label={tr ? "Tablo yoğunluğu" : "Table density"}>
+          <option value="comfortable">{tr ? "Rahat" : "Comfortable"}</option>
+          <option value="compact">{tr ? "Kompakt" : "Compact"}</option>
+        </select>
+      </label>
       <button className="secondary-button" type="submit">{tr ? "Uygula" : "Apply"}</button>
       {filtered ? <Link className="secondary-button" href={basePath}><X size={14}/>{tr ? "Sıfırla" : "Reset"}</Link> : null}
     </form>
