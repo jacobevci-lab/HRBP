@@ -70,7 +70,7 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
       input.indeterminate = false;
     });
     setSelected(0);
-  }, [state.ok, state.changed, state.critical]);
+  }, [state]);
 
   return <form
     ref={formRef}
@@ -91,7 +91,11 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
         return;
       }
       const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
-      const marking = submitter?.value === "mark-critical";
+      if (!submitter || (submitter.value !== "mark-critical" && submitter.value !== "clear-critical")) {
+        event.preventDefault();
+        return;
+      }
+      const marking = submitter.value === "mark-critical";
       const prompt = marking
         ? (tr ? `${selected} pozisyon kritik olarak işaretlensin mi?` : `Mark ${selected} positions as critical?`)
         : (tr ? `${selected} pozisyonun kritik işareti kaldırılsın mı?` : `Clear critical status from ${selected} positions?`);
