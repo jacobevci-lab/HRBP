@@ -78,7 +78,7 @@ export async function PublicModuleLanding({ slug }: { slug: string }) {
   return <>
     <section className="page-heading module-heading">
       <div><div className="eyebrow">HRBP One / {title}</div><h1>{title}</h1><p>{description}</p></div>
-      <div className="module-heading-actions"><button className="secondary-button" disabled><ShieldCheck size={16}/> {tr ? "Salt-okunur staging" : "Read-only staging"}</button></div>
+      <div className="module-heading-actions"><span className="secondary-button module-state-badge"><ShieldCheck size={16}/> {tr ? "Salt-okunur staging" : "Read-only staging"}</span></div>
     </section>
     <section className="card module-degraded-banner" style={{ marginBottom: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}>
       <ShieldCheck size={18} style={{ flex: "0 0 auto", marginTop: 1 }}/>
