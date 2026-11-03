@@ -387,3 +387,133 @@ html[data-theme="dark"]{
   .enterprise-view-filter,.enterprise-column-picker{min-width:calc(50% - 4px)}
   .table-title,.growth-panel-head,.services-panel-head,.workpay-panel-head,.off-head{min-height:58px!important;padding:12px!important}
 }
+
+
+/* 2026 detail-workspace overhaul: master-detail depth, five-band talent matrix and clearer empty states. */
+.employee-360-layout{
+  grid-template-columns:300px minmax(0,1fr)!important;
+  gap:16px!important;
+}
+.employee-360-rail{
+  top:80px!important;
+  padding:16px!important;
+  border-radius:18px!important;
+  background:linear-gradient(180deg,var(--panel-highlight),var(--surface) 38%)!important;
+  box-shadow:var(--panel-shadow)!important;
+  border-color:color-mix(in srgb,var(--line) 90%,var(--accent) 10%)!important;
+}
+.employee-360-rail-identity{
+  grid-template-columns:54px minmax(0,1fr)!important;
+  gap:12px!important;
+  padding-bottom:14px!important;
+}
+.employee-360-rail-identity .employee-avatar{
+  width:54px!important;
+  height:54px!important;
+  border-radius:15px!important;
+  font-size:14px!important;
+}
+.employee-360-rail-identity h2{font-size:15px!important;letter-spacing:-.25px}
+.employee-360-rail-nav{gap:4px!important;padding:9px 0!important}
+.employee-360-rail-nav a{min-height:38px!important;padding:8px 9px!important;border-radius:9px!important;font-size:9.5px!important}
+.employee-360-rail-nav a.active{
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 13%,var(--surface)),var(--accent-soft))!important;
+  box-shadow:inset 3px 0 0 var(--accent);
+}
+.employee-360-main{gap:16px!important}
+.employee-360-main-head{
+  min-height:88px!important;
+  padding:16px 18px!important;
+  border-radius:16px!important;
+  background:linear-gradient(120deg,var(--panel-highlight),var(--surface) 64%)!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.employee-360-main-head h2{font-size:19px!important;letter-spacing:-.45px!important}
+.profile-card,.employee-action-card,.employee-history-card{
+  border-radius:16px!important;
+  box-shadow:var(--panel-shadow)!important;
+  overflow:hidden;
+}
+
+/* Growth and service detail layouts use an intentional main/rail relationship. */
+.growth-split,.growth-grid,.services-split{
+  grid-template-columns:minmax(0,1.7fr) minmax(310px,.72fr)!important;
+  gap:16px!important;
+}
+.growth-side,.services-side{
+  border-radius:16px!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.decision-side,.restricted-case{
+  border-top:3px solid color-mix(in srgb,var(--orange) 60%,var(--line))!important;
+}
+.growth-control-stack,.services-control-stack{padding:10px 16px!important}
+.growth-control-stack>div,.services-control-stack>div{padding:13px 0!important}
+
+/* Live talent data has five performance bands; preview remains the compact three-band matrix. */
+.talent-matrix.five-band{overflow:auto!important}
+.talent-matrix.five-band .matrix-body{min-width:820px;padding:16px 18px 10px!important}
+.talent-matrix.five-band .matrix-row{
+  grid-template-columns:148px repeat(5,minmax(96px,1fr))!important;
+  gap:9px!important;
+  margin-bottom:9px!important;
+}
+.talent-matrix.five-band .matrix-label,.talent-matrix.five-band .matrix-cell{
+  min-height:76px!important;
+  border-radius:11px!important;
+}
+.talent-matrix.five-band .matrix-cell strong{font-size:19px!important;letter-spacing:-.35px}
+.talent-matrix.five-band .matrix-cell small{
+  max-width:92px;
+  text-align:center;
+  font-size:7.8px!important;
+  line-height:1.3;
+}
+.talent-matrix.five-band .matrix-cell:nth-child(2){
+  background:color-mix(in srgb,var(--danger-bg) 62%,var(--surface))!important;
+}
+.talent-matrix.five-band .matrix-cell:nth-child(3){
+  background:color-mix(in srgb,var(--warning-bg) 62%,var(--surface))!important;
+}
+.talent-matrix.five-band .matrix-cell:nth-child(5),
+.talent-matrix.five-band .matrix-cell:nth-child(6){
+  background:color-mix(in srgb,var(--success-bg) 68%,var(--surface))!important;
+}
+
+/* Master rows should visually read as selectable records without becoming button-like. */
+.services-master-link{gap:3px!important}
+.services-master-link strong{font-size:10.5px!important;color:var(--text)}
+.services-table tbody tr.focused td{
+  background:color-mix(in srgb,var(--warning-bg) 50%,var(--surface))!important;
+}
+.services-table tbody tr.focused{
+  box-shadow:inset 3px 0 0 var(--orange)!important;
+}
+
+/* Calm, useful empty states instead of large blank white panels. */
+.empty-state{
+  max-width:540px!important;
+  padding:54px 26px!important;
+}
+.empty-state h3{font-size:15px!important;letter-spacing:-.2px}
+.empty-state p{font-size:10.5px!important;line-height:1.65!important}
+.workflow-action-empty,.growth-lifecycle-empty,.hr-escalation-empty{
+  color:var(--muted)!important;
+  background:linear-gradient(180deg,var(--surface),var(--surface-soft))!important;
+}
+.enterprise-table-card tbody:has(.workflow-action-empty),
+.growth-panel:has(.growth-lifecycle-empty){
+  background:linear-gradient(180deg,var(--surface),var(--surface-soft));
+}
+
+@media(max-width:1100px){
+  .growth-split,.growth-grid,.services-split{grid-template-columns:1fr!important}
+}
+@media(max-width:1040px){
+  .employee-360-layout{grid-template-columns:1fr!important}
+  .employee-360-rail{position:static!important;max-height:none!important}
+}
+@media(max-width:650px){
+  .talent-matrix.five-band .matrix-body{min-width:760px}
+  .employee-360-main-head{min-height:0!important;padding:14px!important}
+}
