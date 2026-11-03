@@ -22,6 +22,7 @@ test("shared enterprise toolbar uses URL-native query and status filters", () =>
   assert.match(toolbar, /name="density"/);
   assert.match(toolbar, /name="sort"/);
   assert.match(toolbar, /name="dir"/);
+  assert.match(toolbar, /name="pageSize"/);
   assert.match(toolbar, /value="comfortable"/);
   assert.match(toolbar, /value="compact"/);
   assert.match(toolbar, /<EnterpriseSavedViews/);
@@ -76,15 +77,19 @@ test("filtered totals are server-derived and route filter input is bounded", () 
   assert.match(modulePage, /search\.density === "compact"/);
   assert.match(modulePage, /search\.sort === "string"/);
   assert.match(modulePage, /search\.dir === "desc"/);
+  assert.match(modulePage, /search\.page === "string"/);
+  assert.match(modulePage, /search\.pageSize === "string"/);
   assert.match(moduleLanding, /columns\?: string\[\]/);
   assert.match(moduleLanding, /density\?: "comfortable" \| "compact"/);
   assert.match(moduleLanding, /sortKey\?: string/);
   assert.match(moduleLanding, /sortDirection\?: "asc" \| "desc"/);
-  assert.match(moduleLanding, /CoreHRLiveWorkspace\(\{ slug, query, status, columns, columnsCustomized, density, sortKey, sortDirection, personId, tab \}\)/);
+  assert.match(moduleLanding, /page\?: number/);
+  assert.match(moduleLanding, /pageSize\?: 25 \| 50 \| 100/);
+  assert.match(moduleLanding, /CoreHRLiveWorkspace\(\{ slug, query, status, columns, columnsCustomized, density, sortKey, sortDirection, page, pageSize, personId, tab \}\)/);
 });
 
 test("enterprise view controls are responsive Warm Enterprise surfaces", () => {
-  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-controls", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-view-density", ".enterprise-view-sort", ".enterprise-column-picker", ".enterprise-column-options", ".enterprise-saved-views", ".enterprise-saved-view-popover", ".enterprise-view-count"]) {
+  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-controls", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-view-density", ".enterprise-view-page-size", ".enterprise-view-sort", ".enterprise-column-picker", ".enterprise-column-options", ".enterprise-saved-views", ".enterprise-saved-view-popover", ".enterprise-view-count", ".enterprise-pagination"]) {
     assert.match(css, new RegExp(selector.replace(".", "\\.")));
   }
 });
@@ -107,4 +112,18 @@ test("enterprise sorting is allowlisted in UI and executed in PostgreSQL queries
   assert.match(data, /orderBy: peopleOrderBy\(sortKey, sortDirection\)/);
   assert.match(data, /orderBy: positionOrderBy\(sortKey, sortDirection\)/);
   assert.doesNotMatch(toolbar, /\.sort\(/);
+});
+
+
+test("enterprise registers use real server-side pagination rather than hard row caps", () => {
+  assert.match(data, /normalizeEnterprisePage\(page\)/);
+  assert.match(data, /normalizeEnterprisePageSize\(pageSize\)/);
+  assert.ok((data.match(/skip,/g) ?? []).length >= 2);
+  assert.ok((data.match(/take: normalizedPageSize/g) ?? []).length >= 2);
+  assert.ok((data.match(/pageCount = Math\.max\(1, Math\.ceil\(filteredTotal \/ normalizedPageSize\)\)/g) ?? []).length >= 2);
+  assert.doesNotMatch(data, /take: 250/);
+  assert.doesNotMatch(data, /take: 500/);
+  assert.ok((workspace.match(/<EnterprisePagination/g) ?? []).length >= 2);
+  assert.match(workspace, /page=\{data\.page\}/);
+  assert.match(workspace, /pageCount=\{data\.pageCount\}/);
 });
