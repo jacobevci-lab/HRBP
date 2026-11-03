@@ -152,3 +152,27 @@ test("saved page size is allowlisted while transient page number is never persis
   assert.match(control, /name="pageSize" value=\{current\.pageSize\}/);
   assert.doesNotMatch(source, /state\.page\b|page:\s*row\.page/);
 });
+
+
+test("pagination links preserve saved view state but page itself remains transient", () => {
+  const api = loadService();
+  const state = api.sanitizeEnterpriseViewState("people", {
+    query: "Deniz",
+    status: "ACTIVE",
+    columns: ["status"],
+    columnsCustomized: true,
+    density: "compact",
+    sortKey: "employeeNumber",
+    sortDirection: "desc",
+    pageSize: 25
+  });
+  const pageHref = api.buildEnterprisePageHref("people", state, 3);
+  const pageUrl = new URL(pageHref, "https://hrbp.invalid");
+  assert.equal(pageUrl.searchParams.get("page"), "3");
+  assert.equal(pageUrl.searchParams.get("pageSize"), "25");
+  assert.equal(pageUrl.searchParams.get("density"), "compact");
+  assert.equal(pageUrl.searchParams.get("sort"), "employeeNumber");
+  assert.equal(pageUrl.searchParams.get("dir"), "desc");
+  const savedUrl = new URL(api.buildEnterpriseViewHref("people", state), "https://hrbp.invalid");
+  assert.equal(savedUrl.searchParams.get("page"), null);
+});
