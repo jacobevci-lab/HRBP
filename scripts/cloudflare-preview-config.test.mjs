@@ -30,3 +30,13 @@ test("pinned Wrangler supports Worker Previews", () => {
   const [major, minor] = match.slice(1, 3).map(Number);
   assert.ok(major > 4 || (major === 4 && minor >= 135), "Worker Previews require Wrangler 4.135.0 or newer.");
 });
+
+
+test("Cloudflare build uses a loopback-only fallback and never requires a production database secret", () => {
+  const build = readFileSync("scripts/cloudflare-build.mjs", "utf8");
+  assert.equal(pkg.scripts?.["cf:build"], "node scripts/cloudflare-build.mjs");
+  assert.match(build, /process\.env\.DATABASE_URL \|\| "postgresql:\/\/build:build@127\.0\.0\.1:5432\/hrbp_build"/);
+  assert.match(build, /run\(npm, \["run", "typecheck"\]\)/);
+  assert.match(build, /run\(openNext, \["build"\]\)/);
+  assert.doesNotMatch(build, /fornostsecurity|hyperdrive|neon|amazonaws|supabase/i);
+});
