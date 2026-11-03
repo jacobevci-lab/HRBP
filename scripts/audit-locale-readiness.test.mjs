@@ -3,12 +3,15 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { waitForAuditLocale } from './audit-locale-readiness.mjs';
 
-function fixture({ lang = 'tr', busy = 'false', toggle = true, error = false, marker = true } = {}) {
+function fixture({ lang = 'tr', busy = 'false', selected = lang, toggle = true, error = false, marker = true } = {}) {
   const calls = [];
   const document = {
     documentElement: { lang },
     querySelector(selector) {
-      if (selector === '.locale-toggle') return toggle ? { getAttribute: key => key === 'aria-busy' ? busy : null } : null;
+      if (selector === '.locale-toggle') return toggle ? {
+        getAttribute: key => key === 'aria-busy' ? busy : null,
+        querySelector: inner => inner === 'button[aria-pressed="true"]' && selected ? { textContent: selected.toUpperCase() } : null
+      } : null;
       if (selector === '.locale-error') return error ? {} : null;
       throw new Error(`Unexpected DOM query: ${selector}`);
     }
@@ -56,6 +59,8 @@ for (const locale of ['en', 'tr']) {
 for (const [name, options] of [
   ['old language', { lang: 'en' }],
   ['pending transition', { busy: 'true' }],
+  ['provider selection still English', { lang: 'tr', selected: 'en' }],
+  ['missing selected locale', { lang: 'tr', selected: null }],
   ['missing readiness attribute', { busy: null }],
   ['missing toggle', { toggle: false }],
   ['visible locale failure', { error: true }]
