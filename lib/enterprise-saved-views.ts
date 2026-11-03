@@ -111,6 +111,14 @@ export function buildEnterpriseViewHref(moduleKey: EnterpriseViewModule, state: 
   return source ? `${definitions[moduleKey].basePath}?${source}` : definitions[moduleKey].basePath;
 }
 
+export function buildEnterprisePageHref(moduleKey: EnterpriseViewModule, state: EnterpriseViewState, page: number) {
+  const href = buildEnterpriseViewHref(moduleKey, state);
+  const url = new URL(href, "https://hrbp.invalid");
+  const normalizedPage = Number.isInteger(page) && page > 1 ? Math.min(page, 10000) : 1;
+  if (normalizedPage > 1) url.searchParams.set("page", String(normalizedPage));
+  return `${url.pathname}${url.search}`;
+}
+
 function assertViewAccess(ctx: RequestContext, moduleKey: EnterpriseViewModule) {
   if (!can(ctx, definitions[moduleKey].capability)) throw new Error("VIEW_FORBIDDEN");
 }
