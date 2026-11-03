@@ -49,3 +49,12 @@ test("lifecycle cockpits follow responsive Warm Enterprise styling", () => {
   }
   assert.match(css, /@media\(max-width:620px\)/);
 });
+
+
+test("Recruiting and onboarding previews use static labels instead of fake disabled actions", () => {
+  assert.doesNotMatch(recruiting, /<button[^>]*disabled/);
+  assert.match(recruiting, /preview-static-label/);
+  assert.match(recruiting, /pipeline-count-label/);
+  assert.match(recruiting, /Static preview/);
+  assert.match(recruiting, /Statik önizleme/);
+});
