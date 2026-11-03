@@ -290,6 +290,7 @@ model SavedEnterpriseView {
   density           String   @default("comfortable")
   sortKey           String?
   sortDirection     String   @default("asc")
+  pageSize          Int      @default(50)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
