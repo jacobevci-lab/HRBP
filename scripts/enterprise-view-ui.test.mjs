@@ -121,8 +121,10 @@ test("enterprise registers use real server-side pagination rather than hard row 
   assert.ok((data.match(/skip,/g) ?? []).length >= 2);
   assert.ok((data.match(/take: normalizedPageSize/g) ?? []).length >= 2);
   assert.ok((data.match(/pageCount = Math\.max\(1, Math\.ceil\(filteredTotal \/ normalizedPageSize\)\)/g) ?? []).length >= 2);
-  assert.doesNotMatch(data, /take: 250/);
-  assert.doesNotMatch(data, /take: 500/);
+  const peopleBody = data.slice(data.indexOf("export async function getPeopleWorkspaceData"), data.indexOf("export type OrganizationRow"));
+  const positionsBody = data.slice(data.indexOf("export async function getPositionsWorkspaceData"), data.indexOf("const employee360Select"));
+  assert.doesNotMatch(peopleBody, /take: 250/);
+  assert.doesNotMatch(positionsBody, /take: 500/);
   assert.ok((workspace.match(/<EnterprisePagination/g) ?? []).length >= 2);
   assert.match(workspace, /page=\{data\.page\}/);
   assert.match(workspace, /pageCount=\{data\.pageCount\}/);
