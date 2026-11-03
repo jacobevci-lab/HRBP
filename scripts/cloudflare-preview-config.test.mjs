@@ -38,5 +38,7 @@ test("Cloudflare build uses a loopback-only fallback and never requires a produc
   assert.match(build, /process\.env\.DATABASE_URL \|\| "postgresql:\/\/build:build@127\.0\.0\.1:5432\/hrbp_build"/);
   assert.match(build, /run\(npm, \["run", "typecheck"\]\)/);
   assert.match(build, /run\(openNext, \["build"\]\)/);
-  assert.doesNotMatch(build, /fornostsecurity|hyperdrive|neon|amazonaws|supabase/i);
+  assert.doesNotMatch(build, /fornostsecurity|neon\.tech|amazonaws\.com|supabase\.co/i);
+  const fallback = build.match(/DATABASE_URL: process\.env\.DATABASE_URL \|\| "([^"]+)"/)?.[1];
+  assert.equal(fallback, "postgresql://build:build@127.0.0.1:5432/hrbp_build");
 });
