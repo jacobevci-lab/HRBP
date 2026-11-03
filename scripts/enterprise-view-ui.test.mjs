@@ -10,13 +10,16 @@ const modulePage = readFileSync("app/module/[slug]/page.tsx", "utf8");
 const css = readFileSync("app/workspace-shell.css", "utf8");
 
 test("shared enterprise toolbar uses URL-native query and status filters", () => {
-  assert.match(toolbar, /<form className="enterprise-view-toolbar" action=\{basePath\} method="get">/);
+  assert.match(toolbar, /<div className="enterprise-view-toolbar">/);
+  assert.match(toolbar, /<form className="enterprise-view-controls" action=\{basePath\} method="get">/);
   assert.match(toolbar, /name="q"/);
   assert.match(toolbar, /maxLength=\{160\}/);
   assert.match(toolbar, /name="status"/);
   assert.match(toolbar, /name="columnsMode" value="custom"/);
   assert.match(toolbar, /name="columns"/);
   assert.match(toolbar, /enterprise-column-picker/);
+  assert.match(toolbar, /<EnterpriseSavedViews/);
+  assert.match(toolbar, /savedViews=\{savedViews\}/);
   assert.match(toolbar, /href=\{basePath\}/);
   assert.match(toolbar, /shownCount/);
   assert.match(toolbar, /totalCount/);
@@ -24,8 +27,12 @@ test("shared enterprise toolbar uses URL-native query and status filters", () =>
 
 test("People and Positions use the same governed table controls", () => {
   assert.ok((workspace.match(/<EnterpriseViewToolbar/g) ?? []).length >= 2);
+  assert.match(workspace, /moduleKey="people"/);
+  assert.match(workspace, /moduleKey="positions"/);
   assert.match(workspace, /basePath="\/module\/people"/);
   assert.match(workspace, /basePath="\/module\/positions"/);
+  assert.match(workspace, /listSavedEnterpriseViews\(ctx, "people"\)/);
+  assert.match(workspace, /listSavedEnterpriseViews\(ctx, "positions"\)/);
   assert.match(workspace, /getPeopleWorkspaceData\(query, tenantId, status\)/);
   assert.match(workspace, /getPositionsWorkspaceData\(query, tenantId, status\)/);
   assert.match(workspace, /peopleColumnOptions/);
@@ -61,7 +68,7 @@ test("filtered totals are server-derived and route filter input is bounded", () 
 });
 
 test("enterprise view controls are responsive Warm Enterprise surfaces", () => {
-  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-column-picker", ".enterprise-column-options", ".enterprise-view-count"]) {
+  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-controls", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-column-picker", ".enterprise-column-options", ".enterprise-saved-views", ".enterprise-saved-view-popover", ".enterprise-view-count"]) {
     assert.match(css, new RegExp(selector.replace(".", "\\.")));
   }
 });
