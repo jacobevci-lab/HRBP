@@ -75,7 +75,7 @@ for (const [, symbol, slugs] of registry) for (const slug of slugs) {
     assert.ok(!nodes(tree).some(n => n.type === 'public-preview' || n.type === 'button' || n.type === 'input'));
     if (symbol === 'EmployeeServicesLiveWorkspace') assert.equal(route.calls[0].args.focusId, 'filter & Ö');
     if (symbol === 'GovernanceLiveWorkspace') assert.equal(route.calls[0].args.query, 'filter & Ö');
-    if (symbol === 'CoreHRLiveWorkspace') assert.deepEqual(JSON.parse(JSON.stringify(route.calls[0].args)), {slug,query:'filter & Ö',columns:[],columnsCustomized:false,density:'comfortable',sortDirection:'asc',personId:'person-a',tab:'history'});
+    if (symbol === 'CoreHRLiveWorkspace') assert.deepEqual(JSON.parse(JSON.stringify(route.calls[0].args)), {slug,query:'filter & Ö',columns:[],columnsCustomized:false,density:'comfortable',sortDirection:'asc',page:1,pageSize:50,personId:'person-a',tab:'history'});
     if (symbol === 'RecruitingWorkspace') assert.equal(route.calls[0].args.slug, slug);
   });
   for (const kind of ['data', 'import', 'redirect', 'not-found']) {
@@ -114,10 +114,10 @@ for (const slug of ['people','positions']) test(`${slug}: create navigation requ
 });
 for (const slug of ['people','positions']) test(`${slug}: URL-native column view state reaches the live workspace`, async () => {
   const route=fixture();
-  await route.ModuleLanding({slug,query:'needle',status:'ACTIVE',columns:['position','status'],columnsCustomized:true,density:'compact',sortKey:'employeeNumber',sortDirection:'desc'});
+  await route.ModuleLanding({slug,query:'needle',status:'ACTIVE',columns:['position','status'],columnsCustomized:true,density:'compact',sortKey:'employeeNumber',sortDirection:'desc',page:3,pageSize:100});
   assert.equal(route.calls.length,1);
   assert.deepEqual(JSON.parse(JSON.stringify(route.calls[0].args)), {
-    slug,query:'needle',status:'ACTIVE',columns:['position','status'],columnsCustomized:true,density:'compact',sortKey:'employeeNumber',sortDirection:'desc'
+    slug,query:'needle',status:'ACTIVE',columns:['position','status'],columnsCustomized:true,density:'compact',sortKey:'employeeNumber',sortDirection:'desc',page:3,pageSize:100
   });
 });
 test('Unsupported dispatch and empty live result are explicit failures, not success placeholders', async () => {
