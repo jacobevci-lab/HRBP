@@ -9,8 +9,10 @@ export async function waitForAuditLocale(page, path, locale) {
   // Check the selected document language AND the settled control in one observation.
   await page.waitForFunction(expected => {
     const toggle = document.querySelector('.locale-toggle');
+    const selected = toggle?.querySelector('button[aria-pressed="true"]')?.textContent?.trim().toLowerCase();
     return document.documentElement.lang === expected
       && toggle?.getAttribute('aria-busy') === 'false'
+      && selected === expected
       && !document.querySelector('.locale-error');
   }, locale, { timeout: 10000 });
 
