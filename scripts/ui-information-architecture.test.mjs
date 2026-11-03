@@ -75,3 +75,15 @@ test("production prebuild keeps UI information architecture validation mandatory
     "node --test scripts/ui-shell-navigation.test.mjs scripts/ui-information-architecture.test.mjs scripts/manager-hub-ui.test.mjs scripts/hr-operations-hub-ui.test.mjs scripts/employee-home-ui.test.mjs scripts/enterprise-view-ui.test.mjs scripts/admin-studio-ui.test.mjs scripts/employee-360-ui.test.mjs scripts/recruiting-workspace-ui.test.mjs scripts/compensation-workspace-ui.test.mjs scripts/growth-workspace-ui.test.mjs scripts/lifecycle-workspaces-ui.test.mjs scripts/service-case-workspaces-ui.test.mjs scripts/ui-interaction-consistency.test.mjs scripts/preview-static-controls.test.mjs");
   assert.ok(pkg.scripts.prebuild.split(" && ").includes("npm run ui-shell:validate"));
 });
+
+
+test("dashboard uses the new command-center visual hierarchy and semantic state badges", () => {
+  const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
+  assert.match(dashboard, /className="page-heading dashboard-command-heading"/);
+  assert.match(dashboard, /className="ai-brief dashboard-focus-brief"/);
+  assert.doesNotMatch(dashboard, /<button className="secondary-button" disabled>/);
+  assert.match(dashboard, /module-state-badge/);
+  for (const selector of [".dashboard-command-heading", ".dashboard-focus-brief", ".metric-card"]) {
+    assert.match(unified, new RegExp(selector.replace(".", "\\.")));
+  }
+});
