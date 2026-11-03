@@ -56,3 +56,15 @@ test("Performance and Talent cockpit uses responsive Warm Enterprise styling", (
   }
   assert.match(css, /@media\(max-width:620px\)\{\.growth-focus-grid/);
 });
+
+
+test("live Performance and Talent surfaces follow the active EN/TR locale", () => {
+  assert.match(live, /getServerLocale/);
+  assert.match(live, /const \[ctx, locale\] = await Promise\.all/);
+  assert.match(live, /Dönem tamamlanma/);
+  assert.match(live, /İnsan sahipliğinde puanlama/);
+  assert.match(live, /İnsan değerlendirmeli yetenek matrisi/);
+  assert.match(live, /AI ile puanlanmaz/);
+  assert.match(live, /localGrowthValue\(locale,goal\.status\)/);
+  assert.match(live, /localGrowthValue\(locale,row\.performance\)/);
+});
