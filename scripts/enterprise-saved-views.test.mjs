@@ -29,8 +29,10 @@ test("SavedEnterpriseView is a tenant/user/module scoped preference model", () =
   assert.match(schema, /userId\s+String/);
   assert.match(schema, /moduleKey\s+String/);
   assert.match(schema, /columns\s+String\[\]\s+@default\(\[\]\)/);
+  assert.match(schema, /density\s+String\s+@default\("comfortable"\)/);
   assert.match(schema, /@@unique\(\[tenantId, userId, moduleKey, normalizedName\]\)/);
   assert.match(migration, /CHECK \("moduleKey" IN \('people', 'positions'\)\)/);
+  assert.match(migration, /CHECK \("density" IN \('comfortable', 'compact'\)\)/);
   assert.match(migration, /FOREIGN KEY \("tenantId"\) REFERENCES "Tenant"/);
   assert.match(migration, /FOREIGN KEY \("userId"\) REFERENCES "UserAccount"/);
 });
@@ -41,13 +43,15 @@ test("saved view state is allowlisted and produces a shareable URL", () => {
     query: "  Deniz & Team  ",
     status: "active",
     columns: ["status", "position", "evil", "status"],
-    columnsCustomized: true
+    columnsCustomized: true,
+    density: "compact"
   });
   assert.deepEqual(JSON.parse(JSON.stringify(state)), {
     query: "Deniz & Team",
     status: "ACTIVE",
     columns: ["status", "position"],
-    columnsCustomized: true
+    columnsCustomized: true,
+    density: "compact"
   });
   const href = api.buildEnterpriseViewHref("people", state);
   const url = new URL(href, "https://hrbp.invalid");
@@ -56,6 +60,7 @@ test("saved view state is allowlisted and produces a shareable URL", () => {
   assert.equal(url.searchParams.get("status"), "ACTIVE");
   assert.equal(url.searchParams.get("columnsMode"), "custom");
   assert.deepEqual(url.searchParams.getAll("columns"), ["status", "position"]);
+  assert.equal(url.searchParams.get("density"), "compact");
 });
 
 test("saved view names are bounded and normalized for case-insensitive upsert", () => {
@@ -94,4 +99,14 @@ test("People and Positions expose persisted view controls without localStorage p
   assert.match(control, /deleteEnterpriseViewAction/);
   assert.match(control, /Saved views/);
   assert.doesNotMatch(control, /localStorage|sessionStorage/);
+});
+
+
+test("invalid density fails closed to comfortable and is part of saved-view identity state", () => {
+  const api = loadService();
+  assert.equal(api.sanitizeEnterpriseViewState("positions", { density: "dense" }).density, "comfortable");
+  assert.equal(api.sanitizeEnterpriseViewState("positions", { density: "compact" }).density, "compact");
+  assert.match(source, /density: state\.density/);
+  assert.match(actions, /density: formData\.get\("density"\)/);
+  assert.match(control, /name="density" value=\{current\.density\}/);
 });
