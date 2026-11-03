@@ -32,10 +32,12 @@ test("SavedEnterpriseView is a tenant/user/module scoped preference model", () =
   assert.match(schema, /density\s+String\s+@default\("comfortable"\)/);
   assert.match(schema, /sortKey\s+String\?/);
   assert.match(schema, /sortDirection\s+String\s+@default\("asc"\)/);
+  assert.match(schema, /pageSize\s+Int\s+@default\(50\)/);
   assert.match(schema, /@@unique\(\[tenantId, userId, moduleKey, normalizedName\]\)/);
   assert.match(migration, /CHECK \("moduleKey" IN \('people', 'positions'\)\)/);
   assert.match(migration, /CHECK \("density" IN \('comfortable', 'compact'\)\)/);
   assert.match(migration, /CHECK \("sortDirection" IN \('asc', 'desc'\)\)/);
+  assert.match(migration, /CHECK \("pageSize" IN \(25, 50, 100\)\)/);
   assert.match(migration, /FOREIGN KEY \("tenantId"\) REFERENCES "Tenant"/);
   assert.match(migration, /FOREIGN KEY \("userId"\) REFERENCES "UserAccount"/);
 });
@@ -49,7 +51,8 @@ test("saved view state is allowlisted and produces a shareable URL", () => {
     columnsCustomized: true,
     density: "compact",
     sortKey: "employeeNumber",
-    sortDirection: "desc"
+    sortDirection: "desc",
+    pageSize: 100
   });
   assert.deepEqual(JSON.parse(JSON.stringify(state)), {
     query: "Deniz & Team",
@@ -58,7 +61,8 @@ test("saved view state is allowlisted and produces a shareable URL", () => {
     columnsCustomized: true,
     density: "compact",
     sortKey: "employeeNumber",
-    sortDirection: "desc"
+    sortDirection: "desc",
+    pageSize: 100
   });
   const href = api.buildEnterpriseViewHref("people", state);
   const url = new URL(href, "https://hrbp.invalid");
@@ -70,6 +74,8 @@ test("saved view state is allowlisted and produces a shareable URL", () => {
   assert.equal(url.searchParams.get("density"), "compact");
   assert.equal(url.searchParams.get("sort"), "employeeNumber");
   assert.equal(url.searchParams.get("dir"), "desc");
+  assert.equal(url.searchParams.get("pageSize"), "100");
+  assert.equal(url.searchParams.get("page"), null);
 });
 
 test("saved view names are bounded and normalized for case-insensitive upsert", () => {
@@ -133,4 +139,16 @@ test("saved sorting is module-allowlisted and invalid sort state falls back to d
   assert.match(source, /sortKey: state\.sortKey \?\? null/);
   assert.match(actions, /sortKey: formData\.get\("sort"\)/);
   assert.match(actions, /sortDirection: formData\.get\("dir"\)/);
+});
+
+
+test("saved page size is allowlisted while transient page number is never persisted", () => {
+  const api = loadService();
+  assert.equal(api.sanitizeEnterpriseViewState("people", { pageSize: 25 }).pageSize, 25);
+  assert.equal(api.sanitizeEnterpriseViewState("people", { pageSize: 100 }).pageSize, 100);
+  assert.equal(api.sanitizeEnterpriseViewState("people", { pageSize: 999 }).pageSize, 50);
+  assert.match(source, /pageSize: state\.pageSize/);
+  assert.match(actions, /pageSize: Number\(formData\.get\("pageSize"\)\)/);
+  assert.match(control, /name="pageSize" value=\{current\.pageSize\}/);
+  assert.doesNotMatch(source, /state\.page\b|page:\s*row\.page/);
 });
