@@ -109,3 +109,24 @@ test("detail workspaces keep the upgraded master-detail visual hierarchy", () =>
   assert.match(unified, /\.growth-split,.growth-grid,.services-split\{[^]*1\.7fr/);
   assert.match(unified, /\.services-table tbody tr\.focused td/);
 });
+
+
+test("shell offers skip navigation and active links expose current-page semantics", () => {
+  assert.match(shell, /className="skip-link" href="#main-content"/);
+  assert.match(shell, /id="main-content" tabIndex=\{-1\}/);
+  assert.ok((shell.match(/aria-current=\{active \? "page" : undefined\}/g) ?? []).length >= 2);
+  assert.match(shell, /aria-label=\{t\("shell\.primaryNavigation"\)\}/);
+  assert.match(css, /\.skip-link\{/);
+  assert.match(css, /\.skip-link:focus\{/);
+});
+
+test("enterprise keyboard surfaces use semantic disabled and live-state behavior", () => {
+  const search = readFileSync("components/global-search.tsx", "utf8");
+  const pager = readFileSync("components/enterprise-pagination.tsx", "utf8");
+  const bulk = readFileSync("components/position-bulk-action-form.tsx", "utf8");
+  assert.match(search, /aria-haspopup="listbox"/);
+  assert.match(search, /setActiveIndex\(0\)/);
+  assert.ok((pager.match(/<span className="enterprise-page-button disabled" aria-disabled="true">/g) ?? []).length >= 2);
+  assert.doesNotMatch(pager, /tabIndex=\{page <= 1/);
+  assert.match(bulk, /<strong aria-live="polite">/);
+});
