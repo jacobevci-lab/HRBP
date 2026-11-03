@@ -6,6 +6,15 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": true,
+  "previews": {
+    "vars": {
+      "HRBP_LOCAL_AUTH_ENABLED": "false",
+      "HRBP_AUTH_TENANT_ID": "tenant-acme-global"
+    },
+    "observability": {
+      "enabled": true
+    }
+  },
   "vars": {
     "HRBP_LOCAL_AUTH_ENABLED": "true",
     "HRBP_AUTH_TENANT_ID": "tenant-acme-global"
