@@ -80,6 +80,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="app-shell" data-session-loading={loading ? "true" : "false"}>
+      <a className="skip-link" href="#main-content">{t("shell.skipToContent")}</a>
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="brand-row">
           <Link href="/" className="brand" onClick={() => setMobileOpen(false)}>
@@ -93,14 +94,14 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           <span className="tenant-copy"><strong>{workspaceName}</strong><small>{t("shell.enterpriseWorkspace")}</small></span>
           <ChevronDown size={15}/>
         </div>
-        <nav className="nav-scroll">
+        <nav className="nav-scroll" aria-label={t("shell.primaryNavigation")}>
           <div className="nav-primary">
             <div className="nav-label">{t("shell.quickAccess")}</div>
             {primaryDestinations.map((item) => {
               const href = hrefForSlug(item.slug);
               const active = activeHref(href);
               const Icon = primaryIcons[item.id];
-              return <Link key={item.id} href={href} className={`nav-item nav-primary-item ${active ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
+              return <Link key={item.id} href={href} className={`nav-item nav-primary-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined} onClick={() => setMobileOpen(false)}>
                 <Icon size={17} strokeWidth={1.8}/><span>{primaryLabel(item.label)}</span>
               </Link>;
             })}
@@ -116,7 +117,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
                   const href = hrefForSlug(item.slug);
                   const active = activeHref(href);
                   const Icon = item.icon;
-                  return <Link key={item.slug} href={href} className={`nav-item ${active ? "active" : ""}`} onClick={() => setMobileOpen(false)}>
+                  return <Link key={item.slug} href={href} className={`nav-item ${active ? "active" : ""}`} aria-current={active ? "page" : undefined} onClick={() => setMobileOpen(false)}>
                     <Icon size={17} strokeWidth={1.8}/><span>{t(item.labelKey)}</span>{item.badge && <em>{item.badge}</em>}
                   </Link>;
                 })}
@@ -140,7 +141,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
             <TopbarAccount/>
           </div>
         </header>
-        <div className="page-content">{children}</div>
+        <div className="page-content" id="main-content" tabIndex={-1}>{children}</div>
       </main>
     </div>
   );
