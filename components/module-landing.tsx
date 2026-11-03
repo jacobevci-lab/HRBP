@@ -128,7 +128,7 @@ export async function ModuleLanding({ slug, query = "", status, columns = [], co
     <section className="page-heading module-heading">
       <div><div className="eyebrow">HRBP One / {title}</div><h1>{title}</h1><p>{meta}</p></div>
       <div className="module-heading-actions">
-        <span className="secondary-button"><CircleCheckBig size={16}/>{locale === "tr" ? "Canlı veri görünümü" : "Live data view"}</span>
+        <span className="secondary-button module-state-badge"><CircleCheckBig size={16}/>{locale === "tr" ? "Canlı veri görünümü" : "Live data view"}</span>
         {createHref ? <Link className="create-button" href={createHref}><Plus size={17}/>{locale === "tr" ? (slug === "people" ? "Çalışan ekle" : "Yeni pozisyon") : (slug === "people" ? "Add employee" : "New position")}</Link> : null}
       </div>
     </section>
