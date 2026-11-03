@@ -9,7 +9,12 @@ const env = {
   // Cloudflare Workers Builds does not need a live database connection to
   // compile this app, so use a loopback-only placeholder when no build-time
   // DATABASE_URL is configured. Runtime database access remains Hyperdrive.
-  DATABASE_URL: process.env.DATABASE_URL || "postgresql://build:build@127.0.0.1:5432/hrbp_build"
+  DATABASE_URL: process.env.DATABASE_URL || "postgresql://build:build@127.0.0.1:5432/hrbp_build",
+  // OpenNext invokes `npm run build` internally. npm would normally execute the
+  // repository's full `prebuild` integration suite again. That suite is already
+  // mandatory in GitHub CI and requires disposable PostgreSQL. Suppress only the
+  // npm lifecycle hooks inside Cloudflare packaging; the named build script still runs.
+  npm_config_ignore_scripts: "true"
 };
 
 function run(command, args) {
