@@ -58,3 +58,13 @@ test("Recruiting and onboarding previews use static labels instead of fake disab
   assert.match(recruiting, /Static preview/);
   assert.match(recruiting, /Statik önizleme/);
 });
+
+
+test("lifecycle modules share the final visual panel and disclosure contract", () => {
+  const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
+  for (const selector of [".pipeline-card", ".pipeline-column", ".journey-list", ".off-process-card"]) {
+    assert.match(unified, new RegExp(selector.replace(".", "\\.")));
+  }
+  assert.match(unified, /\.pipeline-column\{[^]*border-radius:12px/);
+  assert.match(unified, /\)\[open\]>summary\{/);
+});
