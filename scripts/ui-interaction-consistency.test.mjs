@@ -82,3 +82,21 @@ test("module state indicators are semantic text badges rather than disabled fake
   assert.ok((governanceModule.match(/module-state-badge/g) ?? []).length >= 3);
   assert.match(css, /\.module-state-badge\{cursor:default!important;user-select:none;pointer-events:none\}/);
 });
+
+
+test("Warm Enterprise visual overhaul establishes a visibly different shell and cockpit hierarchy", () => {
+  const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
+  for (const marker of [
+    "--shell-sidebar:244px",
+    "--panel-radius:16px",
+    ".page-heading.module-heading",
+    ".enterprise-view-toolbar",
+    ".enterprise-table-card",
+    ".operations-attention-card",
+    ".employee-home-hero"
+  ]) assert.ok(unified.includes(marker), marker + " must remain part of the visual overhaul contract");
+  assert.match(unified, /\.page-heading\.module-heading[\s\S]*border-radius:18px/);
+  assert.match(unified, /\.enterprise-stat[^]*min-height:104px/);
+  assert.match(unified, /\.enterprise-table td[^]*font-size:10px/);
+  assert.match(unified, /@media\(max-width:620px\)[^]*\.page-heading\.module-heading/);
+});
