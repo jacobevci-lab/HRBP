@@ -9,6 +9,7 @@ const hrAccess = readFileSync("lib/hr-service-access.ts", "utf8");
 const caseLifecycle = readFileSync("lib/employee-relations-lifecycle-live-data.ts", "utf8");
 const caseWall = readFileSync("lib/case-wall.ts", "utf8");
 const css = readFileSync("app/workspace-shell.css", "utf8");
+const servicesCss = readFileSync("app/employee-services.css", "utf8");
 
 test("HR Service starts with work, queue, lifecycle and escalation context", () => {
   assert.match(services, /\/module\/workflows\?view=hr-service/);
@@ -55,4 +56,17 @@ test("service/case cockpit follows responsive Warm Enterprise styling", () => {
     assert.match(css, new RegExp(selector.replace(".", "\\.")));
   }
   assert.match(css, /@media\(max-width:620px\)/);
+});
+
+
+test("HR Service and Employee Relations registers deep-link scoped rows into lifecycle detail", () => {
+  assert.ok((services.match(/services-master-link/g) ?? []).length >= 2);
+  assert.match(services, /\/module\/hr-service\?q=/);
+  assert.match(services, /#hr-service-lifecycle/);
+  assert.match(services, /\/module\/employee-relations\?q=/);
+  assert.match(services, /&case=/);
+  assert.match(services, /#er-lifecycle/);
+  assert.ok((services.match(/aria-current=\{focusId===/g) ?? []).length >= 2);
+  assert.match(servicesCss, /\.services-master-link/);
+  assert.match(servicesCss, /\.services-table tbody tr\.focused/);
 });
