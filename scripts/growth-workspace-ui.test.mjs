@@ -71,7 +71,8 @@ test("live Performance and Talent surfaces follow the active EN/TR locale", () =
 
 
 test("live Talent matrix uses a dedicated five-band layout without changing the three-band preview", () => {
+  const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
   assert.match(live, /className="card talent-matrix five-band"/);
-  assert.match(css, /\.talent-matrix\.five-band \.matrix-row/);
-  assert.match(css, /repeat\(5,minmax\(96px,1fr\)\)/);
+  assert.match(unified, /\.talent-matrix\.five-band \.matrix-row/);
+  assert.match(unified, /repeat\(5,minmax\(96px,1fr\)\)/);
 });
