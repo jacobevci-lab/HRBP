@@ -12,6 +12,8 @@ CREATE TABLE "SavedEnterpriseView" (
   "columns" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   "columnsCustomized" BOOLEAN NOT NULL DEFAULT false,
   "density" TEXT NOT NULL DEFAULT 'comfortable',
+  "sortKey" TEXT,
+  "sortDirection" TEXT NOT NULL DEFAULT 'asc',
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "SavedEnterpriseView_pkey" PRIMARY KEY ("id"),
@@ -19,7 +21,9 @@ CREATE TABLE "SavedEnterpriseView" (
   CONSTRAINT "SavedEnterpriseView_name_check" CHECK (char_length("name") BETWEEN 1 AND 64),
   CONSTRAINT "SavedEnterpriseView_query_check" CHECK (char_length("query") <= 160),
   CONSTRAINT "SavedEnterpriseView_status_check" CHECK ("status" IS NULL OR char_length("status") <= 40),
-  CONSTRAINT "SavedEnterpriseView_density_check" CHECK ("density" IN ('comfortable', 'compact'))
+  CONSTRAINT "SavedEnterpriseView_density_check" CHECK ("density" IN ('comfortable', 'compact')),
+  CONSTRAINT "SavedEnterpriseView_sort_key_check" CHECK ("sortKey" IS NULL OR char_length("sortKey") <= 40),
+  CONSTRAINT "SavedEnterpriseView_sort_direction_check" CHECK ("sortDirection" IN ('asc', 'desc'))
 );
 
 CREATE UNIQUE INDEX "SavedEnterpriseView_tenantId_userId_moduleKey_normalizedNam_key"
