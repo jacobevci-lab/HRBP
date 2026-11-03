@@ -10,7 +10,7 @@ import { SessionIndicator } from "@/components/session-indicator";
 import { SessionProvider, useSessionContext } from "@/components/session-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TopbarAccount } from "@/components/topbar-account";
-import { LocaleProvider, useLocale } from "@/components/locale-provider";
+import { useLocale } from "@/components/locale-provider";
 import { LocaleToggle } from "@/components/locale-toggle";
 import { NotificationCenter } from "@/components/notification-center";
 import { primaryShellDestinations } from "@/lib/ui-shell-navigation.mjs";
@@ -147,5 +147,5 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  return <LocaleProvider><SessionProvider><AppShellContent>{children}</AppShellContent></SessionProvider></LocaleProvider>;
+  return <SessionProvider><AppShellContent>{children}</AppShellContent></SessionProvider>;
 }
