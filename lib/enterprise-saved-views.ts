@@ -11,6 +11,7 @@ export type EnterpriseViewState = {
   density: "comfortable" | "compact";
   sortKey?: string;
   sortDirection: "asc" | "desc";
+  pageSize: 25 | 50 | 100;
 };
 export type SavedEnterpriseViewSummary = {
   id: string;
@@ -66,6 +67,7 @@ export function sanitizeEnterpriseViewState(moduleKey: EnterpriseViewModule, inp
   density?: unknown;
   sortKey?: unknown;
   sortDirection?: unknown;
+  pageSize?: unknown;
 }): EnterpriseViewState {
   const definition = definitions[moduleKey];
   const query = typeof input.query === "string" ? input.query.trim().slice(0, 160) : "";
@@ -86,7 +88,8 @@ export function sanitizeEnterpriseViewState(moduleKey: EnterpriseViewModule, inp
     columnsCustomized: input.columnsCustomized === true,
     density: input.density === "compact" ? "compact" : "comfortable",
     sortKey,
-    sortDirection: sortKey && input.sortDirection === "desc" ? "desc" : "asc"
+    sortDirection: sortKey && input.sortDirection === "desc" ? "desc" : "asc",
+    pageSize: input.pageSize === 25 || input.pageSize === 100 ? input.pageSize : 50
   };
 }
 
@@ -103,6 +106,7 @@ export function buildEnterpriseViewHref(moduleKey: EnterpriseViewModule, state: 
     params.set("sort", state.sortKey);
     if (state.sortDirection === "desc") params.set("dir", "desc");
   }
+  if (state.pageSize !== 50) params.set("pageSize", String(state.pageSize));
   const source = params.toString();
   return source ? `${definitions[moduleKey].basePath}?${source}` : definitions[moduleKey].basePath;
 }
@@ -133,7 +137,8 @@ export async function listSavedEnterpriseViews(ctx: RequestContext, moduleKey: E
         columnsCustomized: true,
         density: true,
         sortKey: true,
-        sortDirection: true
+        sortDirection: true,
+        pageSize: true
       }
     });
     return rows.map((row) => {
@@ -144,7 +149,8 @@ export async function listSavedEnterpriseViews(ctx: RequestContext, moduleKey: E
         columnsCustomized: row.columnsCustomized,
         density: row.density,
         sortKey: row.sortKey,
-        sortDirection: row.sortDirection
+        sortDirection: row.sortDirection,
+        pageSize: row.pageSize
       });
       return { id: row.id, name: row.name, moduleKey, state, href: buildEnterpriseViewHref(moduleKey, state) };
     });
@@ -195,7 +201,8 @@ export async function upsertSavedEnterpriseView(
         columnsCustomized: state.columnsCustomized,
         density: state.density,
         sortKey: state.sortKey ?? null,
-        sortDirection: state.sortDirection
+        sortDirection: state.sortDirection,
+        pageSize: state.pageSize
       },
       update: {
         name: parsedName.name,
@@ -205,7 +212,8 @@ export async function upsertSavedEnterpriseView(
         columnsCustomized: state.columnsCustomized,
         density: state.density,
         sortKey: state.sortKey ?? null,
-        sortDirection: state.sortDirection
+        sortDirection: state.sortDirection,
+        pageSize: state.pageSize
       },
       select: { id: true }
     });
