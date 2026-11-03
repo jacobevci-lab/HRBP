@@ -82,3 +82,308 @@ html[data-theme="dark"] .pipeline-column article,html[data-theme="dark"] .off-pr
 html[data-theme="dark"] .decision-side,html[data-theme="dark"] .restricted-side,html[data-theme="dark"] .restricted-case,html[data-theme="dark"] .ai-governance-hero{background:var(--surface)!important}
 html[data-theme="dark"] .auth-panel{box-shadow:0 24px 80px rgba(0,0,0,.24)!important}
 html[data-theme="dark"] .enterprise-person strong,html[data-theme="dark"] .cell-strong,html[data-theme="dark"] .profile-card dd,html[data-theme="dark"] .growth-control-stack strong,html[data-theme="dark"] .services-control-stack strong,html[data-theme="dark"] .gov-controls strong,html[data-theme="dark"] .control-stack strong,html[data-theme="dark"] .security-list strong{color:var(--text)!important}
+
+
+/* 2026 visual overhaul: denser enterprise shell, stronger cockpit hierarchy, calmer data chrome. */
+:root{
+  --shell-sidebar:244px;
+  --shell-topbar:64px;
+  --panel-radius:16px;
+  --panel-shadow:0 1px 2px rgba(32,38,34,.035),0 12px 34px rgba(32,38,34,.055);
+  --panel-shadow-hover:0 2px 4px rgba(32,38,34,.045),0 18px 42px rgba(32,38,34,.09);
+  --panel-highlight:color-mix(in srgb,var(--accent) 7%,var(--surface));
+}
+html[data-theme="dark"]{
+  --panel-shadow:0 1px 2px rgba(0,0,0,.18),0 12px 34px rgba(0,0,0,.18);
+  --panel-shadow-hover:0 2px 4px rgba(0,0,0,.2),0 18px 42px rgba(0,0,0,.26);
+  --panel-highlight:color-mix(in srgb,var(--accent) 9%,var(--surface));
+}
+
+/* Shell */
+.sidebar{
+  width:var(--shell-sidebar)!important;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--sidebar) 94%,var(--accent) 6%),var(--sidebar))!important;
+  border-right-color:color-mix(in srgb,var(--accent) 10%,#20251f)!important;
+}
+.main-area{margin-left:var(--shell-sidebar)!important}
+.brand-row{height:var(--shell-topbar)!important;padding-inline:16px!important}
+.tenant-switcher{
+  margin:11px 10px 7px!important;
+  border-radius:12px!important;
+  background:color-mix(in srgb,#17201c 90%,var(--accent) 10%)!important;
+  border-color:color-mix(in srgb,#2d3730 82%,var(--accent) 18%)!important;
+}
+.nav-scroll{padding:4px 9px 18px!important}
+.nav-item{min-height:40px!important;border-radius:10px!important;margin:3px 0!important;font-size:12px!important}
+.nav-primary-item{font-size:12.5px!important}
+.nav-primary-item.active{
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 17%,#20251f),color-mix(in srgb,var(--accent) 7%,#20251f))!important;
+  box-shadow:inset 3px 0 0 var(--orange),0 1px 0 rgba(255,255,255,.025)!important;
+}
+.nav-disclosure>summary{min-height:34px!important;padding-inline:9px!important}
+.topbar{
+  height:var(--shell-topbar)!important;
+  padding:0 24px!important;
+  background:color-mix(in srgb,var(--surface) 88%,transparent)!important;
+  border-bottom-color:color-mix(in srgb,var(--line) 88%,transparent)!important;
+  box-shadow:0 1px 0 rgba(37,44,40,.025)!important;
+}
+.page-content{
+  max-width:1760px!important;
+  padding:26px 30px 46px!important;
+  scroll-padding-top:84px!important;
+}
+.global-search{max-width:560px!important;height:38px!important;border-radius:11px!important}
+
+/* Page / cockpit headers */
+.page-heading.module-heading,
+.manager-hub-heading{
+  position:relative;
+  overflow:hidden;
+  min-height:118px;
+  margin-bottom:18px!important;
+  padding:20px 22px;
+  align-items:center!important;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:
+    linear-gradient(118deg,var(--panel-highlight),var(--surface) 48%,color-mix(in srgb,var(--orange) 3%,var(--surface)));
+  box-shadow:var(--panel-shadow);
+}
+.page-heading.module-heading:after,
+.manager-hub-heading:after{
+  content:"";
+  position:absolute;
+  width:180px;
+  height:180px;
+  right:-70px;
+  top:-112px;
+  border-radius:50%;
+  background:color-mix(in srgb,var(--accent) 9%,transparent);
+  pointer-events:none;
+}
+.page-heading.module-heading>div:first-child,
+.manager-hub-heading>div:first-child{position:relative;z-index:1;max-width:980px}
+.page-heading.module-heading .eyebrow,
+.manager-hub-heading .eyebrow{color:var(--accent);letter-spacing:1.25px}
+.page-heading.module-heading h1,
+.manager-hub-heading h1{
+  margin:5px 0 6px!important;
+  font-size:30px!important;
+  line-height:1.05;
+  letter-spacing:-1px!important;
+}
+.page-heading.module-heading p,
+.manager-hub-heading p{max-width:920px;font-size:12.5px!important;line-height:1.55}
+.module-heading-actions{position:relative;z-index:1}
+.module-state-badge{
+  height:32px!important;
+  border-radius:999px!important;
+  padding-inline:11px!important;
+  background:color-mix(in srgb,var(--accent) 7%,var(--surface))!important;
+  border-color:color-mix(in srgb,var(--accent) 18%,var(--line))!important;
+  color:var(--accent)!important;
+  font-size:9.5px!important;
+}
+
+/* KPI system */
+.enterprise-stats,.growth-metrics,.services-metrics,.gov-metrics,.workpay-metrics,.off-metrics,.recruit-metrics{
+  gap:12px!important;
+}
+.enterprise-stat,.growth-metric,.services-metric,.gov-metric,.workpay-metric,.off-metric,.recruit-metric{
+  position:relative;
+  overflow:hidden;
+  min-height:104px;
+  padding:16px 17px!important;
+  border-radius:15px!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.enterprise-stat:after,.growth-metric:after,.services-metric:after,.gov-metric:after,.workpay-metric:after,.off-metric:after,.recruit-metric:after{
+  content:"";
+  position:absolute;
+  width:76px;
+  height:76px;
+  right:-31px;
+  top:-34px;
+  border-radius:50%;
+  background:color-mix(in srgb,var(--accent) 7%,transparent);
+  pointer-events:none;
+}
+.enterprise-stat-icon,.growth-metric-icon,.services-metric-icon,.gov-metric-icon,.platform-metric-icon,.off-icon,.metric-icon{
+  width:38px!important;
+  height:38px!important;
+  border-radius:11px!important;
+}
+.enterprise-stat span,.growth-metric span,.services-metric span,.gov-metric span,.workpay-metric span,.off-metric span,.recruit-metric small{
+  font-size:9px!important;
+  font-weight:760;
+  letter-spacing:.15px;
+}
+.enterprise-stat strong,.growth-metric strong,.services-metric strong,.gov-metric strong,.workpay-metric strong,.off-metric strong,.recruit-metric strong{
+  font-size:25px!important;
+  line-height:1.05!important;
+  letter-spacing:-.7px!important;
+  margin-top:4px!important;
+}
+.enterprise-stat small,.growth-metric small,.services-metric small,.gov-metric small,.workpay-metric small,.off-metric small,.recruit-metric em{
+  font-size:8.5px!important;
+  line-height:1.4;
+}
+
+/* Primary cockpit cards */
+.manager-hub-action,.employee-home-action,.workspace-shortcut,.growth-focus-card,.services-focus-card,
+.recruiting-focus-card,.compensation-focus-card,.offboarding-focus-card,.operations-attention-card,.admin-studio-card{
+  border-radius:14px!important;
+  box-shadow:var(--panel-shadow)!important;
+  border-color:color-mix(in srgb,var(--line) 92%,var(--accent) 8%)!important;
+}
+.manager-hub-action,.employee-home-action,.workspace-shortcut,.growth-focus-card,.services-focus-card,
+.recruiting-focus-card,.compensation-focus-card,.offboarding-focus-card{
+  min-height:80px!important;
+  padding:13px 14px!important;
+  grid-template-columns:40px minmax(0,1fr) 16px!important;
+}
+.manager-hub-action>svg:first-child,.growth-focus-card>svg:first-child,.services-focus-card>svg:first-child,
+.recruiting-focus-card>svg:first-child,.compensation-focus-card>svg:first-child,.offboarding-focus-card>svg:first-child,
+.workspace-shortcut-icon,.employee-home-action>span{
+  width:40px!important;
+  height:40px!important;
+  border-radius:11px!important;
+  padding:10px!important;
+}
+.workspace-shortcut-icon,.employee-home-action>span{padding:0!important}
+.manager-hub-action strong,.employee-home-action strong,.workspace-shortcut strong,.growth-focus-card strong,
+.services-focus-card strong,.recruiting-focus-card strong,.compensation-focus-card strong,.offboarding-focus-card strong{
+  font-size:11px!important;
+}
+.manager-hub-action small,.employee-home-action small,.workspace-shortcut small,.growth-focus-card small,
+.services-focus-card small,.recruiting-focus-card small,.compensation-focus-card small,.offboarding-focus-card small{
+  font-size:8.8px!important;
+  line-height:1.45!important;
+}
+.manager-hub-action:hover,.employee-home-action:hover,.workspace-shortcut:hover,.growth-focus-card:hover,.services-focus-card:hover,
+.recruiting-focus-card:hover,.compensation-focus-card:hover,.offboarding-focus-card:hover,.operations-attention-card:hover,.admin-studio-card:hover{
+  transform:translateY(-2px)!important;
+  box-shadow:var(--panel-shadow-hover)!important;
+  border-color:color-mix(in srgb,var(--accent) 32%,var(--line))!important;
+}
+
+/* Role-aware home surfaces */
+.employee-home-hero{
+  min-height:118px!important;
+  padding:20px!important;
+  border-radius:18px!important;
+  background:linear-gradient(120deg,var(--panel-highlight),var(--surface) 62%,color-mix(in srgb,var(--orange) 4%,var(--surface)))!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.employee-home-avatar{width:58px!important;height:58px!important;border-radius:16px!important}
+.employee-home-identity h1{font-size:24px!important;letter-spacing:-.7px!important}
+.operations-attention-card{
+  min-height:86px!important;
+  padding:14px!important;
+  grid-template-columns:48px minmax(0,1fr) 16px!important;
+}
+.operations-attention-count{width:48px!important;height:48px!important;border-radius:13px!important;font-size:18px!important}
+.operations-lane,.employee-home-panel{border-radius:16px!important;box-shadow:var(--panel-shadow)!important}
+
+/* Enterprise view controls */
+.enterprise-view-toolbar{
+  min-height:58px!important;
+  margin-bottom:14px!important;
+  padding:9px!important;
+  gap:8px!important;
+  border-radius:14px!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.enterprise-view-search,.enterprise-view-filter,.enterprise-column-picker>summary{
+  height:38px!important;
+  border-radius:10px!important;
+}
+.enterprise-view-search{padding-inline:11px!important}
+.enterprise-view-search input{font-size:10.5px!important}
+.enterprise-view-filter select{font-size:10px!important}
+.enterprise-column-options{
+  top:calc(100% + 8px)!important;
+  min-width:230px!important;
+  padding:10px!important;
+  border-radius:12px!important;
+  box-shadow:var(--panel-shadow-hover)!important;
+}
+.enterprise-view-count{font-size:9px!important;font-weight:700}
+
+/* Data panels and tables */
+.enterprise-table-card,.growth-panel,.services-panel,.workpay-panel,.off-panel,.talent-matrix,.org-tree,.org-insight{
+  border-radius:16px!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.enterprise-table-card,.growth-panel,.services-panel,.workpay-panel,.off-panel{overflow:hidden}
+.table-title,.growth-panel-head,.services-panel-head,.workpay-panel-head,.off-head{
+  min-height:66px!important;
+  padding:14px 16px!important;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--surface-soft) 58%,var(--surface)),var(--surface))!important;
+}
+.table-title h3,.growth-panel-head h3,.services-panel-head h3,.workpay-panel-head h3,.off-head h3{
+  font-size:13.5px!important;
+  letter-spacing:-.12px;
+}
+.table-title p,.growth-panel-head p,.services-panel-head p,.workpay-panel-head p,.off-head p{
+  font-size:9px!important;
+  line-height:1.45!important;
+}
+.enterprise-table th,.growth-table th,.services-table th,.workpay-table th,.off-table th{
+  height:38px;
+  padding:10px 14px!important;
+  font-size:8px!important;
+  letter-spacing:.72px!important;
+  font-weight:800!important;
+}
+.enterprise-table td,.growth-table td,.services-table td,.workpay-table td,.off-table td{
+  padding:12px 14px!important;
+  font-size:10px!important;
+  line-height:1.4;
+}
+.enterprise-table tbody tr:last-child td,.growth-table tbody tr:last-child td,.services-table tbody tr:last-child td,
+.workpay-table tbody tr:last-child td,.off-table tbody tr:last-child td{border-bottom:0!important}
+.enterprise-person>span{width:30px!important;height:30px!important;border-radius:9px!important}
+.cell-strong{font-size:10.5px!important}
+.cell-sub{font-size:8px!important;margin-top:3px!important}
+
+/* Progressive disclosure reads as secondary, not another full module. */
+.growth-governed-panel,.service-governance-panel,.service-admin-panel,.recruiting-operations-panel,
+.compensation-proposal-panel,.onboarding-operations-panel,.offboarding-operations-panel,.my-work-history-panel{
+  border-radius:14px!important;
+  box-shadow:0 1px 2px rgba(32,38,34,.025)!important;
+}
+.growth-governed-panel>summary,.service-governance-panel>summary,.service-admin-panel>summary,.recruiting-operations-panel>summary,
+.compensation-proposal-panel>summary,.onboarding-operations-panel>summary,.offboarding-operations-panel>summary,.my-work-history-panel>summary{
+  min-height:60px!important;
+  padding:12px 14px!important;
+}
+
+/* Responsive shell keeps the visual hierarchy without squeezing data surfaces. */
+@media(max-width:1180px){
+  .page-content{padding-inline:22px!important}
+  .page-heading.module-heading,.manager-hub-heading{min-height:108px;padding:18px!important}
+}
+@media(max-width:900px){
+  .sidebar{width:260px!important}
+  .main-area{margin-left:0!important}
+  .topbar{padding-inline:15px!important}
+  .page-content{padding:20px 16px 36px!important}
+}
+@media(max-width:620px){
+  .page-heading.module-heading,.manager-hub-heading{
+    min-height:0;
+    padding:16px!important;
+    border-radius:15px;
+    align-items:flex-start!important;
+  }
+  .page-heading.module-heading h1,.manager-hub-heading h1{font-size:24px!important}
+  .page-heading.module-heading p,.manager-hub-heading p{font-size:11px!important}
+  .module-heading-actions{width:100%}
+  .module-heading-actions .create-button,.module-heading-actions .secondary-button{width:100%;justify-content:center}
+  .enterprise-stat,.growth-metric,.services-metric,.gov-metric,.workpay-metric,.off-metric,.recruit-metric{min-height:92px}
+  .enterprise-view-toolbar{padding:8px!important}
+  .enterprise-view-filter,.enterprise-column-picker{min-width:calc(50% - 4px)}
+  .table-title,.growth-panel-head,.services-panel-head,.workpay-panel-head,.off-head{min-height:58px!important;padding:12px!important}
+}
