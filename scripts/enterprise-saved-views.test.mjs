@@ -78,7 +78,8 @@ test("persistence queries fail closed to the signed tenant, user and module", ()
   assert.match(source, /tenantId: ctx\.tenantId, userId: ctx\.actorId, moduleKey/);
   assert.match(source, /count >= 20/);
   assert.match(source, /deleteMany\(\{[\s\S]*id, tenantId: ctx\.tenantId, userId: ctx\.actorId, moduleKey/);
-  assert.match(source, /if \(isMissingTable\(error\)\) return \[\]/);
+  assert.match(source, /code === "P2021" \|\| code === "P2022"/);
+  assert.match(source, /if \(isPreferenceSchemaUnavailable\(error\)\) return \[\]/);
   assert.match(source, /assertViewAccess\(ctx, moduleKey\)/);
 });
 
