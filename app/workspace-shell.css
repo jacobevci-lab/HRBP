@@ -456,3 +456,11 @@ html[data-theme="dark"] .workspace-shortcut:hover{box-shadow:0 8px 24px rgba(0,0
   ){transition:none!important}
   html{scroll-behavior:auto!important}
 }
+
+/* Public preview affordances are deliberately non-interactive. */
+.preview-static-label{display:inline-flex;align-items:center;gap:6px;min-height:28px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-soft);color:var(--muted);font-size:8.5px;font-weight:750;cursor:default;user-select:none}
+.preview-static-label svg{flex:0 0 auto;color:var(--muted-2)}
+.preview-static-icon{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:7px;color:var(--muted-2);background:transparent;cursor:default;user-select:none}
+.profile-tabs .preview-static-tab{display:inline-flex;align-items:center;padding:8px 11px;border-radius:7px;color:var(--muted);font-size:9.5px;white-space:nowrap;cursor:default;user-select:none}
+.profile-tabs .preview-static-tab.active{background:var(--surface);color:var(--accent);box-shadow:0 1px 3px rgba(49,44,36,.07);font-weight:750}
+html[data-theme="dark"] .profile-tabs .preview-static-tab.active{background:#262b25;box-shadow:none}
