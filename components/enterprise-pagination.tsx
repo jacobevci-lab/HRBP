@@ -33,7 +33,9 @@ export function EnterprisePagination({
   return <nav className="enterprise-pagination" aria-label={tr ? "Tablo sayfaları" : "Table pages"}>
     <span className="enterprise-pagination-range">{tr ? `${start}–${end} / ${totalCount}` : `${start}–${end} of ${totalCount}`}</span>
     <div className="enterprise-pagination-pages">
-      <Link className={`enterprise-page-button ${page <= 1 ? "disabled" : ""}`} href={page <= 1 ? buildEnterprisePageHref(moduleKey, state, 1) : buildEnterprisePageHref(moduleKey, state, page - 1)} aria-disabled={page <= 1 ? "true" : undefined} tabIndex={page <= 1 ? -1 : undefined}><ChevronLeft size={14}/><span>{tr ? "Önceki" : "Previous"}</span></Link>
+      {page <= 1
+        ? <span className="enterprise-page-button disabled" aria-disabled="true"><ChevronLeft size={14}/><span>{tr ? "Önceki" : "Previous"}</span></span>
+        : <Link className="enterprise-page-button" href={buildEnterprisePageHref(moduleKey, state, page - 1)}><ChevronLeft size={14}/><span>{tr ? "Önceki" : "Previous"}</span></Link>}
       {pages.map((value, index) => {
         const previous = pages[index - 1];
         return <span className="enterprise-page-fragment" key={value}>
@@ -41,7 +43,9 @@ export function EnterprisePagination({
           {value === page ? <span className="enterprise-page-number active" aria-current="page">{value}</span> : <Link className="enterprise-page-number" href={buildEnterprisePageHref(moduleKey, state, value)}>{value}</Link>}
         </span>;
       })}
-      <Link className={`enterprise-page-button ${page >= pageCount ? "disabled" : ""}`} href={page >= pageCount ? buildEnterprisePageHref(moduleKey, state, pageCount) : buildEnterprisePageHref(moduleKey, state, page + 1)} aria-disabled={page >= pageCount ? "true" : undefined} tabIndex={page >= pageCount ? -1 : undefined}><span>{tr ? "Sonraki" : "Next"}</span><ChevronRight size={14}/></Link>
+      {page >= pageCount
+        ? <span className="enterprise-page-button disabled" aria-disabled="true"><span>{tr ? "Sonraki" : "Next"}</span><ChevronRight size={14}/></span>
+        : <Link className="enterprise-page-button" href={buildEnterprisePageHref(moduleKey, state, page + 1)}><span>{tr ? "Sonraki" : "Next"}</span><ChevronRight size={14}/></Link>}
     </div>
   </nav>;
 }
