@@ -8,6 +8,7 @@ export type EnterpriseViewState = {
   status?: string;
   columns: string[];
   columnsCustomized: boolean;
+  density: "comfortable" | "compact";
 };
 export type SavedEnterpriseViewSummary = {
   id: string;
@@ -57,6 +58,7 @@ export function sanitizeEnterpriseViewState(moduleKey: EnterpriseViewModule, inp
   status?: unknown;
   columns?: unknown;
   columnsCustomized?: unknown;
+  density?: unknown;
 }): EnterpriseViewState {
   const definition = definitions[moduleKey];
   const query = typeof input.query === "string" ? input.query.trim().slice(0, 160) : "";
@@ -72,7 +74,8 @@ export function sanitizeEnterpriseViewState(moduleKey: EnterpriseViewModule, inp
     query,
     status,
     columns,
-    columnsCustomized: input.columnsCustomized === true
+    columnsCustomized: input.columnsCustomized === true,
+    density: input.density === "compact" ? "compact" : "comfortable"
   };
 }
 
@@ -84,6 +87,7 @@ export function buildEnterpriseViewHref(moduleKey: EnterpriseViewModule, state: 
     params.set("columnsMode", "custom");
     for (const column of state.columns) params.append("columns", column);
   }
+  if (state.density === "compact") params.set("density", "compact");
   const source = params.toString();
   return source ? `${definitions[moduleKey].basePath}?${source}` : definitions[moduleKey].basePath;
 }
@@ -110,7 +114,8 @@ export async function listSavedEnterpriseViews(ctx: RequestContext, moduleKey: E
         query: true,
         status: true,
         columns: true,
-        columnsCustomized: true
+        columnsCustomized: true,
+        density: true
       }
     });
     return rows.map((row) => {
@@ -118,7 +123,8 @@ export async function listSavedEnterpriseViews(ctx: RequestContext, moduleKey: E
         query: row.query,
         status: row.status,
         columns: row.columns,
-        columnsCustomized: row.columnsCustomized
+        columnsCustomized: row.columnsCustomized,
+        density: row.density
       });
       return { id: row.id, name: row.name, moduleKey, state, href: buildEnterpriseViewHref(moduleKey, state) };
     });
@@ -166,14 +172,16 @@ export async function upsertSavedEnterpriseView(
         query: state.query,
         status: state.status ?? null,
         columns: state.columns,
-        columnsCustomized: state.columnsCustomized
+        columnsCustomized: state.columnsCustomized,
+        density: state.density
       },
       update: {
         name: parsedName.name,
         query: state.query,
         status: state.status ?? null,
         columns: state.columns,
-        columnsCustomized: state.columnsCustomized
+        columnsCustomized: state.columnsCustomized,
+        density: state.density
       },
       select: { id: true }
     });
