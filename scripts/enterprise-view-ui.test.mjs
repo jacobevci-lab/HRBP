@@ -20,6 +20,8 @@ test("shared enterprise toolbar uses URL-native query and status filters", () =>
   assert.match(toolbar, /name="columns"/);
   assert.match(toolbar, /enterprise-column-picker/);
   assert.match(toolbar, /name="density"/);
+  assert.match(toolbar, /name="sort"/);
+  assert.match(toolbar, /name="dir"/);
   assert.match(toolbar, /value="comfortable"/);
   assert.match(toolbar, /value="compact"/);
   assert.match(toolbar, /<EnterpriseSavedViews/);
@@ -37,8 +39,10 @@ test("People and Positions use the same governed table controls", () => {
   assert.match(workspace, /basePath="\/module\/positions"/);
   assert.match(workspace, /listSavedEnterpriseViews\(ctx, "people"\)/);
   assert.match(workspace, /listSavedEnterpriseViews\(ctx, "positions"\)/);
-  assert.match(workspace, /getPeopleWorkspaceData\(query, tenantId, status\)/);
-  assert.match(workspace, /getPositionsWorkspaceData\(query, tenantId, status\)/);
+  assert.match(workspace, /getPeopleWorkspaceData\(query, tenantId, status, sortKey, sortDirection\)/);
+  assert.match(workspace, /getPositionsWorkspaceData\(query, tenantId, status, sortKey, sortDirection\)/);
+  assert.match(workspace, /peopleSortOptions/);
+  assert.match(workspace, /positionSortOptions/);
   assert.match(workspace, /peopleColumnOptions/);
   assert.match(workspace, /positionColumnOptions/);
   assert.match(workspace, /visiblePeopleColumns\.has\("position"\)/);
@@ -68,13 +72,17 @@ test("filtered totals are server-derived and route filter input is bounded", () 
   assert.match(modulePage, /rawColumns\.slice\(0, 12\)/);
   assert.match(modulePage, /search\.columnsMode === "custom"/);
   assert.match(modulePage, /search\.density === "compact"/);
+  assert.match(modulePage, /search\.sort === "string"/);
+  assert.match(modulePage, /search\.dir === "desc"/);
   assert.match(moduleLanding, /columns\?: string\[\]/);
   assert.match(moduleLanding, /density\?: "comfortable" \| "compact"/);
-  assert.match(moduleLanding, /CoreHRLiveWorkspace\(\{ slug, query, status, columns, columnsCustomized, density, personId, tab \}\)/);
+  assert.match(moduleLanding, /sortKey\?: string/);
+  assert.match(moduleLanding, /sortDirection\?: "asc" \| "desc"/);
+  assert.match(moduleLanding, /CoreHRLiveWorkspace\(\{ slug, query, status, columns, columnsCustomized, density, sortKey, sortDirection, personId, tab \}\)/);
 });
 
 test("enterprise view controls are responsive Warm Enterprise surfaces", () => {
-  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-controls", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-view-density", ".enterprise-column-picker", ".enterprise-column-options", ".enterprise-saved-views", ".enterprise-saved-view-popover", ".enterprise-view-count"]) {
+  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-controls", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-view-density", ".enterprise-view-sort", ".enterprise-column-picker", ".enterprise-column-options", ".enterprise-saved-views", ".enterprise-saved-view-popover", ".enterprise-view-count"]) {
     assert.match(css, new RegExp(selector.replace(".", "\\.")));
   }
 });
@@ -86,4 +94,15 @@ test("compact density is URL-native, persisted by the workspace and uses sticky 
   assert.match(unified, /\.enterprise-table-card \.enterprise-table thead th/);
   assert.match(unified, /position:sticky/);
   assert.match(unified, /\.enterprise-density-compact \.enterprise-table td/);
+});
+
+
+test("enterprise sorting is allowlisted in UI and executed in PostgreSQL queries", () => {
+  assert.match(data, /function peopleOrderBy/);
+  assert.match(data, /sortKey === "employeeNumber"/);
+  assert.match(data, /function positionOrderBy/);
+  for (const key of ["title","status","critical"]) assert.match(data, new RegExp('sortKey === "' + key + '"'));
+  assert.match(data, /orderBy: peopleOrderBy\(sortKey, sortDirection\)/);
+  assert.match(data, /orderBy: positionOrderBy\(sortKey, sortDirection\)/);
+  assert.doesNotMatch(toolbar, /\.sort\(/);
 });
