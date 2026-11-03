@@ -6,9 +6,9 @@ import { useFormStatus } from "react-dom";
 import { Bookmark, BookmarkCheck, Check, Save, Trash2 } from "lucide-react";
 import {
   deleteEnterpriseViewAction,
-  initialSavedEnterpriseViewActionState,
   saveEnterpriseViewAction
 } from "@/lib/enterprise-saved-view-actions";
+import type { SavedEnterpriseViewActionState } from "@/lib/enterprise-saved-view-actions";
 import type {
   EnterpriseViewModule,
   EnterpriseViewState,
@@ -53,7 +53,8 @@ export function EnterpriseSavedViews({
   savedViews: SavedEnterpriseViewSummary[];
 }) {
   const tr = locale === "tr";
-  const [state, formAction] = useActionState(saveEnterpriseViewAction, initialSavedEnterpriseViewActionState);
+  const initialState: SavedEnterpriseViewActionState = { ok: false };
+  const [state, formAction] = useActionState(saveEnterpriseViewAction, initialState);
   const formRef = useRef<HTMLFormElement>(null);
   const message = messageFor(locale, state);
 
