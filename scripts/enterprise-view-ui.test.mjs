@@ -42,8 +42,8 @@ test("People and Positions use the same governed table controls", () => {
   assert.match(workspace, /listSavedEnterpriseViews\(ctx, "positions"\)/);
   assert.match(workspace, /sanitizeEnterpriseViewState\("people"/);
   assert.match(workspace, /sanitizeEnterpriseViewState\("positions"/);
-  assert.match(workspace, /getPeopleWorkspaceData\(currentView\.query, tenantId, currentView\.status, currentView\.sortKey, currentView\.sortDirection\)/);
-  assert.match(workspace, /getPositionsWorkspaceData\(currentView\.query, tenantId, currentView\.status, currentView\.sortKey, currentView\.sortDirection\)/);
+  assert.match(workspace, /getPeopleWorkspaceData\(currentView\.query, tenantId, currentView\.status, currentView\.sortKey, currentView\.sortDirection, page, currentView\.pageSize\)/);
+  assert.match(workspace, /getPositionsWorkspaceData\(currentView\.query, tenantId, currentView\.status, currentView\.sortKey, currentView\.sortDirection, page, currentView\.pageSize\)/);
   assert.match(workspace, /peopleSortOptions/);
   assert.match(workspace, /positionSortOptions/);
   assert.match(workspace, /peopleColumnOptions/);
