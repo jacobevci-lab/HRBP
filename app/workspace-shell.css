@@ -163,6 +163,8 @@ html[data-theme="dark"] .workspace-shortcut:hover{box-shadow:0 8px 24px rgba(0,0
 @media(max-width:1100px){.employee-home-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){.employee-home-hero{grid-template-columns:46px minmax(0,1fr)}.employee-home-hero>.secondary-button{grid-column:1/-1;justify-content:center}.employee-home-grid{grid-template-columns:1fr}}
 
+.module-state-badge{cursor:default!important;user-select:none;pointer-events:none}
+
 /* Enterprise table / view controls */
 .enterprise-view-toolbar{min-height:48px;margin:0 0 12px;padding:7px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow)}
 .enterprise-view-search{height:34px;min-width:260px;flex:1;display:flex;align-items:center;gap:7px;padding:0 9px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface-soft);color:var(--muted)}
