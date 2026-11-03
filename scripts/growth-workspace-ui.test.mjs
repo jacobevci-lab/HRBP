@@ -68,3 +68,10 @@ test("live Performance and Talent surfaces follow the active EN/TR locale", () =
   assert.match(live, /localGrowthValue\(locale,goal\.status\)/);
   assert.match(live, /localGrowthValue\(locale,row\.performance\)/);
 });
+
+
+test("live Talent matrix uses a dedicated five-band layout without changing the three-band preview", () => {
+  assert.match(live, /className="card talent-matrix five-band"/);
+  assert.match(css, /\.talent-matrix\.five-band \.matrix-row/);
+  assert.match(css, /repeat\(5,minmax\(96px,1fr\)\)/);
+});
