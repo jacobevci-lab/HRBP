@@ -50,7 +50,7 @@ export function EnterpriseViewToolbar({
 }) {
   const tr = locale === "tr";
   const selectedColumns = new Set(columns);
-  const filtered = Boolean(query || status || columnsCustomized || density === "compact" || sortKey);
+  const filtered = Boolean(query || status || columnsCustomized || density === "compact" || sortKey || pageSize !== 50);
   const current = { query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize };
 
   return <div className="enterprise-view-toolbar">
