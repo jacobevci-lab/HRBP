@@ -106,7 +106,7 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
     <div className="position-bulk-bar">
       <div>
         <span>{tr ? "Toplu işlem" : "Bulk action"}</span>
-        <strong>{selected ? (tr ? `${selected} seçili` : `${selected} selected`) : (tr ? "Pozisyon seçin" : "Select positions")}</strong>
+        <strong aria-live="polite">{selected ? (tr ? `${selected} seçili` : `${selected} selected`) : (tr ? "Pozisyon seçin" : "Select positions")}</strong>
       </div>
       <div className="position-bulk-actions">
         <BulkButton operation="mark-critical" disabled={!selected}><ShieldAlert size={14}/>{tr ? "Kritik işaretle" : "Mark critical"}</BulkButton>
