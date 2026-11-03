@@ -68,6 +68,8 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const columnFilter = rawColumns.slice(0, 12).map((value) => value.slice(0, 40));
   const columnsCustomized = search.columnsMode === "custom";
   const density = search.density === "compact" ? "compact" as const : "comfortable" as const;
+  const sortKey = typeof search.sort === "string" ? search.sort.slice(0, 40) : undefined;
+  const sortDirection = search.dir === "desc" ? "desc" as const : "asc" as const;
   const employeeRelationsCaseId = typeof search.case === "string" ? search.case : undefined;
   const employeeRelationsActionId = typeof search.action === "string" ? search.action : undefined;
   const employeeRelationsAppealId = typeof search.appeal === "string" ? search.appeal : undefined;
@@ -113,7 +115,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
 
   return (
     <AppShell>
-      <ModuleLanding slug={slug} query={query} status={statusFilter} columns={columnFilter} columnsCustomized={columnsCustomized} density={density} personId={personId} tab={slug === "policies" ? lifecycleMode : tab}/>
+      <ModuleLanding slug={slug} query={query} status={statusFilter} columns={columnFilter} columnsCustomized={columnsCustomized} density={density} sortKey={sortKey} sortDirection={sortDirection} personId={personId} tab={slug === "policies" ? lifecycleMode : tab}/>
       {slug === "offboarding" && can(ctx, "offboarding:write") ? <OffboardingClearanceLoader/> : null}
       {slug === "employee-relations" ? <details id="er-lifecycle" className="service-governance-panel" open={Boolean(query || employeeRelationsCaseId || employeeRelationsActionId || employeeRelationsAppealId)}>
         <summary><span><strong>{locale === "tr" ? "Vaka yaşam döngüsü & kapanış" : "Case lifecycle & closure"}</strong><small>{locale === "tr" ? "Çözüm, düzeltici aksiyon ve itiraz kontrollerini gerektiğinde açın." : "Open resolution, corrective-action and appeal controls when needed."}</small></span><span>Case Wall</span></summary>
