@@ -119,8 +119,14 @@ test("manual Release Verification requires independently supplied provider build
 
 test("production prebuild keeps provider-version verification mandatory", () => {
   const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-  assert.equal(pkg.scripts["deployment-verification:validate"],
-    "node --test scripts/deployment-verification.test.mjs scripts/provider-version-verification.test.mjs scripts/provider-check-verification.test.mjs scripts/cloudflare-deployment-verification.test.mjs");
+  const deploymentContract = pkg.scripts["deployment-verification:validate"];
+  for (const required of [
+    "scripts/deployment-verification.test.mjs",
+    "scripts/provider-version-verification.test.mjs",
+    "scripts/provider-check-verification.test.mjs",
+    "scripts/cloudflare-deployment-verification.test.mjs",
+    "scripts/cloudflare-preview-config.test.mjs"
+  ]) assert.ok(deploymentContract.includes(required), required + " must remain mandatory");
   assert.ok(pkg.scripts.prebuild.split(" && ").includes("npm run deployment-verification:validate"));
 });
 
