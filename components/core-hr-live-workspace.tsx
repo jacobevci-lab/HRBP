@@ -33,14 +33,14 @@ function resolveVisibleColumns(options: { value: string }[], requested: string[]
 }
 const employeeTabs = new Set(["overview", "employment", "compensation", "documents", "history"]);
 
-export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = [], columnsCustomized = false, density = "comfortable", personId, tab }: { slug: string; query?: string; status?: string; columns?: string[]; columnsCustomized?: boolean; density?: "comfortable" | "compact"; personId?: string; tab?: string }) {
+export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = [], columnsCustomized = false, density = "comfortable", sortKey, sortDirection = "asc", personId, tab }: { slug: string; query?: string; status?: string; columns?: string[]; columnsCustomized?: boolean; density?: "comfortable" | "compact"; sortKey?: string; sortDirection?: "asc" | "desc"; personId?: string; tab?: string }) {
   const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   const tenantId = ctx?.tenantId;
 
   if (slug === "people") {
     if (ctx && !can(ctx, "people:read")) return <AccessDenied title={c(locale,"People directory restricted","Çalışan dizini kısıtlı")} detail={c(locale,"Your current role does not include people:read access.","Mevcut rolünüz people:read erişimini içermiyor.")}/>;
     const [data, savedViews] = await Promise.all([
-      getPeopleWorkspaceData(query, tenantId, status),
+      getPeopleWorkspaceData(query, tenantId, status, sortKey, sortDirection),
       ctx ? listSavedEnterpriseViews(ctx, "people") : Promise.resolve([])
     ]);
     const peopleStatusOptions = [
@@ -55,6 +55,10 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = 
       { value: "status", label: c(locale,"Status","Durum") },
       { value: "start", label: c(locale,"Start date","Başlangıç") }
     ];
+    const peopleSortOptions = [
+      { value: "name", label: c(locale,"Name","Ad") },
+      { value: "employeeNumber", label: c(locale,"Employee ID","Çalışan no") }
+    ];
     const visiblePeopleColumns = resolveVisibleColumns(peopleColumnOptions, columns, columnsCustomized);
     return <><div className="enterprise-stats"><Stat label={c(locale,"Active workers","Aktif çalışanlar")} value={String(data.active)} meta={c(locale,"Current employment records","Mevcut istihdam kayıtları")} icon={UsersRound}/><Stat label={c(locale,"Preboarding","İşe başlamadan önce")} value={String(data.preboarding)} meta={c(locale,"Accepted future starters","Kabul edilmiş gelecek başlangıçlar")} icon={UserCheck}/><Stat label={c(locale,"On leave","İzinde")} value={String(data.onLeave)} meta={c(locale,"Current leave status","Mevcut izin durumu")} icon={Clock3}/><Stat label={c(locale,"Data quality","Veri kalitesi")} value={`${data.dataQuality.toFixed(1)}%`} meta={c(locale,`${data.needsReview} records need review`,`${data.needsReview} kayıt inceleme bekliyor`)} icon={BadgeCheck}/></div><EnterpriseViewToolbar
       moduleKey="people"
@@ -67,6 +71,9 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = 
       columns={columns}
       columnsCustomized={columnsCustomized}
       density={density}
+      sortOptions={peopleSortOptions}
+      sortKey={sortKey}
+      sortDirection={sortDirection}
       savedViews={savedViews}
       shownCount={data.people.length}
       totalCount={data.filteredTotal}
@@ -83,7 +90,7 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = 
   if (slug === "positions") {
     if (ctx && !can(ctx, "positions:read")) return <AccessDenied title={c(locale,"Positions restricted","Pozisyonlar kısıtlı")} detail={c(locale,"Your current role does not include positions:read access.","Mevcut rolünüz positions:read erişimini içermiyor.")}/>;
     const [data, savedViews] = await Promise.all([
-      getPositionsWorkspaceData(query, tenantId, status),
+      getPositionsWorkspaceData(query, tenantId, status, sortKey, sortDirection),
       ctx ? listSavedEnterpriseViews(ctx, "positions") : Promise.resolve([])
     ]);
     const positionStatusOptions = [
@@ -101,6 +108,12 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = 
       { value: "status", label: c(locale,"Status","Durum") },
       { value: "critical", label: c(locale,"Critical","Kritik") }
     ];
+    const positionSortOptions = [
+      { value: "code", label: c(locale,"Position code","Pozisyon kodu") },
+      { value: "title", label: c(locale,"Title","Unvan") },
+      { value: "status", label: c(locale,"Status","Durum") },
+      { value: "critical", label: c(locale,"Criticality","Kritiklik") }
+    ];
     const visiblePositionColumns = resolveVisibleColumns(positionColumnOptions, columns, columnsCustomized);
     const canBulkManagePositions = !!ctx && can(ctx, "positions:write");
     return <><div className="enterprise-stats"><Stat label={c(locale,"Positions","Pozisyonlar")} value={String(data.positions)} meta={c(locale,`${data.filled} filled`,`${data.filled} dolu`)} icon={BriefcaseBusiness}/><Stat label={c(locale,"Open","Açık")} value={String(data.open)} meta={c(locale,"Available for recruiting","İşe alıma uygun")} icon={CircleAlert}/><Stat label={c(locale,"Planned","Planlanan")} value={String(data.planned)} meta={c(locale,"Future workforce plan","Gelecek iş gücü planı")} icon={Clock3}/><Stat label={c(locale,"Critical roles","Kritik roller")} value={String(data.critical)} meta={c(locale,"Business continuity scoped","İş sürekliliği kapsamında")} icon={ShieldCheck}/></div><EnterpriseViewToolbar
@@ -114,6 +127,9 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = 
       columns={columns}
       columnsCustomized={columnsCustomized}
       density={density}
+      sortOptions={positionSortOptions}
+      sortKey={sortKey}
+      sortDirection={sortDirection}
       savedViews={savedViews}
       shownCount={data.rows.length}
       totalCount={data.filteredTotal}
