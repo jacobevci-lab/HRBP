@@ -295,7 +295,7 @@ html[data-theme="dark"]{
   border-radius:14px!important;
   box-shadow:var(--panel-shadow)!important;
 }
-.enterprise-view-search,.enterprise-view-filter,.enterprise-column-picker>summary{
+.enterprise-view-search,.enterprise-view-filter,.enterprise-view-density,.enterprise-column-picker>summary{
   height:38px!important;
   border-radius:10px!important;
 }
@@ -364,6 +364,28 @@ html[data-theme="dark"]{
   font-size:10px!important;
   line-height:1.4;
 }
+
+.enterprise-table-card .table-wrap{max-height:min(68vh,720px);overflow:auto}
+.enterprise-table-card .enterprise-table thead th{
+  position:sticky;
+  top:0;
+  z-index:4;
+  box-shadow:0 1px 0 var(--line);
+}
+.enterprise-density-compact .enterprise-table th{
+  height:32px!important;
+  padding:7px 11px!important;
+  font-size:7.6px!important;
+}
+.enterprise-density-compact .enterprise-table td{
+  padding:8px 11px!important;
+  font-size:9px!important;
+  line-height:1.28!important;
+}
+.enterprise-density-compact .enterprise-person>span{width:26px!important;height:26px!important;border-radius:8px!important}
+.enterprise-density-compact .cell-strong{font-size:9.6px!important}
+.enterprise-density-compact .cell-sub{font-size:7.4px!important;margin-top:2px!important}
+.enterprise-density-compact .pill,.enterprise-density-compact .critical-badge{transform:scale(.94);transform-origin:left center}
 .enterprise-table tbody tr:last-child td,.growth-table tbody tr:last-child td,.services-table tbody tr:last-child td,
 .workpay-table tbody tr:last-child td,.off-table tbody tr:last-child td{border-bottom:0!important}
 .enterprise-person>span{width:30px!important;height:30px!important;border-radius:9px!important}
