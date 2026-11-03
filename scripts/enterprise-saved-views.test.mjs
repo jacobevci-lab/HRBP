@@ -30,9 +30,12 @@ test("SavedEnterpriseView is a tenant/user/module scoped preference model", () =
   assert.match(schema, /moduleKey\s+String/);
   assert.match(schema, /columns\s+String\[\]\s+@default\(\[\]\)/);
   assert.match(schema, /density\s+String\s+@default\("comfortable"\)/);
+  assert.match(schema, /sortKey\s+String\?/);
+  assert.match(schema, /sortDirection\s+String\s+@default\("asc"\)/);
   assert.match(schema, /@@unique\(\[tenantId, userId, moduleKey, normalizedName\]\)/);
   assert.match(migration, /CHECK \("moduleKey" IN \('people', 'positions'\)\)/);
   assert.match(migration, /CHECK \("density" IN \('comfortable', 'compact'\)\)/);
+  assert.match(migration, /CHECK \("sortDirection" IN \('asc', 'desc'\)\)/);
   assert.match(migration, /FOREIGN KEY \("tenantId"\) REFERENCES "Tenant"/);
   assert.match(migration, /FOREIGN KEY \("userId"\) REFERENCES "UserAccount"/);
 });
@@ -44,14 +47,18 @@ test("saved view state is allowlisted and produces a shareable URL", () => {
     status: "active",
     columns: ["status", "position", "evil", "status"],
     columnsCustomized: true,
-    density: "compact"
+    density: "compact",
+    sortKey: "employeeNumber",
+    sortDirection: "desc"
   });
   assert.deepEqual(JSON.parse(JSON.stringify(state)), {
     query: "Deniz & Team",
     status: "ACTIVE",
     columns: ["status", "position"],
     columnsCustomized: true,
-    density: "compact"
+    density: "compact",
+    sortKey: "employeeNumber",
+    sortDirection: "desc"
   });
   const href = api.buildEnterpriseViewHref("people", state);
   const url = new URL(href, "https://hrbp.invalid");
@@ -61,6 +68,8 @@ test("saved view state is allowlisted and produces a shareable URL", () => {
   assert.equal(url.searchParams.get("columnsMode"), "custom");
   assert.deepEqual(url.searchParams.getAll("columns"), ["status", "position"]);
   assert.equal(url.searchParams.get("density"), "compact");
+  assert.equal(url.searchParams.get("sort"), "employeeNumber");
+  assert.equal(url.searchParams.get("dir"), "desc");
 });
 
 test("saved view names are bounded and normalized for case-insensitive upsert", () => {
@@ -110,4 +119,18 @@ test("invalid density fails closed to comfortable and is part of saved-view iden
   assert.match(source, /density: state\.density/);
   assert.match(actions, /density: formData\.get\("density"\)/);
   assert.match(control, /name="density" value=\{current\.density\}/);
+});
+
+
+test("saved sorting is module-allowlisted and invalid sort state falls back to default order", () => {
+  const api = loadService();
+  const people = api.sanitizeEnterpriseViewState("people", { sortKey: "critical", sortDirection: "desc" });
+  assert.equal(people.sortKey, undefined);
+  assert.equal(people.sortDirection, "asc");
+  const positions = api.sanitizeEnterpriseViewState("positions", { sortKey: "critical", sortDirection: "desc" });
+  assert.equal(positions.sortKey, "critical");
+  assert.equal(positions.sortDirection, "desc");
+  assert.match(source, /sortKey: state\.sortKey \?\? null/);
+  assert.match(actions, /sortKey: formData\.get\("sort"\)/);
+  assert.match(actions, /sortDirection: formData\.get\("dir"\)/);
 });
