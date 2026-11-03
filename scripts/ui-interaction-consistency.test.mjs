@@ -100,3 +100,12 @@ test("Warm Enterprise visual overhaul establishes a visibly different shell and 
   assert.match(unified, /\.enterprise-table td[^]*font-size:10px/);
   assert.match(unified, /@media\(max-width:620px\)[^]*\.page-heading\.module-heading/);
 });
+
+
+test("detail workspaces keep the upgraded master-detail visual hierarchy", () => {
+  const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
+  assert.match(unified, /\.employee-360-layout\{[^]*grid-template-columns:300px/);
+  assert.match(unified, /\.employee-360-rail\{[^]*border-radius:18px/);
+  assert.match(unified, /\.growth-split,.growth-grid,.services-split\{[^]*1\.7fr/);
+  assert.match(unified, /\.services-table tbody tr\.focused td/);
+});
