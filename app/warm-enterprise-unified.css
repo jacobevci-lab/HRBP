@@ -309,6 +309,20 @@ html[data-theme="dark"]{
   border-radius:12px!important;
   box-shadow:var(--panel-shadow-hover)!important;
 }
+.enterprise-saved-views{height:38px!important}
+.enterprise-saved-views>summary{
+  height:38px!important;
+  border-radius:10px!important;
+  background:var(--surface-soft)!important;
+}
+.enterprise-saved-view-popover{
+  top:calc(100% + 8px)!important;
+  border-radius:14px!important;
+  box-shadow:var(--panel-shadow-hover)!important;
+}
+.enterprise-saved-view-row{border-radius:9px!important}
+.enterprise-save-view-form input[name="name"]{height:38px!important;border-radius:10px!important}
+.enterprise-save-view-button{height:38px!important;min-height:38px!important}
 .enterprise-view-count{font-size:9px!important;font-weight:700}
 
 /* Data panels and tables */
