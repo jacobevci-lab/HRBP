@@ -15,8 +15,6 @@ export type SavedEnterpriseViewActionState = {
   code?: "auth" | "invalid" | "limit" | "forbidden" | "unavailable";
 };
 
-export const initialSavedEnterpriseViewActionState: SavedEnterpriseViewActionState = { ok: false };
-
 function readModule(formData: FormData) {
   const value = formData.get("moduleKey");
   return typeof value === "string" && isEnterpriseViewModule(value) ? value : null;
