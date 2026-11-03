@@ -673,3 +673,61 @@ a.metric-card:hover{
   .dashboard-focus-brief>a{display:none}
   .metric-card{min-height:112px}
 }
+
+
+/* 2026 lifecycle consistency pass: recruiting, onboarding, offboarding and disclosure panels. */
+.secondary-button,.create-button,.ai-button{
+  min-height:38px!important;
+  border-radius:9px!important;
+}
+.recruit-grid,.onboarding-grid{gap:16px!important}
+.pipeline-card,.requisition-card,.off-ops-console,.ats-console,.onb-console{
+  border-radius:16px!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.pipeline-board{padding:14px!important;gap:10px!important}
+.pipeline-column{
+  padding:10px!important;
+  border-radius:12px!important;
+  background:color-mix(in srgb,var(--surface-soft) 72%,var(--surface))!important;
+}
+.pipeline-column header{padding:3px 3px 10px!important}
+.pipeline-column article{
+  min-height:52px;
+  padding:9px!important;
+  margin-bottom:7px!important;
+  border-radius:10px!important;
+  box-shadow:0 1px 2px rgba(32,38,34,.025)!important;
+}
+.candidate-avatar{width:30px!important;height:30px!important;border-radius:9px!important}
+.journey-list{padding:7px 15px 13px!important}
+.journey-list article{min-height:66px;padding:12px 3px!important}
+.task-control-list{padding:7px 15px!important}
+.task-control-list>div{min-height:54px;padding:11px 0!important}
+.onboarding-policy{margin:10px 14px 14px!important;padding:12px!important;border-radius:11px!important}
+.off-process-card{border-radius:13px!important;box-shadow:0 1px 2px rgba(32,38,34,.03)!important}
+.off-task-list>div{min-height:52px}
+:is(
+  .growth-governed-panel,
+  .service-governance-panel,
+  .service-admin-panel,
+  .recruiting-operations-panel,
+  .compensation-proposal-panel,
+  .onboarding-operations-panel,
+  .offboarding-operations-panel,
+  .my-work-source-panel,
+  .my-work-history-panel
+)[open]>summary{
+  background:color-mix(in srgb,var(--accent) 4%,var(--surface))!important;
+}
+:is(
+  .growth-governed-panel,
+  .service-governance-panel,
+  .service-admin-panel,
+  .recruiting-operations-panel,
+  .compensation-proposal-panel,
+  .onboarding-operations-panel,
+  .offboarding-operations-panel
+)>summary:hover{
+  background:color-mix(in srgb,var(--accent) 3%,var(--surface))!important;
+}
