@@ -136,7 +136,9 @@ test("People and Positions expose scoped filtered CSV exports", () => {
   assert.match(toolbar, /new URLSearchParams\(\{ module: moduleKey \}\)/);
   assert.match(toolbar, /columnsMode/);
   assert.match(toolbar, /columns\.forEach\(\(column\) => exportParams\.append\("columns", column\)\)/);
-  assert.match(toolbar, /className="secondary-button enterprise-view-export"/);
+  assert.match(toolbar, /exportEnabled = false/);
+  assert.match(toolbar, /exportEnabled \? <a className="secondary-button enterprise-view-export"/);
+  assert.ok((workspace.match(/exportEnabled=\{!!ctx\}/g) ?? []).length >= 2);
   assert.match(route, /can\(ctx, "people:read"\)/);
   assert.match(route, /can\(ctx, "positions:read"\)/);
   assert.match(route, /tenantId: ctx\.tenantId/);

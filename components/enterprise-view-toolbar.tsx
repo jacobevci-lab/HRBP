@@ -27,7 +27,8 @@ export function EnterpriseViewToolbar({
   savedViews,
   shownCount,
   totalCount,
-  searchPlaceholder
+  searchPlaceholder,
+  exportEnabled = false
 }: {
   moduleKey: EnterpriseViewModule;
   basePath: string;
@@ -47,6 +48,7 @@ export function EnterpriseViewToolbar({
   shownCount: number;
   totalCount: number;
   searchPlaceholder: string;
+  exportEnabled?: boolean;
 }) {
   const tr = locale === "tr";
   const selectedColumns = new Set(columns);
@@ -115,9 +117,9 @@ export function EnterpriseViewToolbar({
       {filtered ? <Link className="secondary-button" href={basePath}><X size={14}/>{tr ? "Sıfırla" : "Reset"}</Link> : null}
     </form>
 
-    <a className="secondary-button enterprise-view-export" href={exportHref} title={tr ? "Filtrelenmiş görünümün tamamını CSV olarak dışa aktar" : "Export the complete filtered view as CSV"}>
+    {exportEnabled ? <a className="secondary-button enterprise-view-export" href={exportHref} title={tr ? "Filtrelenmiş görünümün tamamını CSV olarak dışa aktar" : "Export the complete filtered view as CSV"}>
       <Download size={14}/>{tr ? "CSV dışa aktar" : "Export CSV"}
-    </a>
+    </a> : null}
 
     <EnterpriseSavedViews locale={locale} moduleKey={moduleKey} current={current} savedViews={savedViews}/>
 
