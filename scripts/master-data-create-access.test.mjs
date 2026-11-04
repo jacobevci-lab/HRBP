@@ -6,6 +6,9 @@ const peoplePage = readFileSync("app/module/people/new/page.tsx", "utf8");
 const positionPage = readFileSync("app/module/positions/new/page.tsx", "utf8");
 const peopleApi = readFileSync("app/api/people/route.ts", "utf8");
 const access = readFileSync("lib/workforce-master-data-access.ts", "utf8");
+const workforceMasterPolicy = readFileSync("lib/workforce-master-data-policy.ts", "utf8");
+const moduleLanding = readFileSync("components/module-landing.tsx", "utf8");
+const appShell = readFileSync("components/app-shell.tsx", "utf8");
 
 test("employee create workspace is signed-session and operational-role gated before reference data loads", () => {
   assert.match(peoplePage, /getServerRequestContext\(\)/);
@@ -19,9 +22,11 @@ test("employee create workspace is signed-session and operational-role gated bef
 });
 
 test("employee page and API share one workforce master-data writer policy", () => {
-  assert.match(access, /PlatformRole\.HR_OPERATIONS/);
-  assert.match(access, /PlatformRole\.TENANT_ADMIN/);
+  assert.match(workforceMasterPolicy, /"HR_OPERATIONS"/);
+  assert.match(workforceMasterPolicy, /"TENANT_ADMIN"/);
+  assert.match(workforceMasterPolicy, /roleCanCreateEmployeeMasterRecord/);
   assert.match(access, /can\(ctx, "people:write"\)/);
+  assert.match(access, /roleCanCreateEmployeeMasterRecord\(ctx\.role\)/);
   assert.match(peopleApi, /canCreateEmployeeMasterRecord\(ctx\)/);
   assert.doesNotMatch(peopleApi, /workforceMasterDataWriters/);
 });
@@ -35,4 +40,12 @@ test("position create workspace is signed-session and positions-write gated befo
   assert.doesNotMatch(positionPage, /href="\/auth\/sign-in\?returnTo=%2Fmodule%2Fpositions%2Fnew"/);
   assert.match(positionPage, /Position creation access is restricted/);
   assert.match(positionPage, /Pozisyon oluşturma erişimi kısıtlı/);
+});
+
+
+test("create CTAs use the same workforce master-data role policy as the page and API", () => {
+  assert.match(moduleLanding, /canCreateEmployeeMasterRecord\(ctx\)/);
+  assert.doesNotMatch(moduleLanding, /slug === "people" && can\(ctx, "people:read"\) && can\(ctx, "people:write"\)/);
+  assert.match(appShell, /roleCanCreateEmployeeMasterRecord\(session\?\.user\?\.role\)/);
+  assert.match(appShell, /navigationCapabilities\.has\("people:write"\)/);
 });

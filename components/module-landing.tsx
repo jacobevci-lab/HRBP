@@ -7,6 +7,7 @@ import { getServerLocale } from "@/lib/i18n-server";
 import { translate, type Locale } from "@/lib/i18n";
 import { getServerRequestContext } from "@/lib/server-session";
 import { PublicModuleLanding } from "@/components/public-module-landing";
+import { canCreateEmployeeMasterRecord } from "@/lib/workforce-master-data-access";
 
 const descriptions: Record<string, { en: string; tr: string }> = {
   people: {
@@ -121,7 +122,7 @@ export async function ModuleLanding({ slug, query = "", status, columns = [], co
 
   const content = await renderLiveWorkspace({ slug, query, status, columns, columnsCustomized, density, sortKey, sortDirection, page, pageSize, personId, tab });
   if (content === null || content === undefined) throw new Error("Live workspace returned no content.");
-  const createHref = slug === "people" && can(ctx, "people:read") && can(ctx, "people:write")
+  const createHref = slug === "people" && can(ctx, "people:read") && canCreateEmployeeMasterRecord(ctx)
     ? "/module/people/new"
     : slug === "positions" && can(ctx, "positions:read") && can(ctx, "positions:write") ? "/module/positions/new" : null;
   return <section data-module-workspace-state="rendered" data-module-workspace={slug}>

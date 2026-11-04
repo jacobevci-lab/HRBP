@@ -14,6 +14,7 @@ import { useLocale } from "@/components/locale-provider";
 import { LocaleToggle } from "@/components/locale-toggle";
 import { NotificationCenter } from "@/components/notification-center";
 import { primaryShellDestinations } from "@/lib/ui-shell-navigation.mjs";
+import { roleCanCreateEmployeeMasterRecord } from "@/lib/workforce-master-data-policy";
 
 function initials(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -137,7 +138,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
             <ThemeToggle/>
             <NotificationCenter/>
             {authenticated && navigationCapabilities.has("ai:use") ? <Link className="ai-button" href="/module/ai-assistant"><Sparkles size={16}/> {t("shell.ask")}</Link> : null}
-            {authenticated && navigationCapabilities.has("people:write") ? <Link className="create-button" href="/module/people/new"><Plus size={17}/> {t("shell.create")}</Link> : null}
+            {authenticated && navigationCapabilities.has("people:write") && roleCanCreateEmployeeMasterRecord(session?.user?.role) ? <Link className="create-button" href="/module/people/new"><Plus size={17}/> {t("shell.create")}</Link> : null}
             <TopbarAccount/>
           </div>
         </header>
