@@ -1012,3 +1012,10 @@ th{font-size:10px!important}
 .enterprise-empty-row{min-height:112px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:22px;text-align:center}
 .enterprise-empty-row>span{max-width:560px;color:var(--muted);font-size:11px;line-height:1.5}
 .enterprise-empty-row>.secondary-button{min-height:34px;padding-inline:12px;font-size:10.5px!important;text-decoration:none}
+
+/* Sortable enterprise register headers keep URL-native view state and visible affordance. */
+.enterprise-sort-header{display:inline-flex;align-items:center;gap:5px;color:inherit;text-decoration:none;font:inherit;letter-spacing:inherit;text-transform:inherit}
+.enterprise-sort-header svg{opacity:.55;flex:0 0 auto}
+.enterprise-sort-header:hover,.enterprise-sort-header:focus-visible,.enterprise-sort-header.active{color:var(--accent)!important}
+.enterprise-sort-header:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.enterprise-sort-header.active svg{opacity:1}
