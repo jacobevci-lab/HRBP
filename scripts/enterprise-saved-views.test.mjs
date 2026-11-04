@@ -240,3 +240,12 @@ test("saved view deletion exposes pending and failure feedback", () => {
   const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
   assert.match(unified, /\.enterprise-saved-view-delete-error\{[^}]*font-size:9\.5px/);
 });
+
+test("saved view overwrite requires explicit confirmation", () => {
+  assert.match(control, /function normalizeViewNameForComparison/);
+  assert.match(control, /normalize\("NFKC"\)\.toLowerCase\(\)/);
+  assert.match(control, /const existing = savedViews\.find/);
+  assert.match(control, /Update “\$\{existing\.name\}” with the current view settings\?/);
+  assert.match(control, /görünümü mevcut filtrelerle güncellensin mi\?/);
+  assert.match(control, /if \(!window\.confirm\(prompt\)\) event\.preventDefault\(\)/);
+});

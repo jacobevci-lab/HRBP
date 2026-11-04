@@ -16,6 +16,10 @@ import type {
 } from "@/lib/enterprise-saved-views";
 import type { Locale } from "@/lib/i18n";
 
+function normalizeViewNameForComparison(value: string) {
+  return value.trim().replace(/\s+/g, " ").normalize("NFKC").toLowerCase();
+}
+
 function sameState(left: EnterpriseViewState, right: EnterpriseViewState) {
   if (left.query !== right.query || left.status !== right.status || left.columnsCustomized !== right.columnsCustomized || left.density !== right.density || left.sortKey !== right.sortKey || left.sortDirection !== right.sortDirection || left.pageSize !== right.pageSize) return false;
   if (!left.columnsCustomized) return true;
@@ -176,7 +180,22 @@ export function EnterpriseSavedViews({
         }) : <div className="enterprise-saved-view-empty">{tr ? "Henüz kayıtlı görünüm yok." : "No saved views yet."}</div>}
       </div>
 
-      <form ref={formRef} action={formAction} className="enterprise-save-view-form">
+      <form
+        ref={formRef}
+        action={formAction}
+        className="enterprise-save-view-form"
+        onSubmit={(event) => {
+          const input = formRef.current?.elements.namedItem("name");
+          if (!(input instanceof HTMLInputElement)) return;
+          const normalized = normalizeViewNameForComparison(input.value);
+          const existing = savedViews.find((view) => normalizeViewNameForComparison(view.name) === normalized);
+          if (!existing) return;
+          const prompt = tr
+            ? `“${existing.name}” görünümü mevcut filtrelerle güncellensin mi?`
+            : `Update “${existing.name}” with the current view settings?`;
+          if (!window.confirm(prompt)) event.preventDefault();
+        }}
+      >
         <input type="hidden" name="moduleKey" value={moduleKey}/>
         <input type="hidden" name="query" value={current.query}/>
         <input type="hidden" name="status" value={current.status ?? ""}/>
