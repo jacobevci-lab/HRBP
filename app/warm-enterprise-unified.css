@@ -338,6 +338,10 @@ html[data-theme="dark"]{
   box-shadow:var(--panel-shadow)!important;
 }
 .position-bulk-button{height:38px!important;min-height:38px!important;border-radius:10px!important}
+.position-bulk-clear{color:var(--muted)!important}
+.position-bulk-bar>div:first-child span{font-size:10px!important}
+.position-bulk-bar>div:first-child strong{font-size:10.5px!important}
+.position-bulk-success,.position-bulk-error{font-size:10px!important}
 .position-bulk-select input{accent-color:var(--accent)}
 .enterprise-view-count{font-size:10.5px!important;font-weight:700}
 

@@ -57,17 +57,29 @@ test("bulk action UI is capability gated, confirmed and never rendered as a fake
   assert.match(workspace, /canBulkManagePositions = !!ctx && can\(ctx, "positions:write"\)/);
   assert.match(workspace, /<PositionBulkActionForm locale=\{locale\} enabled=\{canBulkManagePositions\}>/);
   assert.match(workspace, /name="positionIds"/);
+  assert.match(workspace, /data-position-critical=\{position\.critical \? "true" : "false"\}/);
   assert.match(workspace, /data-position-select-all/);
   assert.match(control, /window\.confirm\(prompt\)/);
-  assert.match(control, /selected/);
+  assert.match(control, /selection\.critical/);
+  assert.match(control, /selection\.nonCritical/);
+  assert.match(control, /Mark \$\{affected\} of \$\{selection\.total\} selected positions as critical/);
+  assert.match(control, /Clear critical status from \$\{affected\} of \$\{selection\.total\} selected positions/);
+  assert.match(control, /disabled=\{!selection\.total \|\| selection\.nonCritical === 0\}/);
+  assert.match(control, /disabled=\{!selection\.total \|\| selection\.critical === 0\}/);
+  assert.match(control, /position-bulk-clear/);
+  assert.match(control, /Clear selection/);
   assert.match(control, /mark-critical/);
   assert.match(control, /clear-critical/);
   assert.doesNotMatch(control, /localStorage|sessionStorage/);
 });
 
 test("position bulk controls participate in responsive Warm Enterprise styling", () => {
+  const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
   for (const selector of [".position-bulk-form", ".position-bulk-bar", ".position-bulk-actions", ".position-bulk-select"]) {
     assert.match(css, new RegExp(selector.replace(".", "\\.")));
   }
   assert.match(css, /@media\(max-width:760px\)[\s\S]*\.position-bulk-actions/);
+  assert.match(unified, /\.position-bulk-clear\{/);
+  assert.match(unified, /\.position-bulk-bar>div:first-child span\{font-size:10px!important\}/);
+  assert.match(unified, /\.position-bulk-success,.position-bulk-error\{font-size:10px!important\}/);
 });

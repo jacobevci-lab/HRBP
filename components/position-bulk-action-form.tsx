@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { ShieldAlert, ShieldCheck } from "lucide-react";
+import { ShieldAlert, ShieldCheck, X } from "lucide-react";
 import { positionBulkCriticalityAction } from "@/lib/position-bulk-action";
 import type { PositionBulkActionState } from "@/lib/position-bulk-action";
 import type { Locale } from "@/lib/i18n";
@@ -44,15 +44,22 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
   const tr = locale === "tr";
   const initial: PositionBulkActionState = { ok: false };
   const [state, action] = useActionState(positionBulkCriticalityAction, initial);
-  const [selected, setSelected] = useState(0);
+  const [selection, setSelection] = useState({ total: 0, critical: 0, nonCritical: 0 });
   const formRef = useRef<HTMLFormElement>(null);
   const message = messageFor(locale, state);
+  const selectionText = selection.total
+    ? (tr
+      ? `${selection.total} seçili · ${selection.critical} kritik · ${selection.nonCritical} kritik değil`
+      : `${selection.total} selected · ${selection.critical} critical · ${selection.nonCritical} non-critical`)
+    : (tr ? "Pozisyon seçin" : "Select positions");
 
   function syncSelected() {
     const form = formRef.current;
     if (!form) return;
-    const checked = form.querySelectorAll<HTMLInputElement>('input[name="positionIds"]:checked').length;
-    setSelected(checked);
+    const checkedInputs = [...form.querySelectorAll<HTMLInputElement>('input[name="positionIds"]:checked')];
+    const checked = checkedInputs.length;
+    const critical = checkedInputs.filter((input) => input.dataset.positionCritical === "true").length;
+    setSelection({ total: checked, critical, nonCritical: checked - critical });
     const selectAll = form.querySelector<HTMLInputElement>("[data-position-select-all]");
     const total = form.querySelectorAll<HTMLInputElement>('input[name="positionIds"]').length;
     if (selectAll) {
@@ -69,7 +76,7 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
       input.checked = false;
       input.indeterminate = false;
     });
-    setSelected(0);
+    setSelection({ total: 0, critical: 0, nonCritical: 0 });
   }, [state]);
 
   return <form
@@ -87,7 +94,7 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
       syncSelected();
     }}
     onSubmit={(event) => {
-      if (!selected) {
+      if (!selection.total) {
         event.preventDefault();
         return;
       }
@@ -97,20 +104,43 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
         return;
       }
       const marking = submitter.value === "mark-critical";
+      const affected = marking ? selection.nonCritical : selection.critical;
+      if (!affected) {
+        event.preventDefault();
+        return;
+      }
       const prompt = marking
-        ? (tr ? `${selected} pozisyon kritik olarak işaretlensin mi?` : `Mark ${selected} positions as critical?`)
-        : (tr ? `${selected} pozisyonun kritik işareti kaldırılsın mı?` : `Clear critical status from ${selected} positions?`);
+        ? (tr
+          ? `Seçili ${selection.total} pozisyonun ${affected} tanesi kritik olarak işaretlensin mi?`
+          : `Mark ${affected} of ${selection.total} selected positions as critical?`)
+        : (tr
+          ? `Seçili ${selection.total} pozisyonun ${affected} tanesinin kritik işareti kaldırılsın mı?`
+          : `Clear critical status from ${affected} of ${selection.total} selected positions?`);
       if (!window.confirm(prompt)) event.preventDefault();
     }}
   >
     <div className="position-bulk-bar">
       <div>
         <span>{tr ? "Toplu işlem" : "Bulk action"}</span>
-        <strong aria-live="polite">{selected ? (tr ? `${selected} seçili` : `${selected} selected`) : (tr ? "Pozisyon seçin" : "Select positions")}</strong>
+        <strong aria-live="polite">{selectionText}</strong>
       </div>
       <div className="position-bulk-actions">
-        <BulkButton operation="mark-critical" disabled={!selected}><ShieldAlert size={14}/>{tr ? "Kritik işaretle" : "Mark critical"}</BulkButton>
-        <BulkButton operation="clear-critical" disabled={!selected}><ShieldCheck size={14}/>{tr ? "Kritik işaretini kaldır" : "Clear critical"}</BulkButton>
+        <BulkButton operation="mark-critical" disabled={!selection.total || selection.nonCritical === 0}><ShieldAlert size={14}/>{tr ? "Kritik işaretle" : "Mark critical"}</BulkButton>
+        <BulkButton operation="clear-critical" disabled={!selection.total || selection.critical === 0}><ShieldCheck size={14}/>{tr ? "Kritik işaretini kaldır" : "Clear critical"}</BulkButton>
+        <button
+          className="secondary-button position-bulk-button position-bulk-clear"
+          type="button"
+          disabled={!selection.total}
+          onClick={() => {
+            const current = formRef.current;
+            if (!current) return;
+            current.querySelectorAll<HTMLInputElement>('input[name="positionIds"],[data-position-select-all]').forEach((input) => {
+              input.checked = false;
+              input.indeterminate = false;
+            });
+            setSelection({ total: 0, critical: 0, nonCritical: 0 });
+          }}
+        ><X size={14}/>{tr ? "Seçimi temizle" : "Clear selection"}</button>
       </div>
       {message ? <small className={state.ok ? "position-bulk-success" : "position-bulk-error"} role={state.ok ? "status" : "alert"}>{message}</small> : null}
     </div>
