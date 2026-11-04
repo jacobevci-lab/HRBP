@@ -193,31 +193,33 @@ export function GlobalSearch() {
       </div>
 
       {open ? (
-        <div className="global-search-menu" id="global-search-results" role="listbox" ref={menuRef} aria-busy={loading}>
-          {statusText ? <div className={`global-search-state ${degraded ? "degraded" : ""}`} aria-live="polite">{statusText}</div> : null}
-          {groupedItems.map((group) => (
-            <div className="global-search-group" role="group" aria-label={groupLabel(group.type)} key={group.type}>
-              <div className="global-search-group-label" aria-hidden="true"><span>{groupLabel(group.type)}</span><small>{group.items.length}</small></div>
-              {group.items.map((item, localIndex) => {
-                const index = group.startIndex + localIndex;
-                return <Link
-                  key={`${item.type}:${item.id}`}
-                  id={`global-search-option-${index}`}
-                  href={item.href}
-                  role="option"
-                  aria-selected={index === activeIndex}
-                  className={`global-search-result ${index === activeIndex ? "active" : ""}`}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => { setOpen(false); setQuery(""); }}
-                >
-                  <span className="global-search-result-icon"><ResultIcon type={item.type}/></span>
-                  <span className="global-search-result-copy"><strong>{item.title}</strong><small>{item.subtitle}</small></span>
-                  <em>{item.type === "module" ? (locale === "tr" ? "Modül" : "Module") : item.type === "person" ? (locale === "tr" ? "Çalışan" : "Person") : (locale === "tr" ? "Pozisyon" : "Position")}</em>
-                </Link>;
-              })}
-            </div>
-          ))}
-          {items.length ? <div className="global-search-hints"><span>↑↓ {locale === "tr" ? "Gezin" : "Navigate"}</span><span>↵ {locale === "tr" ? "Aç" : "Open"}</span><span>Esc {locale === "tr" ? "Kapat" : "Close"}</span></div> : null}
+        <div className="global-search-menu">
+          {statusText ? <div className={`global-search-state ${degraded ? "degraded" : ""}`} role="status" aria-live="polite">{statusText}</div> : null}
+          <div className="global-search-options" id="global-search-results" role="listbox" ref={menuRef} aria-busy={loading}>
+            {groupedItems.map((group) => (
+              <div className="global-search-group" role="group" aria-label={groupLabel(group.type)} key={group.type}>
+                <div className="global-search-group-label" aria-hidden="true"><span>{groupLabel(group.type)}</span><small>{group.items.length}</small></div>
+                {group.items.map((item, localIndex) => {
+                  const index = group.startIndex + localIndex;
+                  return <Link
+                    key={`${item.type}:${item.id}`}
+                    id={`global-search-option-${index}`}
+                    href={item.href}
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    className={`global-search-result ${index === activeIndex ? "active" : ""}`}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => { setOpen(false); setQuery(""); }}
+                  >
+                    <span className="global-search-result-icon"><ResultIcon type={item.type}/></span>
+                    <span className="global-search-result-copy"><strong>{item.title}</strong><small>{item.subtitle}</small></span>
+                    <em>{item.type === "module" ? (locale === "tr" ? "Modül" : "Module") : item.type === "person" ? (locale === "tr" ? "Çalışan" : "Person") : (locale === "tr" ? "Pozisyon" : "Position")}</em>
+                  </Link>;
+                })}
+              </div>
+            ))}
+          </div>
+          {items.length ? <div className="global-search-hints"><span>↑↓ {locale === "tr" ? "Gezin" : "Navigate"}</span><span>Home/End {locale === "tr" ? "İlk/son" : "First/last"}</span><span>↵ {locale === "tr" ? "Aç" : "Open"}</span><span>Esc {locale === "tr" ? "Kapat" : "Close"}</span></div> : null}
         </div>
       ) : null}
     </div>

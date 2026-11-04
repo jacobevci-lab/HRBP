@@ -257,3 +257,12 @@ test("global search keeps keyboard selection visible in long result lists", () =
   assert.match(globalSearch, /scrollIntoView\(\{ block: "nearest" \}\)/);
   assert.match(globalSearch, /role="listbox" ref=\{menuRef\} aria-busy=\{loading\}/);
 });
+
+test("global search keeps live status outside listbox option ownership", () => {
+  const menuIndex = globalSearch.indexOf('<div className="global-search-menu">');
+  const statusIndex = globalSearch.indexOf('role="status" aria-live="polite"', menuIndex);
+  const listboxIndex = globalSearch.indexOf('className="global-search-options" id="global-search-results" role="listbox"', menuIndex);
+  assert.ok(menuIndex > -1 && statusIndex > menuIndex && listboxIndex > statusIndex);
+  assert.match(globalSearch, /role="listbox" ref=\{menuRef\} aria-busy=\{loading\}/);
+  assert.match(globalSearch, /Home\/End \{locale === "tr" \? "İlk\/son" : "First\/last"\}/);
+});
