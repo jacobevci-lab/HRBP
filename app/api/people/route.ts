@@ -1,4 +1,4 @@
-import { readJsonObject } from "@/lib/input-validation";
+import { asDateOnly, asEmailAddress, asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
 import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatus } from "@prisma/client";
 import { withDb, db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -45,20 +45,18 @@ export async function POST(request: Request) {
 
   const body = await readJsonObject(request) as Record<string, unknown>;
   if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
-  const givenName = String(body.givenName ?? "").trim();
-  const familyName = String(body.familyName ?? "").trim();
-  const employeeNumber = String(body.employeeNumber ?? "").trim();
-  const workEmail = String(body.workEmail ?? "").trim().toLowerCase();
-  const positionId = String(body.positionId ?? "").trim();
-  const startDateValue = String(body.startDate ?? "").trim();
+  const givenName = asText(body.givenName, 100);
+  const familyName = asText(body.familyName, 100);
+  const employeeNumber = asIdentifier(body.employeeNumber, 64);
+  const workEmail = asEmailAddress(body.workEmail);
+  const positionId = asIdentifier(body.positionId);
+  const startDate = asDateOnly(body.startDate);
 
-  if (!givenName || !familyName || !employeeNumber || !workEmail || !positionId || !startDateValue) {
-    return Response.json({ error: "givenName, familyName, employeeNumber, workEmail, positionId and startDate are required." }, { status: 400 });
+  if (!givenName || !familyName || !employeeNumber || !workEmail || !positionId || !startDate) {
+    return Response.json({
+      error: "A valid employeeNumber, givenName, familyName, workEmail, positionId and YYYY-MM-DD startDate are required."
+    }, { status: 400 });
   }
-  if (!workEmail.includes("@")) return Response.json({ error: "A valid work email is required." }, { status: 400 });
-
-  const startDate = new Date(`${startDateValue}T00:00:00.000Z`);
-  if (Number.isNaN(startDate.getTime())) return Response.json({ error: "startDate is invalid." }, { status: 400 });
 
   const now = new Date();
   const status = startDate.getTime() > now.getTime() ? EmploymentStatus.PREBOARDING : EmploymentStatus.ACTIVE;

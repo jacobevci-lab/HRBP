@@ -1,4 +1,4 @@
-import { readJsonObject } from "@/lib/input-validation";
+import { asEnumValue, asIdentifier, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
 import { DataClassification, PositionStatus } from "@prisma/client";
 import { db, withDb } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -25,21 +25,24 @@ export async function POST(request: Request) {
 
   const body = await readJsonObject(request) as Record<string, unknown>;
   if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
-  const positionCode = String(body.positionCode ?? "").trim().toUpperCase();
-  const title = String(body.title ?? "").trim();
-  const orgUnitId = String(body.orgUnitId ?? "").trim();
-  const jobFamily = String(body.jobFamily ?? "").trim() || null;
-  const grade = String(body.grade ?? "").trim() || null;
-  const location = String(body.location ?? "").trim() || null;
-  const statusValue = String(body.status ?? PositionStatus.OPEN).trim().toUpperCase();
+  const rawCode = asIdentifier(body.positionCode, 64);
+  const positionCode = rawCode?.toUpperCase() ?? null;
+  const title = asText(body.title, 160);
+  const orgUnitId = asIdentifier(body.orgUnitId);
+  const jobFamilyValue = asOptionalText(body.jobFamily, 100);
+  const gradeValue = asOptionalText(body.grade, 64);
+  const locationValue = asOptionalText(body.location, 160);
+  const statusValue = asEnumValue(body.status ?? PositionStatus.OPEN, [PositionStatus.OPEN, PositionStatus.PLANNED] as const);
   const critical = body.critical === true;
 
-  if (!positionCode || !title || !orgUnitId) {
-    return Response.json({ error: "positionCode, title and orgUnitId are required." }, { status: 400 });
+  if (!positionCode || !title || !orgUnitId || jobFamilyValue === null || gradeValue === null || locationValue === null || !statusValue) {
+    return Response.json({
+      error: "A valid positionCode, title, orgUnitId and OPEN/PLANNED status are required; optional fields must stay within allowed lengths."
+    }, { status: 400 });
   }
-  if (statusValue !== PositionStatus.OPEN && statusValue !== PositionStatus.PLANNED) {
-    return Response.json({ error: "New positions must start as OPEN or PLANNED." }, { status: 400 });
-  }
+  const jobFamily = jobFamilyValue ?? null;
+  const grade = gradeValue ?? null;
+  const location = locationValue ?? null;
 
   try {
     const position = await withDb((client) => client.$transaction(async (tx) => {
