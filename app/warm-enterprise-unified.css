@@ -300,8 +300,8 @@ html[data-theme="dark"]{
   border-radius:10px!important;
 }
 .enterprise-view-search{padding-inline:11px!important}
-.enterprise-view-search input{font-size:10.5px!important}
-.enterprise-view-filter select{font-size:10px!important}
+.enterprise-view-search input{font-size:11.5px!important}
+.enterprise-view-filter select{font-size:11px!important}
 .enterprise-column-options{
   top:calc(100% + 8px)!important;
   min-width:230px!important;
@@ -320,9 +320,15 @@ html[data-theme="dark"]{
   border-radius:14px!important;
   box-shadow:var(--panel-shadow-hover)!important;
 }
-.enterprise-pagination{min-height:58px!important;padding:10px 14px!important}
-.enterprise-page-button,.enterprise-page-number{height:32px!important;border-radius:9px!important}
+.enterprise-pagination{min-height:60px!important;padding:11px 14px!important}
+.enterprise-page-button,.enterprise-page-number{height:34px!important;border-radius:9px!important;font-size:10.5px!important}
 .enterprise-saved-view-row{border-radius:9px!important}
+.enterprise-saved-views>summary{font-size:10.5px!important}
+.enterprise-saved-view-head strong{font-size:11px!important}
+.enterprise-saved-view-row>a strong{font-size:10.5px!important}
+.enterprise-saved-view-row>a small{font-size:9.5px!important}
+.enterprise-save-view-form>label>span{font-size:9.5px!important}
+.enterprise-save-view-form input[name="name"]{font-size:10.5px!important}
 .enterprise-save-view-form input[name="name"]{height:38px!important;border-radius:10px!important}
 .enterprise-save-view-button{height:38px!important;min-height:38px!important}
 .position-bulk-bar{
@@ -333,7 +339,7 @@ html[data-theme="dark"]{
 }
 .position-bulk-button{height:38px!important;min-height:38px!important;border-radius:10px!important}
 .position-bulk-select input{accent-color:var(--accent)}
-.enterprise-view-count{font-size:9px!important;font-weight:700}
+.enterprise-view-count{font-size:10.5px!important;font-weight:700}
 
 /* Data panels and tables */
 .enterprise-table-card,.growth-panel,.services-panel,.workpay-panel,.off-panel,.talent-matrix,.org-tree,.org-insight{
@@ -351,20 +357,20 @@ html[data-theme="dark"]{
   letter-spacing:-.12px;
 }
 .table-title p,.growth-panel-head p,.services-panel-head p,.workpay-panel-head p,.off-head p{
-  font-size:9px!important;
+  font-size:10.5px!important;
   line-height:1.45!important;
 }
 .enterprise-table th,.growth-table th,.services-table th,.workpay-table th,.off-table th{
   height:38px;
   padding:10px 14px!important;
-  font-size:8px!important;
-  letter-spacing:.72px!important;
+  font-size:10px!important;
+  letter-spacing:.6px!important;
   font-weight:800!important;
 }
 .enterprise-table td,.growth-table td,.services-table td,.workpay-table td,.off-table td{
   padding:12px 14px!important;
-  font-size:10px!important;
-  line-height:1.4;
+  font-size:11.5px!important;
+  line-height:1.45;
 }
 
 .enterprise-table-card .table-wrap{max-height:min(68vh,720px);overflow:auto}
@@ -377,22 +383,22 @@ html[data-theme="dark"]{
 .enterprise-density-compact .enterprise-table th{
   height:32px!important;
   padding:7px 11px!important;
-  font-size:7.6px!important;
+  font-size:9.5px!important;
 }
 .enterprise-density-compact .enterprise-table td{
   padding:8px 11px!important;
-  font-size:9px!important;
-  line-height:1.28!important;
+  font-size:10px!important;
+  line-height:1.35!important;
 }
 .enterprise-density-compact .enterprise-person>span{width:26px!important;height:26px!important;border-radius:8px!important}
-.enterprise-density-compact .cell-strong{font-size:9.6px!important}
-.enterprise-density-compact .cell-sub{font-size:7.4px!important;margin-top:2px!important}
+.enterprise-density-compact .cell-strong{font-size:11.5px!important}
+.enterprise-density-compact .cell-sub{font-size:9px!important;margin-top:2px!important}
 .enterprise-density-compact .pill,.enterprise-density-compact .critical-badge{transform:scale(.94);transform-origin:left center}
 .enterprise-table tbody tr:last-child td,.growth-table tbody tr:last-child td,.services-table tbody tr:last-child td,
 .workpay-table tbody tr:last-child td,.off-table tbody tr:last-child td{border-bottom:0!important}
 .enterprise-person>span{width:30px!important;height:30px!important;border-radius:9px!important}
 .cell-strong{font-size:10.5px!important}
-.cell-sub{font-size:8px!important;margin-top:3px!important}
+.cell-sub{font-size:9.5px!important;margin-top:3px!important}
 
 /* Progressive disclosure reads as secondary, not another full module. */
 .growth-governed-panel,.service-governance-panel,.service-admin-panel,.recruiting-operations-panel,
@@ -465,7 +471,7 @@ html[data-theme="dark"]{
 }
 .employee-360-rail-identity h2{font-size:15px!important;letter-spacing:-.25px}
 .employee-360-rail-nav{gap:4px!important;padding:9px 0!important}
-.employee-360-rail-nav a{min-height:38px!important;padding:8px 9px!important;border-radius:9px!important;font-size:9.5px!important}
+.employee-360-rail-nav a{min-height:40px!important;padding:9px 10px!important;border-radius:9px!important;font-size:10.5px!important}
 .employee-360-rail-nav a.active{
   background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 13%,var(--surface)),var(--accent-soft))!important;
   box-shadow:inset 3px 0 0 var(--accent);
