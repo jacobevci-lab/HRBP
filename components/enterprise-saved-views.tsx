@@ -22,6 +22,42 @@ function sameState(left: EnterpriseViewState, right: EnterpriseViewState) {
   return left.columns.length === right.columns.length && left.columns.every((value, index) => value === right.columns[index]);
 }
 
+function savedStatusLabel(moduleKey: EnterpriseViewModule, status: string, tr: boolean) {
+  const labels: Record<EnterpriseViewModule, Record<string, [string, string]>> = {
+    people: {
+      ACTIVE: ["Active", "Aktif"],
+      PREBOARDING: ["Preboarding", "İşe başlamadan önce"],
+      LEAVE: ["On leave", "İzinde"]
+    },
+    positions: {
+      OPEN: ["Open", "Açık"],
+      PLANNED: ["Planned", "Planlandı"],
+      FILLED: ["Filled", "Dolu"],
+      FROZEN: ["Frozen", "Donduruldu"],
+      CLOSED: ["Closed", "Kapalı"]
+    }
+  };
+  const label = labels[moduleKey][status];
+  return label ? label[tr ? 1 : 0] : status;
+}
+
+function savedSortLabel(moduleKey: EnterpriseViewModule, sortKey: string, tr: boolean) {
+  const labels: Record<EnterpriseViewModule, Record<string, [string, string]>> = {
+    people: {
+      name: ["Name", "Ad"],
+      employeeNumber: ["Employee ID", "Çalışan no"]
+    },
+    positions: {
+      code: ["Position code", "Pozisyon kodu"],
+      title: ["Title", "Unvan"],
+      status: ["Status", "Durum"],
+      critical: ["Criticality", "Kritiklik"]
+    }
+  };
+  const label = labels[moduleKey][sortKey];
+  return label ? label[tr ? 1 : 0] : sortKey;
+}
+
 function SaveButton({ tr }: { tr: boolean }) {
   const { pending } = useFormStatus();
   return <button className="secondary-button enterprise-save-view-button" type="submit" disabled={pending}>
@@ -79,10 +115,10 @@ export function EnterpriseSavedViews({
           const active = sameState(current, view.state);
           const detail = [
             view.state.query ? (tr ? "arama" : "search") : null,
-            view.state.status ? view.state.status : null,
+            view.state.status ? savedStatusLabel(moduleKey, view.state.status, tr) : null,
             view.state.columnsCustomized ? (tr ? `${view.state.columns.length} sütun` : `${view.state.columns.length} columns`) : (tr ? "varsayılan sütunlar" : "default columns"),
             view.state.density === "compact" ? (tr ? "kompakt" : "compact") : (tr ? "rahat" : "comfortable"),
-            view.state.sortKey ? `${view.state.sortKey} ${view.state.sortDirection === "desc" ? "↓" : "↑"}` : null,
+            view.state.sortKey ? `${savedSortLabel(moduleKey, view.state.sortKey, tr)} ${view.state.sortDirection === "desc" ? "↓" : "↑"}` : null,
             tr ? `${view.state.pageSize}/sayfa` : `${view.state.pageSize}/page`
           ].filter(Boolean).join(" · ");
           return <div className={`enterprise-saved-view-row ${active ? "active" : ""}`} key={view.id}>

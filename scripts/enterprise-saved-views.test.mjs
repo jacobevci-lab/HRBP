@@ -176,3 +176,15 @@ test("pagination links preserve saved view state but page itself remains transie
   const savedUrl = new URL(api.buildEnterpriseViewHref("people", state), "https://hrbp.invalid");
   assert.equal(savedUrl.searchParams.get("page"), null);
 });
+
+test("saved view summaries localize technical status and sort keys", () => {
+  assert.match(control, /function savedStatusLabel/);
+  assert.match(control, /ACTIVE: \["Active", "Aktif"\]/);
+  assert.match(control, /OPEN: \["Open", "Açık"\]/);
+  assert.match(control, /function savedSortLabel/);
+  assert.match(control, /employeeNumber: \["Employee ID", "Çalışan no"\]/);
+  assert.match(control, /critical: \["Criticality", "Kritiklik"\]/);
+  assert.match(control, /savedStatusLabel\(moduleKey, view\.state\.status, tr\)/);
+  assert.match(control, /savedSortLabel\(moduleKey, view\.state\.sortKey, tr\)/);
+  assert.doesNotMatch(control, /view\.state\.status \? view\.state\.status : null/);
+});
