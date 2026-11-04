@@ -136,6 +136,14 @@ test("all fourteen browser/API gate invocations remain required in their origina
   assert.match(audit, /test "\$ready" -eq 1 \|\| \{ tail -70 \.audit\/server.log; exit 1; \}/);
 });
 
+test("create-workspace browser policy is a hard runtime gate", () => {
+  const authAudit = readFileSync(new URL("./platform-auth-browser-audit.mjs", import.meta.url), "utf8");
+  assert.match(authAudit, /createWorkspacePaths=new Set\(\['\/module\/people\/new','\/module\/positions\/new'\]\)/);
+  assert.match(authAudit, /x\.role==='admin'\?x\.denied===true:x\.denied!==true/);
+  assert.match(authAudit, /CREATE_WORKSPACE_AUTH_POLICY_FAILED/);
+  assert.match(authAudit, /createWorkspacePolicyFailures/);
+});
+
 test("leave browser login recovery requires a verified session before explicit navigation", () => {
   assert.match(leaveDecisionBrowser, /async function submitLocalLogin/);
   assert.match(leaveDecisionBrowser, /page\.waitForURL\(target, \{ waitUntil: 'commit', timeout: 30000 \}\)/);

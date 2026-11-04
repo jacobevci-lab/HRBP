@@ -92,6 +92,14 @@ try{
   await context.close();
  }
 }finally{await browser.close();}
-const summary={source:report.source,natural:report.natural,controlledCount:report.controlled.length,principalVerifiedCount:report.controlled.filter(x=>x.principalVerified).length,principalFailures:report.controlled.filter(x=>!x.principalVerified),httpFailures:report.controlled.filter(x=>x.status>=500||x.status===0),jsFailures:report.controlled.filter(x=>x.errors?.length),serverFailures:report.controlled.filter(x=>x.serverFailures?.length),adminProtectedFallbacks:report.controlled.filter(x=>x.role==='admin'&&x.protectedFallback),unexpectedPreviews:report.controlled.filter(x=>x.preview),mobileOverflow:report.controlled.filter(x=>x.role==='admin-mobile'&&x.overflow),adminLinks:report.links.length,nonSuccessfulLinks:report.links.filter(x=>x.status>=400||x.status===0),ui:report.ui,modules:report.controlled.map(x=>({role:x.role,path:x.path,status:x.status,principalVerified:x.principalVerified,denied:x.denied,preview:x.preview,protectedFallback:x.protectedFallback,overflow:x.overflow})),limitations:report.limitations};
+const createWorkspacePaths=new Set(['/module/people/new','/module/positions/new']);
+const createWorkspacePolicyFailures=report.controlled.filter(x=>{
+ if(!createWorkspacePaths.has(x.path)||!['admin','employee','manager','hrbp'].includes(x.role))return false;
+ return x.role==='admin'?x.denied===true:x.denied!==true;
+});
+const summary={source:report.source,natural:report.natural,controlledCount:report.controlled.length,principalVerifiedCount:report.controlled.filter(x=>x.principalVerified).length,principalFailures:report.controlled.filter(x=>!x.principalVerified),httpFailures:report.controlled.filter(x=>x.status>=500||x.status===0),jsFailures:report.controlled.filter(x=>x.errors?.length),serverFailures:report.controlled.filter(x=>x.serverFailures?.length),adminProtectedFallbacks:report.controlled.filter(x=>x.role==='admin'&&x.protectedFallback),unexpectedPreviews:report.controlled.filter(x=>x.preview),mobileOverflow:report.controlled.filter(x=>x.role==='admin-mobile'&&x.overflow),createWorkspacePolicyFailures,adminLinks:report.links.length,nonSuccessfulLinks:report.links.filter(x=>x.status>=400||x.status===0),ui:report.ui,modules:report.controlled.map(x=>({role:x.role,path:x.path,status:x.status,principalVerified:x.principalVerified,denied:x.denied,preview:x.preview,protectedFallback:x.protectedFallback,overflow:x.overflow})),limitations:report.limitations};
 await writeFile('.audit/auth-browser-report.json',JSON.stringify(report,null,2));await writeFile('.audit/auth-browser-summary.json',JSON.stringify(summary,null,2));
 console.log('AUDIT_AUTHENTICATED_BROWSER '+JSON.stringify(summary));
+if(createWorkspacePolicyFailures.length){
+ throw new Error('CREATE_WORKSPACE_AUTH_POLICY_FAILED '+JSON.stringify(createWorkspacePolicyFailures.map(x=>({role:x.role,path:x.path,denied:x.denied,status:x.status}))));
+}
