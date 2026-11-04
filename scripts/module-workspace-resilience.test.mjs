@@ -55,7 +55,13 @@ function fixture({ ctx = { tenantId: 'qa-tenant', actorId: 'qa-user' }, locale =
     '@/lib/i18n': { translate: (selected, key) => `${selected}:${key}` },
     '@/lib/authorization': { can: (actual, capability) => {
       assert.equal(actual, ctx); return !denied.includes(capability);
-    } }
+    } },
+    '@/lib/workforce-master-data-access': {
+      canCreateEmployeeMasterRecord: actual => {
+        assert.equal(actual, ctx);
+        return !denied.includes('people:write');
+      }
+    }
   };
   for (const [file, symbol] of registry) mocks[`@/components/${file}`] = importFail || {
     [symbol]: async args => {
@@ -190,4 +196,11 @@ test('Browser fault/healthy gate is mandatory and restricted to the disposable l
   assert.match(browser,/report\.healthy\.length,64/);assert.match(browser,/report\.faults\.length,2/);assert.match(browser,/report\.failures,\[\]/);
   const workflow=readFileSync('.github/workflows/platform-regression.yml','utf8');
   assert.match(workflow,/node scripts\/module-workspace-browser-regression\.mjs\s*node scripts\/core-workspace-browser-regression\.mjs\s*node scripts\/platform-remediation-gate\.mjs/);
+});
+
+
+test('ModuleLanding resilience harness explicitly provides workforce master-data access', () => {
+  const source=readFileSync('scripts/module-workspace-resilience.test.mjs','utf8');
+  assert.match(source, /'@\/lib\/workforce-master-data-access'/);
+  assert.match(source, /canCreateEmployeeMasterRecord/);
 });
