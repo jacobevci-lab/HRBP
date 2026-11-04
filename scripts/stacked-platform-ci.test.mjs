@@ -136,6 +136,16 @@ test("all fourteen browser/API gate invocations remain required in their origina
   assert.match(audit, /test "\$ready" -eq 1 \|\| \{ tail -70 \.audit\/server.log; exit 1; \}/);
 });
 
+test("anonymous create URLs must redirect to sign-in without rendering create forms", () => {
+  const authAudit = readFileSync(new URL("./platform-auth-browser-audit.mjs", import.meta.url), "utf8");
+  assert.match(authAudit, /anonymousCreate:\[\]/);
+  assert.match(authAudit, /\['\/module\/people\/new','\/module\/positions\/new'\]/);
+  assert.match(authAudit, /returnTo=current\.searchParams\.get\('returnTo'\)/);
+  assert.match(authAudit, /page\.locator\('\.record-form'\)\.count\(\)/);
+  assert.match(authAudit, /anonymousCreateFailures/);
+  assert.match(authAudit, /ANONYMOUS_CREATE_ACCESS_FAILED/);
+});
+
 test("create-workspace browser policy is a hard runtime gate", () => {
   const authAudit = readFileSync(new URL("./platform-auth-browser-audit.mjs", import.meta.url), "utf8");
   assert.match(authAudit, /createWorkspacePaths=new Set\(\['\/module\/people\/new','\/module\/positions\/new'\]\)/);
