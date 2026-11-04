@@ -24,7 +24,7 @@ export default async function NewPositionPage() {
   const tr = locale === "tr";
   const c = (en: string, trValue: string) => tr ? trValue : en;
   if (!can(ctx, "positions:write")) {
-    return <AppShell><div className="record-form-page"><div className="card employee-restricted-card"><LockKeyhole size={22}/><div><h3>{c("Position creation restricted","Pozisyon oluşturma kısıtlı")}</h3><p>{c("Your current role does not include positions:write access.","Mevcut rolünüz positions:write erişimini içermiyor.")}</p></div></div></div></AppShell>;
+    return <AppShell><div className="record-form-page"><div className="card employee-restricted-card"><LockKeyhole size={22}/><div><h3>{c("Position creation access is restricted","Pozisyon oluşturma erişimi kısıtlı")}</h3><p>{c("Your current role does not include positions:write access.","Mevcut rolünüz positions:write erişimini içermiyor.")}</p></div></div></div></AppShell>;
   }
   const organizations = await withDb(async (db) => {
     const rows = await db.organizationUnit.findMany({ where: { tenantId: ctx.tenantId, validTo: null }, orderBy: [{ type: "asc" }, { name: "asc" }], select: { id: true, code: true, name: true, type: true } });

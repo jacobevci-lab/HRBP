@@ -14,6 +14,8 @@ test("employee create workspace is signed-session and operational-role gated bef
   assert.match(peoplePage, /tenantId: ctx\.tenantId/);
   assert.doesNotMatch(peoplePage, /workspaceTenantId\(\)/);
   assert.doesNotMatch(peoplePage, /href="\/auth\/sign-in\?returnTo=%2Fmodule%2Fpeople%2Fnew"/);
+  assert.match(peoplePage, /Employee creation access is restricted/);
+  assert.match(peoplePage, /Çalışan oluşturma erişimi kısıtlı/);
 });
 
 test("employee page and API share one workforce master-data writer policy", () => {
@@ -31,4 +33,6 @@ test("position create workspace is signed-session and positions-write gated befo
   assert.match(positionPage, /tenantId: ctx\.tenantId/);
   assert.doesNotMatch(positionPage, /workspaceTenantId\(\)/);
   assert.doesNotMatch(positionPage, /href="\/auth\/sign-in\?returnTo=%2Fmodule%2Fpositions%2Fnew"/);
+  assert.match(positionPage, /Position creation access is restricted/);
+  assert.match(positionPage, /Pozisyon oluşturma erişimi kısıtlı/);
 });

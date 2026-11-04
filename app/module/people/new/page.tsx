@@ -17,7 +17,7 @@ export default async function NewEmployeePage() {
   const tr = locale === "tr";
   const c = (en: string, trValue: string) => tr ? trValue : en;
   if (!canCreateEmployeeMasterRecord(ctx)) {
-    return <AppShell><div className="record-form-page"><div className="card employee-restricted-card"><LockKeyhole size={22}/><div><h3>{c("Employee creation restricted","Çalışan oluşturma kısıtlı")}</h3><p>{c("Creating workforce master records requires an operational tenant-wide role.","Çalışan ana kaydı oluşturmak tenant genelinde operasyonel bir rol gerektirir.")}</p></div></div></div></AppShell>;
+    return <AppShell><div className="record-form-page"><div className="card employee-restricted-card"><LockKeyhole size={22}/><div><h3>{c("Employee creation access is restricted","Çalışan oluşturma erişimi kısıtlı")}</h3><p>{c("Creating workforce master records requires an operational tenant-wide role.","Çalışan ana kaydı oluşturmak tenant genelinde operasyonel bir rol gerektirir.")}</p></div></div></div></AppShell>;
   }
   const positions = await withDb(async (db) => {
     const rows = await db.position.findMany({ where: { tenantId: ctx.tenantId, validTo: null, status: "OPEN" }, orderBy: [{ orgUnit: { name: "asc" } }, { positionCode: "asc" }], select: { id: true, positionCode: true, title: true, location: true, orgUnit: { select: { name: true } } } });
