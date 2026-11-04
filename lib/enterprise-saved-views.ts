@@ -74,11 +74,11 @@ export function sanitizeEnterpriseViewState(moduleKey: EnterpriseViewModule, inp
   const statusCandidate = typeof input.status === "string" ? input.status.trim().toUpperCase().slice(0, 40) : "";
   const status = definition.statuses.has(statusCandidate) ? statusCandidate : undefined;
   const rawColumns = Array.isArray(input.columns) ? input.columns : [];
-  const columns = [...new Set(rawColumns
+  const requestedColumns = new Set(rawColumns
     .filter((value): value is string => typeof value === "string")
     .map((value) => value.trim().slice(0, 40))
-    .filter((value) => definition.columns.has(value)))]
-    .slice(0, 12);
+    .filter((value) => definition.columns.has(value)));
+  const columns = [...definition.columns].filter((value) => requestedColumns.has(value)).slice(0, 12);
   const sortCandidate = typeof input.sortKey === "string" ? input.sortKey.trim().slice(0, 40) : "";
   const sortKey = definition.sorts.has(sortCandidate) ? sortCandidate : undefined;
   return {

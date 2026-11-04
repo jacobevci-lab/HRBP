@@ -57,7 +57,7 @@ test("saved view state is allowlisted and produces a shareable URL", () => {
   assert.deepEqual(JSON.parse(JSON.stringify(state)), {
     query: "Deniz & Team",
     status: "ACTIVE",
-    columns: ["status", "position"],
+    columns: ["position", "status"],
     columnsCustomized: true,
     density: "compact",
     sortKey: "employeeNumber",
@@ -70,7 +70,7 @@ test("saved view state is allowlisted and produces a shareable URL", () => {
   assert.equal(url.searchParams.get("q"), "Deniz & Team");
   assert.equal(url.searchParams.get("status"), "ACTIVE");
   assert.equal(url.searchParams.get("columnsMode"), "custom");
-  assert.deepEqual(url.searchParams.getAll("columns"), ["status", "position"]);
+  assert.deepEqual(url.searchParams.getAll("columns"), ["position", "status"]);
   assert.equal(url.searchParams.get("density"), "compact");
   assert.equal(url.searchParams.get("sort"), "employeeNumber");
   assert.equal(url.searchParams.get("dir"), "desc");
@@ -209,4 +209,19 @@ test("saved People views allow the model-supported suspended status", () => {
   const href = api.buildEnterpriseViewHref("people", state);
   assert.equal(new URL(href, "https://hrbp.invalid").searchParams.get("status"), "SUSPENDED");
   assert.match(source, /statuses: new Set\(\["ACTIVE", "PREBOARDING", "LEAVE", "SUSPENDED"\]\)/);
+});
+
+test("column visibility state is canonical regardless of URL parameter order", () => {
+  const api = loadService();
+  const left = api.sanitizeEnterpriseViewState("people", {
+    columns: ["status", "position"],
+    columnsCustomized: true
+  });
+  const right = api.sanitizeEnterpriseViewState("people", {
+    columns: ["position", "status", "position"],
+    columnsCustomized: true
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(left.columns)), ["position", "status"]);
+  assert.deepEqual(JSON.parse(JSON.stringify(left)), JSON.parse(JSON.stringify(right)));
+  assert.equal(api.buildEnterpriseViewHref("people", left), api.buildEnterpriseViewHref("people", right));
 });
