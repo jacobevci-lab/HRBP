@@ -1,15 +1,11 @@
 import { readJsonObject } from "@/lib/input-validation";
-import { DataClassification, EmploymentStatus, LifecycleEventType, PlatformRole, PositionStatus } from "@prisma/client";
+import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatus } from "@prisma/client";
 import { withDb, db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { appendAudit } from "@/lib/audit";
-
-const workforceMasterDataWriters = new Set<PlatformRole>([
-  PlatformRole.HR_OPERATIONS,
-  PlatformRole.TENANT_ADMIN
-]);
+import { canCreateEmployeeMasterRecord } from "@/lib/workforce-master-data-access";
 
 export async function GET(request: Request) {
   const ctx = await getRequestContext(request);
@@ -43,7 +39,7 @@ export async function POST(request: Request) {
   const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
-  if (!can(ctx, "people:write") || !workforceMasterDataWriters.has(ctx.role)) {
+  if (!canCreateEmployeeMasterRecord(ctx)) {
     return forbidden("Creating a workforce master record requires an operational tenant-wide role.");
   }
 
