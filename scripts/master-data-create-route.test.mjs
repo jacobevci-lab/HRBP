@@ -36,14 +36,14 @@ const prisma = {
   PositionStatus: { OPEN: "OPEN", PLANNED: "PLANNED", FILLED: "FILLED" }
 };
 
-function peopleFixture() {
+function peopleFixture({ positionStatus = "OPEN" } = {}) {
   const calls = {
     transactions: 0, personCreates: [], employmentCreates: [], positionUpdates: [],
     lifecycleCreates: [], onboardingCreates: [], audits: []
   };
   const tx = {
     position: {
-      findFirst: async () => ({ id: "position-1", title: "Security Engineer", status: "OPEN", employments: [] }),
+      findFirst: async () => ({ id: "position-1", title: "Security Engineer", status: positionStatus, employments: [] }),
       update: async (input) => { calls.positionUpdates.push(input); return input; }
     },
     person: {
@@ -150,6 +150,25 @@ test("invalid employee master data is rejected before any database transaction",
     assert.equal(calls.transactions, 0);
     assert.equal(calls.audits.length, 0);
   }
+});
+
+test("employee create refuses PLANNED positions until the seat is OPEN", async () => {
+  const { route, calls } = peopleFixture({ positionStatus: "PLANNED" });
+  const response = await post(route, "/api/people", {
+    employeeNumber: "E-PLANNED",
+    givenName: "Ada",
+    familyName: "Example",
+    workEmail: "planned@example.com",
+    positionId: "position-1",
+    startDate: "2099-01-01"
+  });
+  assert.equal(response.status, 409);
+  assert.equal(calls.personCreates.length, 0);
+  assert.equal(calls.employmentCreates.length, 0);
+  assert.equal(calls.positionUpdates.length, 0);
+  assert.equal(calls.lifecycleCreates.length, 0);
+  assert.equal(calls.onboardingCreates.length, 0);
+  assert.equal(calls.audits.length, 0);
 });
 
 test("valid employee create normalizes identity fields and preserves atomic lifecycle writes", async () => {
