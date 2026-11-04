@@ -49,7 +49,7 @@ test("application runs migrations and the real PostgreSQL audit and domain cases
   const commands = ["npx --no-install prisma validate", "npm run db:migrate:verify", "npm run db:migrate:upgrade",
     ...["audit-ledger-concurrency.test.mjs", "audit-full-history-postgres.test.mjs",
       "audit-assurance-rehearsal.postgres.test.mjs", "audit-verification-progress.postgres.test.mjs",
-      "job-change-impact-preview.postgres.test.mjs", "scheduled-job-changes.postgres.test.mjs",
+      "master-data-create-concurrency.postgres.test.mjs", "job-change-impact-preview.postgres.test.mjs", "scheduled-job-changes.postgres.test.mjs",
       "emergency-access.postgres.test.mjs", "identity-provider-lifecycle.postgres.test.mjs"].map(file => `node --test scripts/${file}`)];
   let position = -1;
   for (const command of commands) {
@@ -58,6 +58,7 @@ test("application runs migrations and the real PostgreSQL audit and domain cases
     position = next;
   }
   assert.match(application, /^          HRBP_DISPOSABLE_AUDIT_LEDGER_TEST: "true"$/m);
+  assert.match(application, /^          HRBP_DISPOSABLE_MASTER_DATA_CONCURRENCY: "true"$/m);
   assert.match(application, /^    timeout-minutes: 35$/m);
 });
 
