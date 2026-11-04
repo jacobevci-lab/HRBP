@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 
 const routePath = "app/api/core-hr/export/route.ts";
+const plain = (value) => JSON.parse(JSON.stringify(value));
 
 function loadRoute(dependencies) {
   const compiled = ts.transpileModule(readFileSync(routePath, "utf8"), {
@@ -157,12 +158,12 @@ test("people CSV preserves filter, sort, visible columns, employment scope and s
   assert.equal(h.reads.length, 1);
   const query = h.reads[0].query;
   assert.equal(query.where.tenantId, "tenant-a");
-  assert.deepEqual(query.where.employments.some.id.in, ["emp-self", "emp-visible"]);
+  assert.deepEqual(plain(query.where.employments.some.id.in), ["emp-self", "emp-visible"]);
   assert.equal(query.where.employments.some.status, "ACTIVE");
   assert.equal(query.where.OR.length, 4);
   assert.equal(query.orderBy[0].employeeNumber, "desc");
   assert.equal(query.take, 5001);
-  assert.deepEqual(query.select.employments.where.id.in, ["emp-self", "emp-visible"]);
+  assert.deepEqual(plain(query.select.employments.where.id.in), ["emp-self", "emp-visible"]);
 
   assert.equal(h.scopeCalls.length, 1);
   assert.equal(h.audits.length, 1);
@@ -175,7 +176,7 @@ test("positions export cannot disclose incumbent identity without people read ca
   const h = harness({
     capabilities: ["positions:read"],
     positionRows(query) {
-      assert.deepEqual(query.select.employments.where.id.in, []);
+      assert.deepEqual(plain(query.select.employments.where.id.in), []);
       return [{
         positionCode: "P-100",
         title: "Security Architect",
@@ -202,7 +203,7 @@ test("positions export forwards the caller's people scope when incumbent data is
     capabilities: ["positions:read", "people:read"],
     scope: ["emp-visible"],
     positionRows(query) {
-      assert.deepEqual(query.select.employments.where.id.in, ["emp-visible"]);
+      assert.deepEqual(plain(query.select.employments.where.id.in), ["emp-visible"]);
       return [{
         positionCode: "P-200",
         title: "Platform Engineer",
