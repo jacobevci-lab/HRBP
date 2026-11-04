@@ -168,16 +168,12 @@ test("People and Positions distinguish empty registers from empty filtered resul
 });
 
 test("People and Positions support URL-native sortable table headers", () => {
-  assert.match(workspace, /function enterpriseSortHref/);
-  assert.match(workspace, /state\.query/);
-  assert.match(workspace, /state\.status/);
-  assert.match(workspace, /state\.columnsCustomized/);
-  assert.match(workspace, /state\.density === "compact"/);
-  assert.match(workspace, /state\.pageSize !== 50/);
-  assert.match(workspace, /state\.sortKey === sortKey && state\.sortDirection === "asc" \? "desc" : "asc"/);
+  assert.match(workspace, /buildEnterpriseViewHref/);
+  assert.doesNotMatch(workspace, /function enterpriseSortHref/);
+  assert.match(workspace, /sortDirection: active && state\.sortDirection === "asc" \? "desc" : "asc"/);
   assert.match(workspace, /aria-sort=\{ariaSort\}/);
-  assert.match(workspace, /basePath="\/module\/people" state=\{currentView\} sortKey="name"/);
-  assert.match(workspace, /basePath="\/module\/positions" state=\{currentView\} sortKey="title"/);
+  assert.match(workspace, /moduleKey="people" state=\{currentView\} sortKey="name"/);
+  assert.match(workspace, /moduleKey="positions" state=\{currentView\} sortKey="title"/);
   assert.match(workspace, /sortKey="status"/);
   assert.match(workspace, /sortKey="critical"/);
   assert.match(unified, /\.enterprise-sort-header\{/);
