@@ -6,6 +6,7 @@ import { employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employ
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { appendAudit } from "@/lib/audit";
 import { canCreateEmployeeMasterRecord } from "@/lib/workforce-master-data-access";
+import { privateJson } from "@/lib/private-json";
 
 export async function GET(request: Request) {
   const ctx = await getRequestContext(request);
@@ -32,7 +33,7 @@ export async function GET(request: Request) {
       }}
     }
   });
-  return Response.json({ data: people });
+  return privateJson({ data: people });
 }
 
 export async function POST(request: Request) {
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
   }
 
   const body = await readJsonObject(request) as Record<string, unknown>;
-  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
+  if (!body) return privateJson({ error: "A bounded JSON object body is required." }, { status: 400 });
   const givenName = asText(body.givenName, 100);
   const familyName = asText(body.familyName, 100);
   const employeeNumber = asIdentifier(body.employeeNumber, 64);
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
   const startDate = asDateOnly(body.startDate);
 
   if (!givenName || !familyName || !employeeNumber || !workEmail || !positionId || !startDate) {
-    return Response.json({
+    return privateJson({
       error: "A valid employeeNumber, givenName, familyName, workEmail, positionId and YYYY-MM-DD startDate are required."
     }, { status: 400 });
   }
@@ -159,13 +160,13 @@ export async function POST(request: Request) {
       return { person, employment, status };
     }));
 
-    return Response.json({ data: result }, { status: 201 });
+    return privateJson({ data: result }, { status: 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
-    if (code === "POSITION_NOT_FOUND") return Response.json({ error: "The selected position does not exist in this tenant." }, { status: 404 });
-    if (code === "POSITION_NOT_AVAILABLE" || code === "POSITION_OCCUPIED") return Response.json({ error: "The selected position is no longer available." }, { status: 409 });
-    if (code === "PERSON_DUPLICATE" || (error as { code?: string })?.code === "P2002") return Response.json({ error: "Employee number or work email already exists." }, { status: 409 });
+    if (code === "POSITION_NOT_FOUND") return privateJson({ error: "The selected position does not exist in this tenant." }, { status: 404 });
+    if (code === "POSITION_NOT_AVAILABLE" || code === "POSITION_OCCUPIED") return privateJson({ error: "The selected position is no longer available." }, { status: 409 });
+    if (code === "PERSON_DUPLICATE" || (error as { code?: string })?.code === "P2002") return privateJson({ error: "Employee number or work email already exists." }, { status: 409 });
     console.error("Employee creation failed", error);
-    return Response.json({ error: "Employee record could not be created." }, { status: 500 });
+    return privateJson({ error: "Employee record could not be created." }, { status: 500 });
   }
 }

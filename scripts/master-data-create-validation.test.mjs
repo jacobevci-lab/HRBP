@@ -22,6 +22,8 @@ function loadInputValidation() {
 const validation = loadInputValidation();
 const people = readFileSync("app/api/people/route.ts", "utf8");
 const positions = readFileSync("app/api/positions/route.ts", "utf8");
+const employeeForm = readFileSync("components/employee-create-form.tsx", "utf8");
+const positionForm = readFileSync("components/position-create-form.tsx", "utf8");
 
 test("strict date-only validation rejects calendar normalization", () => {
   assert.ok(validation.asDateOnly("2026-02-28") instanceof Date);
@@ -61,4 +63,21 @@ test("position create API bounds identifiers, text, optionals and enum status", 
   assert.match(positions, /asOptionalText\(body\.grade, 64\)/);
   assert.match(positions, /asOptionalText\(body\.location, 160\)/);
   assert.match(positions, /asEnumValue\(body\.status \?\? PositionStatus\.OPEN/);
+});
+
+
+test("create forms mirror server field bounds and expose accessible pending/error state", () => {
+  assert.match(employeeForm, /name="employeeNumber" required maxLength=\{64\}/);
+  assert.match(employeeForm, /name="givenName" required maxLength=\{100\}/);
+  assert.match(employeeForm, /name="familyName" required maxLength=\{100\}/);
+  assert.match(employeeForm, /name="workEmail" required maxLength=\{254\}/);
+  assert.match(employeeForm, /className="record-form" onSubmit=\{submit\} aria-busy=\{submitting\}/);
+  assert.match(employeeForm, /className="form-error" role="alert"/);
+  assert.match(positionForm, /name="positionCode" required maxLength=\{64\}/);
+  assert.match(positionForm, /name="title" required maxLength=\{160\}/);
+  assert.match(positionForm, /name="jobFamily" maxLength=\{100\}/);
+  assert.match(positionForm, /name="grade" maxLength=\{64\}/);
+  assert.match(positionForm, /name="location" maxLength=\{160\}/);
+  assert.match(positionForm, /No active organization units are available/);
+  assert.match(positionForm, /aria-busy=\{submitting\}/);
 });

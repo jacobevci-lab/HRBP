@@ -18,6 +18,7 @@ function loadPlain(path) {
 }
 
 const validation = loadPlain("lib/input-validation.ts");
+const privateResponse = loadPlain("lib/private-json.ts");
 
 function loadRoute(path, mocks) {
   const module = { exports: {} };
@@ -85,7 +86,8 @@ function peopleFixture() {
     "@/lib/audit": {
       appendAudit: async (_tx, _ctx, entry) => { calls.audits.push(entry); }
     },
-    "@/lib/workforce-master-data-access": { canCreateEmployeeMasterRecord: () => true }
+    "@/lib/workforce-master-data-access": { canCreateEmployeeMasterRecord: () => true },
+    "@/lib/private-json": privateResponse
   });
   return { route, calls };
 }
@@ -120,7 +122,8 @@ function positionFixture() {
     },
     "@/lib/audit": {
       appendAudit: async (_tx, _ctx, entry) => { calls.audits.push(entry); }
-    }
+    },
+    "@/lib/private-json": privateResponse
   });
   return { route, calls };
 }
@@ -215,4 +218,30 @@ test("valid position create normalizes bounded fields and keeps audit inside the
   assert.equal(calls.creates[0].status, "PLANNED");
   assert.equal(calls.creates[0].critical, true);
   assert.equal(calls.audits.length, 1);
+});
+
+
+test("Core HR master-data responses are explicitly private and nosniff", async () => {
+  const peopleFixtureResult = peopleFixture();
+  const peoplePost = await post(peopleFixtureResult.route, "/api/people", {
+    employeeNumber: "E-200",
+    givenName: "Ada",
+    familyName: "Example",
+    workEmail: "ada200@example.com",
+    positionId: "position-1",
+    startDate: "2099-01-01"
+  });
+  assert.equal(peoplePost.headers.get("cache-control"), "no-store");
+  assert.equal(peoplePost.headers.get("x-content-type-options"), "nosniff");
+
+  const positionFixtureResult = positionFixture();
+  const positionPost = await post(positionFixtureResult.route, "/api/positions", {
+    positionCode: "SEC-200",
+    title: "Security Engineer",
+    orgUnitId: "org-1",
+    status: "OPEN",
+    critical: false
+  });
+  assert.equal(positionPost.headers.get("cache-control"), "no-store");
+  assert.equal(positionPost.headers.get("x-content-type-options"), "nosniff");
 });

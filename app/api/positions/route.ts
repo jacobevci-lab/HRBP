@@ -4,6 +4,7 @@ import { db, withDb } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { appendAudit } from "@/lib/audit";
+import { privateJson } from "@/lib/private-json";
 
 export async function GET(request: Request) {
   const ctx = await getRequestContext(request);
@@ -14,7 +15,7 @@ export async function GET(request: Request) {
     orderBy: { positionCode: "asc" },
     include: { orgUnit: { select: { id: true, name: true } }, _count: { select: { employments: true } } }
   });
-  return Response.json({ data });
+  return privateJson({ data });
 }
 
 export async function POST(request: Request) {
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
   if (!can(ctx, "positions:write")) return forbidden();
 
   const body = await readJsonObject(request) as Record<string, unknown>;
-  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
+  if (!body) return privateJson({ error: "A bounded JSON object body is required." }, { status: 400 });
   const rawCode = asIdentifier(body.positionCode, 64);
   const positionCode = rawCode?.toUpperCase() ?? null;
   const title = asText(body.title, 160);
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
   const criticalValue = asOptionalBoolean(body.critical);
 
   if (!positionCode || !title || !orgUnitId || jobFamilyValue === null || gradeValue === null || locationValue === null || !statusValue || criticalValue === null) {
-    return Response.json({
+    return privateJson({
       error: "A valid positionCode, title, orgUnitId and OPEN/PLANNED status are required; optional fields must stay within allowed lengths and critical must be boolean."
     }, { status: 400 });
   }
@@ -85,12 +86,12 @@ export async function POST(request: Request) {
       return created;
     }));
 
-    return Response.json({ data: position }, { status: 201 });
+    return privateJson({ data: position }, { status: 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
-    if (code === "ORG_NOT_FOUND") return Response.json({ error: "The selected organization unit is not available." }, { status: 404 });
-    if (code === "POSITION_DUPLICATE" || (error as { code?: string })?.code === "P2002") return Response.json({ error: "A current position with this code already exists." }, { status: 409 });
+    if (code === "ORG_NOT_FOUND") return privateJson({ error: "The selected organization unit is not available." }, { status: 404 });
+    if (code === "POSITION_DUPLICATE" || (error as { code?: string })?.code === "P2002") return privateJson({ error: "A current position with this code already exists." }, { status: 409 });
     console.error("Position creation failed", error);
-    return Response.json({ error: "Position could not be created." }, { status: 500 });
+    return privateJson({ error: "Position could not be created." }, { status: 500 });
   }
 }
