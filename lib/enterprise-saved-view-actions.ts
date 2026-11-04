@@ -12,6 +12,7 @@ import { getServerRequestContext } from "@/lib/server-session";
 
 export type SavedEnterpriseViewActionState = {
   ok: boolean;
+  updated?: boolean;
   code?: "auth" | "invalid" | "limit" | "forbidden" | "unavailable";
 };
 
@@ -51,9 +52,9 @@ export async function saveEnterpriseViewAction(
   if (!ctx) return { ok: false, code: "auth" };
 
   try {
-    await upsertSavedEnterpriseView(ctx, moduleKey, formData.get("name"), readViewState(formData, moduleKey));
+    const result = await upsertSavedEnterpriseView(ctx, moduleKey, formData.get("name"), readViewState(formData, moduleKey));
     revalidatePath(enterpriseViewBasePath(moduleKey));
-    return { ok: true };
+    return { ok: true, updated: result.updated };
   } catch (error) {
     return { ok: false, code: codeFor(error) };
   }

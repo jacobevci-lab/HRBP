@@ -1023,3 +1023,6 @@ th{font-size:10px!important}
 .enterprise-sort-header:hover,.enterprise-sort-header:focus-visible,.enterprise-sort-header.active{color:var(--accent)!important}
 .enterprise-sort-header:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
 .enterprise-sort-header.active svg{opacity:1}
+
+/* Saved-view destructive/update affordances stay explicit. */
+.enterprise-save-view-hint{display:block;margin-top:6px;color:var(--muted);font-size:9.5px!important;line-height:1.45}

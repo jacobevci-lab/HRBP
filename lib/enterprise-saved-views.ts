@@ -198,7 +198,7 @@ export async function upsertSavedEnterpriseView(
       });
       if (count >= 20) throw new Error("VIEW_LIMIT");
     }
-    return tx.savedEnterpriseView.upsert({
+    const saved = await tx.savedEnterpriseView.upsert({
       where: { tenantId_userId_moduleKey_normalizedName: key },
       create: {
         ...key,
@@ -225,6 +225,7 @@ export async function upsertSavedEnterpriseView(
       },
       select: { id: true }
     });
+    return { id: saved.id, updated: Boolean(existing) };
   }));
 }
 

@@ -66,9 +66,11 @@ function SaveButton({ tr }: { tr: boolean }) {
   </button>;
 }
 
-function messageFor(locale: Locale, state: { ok: boolean; code?: string }) {
+function messageFor(locale: Locale, state: { ok: boolean; updated?: boolean; code?: string }) {
   const tr = locale === "tr";
-  if (state.ok) return tr ? "Görünüm kaydedildi." : "View saved.";
+  if (state.ok) return state.updated
+    ? (tr ? "Kayıtlı görünüm güncellendi." : "Saved view updated.")
+    : (tr ? "Görünüm kaydedildi." : "View saved.");
   if (!state.code) return "";
   if (state.code === "auth") return tr ? "Oturum doğrulanamadı." : "Session could not be verified.";
   if (state.code === "invalid") return tr ? "1–64 karakterlik geçerli bir ad girin." : "Enter a valid 1–64 character name.";
@@ -127,7 +129,10 @@ export function EnterpriseSavedViews({
               <span><strong>{view.name}</strong><small>{detail}</small></span>
               {active ? <Check size={13}/> : null}
             </Link>
-            <form action={deleteEnterpriseViewAction}>
+            <form action={deleteEnterpriseViewAction} onSubmit={(event) => {
+              const prompt = tr ? `“${view.name}” görünümü silinsin mi?` : `Delete “${view.name}” view?`;
+              if (!window.confirm(prompt)) event.preventDefault();
+            }}>
               <input type="hidden" name="moduleKey" value={moduleKey}/>
               <input type="hidden" name="id" value={view.id}/>
               <button type="submit" aria-label={tr ? `${view.name} görünümünü sil` : `Delete ${view.name} view`} title={tr ? "Sil" : "Delete"}><Trash2 size={13}/></button>
@@ -149,6 +154,7 @@ export function EnterpriseSavedViews({
         <label>
           <span>{tr ? "Mevcut görünümü kaydet" : "Save current view"}</span>
           <div><input name="name" required maxLength={64} autoComplete="off" placeholder={tr ? "Örn. Aktif çalışanlar" : "e.g. Active workforce"}/><SaveButton tr={tr}/></div>
+          <small className="enterprise-save-view-hint">{tr ? "Aynı isimde bir görünüm varsa mevcut kayıt güncellenir." : "Using an existing name updates that saved view."}</small>
         </label>
         {message ? <small className={state.ok ? "enterprise-saved-view-success" : "enterprise-saved-view-error"} role={state.ok ? "status" : "alert"}>{message}</small> : null}
       </form>

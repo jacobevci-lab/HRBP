@@ -188,3 +188,15 @@ test("saved view summaries localize technical status and sort keys", () => {
   assert.match(control, /savedSortLabel\(moduleKey, view\.state\.sortKey, tr\)/);
   assert.doesNotMatch(control, /view\.state\.status \? view\.state\.status : null/);
 });
+
+test("saved views make overwrite and deletion behavior explicit", () => {
+  assert.match(source, /return \{ id: saved\.id, updated: Boolean\(existing\) \}/);
+  assert.match(actions, /updated\?: boolean/);
+  assert.match(actions, /return \{ ok: true, updated: result\.updated \}/);
+  assert.match(control, /Saved view updated\./);
+  assert.match(control, /Kayıtlı görünüm güncellendi\./);
+  assert.match(control, /Using an existing name updates that saved view\./);
+  assert.match(control, /window\.confirm\(prompt\)/);
+  assert.match(control, /Delete “\$\{view\.name\}” view\?/);
+  assert.match(control, /enterprise-save-view-hint/);
+});
