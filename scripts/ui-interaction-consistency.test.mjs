@@ -246,3 +246,14 @@ test("global search clears stale results before a debounced live query starts", 
   assert.match(globalSearch.slice(effectStart, timerIndex), /setDegraded\(false\)/);
   assert.match(globalSearch.slice(effectStart, timerIndex), /setActiveIndex\(0\)/);
 });
+
+test("global search keeps keyboard selection visible in long result lists", () => {
+  assert.match(globalSearch, /const menuRef = useRef<HTMLDivElement>\(null\)/);
+  assert.match(globalSearch, /event\.key === "Home" && open/);
+  assert.match(globalSearch, /setActiveIndex\(0\)/);
+  assert.match(globalSearch, /event\.key === "End" && open/);
+  assert.match(globalSearch, /setActiveIndex\(items\.length - 1\)/);
+  assert.match(globalSearch, /querySelector<HTMLElement>\(\`#global-search-option-\$\{boundedIndex\}\`\)/);
+  assert.match(globalSearch, /scrollIntoView\(\{ block: "nearest" \}\)/);
+  assert.match(globalSearch, /role="listbox" ref=\{menuRef\} aria-busy=\{loading\}/);
+});

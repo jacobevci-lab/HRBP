@@ -29,6 +29,7 @@ export function GlobalSearch() {
   const { session, loading: sessionLoading } = useSessionContext();
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
   const [open, setOpen] = useState(false);
@@ -131,6 +132,12 @@ export function GlobalSearch() {
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveIndex((value) => (value - 1 + items.length) % items.length);
+    } else if (event.key === "Home" && open) {
+      event.preventDefault();
+      setActiveIndex(0);
+    } else if (event.key === "End" && open) {
+      event.preventDefault();
+      setActiveIndex(items.length - 1);
     } else if (event.key === "Enter" && open) {
       event.preventDefault();
       choose(items[Math.min(activeIndex, items.length - 1)]);
@@ -138,6 +145,13 @@ export function GlobalSearch() {
   }
 
   const activeDescendant = open && items.length ? `global-search-option-${activeIndex}` : undefined;
+
+  useEffect(() => {
+    if (!open || !items.length) return;
+    const boundedIndex = Math.min(activeIndex, items.length - 1);
+    const option = menuRef.current?.querySelector<HTMLElement>(`#global-search-option-${boundedIndex}`);
+    option?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, items.length, open]);
   const groupedItems = useMemo(() => {
     const groups: Array<{ type: SearchItem["type"]; startIndex: number; items: SearchItem[] }> = [];
     items.forEach((item, index) => {
@@ -179,7 +193,7 @@ export function GlobalSearch() {
       </div>
 
       {open ? (
-        <div className="global-search-menu" id="global-search-results" role="listbox">
+        <div className="global-search-menu" id="global-search-results" role="listbox" ref={menuRef} aria-busy={loading}>
           {statusText ? <div className={`global-search-state ${degraded ? "degraded" : ""}`} aria-live="polite">{statusText}</div> : null}
           {groupedItems.map((group) => (
             <div className="global-search-group" role="group" aria-label={groupLabel(group.type)} key={group.type}>
