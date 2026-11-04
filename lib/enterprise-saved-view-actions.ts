@@ -16,6 +16,11 @@ export type SavedEnterpriseViewActionState = {
   code?: "auth" | "invalid" | "limit" | "forbidden" | "unavailable";
 };
 
+export type DeleteEnterpriseViewActionState = {
+  ok: boolean;
+  code?: "auth" | "invalid" | "forbidden" | "unavailable";
+};
+
 function readModule(formData: FormData) {
   const value = formData.get("moduleKey");
   return typeof value === "string" && isEnterpriseViewModule(value) ? value : null;
@@ -60,17 +65,22 @@ export async function saveEnterpriseViewAction(
   }
 }
 
-export async function deleteEnterpriseViewAction(formData: FormData): Promise<void> {
+export async function deleteEnterpriseViewAction(
+  _previous: DeleteEnterpriseViewActionState,
+  formData: FormData
+): Promise<DeleteEnterpriseViewActionState> {
   const moduleKey = readModule(formData);
   const id = formData.get("id");
-  if (!moduleKey || typeof id !== "string") return;
+  if (!moduleKey || typeof id !== "string") return { ok: false, code: "invalid" };
   const ctx = await getServerRequestContext();
-  if (!ctx) return;
+  if (!ctx) return { ok: false, code: "auth" };
 
   try {
     await deleteSavedEnterpriseView(ctx, moduleKey, id);
     revalidatePath(enterpriseViewBasePath(moduleKey));
-  } catch {
-    // Fail closed. The current view remains usable if preference persistence is unavailable.
+    return { ok: true };
+  } catch (error) {
+    const code = codeFor(error);
+    return { ok: false, code: code === "limit" ? "unavailable" : code };
   }
 }

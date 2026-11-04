@@ -225,3 +225,18 @@ test("column visibility state is canonical regardless of URL parameter order", (
   assert.deepEqual(JSON.parse(JSON.stringify(left)), JSON.parse(JSON.stringify(right)));
   assert.equal(api.buildEnterpriseViewHref("people", left), api.buildEnterpriseViewHref("people", right));
 });
+
+test("saved view deletion exposes pending and failure feedback", () => {
+  assert.match(actions, /export type DeleteEnterpriseViewActionState/);
+  assert.match(actions, /deleteEnterpriseViewAction\(\s*_previous: DeleteEnterpriseViewActionState,/);
+  assert.match(actions, /return \{ ok: false, code: "auth" \}/);
+  assert.match(actions, /return \{ ok: true \}/);
+  assert.match(control, /function DeleteViewButton/);
+  assert.match(control, /disabled=\{pending\}/);
+  assert.match(control, /function deleteMessageFor/);
+  assert.match(control, /function SavedViewDeleteForm/);
+  assert.match(control, /<SavedViewDeleteForm locale=\{locale\} moduleKey=\{moduleKey\} view=\{view\}\/>/);
+  assert.match(control, /enterprise-saved-view-delete-error/);
+  const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
+  assert.match(unified, /\.enterprise-saved-view-delete-error\{[^}]*font-size:9\.5px/);
+});

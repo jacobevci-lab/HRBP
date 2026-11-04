@@ -8,7 +8,7 @@ import {
   deleteEnterpriseViewAction,
   saveEnterpriseViewAction
 } from "@/lib/enterprise-saved-view-actions";
-import type { SavedEnterpriseViewActionState } from "@/lib/enterprise-saved-view-actions";
+import type { DeleteEnterpriseViewActionState, SavedEnterpriseViewActionState } from "@/lib/enterprise-saved-view-actions";
 import type {
   EnterpriseViewModule,
   EnterpriseViewState,
@@ -65,6 +65,47 @@ function SaveButton({ tr }: { tr: boolean }) {
     {pending ? <span className="enterprise-save-view-spinner" aria-hidden="true"/> : <Save size={14}/>}
     {pending ? (tr ? "Kaydediliyor" : "Saving") : (tr ? "Kaydet" : "Save")}
   </button>;
+}
+
+function DeleteViewButton({ tr, name }: { tr: boolean; name: string }) {
+  const { pending } = useFormStatus();
+  const label = pending
+    ? (tr ? `${name} görünümü siliniyor` : `Deleting ${name} view`)
+    : (tr ? `${name} görünümünü sil` : `Delete ${name} view`);
+  return <button type="submit" disabled={pending} aria-label={label} title={pending ? (tr ? "Siliniyor" : "Deleting") : (tr ? "Sil" : "Delete")}>
+    {pending ? <span className="enterprise-save-view-spinner" aria-hidden="true"/> : <Trash2 size={13}/>}
+  </button>;
+}
+
+function deleteMessageFor(locale: Locale, state: DeleteEnterpriseViewActionState) {
+  if (state.ok || !state.code) return "";
+  const tr = locale === "tr";
+  if (state.code === "auth") return tr ? "Oturum doğrulanamadı; görünüm silinmedi." : "Session could not be verified; the view was not deleted.";
+  if (state.code === "invalid") return tr ? "Görünüm kimliği geçersiz; sayfayı yenileyin." : "The saved view reference is invalid; refresh the page.";
+  if (state.code === "forbidden") return tr ? "Bu görünümü silme yetkiniz yok." : "You are not authorized to delete this view.";
+  return tr ? "Görünüm şu anda silinemiyor." : "The view cannot be deleted right now.";
+}
+
+function SavedViewDeleteForm({ locale, moduleKey, view }: {
+  locale: Locale;
+  moduleKey: EnterpriseViewModule;
+  view: SavedEnterpriseViewSummary;
+}) {
+  const tr = locale === "tr";
+  const initialState: DeleteEnterpriseViewActionState = { ok: false };
+  const [state, action] = useActionState(deleteEnterpriseViewAction, initialState);
+  const message = deleteMessageFor(locale, state);
+  return <>
+    <form action={action} onSubmit={(event) => {
+      const prompt = tr ? `“${view.name}” görünümü silinsin mi?` : `Delete “${view.name}” view?`;
+      if (!window.confirm(prompt)) event.preventDefault();
+    }}>
+      <input type="hidden" name="moduleKey" value={moduleKey}/>
+      <input type="hidden" name="id" value={view.id}/>
+      <DeleteViewButton tr={tr} name={view.name}/>
+    </form>
+    {message ? <small className="enterprise-saved-view-delete-error" role="alert">{message}</small> : null}
+  </>;
 }
 
 function messageFor(locale: Locale, state: { ok: boolean; updated?: boolean; code?: string }) {
@@ -130,14 +171,7 @@ export function EnterpriseSavedViews({
               <span><strong>{view.name}</strong><small>{detail}</small></span>
               {active ? <Check size={13}/> : null}
             </Link>
-            <form action={deleteEnterpriseViewAction} onSubmit={(event) => {
-              const prompt = tr ? `“${view.name}” görünümü silinsin mi?` : `Delete “${view.name}” view?`;
-              if (!window.confirm(prompt)) event.preventDefault();
-            }}>
-              <input type="hidden" name="moduleKey" value={moduleKey}/>
-              <input type="hidden" name="id" value={view.id}/>
-              <button type="submit" aria-label={tr ? `${view.name} görünümünü sil` : `Delete ${view.name} view`} title={tr ? "Sil" : "Delete"}><Trash2 size={13}/></button>
-            </form>
+            <SavedViewDeleteForm locale={locale} moduleKey={moduleKey} view={view}/>
           </div>;
         }) : <div className="enterprise-saved-view-empty">{tr ? "Henüz kayıtlı görünüm yok." : "No saved views yet."}</div>}
       </div>

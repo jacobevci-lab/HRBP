@@ -1026,3 +1026,6 @@ th{font-size:10px!important}
 
 /* Saved-view destructive/update affordances stay explicit. */
 .enterprise-save-view-hint{display:block;margin-top:6px;color:var(--muted);font-size:9.5px!important;line-height:1.45}
+
+.enterprise-saved-view-delete-error{grid-column:1/-1;padding:0 6px 7px;color:var(--danger-fg);font-size:9.5px;line-height:1.4}
+.enterprise-saved-view-row>form button:disabled{opacity:.55;cursor:wait}
