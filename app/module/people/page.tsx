@@ -3,6 +3,7 @@ import { CircleCheckBig, Plus } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { PublicCoreLanding } from "@/components/public-core-landing";
 import { can } from "@/lib/authorization";
+import { canCreateEmployeeMasterRecord } from "@/lib/workforce-master-data-access";
 import { coreWorkspaceCopy } from "@/lib/core-workspace-copy";
 import { getServerLocale } from "@/lib/i18n-server";
 import { getServerRequestContext } from "@/lib/server-session";
@@ -27,7 +28,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Searc
       <div><div className="eyebrow">HRBP One / {title}</div><h1>{title}</h1><p>{description}</p></div>
       <div className="module-heading-actions">
         {readable ? <span className="secondary-button"><CircleCheckBig size={16}/>{locale === "tr" ? "Canlı veri görünümü" : "Live data view"}</span> : null}
-        {readable && can(ctx, "people:write") ? <Link className="create-button" href="/module/people/new"><Plus size={17}/>{locale === "tr" ? "Çalışan ekle" : "Add employee"}</Link> : null}
+        {readable && canCreateEmployeeMasterRecord(ctx) ? <Link className="create-button" href="/module/people/new"><Plus size={17}/>{locale === "tr" ? "Çalışan ekle" : "Add employee"}</Link> : null}
       </div>
     </section>
     {content}

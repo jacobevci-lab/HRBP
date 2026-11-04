@@ -9,6 +9,7 @@ const access = readFileSync("lib/workforce-master-data-access.ts", "utf8");
 const workforceMasterPolicy = readFileSync("lib/workforce-master-data-policy.ts", "utf8");
 const moduleLanding = readFileSync("components/module-landing.tsx", "utf8");
 const appShell = readFileSync("components/app-shell.tsx", "utf8");
+const dedicatedPeoplePage = readFileSync("app/module/people/page.tsx", "utf8");
 
 test("employee create workspace is signed-session and operational-role gated before reference data loads", () => {
   assert.match(peoplePage, /getServerRequestContext\(\)/);
@@ -48,4 +49,11 @@ test("create CTAs use the same workforce master-data role policy as the page and
   assert.doesNotMatch(moduleLanding, /slug === "people" && can\(ctx, "people:read"\) && can\(ctx, "people:write"\)/);
   assert.match(appShell, /roleCanCreateEmployeeMasterRecord\(session\?\.user\?\.role\)/);
   assert.match(appShell, /navigationCapabilities\.has\("people:write"\)/);
+});
+
+
+test("dedicated People page uses the shared master-data create policy", () => {
+  assert.match(dedicatedPeoplePage, /canCreateEmployeeMasterRecord\(ctx\)/);
+  assert.doesNotMatch(dedicatedPeoplePage, /readable && can\(ctx, "people:write"\)/);
+  assert.match(dedicatedPeoplePage, /href="\/module\/people\/new"/);
 });
