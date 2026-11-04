@@ -171,7 +171,16 @@ export function GlobalSearch() {
       : (locale === "tr" ? "Pozisyonlar" : "Positions");
 
   return (
-    <div className="global-search-root" ref={rootRef}>
+    <div
+      className="global-search-root"
+      ref={rootRef}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setOpen(false);
+          setActiveIndex(0);
+        }
+      }}
+    >
       <div className={`global-search ${open ? "is-open" : ""}`}>
         <Search size={17}/>
         <input

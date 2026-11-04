@@ -237,3 +237,22 @@ test("search input is bounded before database predicates are constructed", async
     assert.equal(field.contains.length, 80);
   }
 });
+
+test("malformed locale cookies fail safely to English and JSON responses are nosniff", async () => {
+  const h = harness({ ctx: null });
+  const response = await h.GET(request("q=people", { cookie: "hrbp-locale=%E0%A4%A" }));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  const body = await response.json();
+  assert.equal(body.data[0].title, "People");
+  assert.equal(body.data[0].subtitle, "Read-only staging module");
+});
+
+test("short search responses also carry no-store and nosniff policy", async () => {
+  const h = harness();
+  const response = await h.GET(request("q=a"));
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+});

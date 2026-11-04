@@ -266,3 +266,10 @@ test("global search keeps live status outside listbox option ownership", () => {
   assert.match(globalSearch, /role="listbox" ref=\{menuRef\} aria-busy=\{loading\}/);
   assert.match(globalSearch, /Home\/End \{locale === "tr" \? "İlk\/son" : "First\/last"\}/);
 });
+
+test("global search closes when keyboard focus leaves the search surface", () => {
+  assert.match(globalSearch, /onBlur=\{\(event\) => \{/);
+  assert.match(globalSearch, /!event\.currentTarget\.contains\(event\.relatedTarget as Node \| null\)/);
+  assert.match(globalSearch, /setOpen\(false\)/);
+  assert.match(globalSearch, /setActiveIndex\(0\)/);
+});
