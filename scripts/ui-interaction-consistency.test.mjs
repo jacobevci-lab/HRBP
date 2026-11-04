@@ -97,7 +97,7 @@ test("Warm Enterprise visual overhaul establishes a visibly different shell and 
   ]) assert.ok(unified.includes(marker), marker + " must remain part of the visual overhaul contract");
   assert.match(unified, /\.page-heading\.module-heading[\s\S]*border-radius:18px/);
   assert.match(unified, /\.enterprise-stat[^]*min-height:104px/);
-  assert.match(unified, /\.enterprise-table td[^]*font-size:10px/);
+  assert.match(unified, /\.enterprise-table td[^]*font-size:11\.5px/);
   assert.match(unified, /@media\(max-width:620px\)[^]*\.page-heading\.module-heading/);
 });
 
@@ -129,4 +129,16 @@ test("enterprise keyboard surfaces use semantic disabled and live-state behavior
   assert.ok((pager.match(/<span className="enterprise-page-button disabled" aria-disabled="true">/g) ?? []).length >= 2);
   assert.doesNotMatch(pager, /tabIndex=\{page <= 1/);
   assert.match(bulk, /<strong aria-live="polite">/);
+});
+
+
+test("enterprise visual system keeps readable minimum typography at normal and compact density", () => {
+  const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
+  assert.match(unified, /\.enterprise-table th[^]*font-size:10px/);
+  assert.match(unified, /\.enterprise-table td[^]*font-size:11\.5px/);
+  assert.match(unified, /\.enterprise-density-compact \.enterprise-table th[^]*font-size:9\.5px/);
+  assert.match(unified, /\.enterprise-density-compact \.enterprise-table td[^]*font-size:10px/);
+  assert.match(unified, /\.enterprise-view-search input\{font-size:11\.5px/);
+  assert.match(unified, /\.employee-360-rail-nav a\{[^]*font-size:10\.5px/);
+  assert.match(unified, /\.enterprise-page-button,.enterprise-page-number\{[^]*font-size:10\.5px/);
 });
