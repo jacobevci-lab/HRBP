@@ -224,3 +224,14 @@ test("global search reports degraded live-data state before ordinary empty resul
   assert.match(globalSearch, /Live people\/position search is limited; no accessible module matches\./);
   assert.match(globalSearch, /Canlı çalışan\/pozisyon araması sınırlı; erişilebilir modül eşleşmesi yok\./);
 });
+
+test("global search groups module people and position results without breaking flat keyboard indices", () => {
+  assert.match(globalSearch, /const groupedItems = useMemo/);
+  assert.match(globalSearch, /startIndex: index/);
+  assert.match(globalSearch, /const index = group\.startIndex \+ localIndex/);
+  assert.match(globalSearch, /role="group" aria-label=\{groupLabel\(group\.type\)\}/);
+  assert.match(globalSearch, /global-search-group-label/);
+  assert.match(globalSearch, /"Modules"/);
+  assert.match(globalSearch, /"People"/);
+  assert.match(globalSearch, /"Positions"/);
+});
