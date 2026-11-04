@@ -55,3 +55,13 @@ test("Admin Studio follows responsive Warm Enterprise styling", () => {
     assert.match(css, new RegExp(selector.replace(".", "\\.")));
   }
 });
+
+test("Access Scope Admin preview keeps readable labels and preview metadata", () => {
+  const scopeCss = readFileSync("components/access-scope-admin.module.css", "utf8");
+  assert.match(scopeCss, /\.field span\{font-size:10px/);
+  assert.match(scopeCss, /\.include,.exclude\{[^}]*font-size:9\.5px/);
+  assert.match(scopeCss, /\.previewMetric span,.previewPeople>span\{font-size:9\.5px/);
+  assert.match(scopeCss, /\.previewMetric small\{font-size:9\.5px/);
+  assert.match(scopeCss, /\.previewPeople em\{font-style:normal;font-size:9\.5px/);
+  assert.match(scopeCss, /\.previewWarning\{[^}]*font-size:9\.5px/);
+});

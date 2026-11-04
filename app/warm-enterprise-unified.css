@@ -1000,3 +1000,6 @@ th{font-size:10px!important}
 .workflow-version-diff-row>div:first-child span,.workflow-action-toggle,.workflow-action-toggle strong,
 .workflow-action-result-count{font-size:9.5px!important}
 .workflow-editor-message,.workflow-version-diff-row strong,.workflow-version-compare-empty{font-size:10px!important}
+
+/* 2026-11 readability pass 5: close residual topbar utility microtype. */
+.locale-toggle button,.topbar-avatar,.topbar-account-copy small{font-size:9.5px!important}
