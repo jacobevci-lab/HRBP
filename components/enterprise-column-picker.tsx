@@ -1,6 +1,6 @@
 "use client";
 
-import { Columns3 } from "lucide-react";
+import { Columns3, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Locale } from "@/lib/i18n";
 
@@ -35,9 +35,15 @@ export function EnterpriseColumnPicker({
 
   return <details className="enterprise-column-picker">
     <input type="hidden" name="columnsMode" value={customized ? "custom" : "default"}/>
-    <summary><Columns3 size={14}/><span>{tr ? "Sütunlar" : "Columns"}</span><small>{selected.length}/{options.length}</small></summary>
+    <summary><Columns3 size={14}/><span>{tr ? "Sütunlar" : "Columns"}</span><small aria-live="polite">{selected.length}/{options.length}</small></summary>
     <div className="enterprise-column-options">
       <strong>{tr ? "Görünür sütunlar" : "Visible columns"}</strong>
+      <button
+        className="enterprise-column-reset"
+        type="button"
+        disabled={!customized}
+        onClick={() => setSelected(options.map((option) => option.value))}
+      ><RotateCcw size={12}/>{tr ? "Varsayılan sütunlar" : "Default columns"}</button>
       {options.map((option) => <label key={option.value}>
         <input
           type="checkbox"

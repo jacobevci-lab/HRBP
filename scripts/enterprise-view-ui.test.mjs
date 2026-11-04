@@ -220,3 +220,13 @@ test("copy view link falls back for non-secure on-prem browser contexts", () => 
   assert.match(copy, /else if \(!legacyCopy\(absolute\)\)/);
   assert.match(copy, /useEffect\(\(\) => \{\s*setState\("idle"\);\s*\}, \[href\]\)/);
 });
+
+test("column picker can restore canonical default visibility in one action", () => {
+  assert.match(columnPicker, /RotateCcw/);
+  assert.match(columnPicker, /className="enterprise-column-reset"/);
+  assert.match(columnPicker, /disabled=\{!customized\}/);
+  assert.match(columnPicker, /setSelected\(options\.map\(\(option\) => option\.value\)\)/);
+  assert.match(columnPicker, /<small aria-live="polite">\{selected\.length\}\/\{options\.length\}<\/small>/);
+  assert.match(unified, /\.enterprise-column-reset\{/);
+  assert.match(unified, /\.enterprise-column-reset:focus-visible/);
+});
