@@ -81,3 +81,19 @@ test("create forms mirror server field bounds and expose accessible pending/erro
   assert.match(positionForm, /No active organization units are available/);
   assert.match(positionForm, /aria-busy=\{submitting\}/);
 });
+
+
+test("create forms use synchronous in-flight locks against same-render duplicate submit", () => {
+  for (const [name, source] of [["employee", employeeForm], ["position", positionForm]]) {
+    assert.match(source, /import \{ FormEvent, useRef, useState \} from "react"/, name + " form must import useRef");
+    assert.match(source, /const submissionLock = useRef\(false\)/, name + " form must allocate an in-flight ref");
+    const submitIndex = source.indexOf("async function submit");
+    const guardIndex = source.indexOf("if (submissionLock.current) return;", submitIndex);
+    const lockIndex = source.indexOf("submissionLock.current = true;", guardIndex);
+    const fetchIndex = source.indexOf("fetch(", lockIndex);
+    const unlockIndex = source.indexOf("submissionLock.current = false;", fetchIndex);
+    assert.ok(submitIndex > -1 && guardIndex > submitIndex, name + " guard must run inside submit");
+    assert.ok(lockIndex > guardIndex && fetchIndex > lockIndex, name + " lock must be acquired before fetch");
+    assert.ok(unlockIndex > fetchIndex, name + " lock must release only after request completion");
+  }
+});

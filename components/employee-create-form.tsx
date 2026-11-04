@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Save, ShieldCheck } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
 export type EmployeePositionOption = { id: string; code: string; title: string; org: string; location: string };
@@ -13,12 +13,15 @@ export function EmployeeCreateForm({ positions }: { positions: EmployeePositionO
   const { locale } = useLocale();
   const tr = locale === "tr";
   const [submitting, setSubmitting] = useState(false);
+  const submissionLock = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [requiresAuth, setRequiresAuth] = useState(false);
   const c = (en: string, trValue: string) => tr ? trValue : en;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submissionLock.current) return;
+    submissionLock.current = true;
     setSubmitting(true); setError(null); setRequiresAuth(false);
     const form = new FormData(event.currentTarget);
     const payload = {
@@ -37,7 +40,10 @@ export function EmployeeCreateForm({ positions }: { positions: EmployeePositionO
       router.refresh();
     } catch {
       setError(c("The request could not reach HRBP. Try again.", "İstek HRBP'ye ulaştırılamadı. Tekrar deneyin."));
-    } finally { setSubmitting(false); }
+    } finally {
+      submissionLock.current = false;
+      setSubmitting(false);
+    }
   }
 
   return <div className="card record-form-card">

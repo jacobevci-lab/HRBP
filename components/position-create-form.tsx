@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BriefcaseBusiness, Save } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useLocale } from "@/components/locale-provider";
 
 export type OrganizationOption = { id: string; code: string; name: string; type: string };
@@ -14,11 +14,15 @@ export function PositionCreateForm({ organizations }: { organizations: Organizat
   const tr = locale === "tr";
   const c = (en: string, trValue: string) => tr ? trValue : en;
   const [submitting, setSubmitting] = useState(false);
+  const submissionLock = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [requiresAuth, setRequiresAuth] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setSubmitting(true); setError(null); setRequiresAuth(false);
+    event.preventDefault();
+    if (submissionLock.current) return;
+    submissionLock.current = true;
+    setSubmitting(true); setError(null); setRequiresAuth(false);
     const form = new FormData(event.currentTarget);
     const payload = { positionCode: String(form.get("positionCode") ?? ""), title: String(form.get("title") ?? ""), orgUnitId: String(form.get("orgUnitId") ?? ""), jobFamily: String(form.get("jobFamily") ?? ""), grade: String(form.get("grade") ?? ""), location: String(form.get("location") ?? ""), status: String(form.get("status") ?? "OPEN"), critical: form.get("critical") === "on" };
     try {
@@ -27,7 +31,10 @@ export function PositionCreateForm({ organizations }: { organizations: Organizat
       if (!response.ok) { if (response.status === 401) setRequiresAuth(true); setError(value.error || c("Position could not be created.","Pozisyon oluşturulamadı.")); return; }
       router.push("/module/positions"); router.refresh();
     } catch { setError(c("The request could not reach HRBP. Try again.","İstek HRBP'ye ulaştırılamadı. Tekrar deneyin.")); }
-    finally { setSubmitting(false); }
+    finally {
+      submissionLock.current = false;
+      setSubmitting(false);
+    }
   }
 
   return <div className="card record-form-card"><div className="record-form-header"><h2>{c("Position record","Pozisyon kaydı")}</h2><p>{c("Create a budgeted organizational seat independently from an incumbent. Hiring will assign an employee to this record later.","Mevcut çalışandan bağımsız bütçelenmiş bir organizasyon kadrosu oluşturun. İşe alım sırasında çalışan bu kayda atanır.")}</p></div><form className="record-form" onSubmit={submit} aria-busy={submitting}>
