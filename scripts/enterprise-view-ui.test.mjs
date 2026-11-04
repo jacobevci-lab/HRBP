@@ -94,7 +94,7 @@ test("filtered totals are server-derived and route filter input is bounded", () 
 });
 
 test("enterprise view controls are responsive Warm Enterprise surfaces", () => {
-  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-controls", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-view-density", ".enterprise-view-page-size", ".enterprise-view-sort", ".enterprise-column-picker", ".enterprise-column-options", ".enterprise-saved-views", ".enterprise-saved-view-popover", ".enterprise-view-count", ".enterprise-pagination"]) {
+  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-controls", ".enterprise-view-actions", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-view-density", ".enterprise-view-page-size", ".enterprise-view-sort", ".enterprise-column-picker", ".enterprise-column-options", ".enterprise-saved-views", ".enterprise-saved-view-popover", ".enterprise-view-count", ".enterprise-pagination"]) {
     assert.match(css, new RegExp(selector.replace(".", "\\.")));
   }
 });
@@ -229,4 +229,12 @@ test("column picker can restore canonical default visibility in one action", () 
   assert.match(columnPicker, /<small aria-live="polite">\{selected\.length\}\/\{options\.length\}<\/small>/);
   assert.match(unified, /\.enterprise-column-reset\{/);
   assert.match(unified, /\.enterprise-column-reset:focus-visible/);
+});
+
+test("enterprise toolbar secondary actions stay grouped on narrow screens", () => {
+  assert.match(toolbar, /<div className="enterprise-view-actions">/);
+  assert.match(toolbar, /enterprise-view-export[\s\S]*EnterpriseCopyViewLink[\s\S]*EnterpriseSavedViews/);
+  assert.match(css, /\.enterprise-view-actions\{display:flex;align-items:center;gap:7px;flex-wrap:wrap\}/);
+  assert.match(css, /@media\(max-width:760px\)[\s\S]*\.enterprise-view-actions\{width:100%;flex:1 1 100%\}/);
+  assert.match(css, /\.enterprise-view-actions>\.secondary-button,.enterprise-view-actions>\.enterprise-saved-views\{flex:1\}/);
 });

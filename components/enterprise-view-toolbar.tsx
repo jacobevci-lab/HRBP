@@ -112,12 +112,13 @@ export function EnterpriseViewToolbar({
       {filtered ? <Link className="secondary-button" href={basePath}><X size={14}/>{tr ? "Sıfırla" : "Reset"}</Link> : null}
     </form>
 
-    {exportEnabled ? <a className="secondary-button enterprise-view-export" href={exportHref} title={tr ? "Filtrelenmiş görünümün tamamını CSV olarak dışa aktar" : "Export the complete filtered view as CSV"}>
-      <Download size={14}/>{tr ? "CSV dışa aktar" : "Export CSV"}
-    </a> : null}
-
-    <EnterpriseCopyViewLink locale={locale} href={shareHref}/>
-    <EnterpriseSavedViews locale={locale} moduleKey={moduleKey} current={current} savedViews={savedViews}/>
+    <div className="enterprise-view-actions">
+      {exportEnabled ? <a className="secondary-button enterprise-view-export" href={exportHref} title={tr ? "Filtrelenmiş görünümün tamamını CSV olarak dışa aktar" : "Export the complete filtered view as CSV"}>
+        <Download size={14}/>{tr ? "CSV dışa aktar" : "Export CSV"}
+      </a> : null}
+      <EnterpriseCopyViewLink locale={locale} href={shareHref}/>
+      <EnterpriseSavedViews locale={locale} moduleKey={moduleKey} current={current} savedViews={savedViews}/>
+    </div>
 
     <span className="enterprise-view-count">{totalCount === shownCount
       ? (tr ? `${shownCount} kayıt` : `${shownCount} records`)

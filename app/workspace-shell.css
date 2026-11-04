@@ -171,6 +171,7 @@ html[data-theme="dark"] .workspace-shortcut:hover{box-shadow:0 8px 24px rgba(0,0
 /* Enterprise table / view controls */
 .enterprise-view-toolbar{min-height:48px;margin:0 0 12px;padding:7px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:11px;box-shadow:var(--shadow)}
 .enterprise-view-controls{min-width:0;flex:1;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.enterprise-view-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .enterprise-view-search{height:34px;min-width:260px;flex:1;display:flex;align-items:center;gap:7px;padding:0 9px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface-soft);color:var(--muted)}
 .enterprise-view-search input{min-width:0;flex:1;border:0!important;box-shadow:none!important;background:transparent!important;font-size:10px}
 .enterprise-view-filter{height:34px;min-width:160px;display:flex;align-items:center;gap:5px;padding:0 7px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface-soft);color:var(--muted)}
@@ -260,6 +261,9 @@ html[data-theme="dark"] .workspace-shortcut:hover{box-shadow:0 8px 24px rgba(0,0
   .enterprise-column-picker>summary{justify-content:center}
   .enterprise-column-options{left:0;right:auto;min-width:220px}
   .enterprise-view-controls>.secondary-button{justify-content:center}
+  .enterprise-view-actions{width:100%;flex:1 1 100%}
+  .enterprise-view-actions>.secondary-button,.enterprise-view-actions>.enterprise-saved-views{flex:1}
+  .enterprise-view-actions>.secondary-button{justify-content:center}
   .enterprise-saved-views{flex:1}
   .enterprise-saved-views>summary{justify-content:center}
   .enterprise-saved-view-popover{left:0;right:auto;width:min(340px,calc(100vw - 32px))}
