@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useActionState, useEffect, useRef } from "react";
 import { useFormStatus } from "react-dom";
-import { Bookmark, BookmarkCheck, Check, Save, Trash2 } from "lucide-react";
+import { Bookmark, BookmarkCheck, Save, Trash2 } from "lucide-react";
 import {
   deleteEnterpriseViewAction,
   saveEnterpriseViewAction
@@ -141,6 +141,8 @@ export function EnterpriseSavedViews({
   const [state, formAction] = useActionState(saveEnterpriseViewAction, initialState);
   const formRef = useRef<HTMLFormElement>(null);
   const message = messageFor(locale, state);
+  const selectedView = current.savedViewId ? savedViews.find((view) => view.id === current.savedViewId) : undefined;
+  const selectedModified = Boolean(selectedView && !sameState(current, selectedView.state));
 
   useEffect(() => {
     if (state.ok) formRef.current?.reset();
@@ -148,9 +150,11 @@ export function EnterpriseSavedViews({
 
   return <details className="enterprise-saved-views">
     <summary>
-      <Bookmark size={14}/>
-      <span>{tr ? "Kayıtlı görünümler" : "Saved views"}</span>
-      <small>{savedViews.length}</small>
+      {selectedView ? <BookmarkCheck size={14}/> : <Bookmark size={14}/>}
+      <span>{selectedView?.name ?? (tr ? "Kayıtlı görünümler" : "Saved views")}</span>
+      <small className={selectedView ? `enterprise-saved-view-context ${selectedModified ? "modified" : "active"}` : undefined}>
+        {selectedView ? (selectedModified ? (tr ? "Değiştirildi" : "Modified") : (tr ? "Etkin" : "Active")) : savedViews.length}
+      </small>
     </summary>
     <div className="enterprise-saved-view-popover">
       <div className="enterprise-saved-view-head">
@@ -160,7 +164,10 @@ export function EnterpriseSavedViews({
 
       <div className="enterprise-saved-view-list">
         {savedViews.length ? savedViews.map((view) => {
-          const active = sameState(current, view.state);
+          const exact = sameState(current, view.state);
+          const selected = current.savedViewId === view.id;
+          const active = selected ? exact : !current.savedViewId && exact;
+          const modified = selected && !exact;
           const detail = [
             view.state.query ? (tr ? "arama" : "search") : null,
             view.state.status ? savedStatusLabel(moduleKey, view.state.status, tr) : null,
@@ -169,11 +176,11 @@ export function EnterpriseSavedViews({
             view.state.sortKey ? `${savedSortLabel(moduleKey, view.state.sortKey, tr)} ${view.state.sortDirection === "desc" ? "↓" : "↑"}` : null,
             tr ? `${view.state.pageSize}/sayfa` : `${view.state.pageSize}/page`
           ].filter(Boolean).join(" · ");
-          return <div className={`enterprise-saved-view-row ${active ? "active" : ""}`} key={view.id}>
+          return <div className={`enterprise-saved-view-row${active ? " active" : ""}${modified ? " modified" : ""}`} key={view.id}>
             <Link href={view.href}>
-              {active ? <BookmarkCheck size={15}/> : <Bookmark size={15}/>}
+              {active || modified ? <BookmarkCheck size={15}/> : <Bookmark size={15}/>}
               <span><strong>{view.name}</strong><small>{detail}</small></span>
-              {active ? <Check size={13}/> : null}
+              {active || modified ? <span className={`enterprise-saved-view-status ${modified ? "modified" : "active"}`}>{modified ? (tr ? "Değiştirildi" : "Modified") : (tr ? "Etkin" : "Active")}</span> : null}
             </Link>
             <SavedViewDeleteForm locale={locale} moduleKey={moduleKey} view={view}/>
           </div>;

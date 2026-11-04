@@ -8,6 +8,9 @@ const workspace = readFileSync("components/core-hr-live-workspace.tsx", "utf8");
 const data = readFileSync("lib/core-hr-live-data.ts", "utf8");
 const moduleLanding = readFileSync("components/module-landing.tsx", "utf8");
 const modulePage = readFileSync("app/module/[slug]/page.tsx", "utf8");
+const peoplePage = readFileSync("app/module/people/page.tsx", "utf8");
+const positionsPage = readFileSync("app/module/positions/page.tsx", "utf8");
+const routeState = readFileSync("lib/enterprise-view-route-state.ts", "utf8");
 const css = readFileSync("app/workspace-shell.css", "utf8");
 const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
 
@@ -75,22 +78,28 @@ test("filtered totals are server-derived and route filter input is bounded", () 
   assert.ok((data.match(/filteredTotal/g) ?? []).length >= 8);
   assert.match(data, /db\.person\.count\(\{ where \}\)/);
   assert.match(data, /db\.position\.count\(\{ where \}\)/);
-  assert.match(modulePage, /search\.status === "string" \? search\.status\.slice\(0, 40\)/);
-  assert.match(modulePage, /Array\.isArray\(search\.columns\)/);
-  assert.match(modulePage, /rawColumns\.slice\(0, 12\)/);
-  assert.match(modulePage, /search\.columnsMode === "custom"/);
-  assert.match(modulePage, /search\.density === "compact"/);
-  assert.match(modulePage, /search\.sort === "string"/);
-  assert.match(modulePage, /search\.dir === "desc"/);
-  assert.match(modulePage, /search\.page === "string"/);
-  assert.match(modulePage, /search\.pageSize === "string"/);
+  assert.match(modulePage, /parseEnterpriseViewRouteState\(search\)/);
+  assert.match(routeState, /search\.status === "string" \? search\.status\.slice\(0, 40\)/);
+  assert.match(routeState, /Array\.isArray\(search\.columns\)/);
+  assert.match(routeState, /rawColumns\.slice\(0, 12\)/);
+  assert.match(routeState, /search\.columnsMode === "custom"/);
+  assert.match(routeState, /search\.density === "compact"/);
+  assert.match(routeState, /search\.sort === "string"/);
+  assert.match(routeState, /search\.dir === "desc"/);
+  assert.match(routeState, /search\.page === "string"/);
+  assert.match(routeState, /search\.pageSize === "string"/);
+  assert.match(routeState, /boundedSingle\(search\.view, 191\)/);
+  assert.match(peoplePage, /parseEnterpriseViewRouteState\(search\)/);
+  assert.match(peoplePage, /CoreHRLiveWorkspace\(\{ slug: "people", \.\.\.view \}\)/);
+  assert.match(positionsPage, /parseEnterpriseViewRouteState\(search\)/);
+  assert.match(positionsPage, /CoreHRLiveWorkspace\(\{ slug: "positions", \.\.\.view \}\)/);
   assert.match(moduleLanding, /columns\?: string\[\]/);
   assert.match(moduleLanding, /density\?: "comfortable" \| "compact"/);
   assert.match(moduleLanding, /sortKey\?: string/);
   assert.match(moduleLanding, /sortDirection\?: "asc" \| "desc"/);
   assert.match(moduleLanding, /page\?: number/);
   assert.match(moduleLanding, /pageSize\?: 25 \| 50 \| 100/);
-  assert.match(moduleLanding, /CoreHRLiveWorkspace\(\{ slug, query, status, columns, columnsCustomized, density, sortKey, sortDirection, page, pageSize, personId, tab \}\)/);
+  assert.match(moduleLanding, /CoreHRLiveWorkspace\(\{ slug, query, status, columns, columnsCustomized, density, sortKey, sortDirection, page, pageSize, savedViewId, personId, tab \}\)/);
 });
 
 test("enterprise view controls are responsive Warm Enterprise surfaces", () => {
@@ -254,4 +263,11 @@ test("enterprise registers expose removable active-view state chips", () => {
   assert.match(toolbar, /className="enterprise-view-chip"/);
   assert.match(unified, /\.enterprise-view-active-state\{/);
   assert.match(unified, /\.enterprise-view-chip:focus-visible/);
+});
+
+
+test("saved view provenance is private navigation context and copy links remain portable", () => {
+  assert.match(toolbar, /name="view" value=\{savedViewId\}/);
+  assert.match(toolbar, /buildEnterpriseViewHref\(moduleKey, \{ \.\.\.current, savedViewId: undefined \}\)/);
+  assert.match(workspace, /savedViewId=\{currentView\.savedViewId\}/);
 });

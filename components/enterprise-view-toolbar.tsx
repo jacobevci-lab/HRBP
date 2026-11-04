@@ -27,6 +27,7 @@ export function EnterpriseViewToolbar({
   sortKey,
   sortDirection,
   pageSize,
+  savedViewId,
   savedViews,
   shownCount,
   totalCount,
@@ -47,6 +48,7 @@ export function EnterpriseViewToolbar({
   sortKey?: string;
   sortDirection: "asc" | "desc";
   pageSize: 25 | 50 | 100;
+  savedViewId?: string;
   savedViews: SavedEnterpriseViewSummary[];
   shownCount: number;
   totalCount: number;
@@ -55,7 +57,7 @@ export function EnterpriseViewToolbar({
 }) {
   const tr = locale === "tr";
   const filtered = Boolean(query || status || columnsCustomized || density === "compact" || sortKey || pageSize !== 50);
-  const current = { query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize };
+  const current = { query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize, savedViewId };
   const exportParams = new URLSearchParams({ module: moduleKey, locale });
   if (query) exportParams.set("q", query);
   if (status) exportParams.set("status", status);
@@ -66,7 +68,7 @@ export function EnterpriseViewToolbar({
   if (sortKey) exportParams.set("sort", sortKey);
   if (sortDirection === "desc") exportParams.set("dir", "desc");
   const exportHref = `/api/core-hr/export?${exportParams.toString()}`;
-  const shareHref = buildEnterpriseViewHref(moduleKey, current);
+  const shareHref = buildEnterpriseViewHref(moduleKey, { ...current, savedViewId: undefined });
 
   const statusLabel = status ? statusOptions.find((option) => option.value === status)?.label ?? status : null;
   const sortLabel = sortKey ? sortOptions.find((option) => option.value === sortKey)?.label ?? sortKey : null;
@@ -116,6 +118,7 @@ export function EnterpriseViewToolbar({
 
   return <div className="enterprise-view-toolbar">
     <form className="enterprise-view-controls" action={basePath} method="get">
+      {savedViewId ? <input type="hidden" name="view" value={savedViewId}/> : null}
       <label className="enterprise-view-search">
         <Search size={16}/>
         <input name="q" defaultValue={query} maxLength={160} placeholder={searchPlaceholder} aria-label={tr ? "Tabloda ara" : "Search table"}/>

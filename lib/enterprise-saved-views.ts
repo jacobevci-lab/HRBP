@@ -12,6 +12,7 @@ export type EnterpriseViewState = {
   sortKey?: string;
   sortDirection: "asc" | "desc";
   pageSize: 25 | 50 | 100;
+  savedViewId?: string;
 };
 export type SavedEnterpriseViewSummary = {
   id: string;
@@ -68,6 +69,7 @@ export function sanitizeEnterpriseViewState(moduleKey: EnterpriseViewModule, inp
   sortKey?: unknown;
   sortDirection?: unknown;
   pageSize?: unknown;
+  savedViewId?: unknown;
 }): EnterpriseViewState {
   const definition = definitions[moduleKey];
   const query = typeof input.query === "string" ? input.query.trim().slice(0, 160) : "";
@@ -82,6 +84,8 @@ export function sanitizeEnterpriseViewState(moduleKey: EnterpriseViewModule, inp
   const columnsCustomized = input.columnsCustomized === true && columns.length < definition.columns.size;
   const sortCandidate = typeof input.sortKey === "string" ? input.sortKey.trim().slice(0, 40) : "";
   const sortKey = definition.sorts.has(sortCandidate) ? sortCandidate : undefined;
+  const rawSavedViewId = typeof input.savedViewId === "string" ? input.savedViewId.trim() : "";
+  const savedViewId = rawSavedViewId && rawSavedViewId.length <= 191 && !/[\u0000-\u001f\u007f]/u.test(rawSavedViewId) ? rawSavedViewId : undefined;
   return {
     query,
     status,
@@ -90,7 +94,8 @@ export function sanitizeEnterpriseViewState(moduleKey: EnterpriseViewModule, inp
     density: input.density === "compact" ? "compact" : "comfortable",
     sortKey,
     sortDirection: sortKey && input.sortDirection === "desc" ? "desc" : "asc",
-    pageSize: input.pageSize === 25 || input.pageSize === 100 ? input.pageSize : 50
+    pageSize: input.pageSize === 25 || input.pageSize === 100 ? input.pageSize : 50,
+    savedViewId
   };
 }
 
@@ -108,6 +113,7 @@ export function buildEnterpriseViewHref(moduleKey: EnterpriseViewModule, state: 
     if (state.sortDirection === "desc") params.set("dir", "desc");
   }
   if (state.pageSize !== 50) params.set("pageSize", String(state.pageSize));
+  if (state.savedViewId) params.set("view", state.savedViewId);
   const source = params.toString();
   return source ? `${definitions[moduleKey].basePath}?${source}` : definitions[moduleKey].basePath;
 }
@@ -161,7 +167,7 @@ export async function listSavedEnterpriseViews(ctx: RequestContext, moduleKey: E
         sortDirection: row.sortDirection,
         pageSize: row.pageSize
       });
-      return { id: row.id, name: row.name, moduleKey, state, href: buildEnterpriseViewHref(moduleKey, state) };
+      return { id: row.id, name: row.name, moduleKey, state, href: buildEnterpriseViewHref(moduleKey, { ...state, savedViewId: row.id }) };
     });
   } catch (error) {
     // Mixed-version deploy safety: absence of the preference table must not take

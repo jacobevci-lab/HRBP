@@ -261,3 +261,27 @@ test("selecting every optional column canonicalizes back to default column mode"
   const href = api.buildEnterpriseViewHref("people", state);
   assert.equal(new URL(href, "https://hrbp.invalid").searchParams.get("columnsMode"), null);
 });
+
+
+test("saved view provenance survives register navigation without entering persisted identity state", () => {
+  const api = loadService();
+  const state = api.sanitizeEnterpriseViewState("people", { query: "Deniz", status: "ACTIVE", pageSize: 25, savedViewId: "view-123" });
+  assert.equal(state.savedViewId, "view-123");
+  const href = new URL(api.buildEnterpriseViewHref("people", state), "https://hrbp.invalid");
+  assert.equal(href.searchParams.get("view"), "view-123");
+  const pageHref = new URL(api.buildEnterprisePageHref("people", state, 3), "https://hrbp.invalid");
+  assert.equal(pageHref.searchParams.get("view"), "view-123");
+  assert.equal(pageHref.searchParams.get("page"), "3");
+  assert.match(source, /href: buildEnterpriseViewHref\(moduleKey, \{ \.\.\.state, savedViewId: row\.id \}\)/);
+  assert.doesNotMatch(source, /savedViewId: state\.savedViewId/);
+});
+
+test("saved view controls expose selected active versus modified provenance", () => {
+  assert.match(control, /const selectedView = current\.savedViewId \? savedViews\.find/);
+  assert.match(control, /const selectedModified = Boolean\(selectedView && !sameState\(current, selectedView\.state\)\)/);
+  assert.match(control, /current\.savedViewId === view\.id/);
+  assert.match(control, /Modified/);
+  assert.match(control, /Değiştirildi/);
+  assert.match(control, /enterprise-saved-view-status/);
+  assert.match(control, /enterprise-saved-view-context/);
+});

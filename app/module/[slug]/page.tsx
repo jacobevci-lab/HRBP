@@ -24,6 +24,7 @@ import { can } from "@/lib/authorization";
 import { isHRServiceSelfServiceRole } from "@/lib/hr-service-access";
 import { getServerRequestContext } from "@/lib/server-session";
 import { getServerLocale } from "@/lib/i18n-server";
+import { parseEnterpriseViewRouteState } from "@/lib/enterprise-view-route-state";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -39,7 +40,8 @@ const governanceSlugs = new Set<GovernanceSlug>(["engagement", "workforce-planni
 
 export default async function ModulePage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: SearchParams }) {
   const [{ slug }, search, ctx, locale] = await Promise.all([params, searchParams, getServerRequestContext(), getServerLocale()]);
-  const explicitQuery = typeof search.q === "string" ? search.q : "";
+  const enterpriseView = parseEnterpriseViewRouteState(search);
+  const explicitQuery = enterpriseView.query;
   const requestFocus = typeof search.request === "string" ? search.request : "";
   const entryFocus = typeof search.entry === "string" ? search.entry : "";
   const compensationFocus = typeof search.change === "string" ? search.change : "";
@@ -63,17 +65,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const taskId = typeof search.task === "string" ? search.task : undefined;
   const instanceId = typeof search.instance === "string" ? search.instance : undefined;
   const actionView = typeof search.view === "string" ? search.view : undefined;
-  const statusFilter = typeof search.status === "string" ? search.status.slice(0, 40) : undefined;
-  const rawColumns = Array.isArray(search.columns) ? search.columns : typeof search.columns === "string" ? [search.columns] : [];
-  const columnFilter = rawColumns.slice(0, 12).map((value) => value.slice(0, 40));
-  const columnsCustomized = search.columnsMode === "custom";
-  const density = search.density === "compact" ? "compact" as const : "comfortable" as const;
-  const sortKey = typeof search.sort === "string" ? search.sort.slice(0, 40) : undefined;
-  const sortDirection = search.dir === "desc" ? "desc" as const : "asc" as const;
-  const requestedPage = typeof search.page === "string" ? Number.parseInt(search.page, 10) : 1;
-  const pageNumber = Number.isInteger(requestedPage) && requestedPage > 0 ? Math.min(requestedPage, 10000) : 1;
-  const requestedPageSize = typeof search.pageSize === "string" ? Number.parseInt(search.pageSize, 10) : 50;
-  const pageSize = requestedPageSize === 25 || requestedPageSize === 100 ? requestedPageSize : 50;
+
   const employeeRelationsCaseId = typeof search.case === "string" ? search.case : undefined;
   const employeeRelationsActionId = typeof search.action === "string" ? search.action : undefined;
   const employeeRelationsAppealId = typeof search.appeal === "string" ? search.appeal : undefined;
@@ -119,7 +111,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
 
   return (
     <AppShell>
-      <ModuleLanding slug={slug} query={query} status={statusFilter} columns={columnFilter} columnsCustomized={columnsCustomized} density={density} sortKey={sortKey} sortDirection={sortDirection} page={pageNumber} pageSize={pageSize} personId={personId} tab={slug === "policies" ? lifecycleMode : tab}/>
+      <ModuleLanding slug={slug} query={query} status={enterpriseView.status} columns={enterpriseView.columns} columnsCustomized={enterpriseView.columnsCustomized} density={enterpriseView.density} sortKey={enterpriseView.sortKey} sortDirection={enterpriseView.sortDirection} page={enterpriseView.page} pageSize={enterpriseView.pageSize} savedViewId={slug === "people" || slug === "positions" ? enterpriseView.savedViewId : undefined} personId={personId} tab={slug === "policies" ? lifecycleMode : tab}/>
       {slug === "offboarding" && can(ctx, "offboarding:write") ? <OffboardingClearanceLoader/> : null}
       {slug === "employee-relations" ? <details id="er-lifecycle" className="service-governance-panel" open={Boolean(query || employeeRelationsCaseId || employeeRelationsActionId || employeeRelationsAppealId)}>
         <summary><span><strong>{locale === "tr" ? "Vaka yaşam döngüsü & kapanış" : "Case lifecycle & closure"}</strong><small>{locale === "tr" ? "Çözüm, düzeltici aksiyon ve itiraz kontrollerini gerektiğinde açın." : "Open resolution, corrective-action and appeal controls when needed."}</small></span><span>Case Wall</span></summary>

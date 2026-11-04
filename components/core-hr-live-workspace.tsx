@@ -48,13 +48,13 @@ function SortableHeader({ moduleKey, state, sortKey, label, defaultActive = fals
 }
 const employeeTabs = new Set(["overview", "employment", "compensation", "documents", "history"]);
 
-export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = [], columnsCustomized = false, density = "comfortable", sortKey, sortDirection = "asc", page = 1, pageSize = 50, personId, tab }: { slug: string; query?: string; status?: string; columns?: string[]; columnsCustomized?: boolean; density?: "comfortable" | "compact"; sortKey?: string; sortDirection?: "asc" | "desc"; page?: number; pageSize?: 25 | 50 | 100; personId?: string; tab?: string }) {
+export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = [], columnsCustomized = false, density = "comfortable", sortKey, sortDirection = "asc", page = 1, pageSize = 50, savedViewId, personId, tab }: { slug: string; query?: string; status?: string; columns?: string[]; columnsCustomized?: boolean; density?: "comfortable" | "compact"; sortKey?: string; sortDirection?: "asc" | "desc"; page?: number; pageSize?: 25 | 50 | 100; savedViewId?: string; personId?: string; tab?: string }) {
   const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   const tenantId = ctx?.tenantId;
 
   if (slug === "people") {
     if (ctx && !can(ctx, "people:read")) return <AccessDenied title={c(locale,"People directory restricted","Çalışan dizini kısıtlı")} detail={c(locale,"Your current role does not include people:read access.","Mevcut rolünüz people:read erişimini içermiyor.")}/>;
-    const currentView = sanitizeEnterpriseViewState("people", { query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize });
+    const currentView = sanitizeEnterpriseViewState("people", { query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize, savedViewId });
     const [data, savedViews] = await Promise.all([
       getPeopleWorkspaceData(currentView.query, tenantId, currentView.status, currentView.sortKey, currentView.sortDirection, page, currentView.pageSize),
       ctx ? listSavedEnterpriseViews(ctx, "people") : Promise.resolve([])
@@ -93,6 +93,7 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = 
       sortKey={currentView.sortKey}
       sortDirection={currentView.sortDirection}
       pageSize={currentView.pageSize}
+      savedViewId={currentView.savedViewId}
       savedViews={savedViews}
       shownCount={data.people.length}
       totalCount={data.filteredTotal}
@@ -114,7 +115,7 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = 
 
   if (slug === "positions") {
     if (ctx && !can(ctx, "positions:read")) return <AccessDenied title={c(locale,"Positions restricted","Pozisyonlar kısıtlı")} detail={c(locale,"Your current role does not include positions:read access.","Mevcut rolünüz positions:read erişimini içermiyor.")}/>;
-    const currentView = sanitizeEnterpriseViewState("positions", { query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize });
+    const currentView = sanitizeEnterpriseViewState("positions", { query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize, savedViewId });
     const [data, savedViews] = await Promise.all([
       getPositionsWorkspaceData(currentView.query, tenantId, currentView.status, currentView.sortKey, currentView.sortDirection, page, currentView.pageSize),
       ctx ? listSavedEnterpriseViews(ctx, "positions") : Promise.resolve([])
@@ -158,6 +159,7 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = 
       sortKey={currentView.sortKey}
       sortDirection={currentView.sortDirection}
       pageSize={currentView.pageSize}
+      savedViewId={currentView.savedViewId}
       savedViews={savedViews}
       shownCount={data.rows.length}
       totalCount={data.filteredTotal}

@@ -21,6 +21,7 @@ function load(path, mocks = {}, globals = {}) {
     if (name === '@/components/app-shell') return { AppShell: 'app-shell' };
     if (name === '@/components/public-core-landing') return { PublicCoreLanding: 'public-preview' };
     if (name === '@/lib/core-workspace-copy') return load('lib/core-workspace-copy.ts');
+    if (name === '@/lib/enterprise-view-route-state') return load('lib/enterprise-view-route-state.ts');
     if (Object.hasOwn(mocks, name)) {
       const value = mocks[name];
       if (value instanceof Error) throw value;

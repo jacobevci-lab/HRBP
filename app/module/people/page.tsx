@@ -7,6 +7,7 @@ import { canCreateEmployeeMasterRecord } from "@/lib/workforce-master-data-acces
 import { coreWorkspaceCopy } from "@/lib/core-workspace-copy";
 import { getServerLocale } from "@/lib/i18n-server";
 import { getServerRequestContext } from "@/lib/server-session";
+import { parseEnterpriseViewRouteState } from "@/lib/enterprise-view-route-state";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -18,10 +19,10 @@ export default async function PeoplePage({ searchParams }: { searchParams: Searc
   const locale = await getServerLocale();
   const { title, description } = coreWorkspaceCopy("people", locale);
   const search = await searchParams;
-  const query = typeof search.q === "string" ? search.q : "";
+  const view = parseEnterpriseViewRouteState(search);
   // Let the route error boundary handle failures; never substitute synthetic people.
   const { CoreHRLiveWorkspace } = await import("@/components/core-hr-live-workspace");
-  const content = await CoreHRLiveWorkspace({ slug: "people", query });
+  const content = await CoreHRLiveWorkspace({ slug: "people", ...view });
   const readable = can(ctx, "people:read");
   return <AppShell>
     <section className="page-heading module-heading">
