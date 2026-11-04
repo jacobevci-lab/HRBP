@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpDown, Columns3, List, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowUpDown, Columns3, Download, List, Search, SlidersHorizontal, X } from "lucide-react";
 import { EnterpriseSavedViews } from "@/components/enterprise-saved-views";
 import type { Locale } from "@/lib/i18n";
 import type {
@@ -52,6 +52,16 @@ export function EnterpriseViewToolbar({
   const selectedColumns = new Set(columns);
   const filtered = Boolean(query || status || columnsCustomized || density === "compact" || sortKey || pageSize !== 50);
   const current = { query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize };
+  const exportParams = new URLSearchParams({ module: moduleKey });
+  if (query) exportParams.set("q", query);
+  if (status) exportParams.set("status", status);
+  if (columnsCustomized) {
+    exportParams.set("columnsMode", "custom");
+    columns.forEach((column) => exportParams.append("columns", column));
+  }
+  if (sortKey) exportParams.set("sort", sortKey);
+  if (sortDirection === "desc") exportParams.set("dir", "desc");
+  const exportHref = `/api/core-hr/export?${exportParams.toString()}`;
 
   return <div className="enterprise-view-toolbar">
     <form className="enterprise-view-controls" action={basePath} method="get">
@@ -104,6 +114,10 @@ export function EnterpriseViewToolbar({
       <button className="secondary-button" type="submit">{tr ? "Uygula" : "Apply"}</button>
       {filtered ? <Link className="secondary-button" href={basePath}><X size={14}/>{tr ? "Sıfırla" : "Reset"}</Link> : null}
     </form>
+
+    <a className="secondary-button enterprise-view-export" href={exportHref} title={tr ? "Filtrelenmiş görünümün tamamını CSV olarak dışa aktar" : "Export the complete filtered view as CSV"}>
+      <Download size={14}/>{tr ? "CSV dışa aktar" : "Export CSV"}
+    </a>
 
     <EnterpriseSavedViews locale={locale} moduleKey={moduleKey} current={current} savedViews={savedViews}/>
 

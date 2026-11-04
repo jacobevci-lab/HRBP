@@ -129,3 +129,26 @@ test("enterprise registers use real server-side pagination rather than hard row 
   assert.match(workspace, /page=\{data\.page\}/);
   assert.match(workspace, /pageCount=\{data\.pageCount\}/);
 });
+
+test("People and Positions expose scoped filtered CSV exports", () => {
+  const route = readFileSync("app/api/core-hr/export/route.ts", "utf8");
+  assert.match(toolbar, /Download/);
+  assert.match(toolbar, /new URLSearchParams\(\{ module: moduleKey \}\)/);
+  assert.match(toolbar, /columnsMode/);
+  assert.match(toolbar, /columns\.forEach\(\(column\) => exportParams\.append\("columns", column\)\)/);
+  assert.match(toolbar, /className="secondary-button enterprise-view-export"/);
+  assert.match(route, /can\(ctx, "people:read"\)/);
+  assert.match(route, /can\(ctx, "positions:read"\)/);
+  assert.match(route, /tenantId: ctx\.tenantId/);
+  assert.match(route, /resolveEmploymentScope\(db, ctx\)/);
+  assert.match(route, /employmentPrimaryKeyFilter\(peopleScope\)/);
+  assert.match(route, /take: EXPORT_LIMIT \+ 1/);
+  assert.match(route, /status: 422/);
+  assert.match(route, /\^\[=\+\\-@\]/);
+  assert.match(route, /PEOPLE_REGISTER_EXPORTED/);
+  assert.match(route, /POSITIONS_REGISTER_EXPORTED/);
+  assert.match(route, /DataClassification\.CONFIDENTIAL/);
+  assert.match(route, /cache-control": "no-store"/);
+  assert.match(route, /x-content-type-options": "nosniff"/);
+  assert.match(unified, /\.enterprise-view-export\{/);
+});

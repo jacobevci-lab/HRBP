@@ -1003,3 +1003,6 @@ th{font-size:10px!important}
 
 /* 2026-11 readability pass 5: close residual topbar utility microtype. */
 .locale-toggle button,.topbar-avatar,.topbar-account-copy small{font-size:9.5px!important}
+
+/* Enterprise register export stays compact but visibly actionable. */
+.enterprise-view-export{height:38px!important;display:inline-flex!important;align-items:center;gap:6px;white-space:nowrap;font-size:10.5px!important;text-decoration:none}
