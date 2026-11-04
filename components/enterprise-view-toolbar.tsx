@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { ArrowUpDown, Columns3, Download, List, Search, SlidersHorizontal, X } from "lucide-react";
+import { ArrowUpDown, Download, List, Search, SlidersHorizontal, X } from "lucide-react";
 import { EnterpriseSavedViews } from "@/components/enterprise-saved-views";
+import { EnterpriseColumnPicker, type EnterpriseColumnOption } from "@/components/enterprise-column-picker";
 import { EnterpriseCopyViewLink } from "@/components/enterprise-copy-view-link";
 import type { Locale } from "@/lib/i18n";
 import {
@@ -9,7 +10,7 @@ import {
   type SavedEnterpriseViewSummary
 } from "@/lib/enterprise-saved-views";
 
-export type EnterpriseViewOption = { value: string; label: string };
+export type EnterpriseViewOption = EnterpriseColumnOption;
 
 export function EnterpriseViewToolbar({
   moduleKey,
@@ -53,7 +54,6 @@ export function EnterpriseViewToolbar({
   exportEnabled?: boolean;
 }) {
   const tr = locale === "tr";
-  const selectedColumns = new Set(columns);
   const filtered = Boolean(query || status || columnsCustomized || density === "compact" || sortKey || pageSize !== 50);
   const current = { query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize };
   const exportParams = new URLSearchParams({ module: moduleKey, locale });
@@ -70,7 +70,6 @@ export function EnterpriseViewToolbar({
 
   return <div className="enterprise-view-toolbar">
     <form className="enterprise-view-controls" action={basePath} method="get">
-      <input type="hidden" name="columnsMode" value="custom"/>
       <label className="enterprise-view-search">
         <Search size={16}/>
         <input name="q" defaultValue={query} maxLength={160} placeholder={searchPlaceholder} aria-label={tr ? "Tabloda ara" : "Search table"}/>
@@ -82,14 +81,7 @@ export function EnterpriseViewToolbar({
           {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
       </label>
-      <details className="enterprise-column-picker">
-        <summary><Columns3 size={14}/><span>{tr ? "Sütunlar" : "Columns"}</span><small>{columnsCustomized ? selectedColumns.size : columnOptions.length}/{columnOptions.length}</small></summary>
-        <div className="enterprise-column-options">
-          <strong>{tr ? "Görünür sütunlar" : "Visible columns"}</strong>
-          {columnOptions.map((option) => <label key={option.value}><input type="checkbox" name="columns" value={option.value} defaultChecked={!columnsCustomized || selectedColumns.has(option.value)}/><span>{option.label}</span></label>)}
-          <small>{tr ? "Ana kayıt sütunu her zaman görünür." : "The primary record column is always visible."}</small>
-        </div>
-      </details>
+      <EnterpriseColumnPicker locale={locale} options={columnOptions} columns={columns} columnsCustomized={columnsCustomized}/>
       <label className="enterprise-view-density">
         <List size={14}/>
         <select name="density" defaultValue={density} aria-label={tr ? "Tablo yoğunluğu" : "Table density"}>

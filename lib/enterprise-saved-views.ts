@@ -79,13 +79,14 @@ export function sanitizeEnterpriseViewState(moduleKey: EnterpriseViewModule, inp
     .map((value) => value.trim().slice(0, 40))
     .filter((value) => definition.columns.has(value)));
   const columns = [...definition.columns].filter((value) => requestedColumns.has(value)).slice(0, 12);
+  const columnsCustomized = input.columnsCustomized === true && columns.length < definition.columns.size;
   const sortCandidate = typeof input.sortKey === "string" ? input.sortKey.trim().slice(0, 40) : "";
   const sortKey = definition.sorts.has(sortCandidate) ? sortCandidate : undefined;
   return {
     query,
     status,
     columns,
-    columnsCustomized: input.columnsCustomized === true,
+    columnsCustomized,
     density: input.density === "compact" ? "compact" : "comfortable",
     sortKey,
     sortDirection: sortKey && input.sortDirection === "desc" ? "desc" : "asc",

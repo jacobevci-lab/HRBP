@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const toolbar = readFileSync("components/enterprise-view-toolbar.tsx", "utf8");
+const columnPicker = readFileSync("components/enterprise-column-picker.tsx", "utf8");
 const workspace = readFileSync("components/core-hr-live-workspace.tsx", "utf8");
 const data = readFileSync("lib/core-hr-live-data.ts", "utf8");
 const moduleLanding = readFileSync("components/module-landing.tsx", "utf8");
@@ -16,9 +17,11 @@ test("shared enterprise toolbar uses URL-native query and status filters", () =>
   assert.match(toolbar, /name="q"/);
   assert.match(toolbar, /maxLength=\{160\}/);
   assert.match(toolbar, /name="status"/);
-  assert.match(toolbar, /name="columnsMode" value="custom"/);
-  assert.match(toolbar, /name="columns"/);
-  assert.match(toolbar, /enterprise-column-picker/);
+  assert.doesNotMatch(toolbar, /name="columnsMode" value="custom"/);
+  assert.match(toolbar, /<EnterpriseColumnPicker/);
+  assert.match(columnPicker, /name="columnsMode" value=\{customized \? "custom" : "default"\}/);
+  assert.match(columnPicker, /name="columns"/);
+  assert.match(columnPicker, /enterprise-column-picker/);
   assert.match(toolbar, /name="density"/);
   assert.match(toolbar, /name="sort"/);
   assert.match(toolbar, /name="dir"/);
@@ -198,4 +201,12 @@ test("enterprise registers expose canonical shareable view links", () => {
   assert.match(copy, /aria-live="polite"/);
   assert.match(copy, /window\.setTimeout\(\(\) => setState\("idle"\), 2400\)/);
   assert.match(unified, /\.enterprise-copy-view-link\{/);
+});
+
+test("default columns stay default until the user changes visibility", () => {
+  assert.match(columnPicker, /selectionFromProps\(options, columns, columnsCustomized\)/);
+  assert.match(columnPicker, /const customized = selected\.length !== options\.length/);
+  assert.match(columnPicker, /value=\{customized \? "custom" : "default"\}/);
+  assert.match(columnPicker, /setSelected\(\(current\) => \{/);
+  assert.doesNotMatch(toolbar, /<input type="hidden" name="columnsMode" value="custom"\/>/);
 });

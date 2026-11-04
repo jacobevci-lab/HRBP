@@ -249,3 +249,15 @@ test("saved view overwrite requires explicit confirmation", () => {
   assert.match(control, /görünümü mevcut filtrelerle güncellensin mi\?/);
   assert.match(control, /if \(!window\.confirm\(prompt\)\) event\.preventDefault\(\)/);
 });
+
+test("selecting every optional column canonicalizes back to default column mode", () => {
+  const api = loadService();
+  const state = api.sanitizeEnterpriseViewState("people", {
+    columnsCustomized: true,
+    columns: ["position", "department", "location", "status", "start"]
+  });
+  assert.equal(state.columnsCustomized, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(state.columns)), ["position", "department", "location", "status", "start"]);
+  const href = api.buildEnterpriseViewHref("people", state);
+  assert.equal(new URL(href, "https://hrbp.invalid").searchParams.get("columnsMode"), null);
+});
