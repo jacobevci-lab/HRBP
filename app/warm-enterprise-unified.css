@@ -787,3 +787,56 @@ a.metric-card:hover{
 )>summary:hover{
   background:color-mix(in srgb,var(--accent) 3%,var(--surface))!important;
 }
+
+/* 2026-11 readability pass 2: remove residual microtype from primary workflows. */
+.module-state-badge{font-size:10px!important}
+.enterprise-stat small,.growth-metric small,.services-metric small,.gov-metric small,.workpay-metric small,.off-metric small,.recruit-metric em{font-size:10px!important}
+.enterprise-saved-view-row>a small,.enterprise-save-view-form>label>span{font-size:10px!important}
+.enterprise-density-compact .cell-sub,.cell-sub{font-size:10px!important}
+
+.metric-label{font-size:10.5px!important}
+.metric-meta{font-size:10px!important}
+.card-header p{font-size:10px!important}
+.card-header>a{font-size:10px!important}
+.attention-row small{font-size:10px!important}
+.attention-row em{font-size:9.5px!important}
+
+.nav-disclosure>summary{font-size:10px!important}
+.my-work-source-panel>summary>span{font-size:10.5px!important}
+.my-work-source-panel>summary>small,.my-work-history-panel>summary small{font-size:9.5px!important}
+.operations-lane>a>small{font-size:10px!important}
+.employee-home-balance-list small,.employee-home-next small,.employee-home-next span,.employee-home-learning-list small{font-size:9.5px!important}
+
+.enterprise-column-picker>summary small{font-size:9.5px!important}
+.enterprise-column-options>strong,.enterprise-column-options>label,.enterprise-column-options>small{font-size:10px!important}
+
+.employee-360-rail-nav small{font-size:9.5px!important}
+.employee-360-access small{font-size:9.5px!important}
+.employee-360-access strong{font-size:10.5px!important}
+.employee-360-access-line,.employee-360-critical{font-size:9.5px!important}
+.employee-360-main-head p{font-size:10.5px!important}
+
+.recruiting-operations-panel>summary small,.compensation-proposal-panel>summary small,.growth-governed-panel>summary small,
+.onboarding-operations-panel>summary small,.offboarding-operations-panel>summary small,
+.service-governance-panel>summary small,.service-admin-panel>summary small{font-size:10px!important}
+.recruiting-operations-panel>summary>span:last-child,.compensation-proposal-panel>summary>span:last-child,
+.growth-governed-panel>summary>span:last-child,.onboarding-operations-panel>summary>span:last-child,
+.offboarding-operations-panel>summary>span:last-child,.service-governance-panel>summary>span:last-child,
+.service-admin-panel>summary>span:last-child{font-size:9.5px!important}
+.growth-section-head p{font-size:10px!important}
+
+.recruit-title p{font-size:10px!important}
+.recruit-title>span{font-size:9.5px!important}
+.pipeline-column header strong{font-size:10.5px!important}
+.pipeline-column header span{font-size:9.5px!important}
+.candidate-avatar{font-size:9.5px!important}
+.pipeline-column article strong{font-size:10.5px!important}
+.pipeline-column article small,.pipeline-column article em{font-size:9.5px!important}
+.pipeline-column>.pipeline-count-label,.pipeline-column>.preview-static-label{font-size:9.5px!important}
+.privacy-strip strong{font-size:10.5px!important}
+.privacy-strip p,.privacy-strip>span{font-size:9.5px!important}
+.journey-avatar{font-size:9.5px!important}
+.journey-person strong,.journey-owner strong{font-size:10.5px!important}
+.journey-person small,.journey-owner small,.journey-progress small,.journey-list em{font-size:9.5px!important}
+.task-control-list strong{font-size:10.5px!important}
+.task-control-list small,.task-control-list b,.onboarding-policy p{font-size:9.5px!important}

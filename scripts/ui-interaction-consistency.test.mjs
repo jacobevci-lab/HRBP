@@ -151,3 +151,23 @@ test("cockpit cards and KPI helper text stay above the previous microtype scale"
   assert.match(unified, /\.enterprise-stat span[^]*font-size:10\.5px/);
   assert.match(unified, /\.enterprise-stat small[^]*font-size:9\.5px/);
 });
+
+test("primary workflow secondary copy no longer falls back to 7–9px microtype", () => {
+  const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
+  const pass = unified.slice(unified.lastIndexOf("/* 2026-11 readability pass 2"));
+  assert.ok(pass.length > 1000, "second readability pass must remain loaded after legacy module CSS");
+  for (const rule of [
+    ".metric-meta{font-size:10px!important}",
+    ".card-header p{font-size:10px!important}",
+    ".attention-row small{font-size:10px!important}",
+    ".my-work-source-panel>summary>small,.my-work-history-panel>summary small{font-size:9.5px!important}",
+    ".operations-lane>a>small{font-size:10px!important}",
+    ".employee-home-balance-list small,.employee-home-next small,.employee-home-next span,.employee-home-learning-list small{font-size:9.5px!important}",
+    ".employee-360-rail-nav small{font-size:9.5px!important}",
+    ".employee-360-access small{font-size:9.5px!important}",
+    ".growth-section-head p{font-size:10px!important}",
+    ".pipeline-column article small,.pipeline-column article em{font-size:9.5px!important}",
+    ".journey-person small,.journey-owner small,.journey-progress small,.journey-list em{font-size:9.5px!important}",
+    ".task-control-list small,.task-control-list b,.onboarding-policy p{font-size:9.5px!important}"
+  ]) assert.ok(pass.includes(rule), rule + " must retain readable workflow microcopy");
+});
