@@ -1,4 +1,4 @@
-import { asEnumValue, asIdentifier, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
+import { asEnumValue, asIdentifier, asOptionalBoolean, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
 import { DataClassification, PositionStatus } from "@prisma/client";
 import { db, withDb } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
@@ -33,16 +33,17 @@ export async function POST(request: Request) {
   const gradeValue = asOptionalText(body.grade, 64);
   const locationValue = asOptionalText(body.location, 160);
   const statusValue = asEnumValue(body.status ?? PositionStatus.OPEN, [PositionStatus.OPEN, PositionStatus.PLANNED] as const);
-  const critical = body.critical === true;
+  const criticalValue = asOptionalBoolean(body.critical);
 
-  if (!positionCode || !title || !orgUnitId || jobFamilyValue === null || gradeValue === null || locationValue === null || !statusValue) {
+  if (!positionCode || !title || !orgUnitId || jobFamilyValue === null || gradeValue === null || locationValue === null || !statusValue || criticalValue === null) {
     return Response.json({
-      error: "A valid positionCode, title, orgUnitId and OPEN/PLANNED status are required; optional fields must stay within allowed lengths."
+      error: "A valid positionCode, title, orgUnitId and OPEN/PLANNED status are required; optional fields must stay within allowed lengths and critical must be boolean."
     }, { status: 400 });
   }
   const jobFamily = jobFamilyValue ?? null;
   const grade = gradeValue ?? null;
   const location = locationValue ?? null;
+  const critical = criticalValue ?? false;
 
   try {
     const position = await withDb((client) => client.$transaction(async (tx) => {
