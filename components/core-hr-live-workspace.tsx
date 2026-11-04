@@ -16,7 +16,7 @@ import { buildEnterpriseViewHref, listSavedEnterpriseViews, sanitizeEnterpriseVi
 function c(locale: Locale, en: string, tr: string) { return locale === "tr" ? tr : en; }
 function localStatus(locale: Locale, value: string) {
   if (locale !== "tr") return value;
-  const map: Record<string,string> = { ACTIVE:"Aktif", PREBOARDING:"İşe başlamadan önce", "ON LEAVE":"İzinde", TERMINATED:"Sonlandırıldı", OPEN:"Açık", PLANNED:"Planlandı", FILLED:"Dolu", APPROVED:"Onaylandı", APPROVAL:"Onay bekliyor", APPLIED:"Uygulandı", DRAFT:"Taslak", REJECTED:"Reddedildi", PENDING:"Bekliyor", SCHEDULED:"Planlandı", COMPLETED:"Tamamlandı", CONFIDENTIAL:"Gizli", RESTRICTED:"Kısıtlı", "HIGHLY RESTRICTED":"Yüksek kısıtlı" };
+  const map: Record<string,string> = { ACTIVE:"Aktif", PREBOARDING:"İşe başlamadan önce", "ON LEAVE":"İzinde", SUSPENDED:"Askıya alındı", TERMINATED:"Sonlandırıldı", OPEN:"Açık", PLANNED:"Planlandı", FILLED:"Dolu", APPROVED:"Onaylandı", APPROVAL:"Onay bekliyor", APPLIED:"Uygulandı", DRAFT:"Taslak", REJECTED:"Reddedildi", PENDING:"Bekliyor", SCHEDULED:"Planlandı", COMPLETED:"Tamamlandı", CONFIDENTIAL:"Gizli", RESTRICTED:"Kısıtlı", "HIGHLY RESTRICTED":"Yüksek kısıtlı" };
   return map[value.trim().toUpperCase()] ?? value;
 }
 function localEvent(locale: Locale, value: string) {
@@ -62,7 +62,8 @@ export async function CoreHRLiveWorkspace({ slug, query = "", status, columns = 
     const peopleStatusOptions = [
       { value: "ACTIVE", label: c(locale,"Active","Aktif") },
       { value: "PREBOARDING", label: c(locale,"Preboarding","İşe başlamadan önce") },
-      { value: "LEAVE", label: c(locale,"On leave","İzinde") }
+      { value: "LEAVE", label: c(locale,"On leave","İzinde") },
+      { value: "SUSPENDED", label: c(locale,"Suspended","Askıya alındı") }
     ];
     const peopleColumnOptions = [
       { value: "position", label: c(locale,"Position","Pozisyon") },

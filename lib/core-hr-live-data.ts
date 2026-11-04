@@ -49,6 +49,7 @@ function normalizedEmploymentStatus(value?: string): EmploymentStatus | null {
   if (normalized === EmploymentStatus.ACTIVE) return EmploymentStatus.ACTIVE;
   if (normalized === EmploymentStatus.PREBOARDING) return EmploymentStatus.PREBOARDING;
   if (normalized === EmploymentStatus.LEAVE) return EmploymentStatus.LEAVE;
+  if (normalized === EmploymentStatus.SUSPENDED) return EmploymentStatus.SUSPENDED;
   return null;
 }
 

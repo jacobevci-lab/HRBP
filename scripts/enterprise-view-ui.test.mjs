@@ -57,6 +57,8 @@ test("status filters are allowlisted and relationship scope remains part of data
   assert.match(data, /EmploymentStatus\.ACTIVE/);
   assert.match(data, /EmploymentStatus\.PREBOARDING/);
   assert.match(data, /EmploymentStatus\.LEAVE/);
+  assert.match(data, /EmploymentStatus\.SUSPENDED/);
+  assert.match(workspace, /value: "SUSPENDED", label: c\(locale,"Suspended","Askıya alındı"\)/);
   assert.match(data, /normalizedPositionStatus/);
   for (const value of ["OPEN","PLANNED","FILLED","FROZEN","CLOSED"]) {
     assert.match(data, new RegExp("PositionStatus\\." + value));

@@ -31,7 +31,7 @@ const definitions: Record<EnterpriseViewModule, {
   people: {
     capability: "people:read",
     basePath: "/module/people",
-    statuses: new Set(["ACTIVE", "PREBOARDING", "LEAVE"]),
+    statuses: new Set(["ACTIVE", "PREBOARDING", "LEAVE", "SUSPENDED"]),
     columns: new Set(["position", "department", "location", "status", "start"]),
     sorts: new Set(["name", "employeeNumber"])
   },

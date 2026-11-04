@@ -200,3 +200,12 @@ test("saved views make overwrite and deletion behavior explicit", () => {
   assert.match(control, /Delete “\$\{view\.name\}” view\?/);
   assert.match(control, /enterprise-save-view-hint/);
 });
+
+test("saved People views allow the model-supported suspended status", () => {
+  const api = loadService();
+  const state = api.sanitizeEnterpriseViewState("people", { status: "suspended" });
+  assert.equal(state.status, "SUSPENDED");
+  const href = api.buildEnterpriseViewHref("people", state);
+  assert.equal(new URL(href, "https://hrbp.invalid").searchParams.get("status"), "SUSPENDED");
+  assert.match(source, /statuses: new Set\(\["ACTIVE", "PREBOARDING", "LEAVE", "SUSPENDED"\]\)/);
+});

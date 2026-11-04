@@ -330,3 +330,25 @@ test("export status labels cover the full EmploymentStatus enum contract", () =>
   assert.match(routeSource, /SUSPENDED: \["Suspended", "Askıya alındı"\]/);
   assert.equal(enums.EmploymentStatus.SUSPENDED, "SUSPENDED");
 });
+
+test("people export accepts the model-supported suspended status", async () => {
+  const h = harness({
+    capabilities: ["people:read"],
+    peopleRows(query) {
+      assert.equal(query.where.employments.some.status, "SUSPENDED");
+      assert.equal(query.select.employments.where.status, "SUSPENDED");
+      return [{
+        employeeNumber: "E-SUSP",
+        givenName: "Suspended",
+        familyName: "Worker",
+        workEmail: "suspended@example.test",
+        employments: [{ status: "SUSPENDED", startDate: new Date("2026-01-01T00:00:00Z"), position: null }]
+      }];
+    }
+  });
+  const response = await h.GET(request("module=people&status=SUSPENDED&columnsMode=custom&columns=status"));
+  assert.equal(response.status, 200);
+  const csv = await response.text();
+  assert.ok(csv.includes('"Suspended"'));
+  assert.equal(h.audits[0].action, "PEOPLE_REGISTER_EXPORTED");
+});
