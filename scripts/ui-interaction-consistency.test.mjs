@@ -190,3 +190,21 @@ test("operational consoles and lifecycle modules keep readable control text", ()
     ".workpay-table th{font-size:10px!important}"
   ]) assert.ok(pass.includes(rule), rule + " must retain readable operational typography");
 });
+
+test("admin audit settings and workflow surfaces keep readable typography", () => {
+  const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
+  const pass = unified.slice(unified.lastIndexOf("/* 2026-11 readability pass 4"));
+  assert.ok(pass.length > 5000, "admin and workflow readability overrides must remain in the final visual contract");
+  for (const rule of [
+    ".audit-table th{font-size:10px!important}",
+    ".audit-table td,.audit-table td strong{font-size:10.5px!important}",
+    ".form-field label{font-size:10px!important}",
+    ".settings-live-table th{font-size:10px!important}",
+    ".settings-live-table td,.settings-live-table td strong{font-size:10.5px!important}",
+    ".connection-lifecycle-table th{font-size:10px!important}",
+    ".workflow-action-table th{font-size:10px!important}",
+    ".workflow-editor-mode select,.workflow-editor-metadata input,.workflow-editor-metadata textarea,",
+    ".workflow-version-summary small,",
+    ".workflow-action-result-count{font-size:9.5px!important}"
+  ]) assert.ok(pass.includes(rule), rule + " must retain readable admin/workflow typography");
+});

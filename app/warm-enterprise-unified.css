@@ -907,3 +907,96 @@ a.metric-card:hover{
 .workpay-table th{font-size:10px!important}
 .workpay-status,.control-stack small,.balance-ring span,.payroll-step small{font-size:9.5px!important}
 .mini-rule,.mini-rule strong{font-size:10px!important}
+
+/* 2026-11 readability pass 4: admin, audit, settings, workflow and global surfaces. */
+/* Global / enterprise utility copy */
+a.card-footer-button strong{font-size:10px!important}
+.table-title>span,.org-node small,.identity-meta span,.profile-timeline small,.security-status small,
+.processing-list span,.processing-list small,.processing-list em,.control-score small,.enterprise-table code{font-size:9.5px!important}
+.pill,.critical-badge,.classification,.mini-policy{font-size:9.5px!important}
+.governance-note p,.profile-card dt,.privacy-controls li{font-size:10px!important}
+.global-search-result-copy small,.global-search-result em,.global-search-hints{font-size:9.5px!important}
+
+/* Governance and connected growth */
+.gov-metric small{font-size:10px!important}
+.gov-table th{font-size:10px!important}
+.gov-pill,.gov-controls small,.planning-chain span{font-size:9.5px!important}
+.gov-copy{font-size:10px!important}
+.growth-lifecycle-copy small,.growth-lifecycle-copy span,.growth-lifecycle-actions .secondary-button{font-size:9.5px!important}
+.growth-lifecycle-empty{font-size:10px!important}
+
+/* Audit ledger and integrity */
+.audit-metric small,.audit-metric p,.audit-integrity-alert p{font-size:10px!important}
+.audit-search input,.audit-filter-bar select{font-size:10.5px!important}
+.audit-ledger-head>small,.audit-action,.audit-classification,.audit-table code{font-size:9.5px!important}
+.audit-table th{font-size:10px!important}
+.audit-table td,.audit-table td strong{font-size:10.5px!important}
+.audit-table td small{font-size:9.5px!important}
+
+/* Authentication */
+.auth-screen .auth-brand small,.auth-screen .auth-kicker,.form-field label{font-size:10px!important}
+.auth-brand-trail,.auth-method-divider,.local-auth-head>span,
+.auth-screen .auth-footnote span:not(.auth-footnote-icon),.form-hint,.form-check small{font-size:9.5px!important}
+
+/* Legacy global shell helpers still visible in supporting screens */
+.brand small,.nav-label,.workforce-summary small,.lifecycle-item p,.trust-score p,.trust-list span{font-size:10px!important}
+.nav-item em,.global-search kbd,.eyebrow,.section-kicker,.bar-col span,.lifecycle-item small,
+.timeline-item small,.timeline-item time,.person-cell>span,.status,.score-ring small,.trust-list strong{font-size:9.5px!important}
+th{font-size:10px!important}
+
+/* Platform administration */
+.platform-metric small{font-size:10px!important}
+.platform-table th{font-size:10px!important}
+.platform-pill,.platform-controls small{font-size:9.5px!important}
+.security-list div,.security-list strong{font-size:10px!important}
+
+/* Settings / connections */
+.settings-connections-heading p{font-size:10px!important}
+.settings-connection-title small,.settings-connection-flags label,.connection-edit-select,.connection-edit-empty{font-size:9.5px!important}
+.settings-connection-fields label{font-size:10px!important}
+.settings-connection-fields input,.settings-connection-fields select,.connection-edit-select select{font-size:10.5px!important}
+
+.settings-live-state,.settings-live-checks small,.settings-live-footnote,.settings-notification-counts small,
+.settings-notification-action small,.settings-policy-toggle small,.settings-policy-footer small,
+.local-account-table td small,.notification-ops-metrics button span,.notification-ops-table td small,
+.notification-ops-error,.settings-smtp-test .workflow-action-message{font-size:9.5px!important}
+.settings-live-metric small,.settings-live-metric p,.settings-security-policy dt,.settings-security-policy dd,
+.settings-policy-warning,.settings-policy-toggle strong,.settings-policy-message,
+.local-account-admin .settings-live-panel-head p,.settings-local-auth-observability .settings-live-panel-head p,
+.notification-ops-console .settings-live-panel-head p{font-size:10px!important}
+.settings-live-table th{font-size:10px!important}
+.settings-live-table td,.settings-live-table td strong{font-size:10.5px!important}
+.settings-policy-fields label,.local-account-create label>span{font-size:10px!important}
+.settings-policy-kms{font-size:9.5px!important}
+.local-account-create input,.local-account-create select,.local-account-reset input{font-size:10.5px!important}
+
+/* Notifications */
+.notification-count,.notification-menu-header small,.notification-menu-header button,.notification-menu-copy time,
+.notifications-filter button span,.notification-row-title span,.notification-row-meta,
+.notification-row-actions button,.notification-row-actions a{font-size:9.5px!important}
+
+/* Connection lifecycle */
+.connection-lifecycle-heading p{font-size:10px!important}
+.connection-lifecycle-title small,.connection-lifecycle-table td small,.connection-readiness,.connection-status,
+.connection-lifecycle-actions button,.connection-lifecycle-actions small{font-size:9.5px!important}
+.connection-lifecycle-table th{font-size:10px!important}
+.connection-lifecycle-table td,.connection-lifecycle-table td strong{font-size:10.5px!important}
+
+/* Workflow action center, editor, history and diff */
+.workflow-action-source-filters button{font-size:10px!important}
+.workflow-action-table th{font-size:10px!important}
+.workflow-action-table td small,.workflow-due,.workflow-source,.workflow-urgency,.workflow-task-status,
+.primary-button.compact,.secondary-button.compact{font-size:9.5px!important}
+.workflow-editor-head p,.workflow-decision-history-head p{font-size:10px!important}
+.workflow-editor-mode label>span,.workflow-editor-metadata label>span,.workflow-step-fields label>span,
+.workflow-version-compare-selects label>span{font-size:10px!important}
+.workflow-editor-mode select,.workflow-editor-metadata input,.workflow-editor-metadata textarea,
+.workflow-step-fields input,.workflow-step-fields select,.workflow-history-controls select,
+.workflow-version-compare-selects select,.workflow-action-search input{font-size:10.5px!important}
+.workflow-step-builder-head>div>span,.workflow-step-builder-head strong,.workflow-version-compare-head span{font-size:10px!important}
+.workflow-step-index>span,.workflow-editor-footer small,.workflow-history-metrics span,.workflow-history-chips>span,
+.workflow-history-footnote,.workflow-version-compare-head small,.workflow-version-summary small,
+.workflow-version-summary span,.workflow-version-diff-row small,.workflow-version-diff-row span,
+.workflow-version-diff-row>div:first-child span,.workflow-action-toggle,.workflow-action-toggle strong,
+.workflow-action-result-count{font-size:9.5px!important}
+.workflow-editor-message,.workflow-version-diff-row strong,.workflow-version-compare-empty{font-size:10px!important}
