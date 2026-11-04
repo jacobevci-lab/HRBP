@@ -284,7 +284,11 @@ test("Turkish export locale localizes register headers and boolean labels", asyn
       givenName: "Ada",
       familyName: "Örnek",
       workEmail: "ada@example.test",
-      employments: []
+      employments: [{
+        status: "ACTIVE",
+        startDate: new Date("2026-10-01T00:00:00Z"),
+        position: null
+      }]
     }]
   });
   const peopleResponse = await people.GET(request("module=people&locale=tr&columnsMode=custom&columns=status"));
@@ -292,6 +296,8 @@ test("Turkish export locale localizes register headers and boolean labels", asyn
   const peopleCsv = await peopleResponse.text();
   assert.ok(peopleCsv.includes('"Çalışan no","Ad Soyad","İş e-postası","Durum"'));
   assert.ok(!peopleCsv.includes('"Employee ID"'));
+  assert.ok(peopleCsv.includes('"Aktif"'));
+  assert.ok(!peopleCsv.includes('"ACTIVE"'));
 
   const positions = harness({
     capabilities: ["positions:read"],
@@ -306,10 +312,12 @@ test("Turkish export locale localizes register headers and boolean labels", asyn
       employments: []
     }]
   });
-  const positionResponse = await positions.GET(request("module=positions&locale=tr&columnsMode=custom&columns=critical"));
+  const positionResponse = await positions.GET(request("module=positions&locale=tr&columnsMode=custom&columns=status&columns=critical"));
   assert.equal(positionResponse.status, 200);
   const positionCsv = await positionResponse.text();
-  assert.ok(positionCsv.includes('"Pozisyon kodu","Unvan","Kritik"'));
+  assert.ok(positionCsv.includes('"Pozisyon kodu","Unvan","Durum","Kritik"'));
+  assert.ok(positionCsv.includes('"Açık"'));
   assert.ok(positionCsv.includes('"Evet"'));
+  assert.ok(!positionCsv.includes('"OPEN"'));
   assert.ok(!positionCsv.includes('"Yes"'));
 });

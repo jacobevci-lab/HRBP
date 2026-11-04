@@ -50,6 +50,30 @@ function copy(locale: "tr" | "en", en: string, tr: string) {
   return locale === "tr" ? tr : en;
 }
 
+function employmentStatusLabel(locale: "tr" | "en", value: EmploymentStatus | undefined) {
+  if (!value) return "";
+  const labels: Record<EmploymentStatus, [string, string]> = {
+    ACTIVE: ["Active", "Aktif"],
+    PREBOARDING: ["Preboarding", "İşe başlamadan önce"],
+    LEAVE: ["On leave", "İzinde"],
+    TERMINATED: ["Terminated", "Sonlandırıldı"]
+  };
+  const label = labels[value];
+  return label ? copy(locale, label[0], label[1]) : value;
+}
+
+function positionStatusLabel(locale: "tr" | "en", value: PositionStatus) {
+  const labels: Record<PositionStatus, [string, string]> = {
+    OPEN: ["Open", "Açık"],
+    PLANNED: ["Planned", "Planlandı"],
+    FILLED: ["Filled", "Dolu"],
+    FROZEN: ["Frozen", "Donduruldu"],
+    CLOSED: ["Closed", "Kapalı"]
+  };
+  const label = labels[value];
+  return label ? copy(locale, label[0], label[1]) : value;
+}
+
 function direction(params: URLSearchParams): Direction | null {
   const raw = params.get("dir");
   if (!raw || raw === "asc") return "asc";
@@ -197,7 +221,7 @@ async function exportPeople(ctx: NonNullable<Awaited<ReturnType<typeof getReques
     if (columns.has("position")) values.push(position?.title ?? "", position?.positionCode ?? "");
     if (columns.has("department")) values.push(position?.orgUnit.name ?? "");
     if (columns.has("location")) values.push(position?.location ?? "");
-    if (columns.has("status")) values.push(employment?.status ?? "");
+    if (columns.has("status")) values.push(employmentStatusLabel(locale, employment?.status));
     if (columns.has("start")) values.push(employment?.startDate.toISOString().slice(0, 10) ?? "");
     lines.push(values);
   }
@@ -281,7 +305,7 @@ async function exportPositions(ctx: NonNullable<Awaited<ReturnType<typeof getReq
     if (columns.has("grade")) values.push(row.grade ?? "");
     if (columns.has("location")) values.push(row.location ?? "");
     if (columns.has("incumbent")) values.push(incumbent ? `${incumbent.givenName} ${incumbent.familyName}` : "");
-    if (columns.has("status")) values.push(row.status);
+    if (columns.has("status")) values.push(positionStatusLabel(locale, row.status));
     if (columns.has("critical")) values.push(row.critical ? copy(locale, "Yes", "Evet") : copy(locale, "No", "Hayır"));
     lines.push(values);
   }
