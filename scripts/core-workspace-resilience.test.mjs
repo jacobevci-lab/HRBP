@@ -42,7 +42,7 @@ function text(tree) {
   if (typeof tree === 'object') return text(tree.props?.children);
   return String(tree);
 }
-function fixture(slug, { locale = 'en', ctx = { tenantId: 'tenant-test', actorId: 'test-user' },
+function fixture(slug, { locale = 'en', ctx = { tenantId: 'tenant-test', actorId: 'test-user', role: 'HR_OPERATIONS' },
   capabilities = ['people:read', 'people:write', 'positions:read', 'positions:write', 'organization:read'],
   fail, importFail } = {}) {
   const calls = [];
@@ -53,6 +53,12 @@ function fixture(slug, { locale = 'en', ctx = { tenantId: 'tenant-test', actorId
       assert.equal(actual, ctx, 'capability checks must use the resolved identity');
       return capabilities.includes(capability);
     } },
+    '@/lib/workforce-master-data-access': {
+      canCreateEmployeeMasterRecord: actual => {
+        assert.equal(actual, ctx, 'master-data checks must use the resolved identity');
+        return capabilities.includes('people:write') && ['HR_OPERATIONS', 'TENANT_ADMIN'].includes(actual?.role);
+      }
+    },
     '@/components/core-hr-live-workspace': importFail || { CoreHRLiveWorkspace: async args => {
       calls.push(JSON.parse(JSON.stringify(args)));
       if (fail) throw fail;
@@ -118,6 +124,15 @@ for (const slug of ['people', 'positions']) {
     });
   }
 }
+test('people: HRBP write capability does not expose master-data create CTA', async () => {
+  const route = fixture('people', {
+    ctx: { tenantId: 'tenant-test', actorId: 'hrbp-user', role: 'HRBP' },
+    capabilities: ['people:read', 'people:write']
+  });
+  const tree = await route.default({ searchParams: Promise.resolve({}) });
+  assert.ok(!nodes(tree).some(n => n.type === 'a' && n.props.href === '/module/people/new'));
+});
+
 test('People search forwards an exact string, ignores duplicate/array query values', async () => {
   for (const q of ['Ayşe & Ömer', ['Ayşe', 'Ömer'], undefined]) {
     const route = fixture('people');
