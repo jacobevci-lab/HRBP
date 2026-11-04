@@ -235,3 +235,14 @@ test("global search groups module people and position results without breaking f
   assert.match(globalSearch, /"People"/);
   assert.match(globalSearch, /"Positions"/);
 });
+
+test("global search clears stale results before a debounced live query starts", () => {
+  const effectStart = globalSearch.indexOf("const normalized = query.trim()");
+  const timerIndex = globalSearch.indexOf("const timer = window.setTimeout", effectStart);
+  const clearIndex = globalSearch.indexOf("setItems([])", effectStart);
+  const loadingIndex = globalSearch.indexOf("setLoading(true)", effectStart);
+  assert.ok(effectStart > -1 && clearIndex > effectStart && clearIndex < timerIndex);
+  assert.ok(loadingIndex > clearIndex && loadingIndex < timerIndex);
+  assert.match(globalSearch.slice(effectStart, timerIndex), /setDegraded\(false\)/);
+  assert.match(globalSearch.slice(effectStart, timerIndex), /setActiveIndex\(0\)/);
+});

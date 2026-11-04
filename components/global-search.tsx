@@ -72,9 +72,14 @@ export function GlobalSearch() {
       return;
     }
 
+    setItems([]);
+    setDegraded(false);
+    setActiveIndex(0);
+    setOpen(true);
+    setLoading(true);
+
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
-      setLoading(true);
       try {
         const response = await fetch(`/api/search?q=${encodeURIComponent(normalized)}`, { cache: "no-store", signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
