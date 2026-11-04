@@ -45,9 +45,10 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
   const initial: PositionBulkActionState = { ok: false };
   const [state, action] = useActionState(positionBulkCriticalityAction, initial);
   const [selection, setSelection] = useState({ total: 0, critical: 0, nonCritical: 0 });
+  const [successDismissed, setSuccessDismissed] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const message = messageFor(locale, state);
-  const visibleMessage = state.ok && selection.total ? "" : message;
+  const visibleMessage = state.ok && successDismissed ? "" : message;
   const selectionText = selection.total
     ? (tr
       ? `${selection.total} seçili · ${selection.critical} kritik · ${selection.nonCritical} kritik değil`
@@ -78,6 +79,7 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
       input.indeterminate = false;
     });
     setSelection({ total: 0, critical: 0, nonCritical: 0 });
+    setSuccessDismissed(false);
   }, [state]);
 
   return <form
@@ -87,6 +89,7 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
     onChange={(event) => {
       if (!(event.target instanceof HTMLInputElement)) return;
       const target = event.target;
+      if (state.ok) setSuccessDismissed(true);
       if (target.matches("[data-position-select-all]")) {
         formRef.current?.querySelectorAll<HTMLInputElement>('input[name="positionIds"]').forEach((input) => {
           input.checked = target.checked;
@@ -140,6 +143,7 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
               input.indeterminate = false;
             });
             setSelection({ total: 0, critical: 0, nonCritical: 0 });
+            if (state.ok) setSuccessDismissed(true);
           }}
         ><X size={14}/>{tr ? "Seçimi temizle" : "Clear selection"}</button>
       </div>

@@ -84,8 +84,11 @@ test("position bulk controls participate in responsive Warm Enterprise styling",
   assert.match(unified, /\.position-bulk-success,.position-bulk-error\{font-size:10px!important\}/);
 });
 
-test("successful bulk feedback clears visually when a new selection starts", () => {
-  assert.match(control, /const visibleMessage = state\.ok && selection\.total \? "" : message/);
+test("successful bulk feedback stays dismissed after the operator starts a new selection", () => {
+  assert.match(control, /const \[successDismissed, setSuccessDismissed\] = useState\(false\)/);
+  assert.match(control, /const visibleMessage = state\.ok && successDismissed \? "" : message/);
+  assert.match(control, /if \(state\.ok\) setSuccessDismissed\(true\)/);
+  assert.match(control, /setSuccessDismissed\(false\)/);
   assert.match(control, /\{visibleMessage \? <small/);
   assert.match(control, />\{visibleMessage\}<\/small>/);
 });
