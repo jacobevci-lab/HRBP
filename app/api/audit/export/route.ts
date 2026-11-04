@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { safeCsvCell } from "@/lib/csv";
 import { getRequestContext, unauthorized } from "@/lib/request-context";
 
+const AUDIT_EXPORT_LIMIT = 5000;
+
 function classification(value: string | null): DataClassification | undefined {
   return value && Object.values(DataClassification).includes(value as DataClassification) ? value as DataClassification : undefined;
 }
@@ -41,13 +43,22 @@ export async function GET(request: Request) {
   const rows = await db.auditEvent.findMany({
     where,
     orderBy: [{ ledgerSequence: "desc" }],
-    take: 5000,
+    take: AUDIT_EXPORT_LIMIT + 1,
     select: {
       id: true, ledgerSequence: true, actorId: true, action: true, resourceType: true, resourceId: true,
       purpose: true, classification: true, ipAddress: true, occurredAt: true,
       hash: true, previousHash: true
     }
   });
+
+  if (rows.length > AUDIT_EXPORT_LIMIT) {
+    return Response.json({
+      error: `Audit export exceeds ${AUDIT_EXPORT_LIMIT} rows. Narrow the filters or time window before exporting.`
+    }, {
+      status: 422,
+      headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
+    });
+  }
 
   const header = ["ledgerSequence", "id", "occurredAt", "actorId", "action", "resourceType", "resourceId", "classification", "ipAddress", "purpose", "hash", "previousHash"];
   const lines = [header.map(safeCsvCell).join(",")];
