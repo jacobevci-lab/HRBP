@@ -1006,3 +1006,9 @@ th{font-size:10px!important}
 
 /* Enterprise register export stays compact but visibly actionable. */
 .enterprise-view-export{height:38px!important;display:inline-flex!important;align-items:center;gap:6px;white-space:nowrap;font-size:10.5px!important;text-decoration:none}
+
+/* Filter-aware register empty states distinguish no data from no matches. */
+.enterprise-empty-cell{padding:0!important}
+.enterprise-empty-row{min-height:112px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:22px;text-align:center}
+.enterprise-empty-row>span{max-width:560px;color:var(--muted);font-size:11px;line-height:1.5}
+.enterprise-empty-row>.secondary-button{min-height:34px;padding-inline:12px;font-size:10.5px!important;text-decoration:none}

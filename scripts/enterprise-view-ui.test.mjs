@@ -154,3 +154,15 @@ test("People and Positions expose scoped filtered CSV exports", () => {
   assert.match(route, /x-content-type-options": "nosniff"/);
   assert.match(unified, /\.enterprise-view-export\{/);
 });
+
+test("People and Positions distinguish empty registers from empty filtered results", () => {
+  assert.match(workspace, /const peopleFiltered = Boolean\(currentView\.query \|\| currentView\.status\)/);
+  assert.match(workspace, /No people match the current filters\./);
+  assert.match(workspace, /No people records are available\./);
+  assert.match(workspace, /actionHref=\{peopleFiltered \? "\/module\/people" : undefined\}/);
+  assert.match(workspace, /const positionsFiltered = Boolean\(currentView\.query \|\| currentView\.status\)/);
+  assert.match(workspace, /No positions match the current filters\./);
+  assert.match(workspace, /No positions are configured\./);
+  assert.match(workspace, /actionHref=\{positionsFiltered \? "\/module\/positions" : undefined\}/);
+  assert.match(unified, /\.enterprise-empty-row\{/);
+});
