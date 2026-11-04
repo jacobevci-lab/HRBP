@@ -8,6 +8,21 @@ const routePath = "app/api/core-hr/export/route.ts";
 const routeSource = readFileSync(routePath, "utf8");
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
+function loadCsvHelper() {
+  const path = "lib/csv.ts";
+  const compiled = ts.transpileModule(readFileSync(path, "utf8"), {
+    fileName: path,
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    reportDiagnostics: true
+  });
+  assert.equal((compiled.diagnostics ?? []).filter((item) => item.category === ts.DiagnosticCategory.Error).length, 0);
+  const module = { exports: {} };
+  runInNewContext(compiled.outputText, { module, exports: module.exports }, { filename: path, timeout: 2000 });
+  return module.exports;
+}
+
+const csvHelper = loadCsvHelper();
+
 function loadRoute(dependencies) {
   const compiled = ts.transpileModule(readFileSync(routePath, "utf8"), {
     fileName: routePath,
@@ -80,6 +95,7 @@ function harness(options = {}) {
       forbidden() { return Response.json({ error: "Access denied by policy." }, { status: 403 }); }
     },
     "@/lib/db": { db },
+    "@/lib/csv": csvHelper,
     "@/lib/employment-scope": {
       employmentPrimaryKeyFilter(value) { return value === null ? {} : { id: { in: value } }; },
       async resolveEmploymentScope(receivedDb, receivedCtx) {
