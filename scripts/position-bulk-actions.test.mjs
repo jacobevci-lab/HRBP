@@ -83,3 +83,9 @@ test("position bulk controls participate in responsive Warm Enterprise styling",
   assert.match(unified, /\.position-bulk-bar>div:first-child span\{font-size:10px!important\}/);
   assert.match(unified, /\.position-bulk-success,.position-bulk-error\{font-size:10px!important\}/);
 });
+
+test("successful bulk feedback clears visually when a new selection starts", () => {
+  assert.match(control, /const visibleMessage = state\.ok && selection\.total \? "" : message/);
+  assert.match(control, /\{visibleMessage \? <small/);
+  assert.match(control, />\{visibleMessage\}<\/small>/);
+});

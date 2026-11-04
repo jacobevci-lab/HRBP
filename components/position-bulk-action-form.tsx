@@ -47,6 +47,7 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
   const [selection, setSelection] = useState({ total: 0, critical: 0, nonCritical: 0 });
   const formRef = useRef<HTMLFormElement>(null);
   const message = messageFor(locale, state);
+  const visibleMessage = state.ok && selection.total ? "" : message;
   const selectionText = selection.total
     ? (tr
       ? `${selection.total} seçili · ${selection.critical} kritik · ${selection.nonCritical} kritik değil`
@@ -142,7 +143,7 @@ function EnabledPositionBulkActionForm({ locale, children }: { locale: Locale; c
           }}
         ><X size={14}/>{tr ? "Seçimi temizle" : "Clear selection"}</button>
       </div>
-      {message ? <small className={state.ok ? "position-bulk-success" : "position-bulk-error"} role={state.ok ? "status" : "alert"}>{message}</small> : null}
+      {visibleMessage ? <small className={state.ok ? "position-bulk-success" : "position-bulk-error"} role={state.ok ? "status" : "alert"}>{visibleMessage}</small> : null}
     </div>
     {children}
   </form>;
