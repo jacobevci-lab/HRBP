@@ -68,6 +68,52 @@ export function EnterpriseViewToolbar({
   const exportHref = `/api/core-hr/export?${exportParams.toString()}`;
   const shareHref = buildEnterpriseViewHref(moduleKey, current);
 
+  const statusLabel = status ? statusOptions.find((option) => option.value === status)?.label ?? status : null;
+  const sortLabel = sortKey ? sortOptions.find((option) => option.value === sortKey)?.label ?? sortKey : null;
+  const queryLabel = query.length > 34 ? `${query.slice(0, 31)}…` : query;
+  const activeViewChips = [
+    query ? {
+      key: "query",
+      label: tr ? `Arama: “${queryLabel}”` : `Search: “${queryLabel}”`,
+      title: tr ? `Aramayı kaldır: ${query}` : `Remove search: ${query}`,
+      href: buildEnterpriseViewHref(moduleKey, { ...current, query: "" })
+    } : null,
+    status ? {
+      key: "status",
+      label: tr ? `Durum: ${statusLabel}` : `Status: ${statusLabel}`,
+      title: tr ? "Durum filtresini kaldır" : "Remove status filter",
+      href: buildEnterpriseViewHref(moduleKey, { ...current, status: undefined })
+    } : null,
+    columnsCustomized ? {
+      key: "columns",
+      label: tr ? `${columns.length}/${columnOptions.length} sütun` : `${columns.length}/${columnOptions.length} columns`,
+      title: tr ? "Varsayılan sütunlara dön" : "Restore default columns",
+      href: buildEnterpriseViewHref(moduleKey, {
+        ...current,
+        columns: columnOptions.map((option) => option.value),
+        columnsCustomized: false
+      })
+    } : null,
+    density === "compact" ? {
+      key: "density",
+      label: tr ? "Kompakt yoğunluk" : "Compact density",
+      title: tr ? "Rahat yoğunluğa dön" : "Restore comfortable density",
+      href: buildEnterpriseViewHref(moduleKey, { ...current, density: "comfortable" })
+    } : null,
+    sortKey ? {
+      key: "sort",
+      label: `${tr ? "Sıra" : "Sort"}: ${sortLabel} ${sortDirection === "desc" ? "↓" : "↑"}`,
+      title: tr ? "Varsayılan sıralamaya dön" : "Restore default sorting",
+      href: buildEnterpriseViewHref(moduleKey, { ...current, sortKey: undefined, sortDirection: "asc" })
+    } : null,
+    pageSize !== 50 ? {
+      key: "pageSize",
+      label: tr ? `${pageSize}/sayfa` : `${pageSize}/page`,
+      title: tr ? "Sayfa boyutunu 50 yap" : "Restore 50 rows per page",
+      href: buildEnterpriseViewHref(moduleKey, { ...current, pageSize: 50 })
+    } : null
+  ].filter((item): item is { key: string; label: string; title: string; href: string } => Boolean(item));
+
   return <div className="enterprise-view-toolbar">
     <form className="enterprise-view-controls" action={basePath} method="get">
       <label className="enterprise-view-search">
@@ -123,5 +169,14 @@ export function EnterpriseViewToolbar({
     <span className="enterprise-view-count">{totalCount === shownCount
       ? (tr ? `${shownCount} kayıt` : `${shownCount} records`)
       : (tr ? `${shownCount} / ${totalCount} gösteriliyor` : `${shownCount} / ${totalCount} shown`)}</span>
+
+    {activeViewChips.length ? <div className="enterprise-view-active-state" aria-label={tr ? "Etkin görünüm ayarları" : "Active view settings"}>
+      <span>{tr ? "Etkin görünüm" : "Active view"}</span>
+      <div>
+        {activeViewChips.map((chip) => <Link key={chip.key} className="enterprise-view-chip" href={chip.href} title={chip.title}>
+          <span>{chip.label}</span><X size={11} aria-hidden="true"/>
+        </Link>)}
+      </div>
+    </div> : null}
   </div>;
 }

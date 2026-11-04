@@ -241,3 +241,17 @@ test("enterprise toolbar secondary actions stay grouped on narrow screens", () =
   assert.match(css, /@media\(max-width:760px\)[\s\S]*\.enterprise-view-actions\{width:100%;flex:1 1 100%\}/);
   assert.match(css, /\.enterprise-view-actions>\.secondary-button,.enterprise-view-actions>\.enterprise-saved-views\{flex:1\}/);
 });
+
+test("enterprise registers expose removable active-view state chips", () => {
+  assert.match(toolbar, /const activeViewChips = \[/);
+  assert.match(toolbar, /buildEnterpriseViewHref\(moduleKey, \{ \.\.\.current, query: "" \}\)/);
+  assert.match(toolbar, /buildEnterpriseViewHref\(moduleKey, \{ \.\.\.current, status: undefined \}\)/);
+  assert.match(toolbar, /columnsCustomized: false/);
+  assert.match(toolbar, /density: "comfortable"/);
+  assert.match(toolbar, /sortKey: undefined, sortDirection: "asc"/);
+  assert.match(toolbar, /pageSize: 50/);
+  assert.match(toolbar, /className="enterprise-view-active-state"/);
+  assert.match(toolbar, /className="enterprise-view-chip"/);
+  assert.match(unified, /\.enterprise-view-active-state\{/);
+  assert.match(unified, /\.enterprise-view-chip:focus-visible/);
+});
