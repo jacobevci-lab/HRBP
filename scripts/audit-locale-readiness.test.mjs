@@ -106,8 +106,19 @@ test('leave decision browser uses deterministic locale readiness instead of netw
   assert.match(source, /import \{ waitForAuditLocale \} from '\.\/audit-locale-readiness\.mjs'/);
   assert.match(source, /waitForAuditLocale\(page, pagePath, locale\)/);
   assert.ok(!source.includes('networkidle'), 'Leave decision acceptance must not depend on global network silence');
-  assert.match(source, /waitForURL\(origin \+ pagePath, \{ waitUntil: 'commit', timeout: 15000 \}\)/,
-    'Leave login must observe navigation commit before locale/UI readiness');
+  assert.match(source, /async function submitLocalLogin/);
+  assert.match(source, /page\.waitForURL\(target, \{ waitUntil: 'commit', timeout: 30000 \}\)/,
+    'Leave login must first observe a navigation commit');
+  assert.match(source, /context\.request\.get\(origin \+ '\/api\/auth\/session'\)/,
+    'Slow redirects may recover only after independently probing the signed session');
+  assert.match(source, /assert\.equal\(body\.authenticated, true/,
+    'Redirect recovery must hard-fail without an authenticated session');
+  assert.match(source, /page\.goto\(target, \{ waitUntil: 'domcontentloaded', timeout: 30000 \}\)/,
+    'Verified slow redirects may explicitly complete target navigation');
+  const loginIndex = source.indexOf('await submitLocalLogin(');
+  const readinessIndex = source.indexOf('waitForAuditLocale(page, pagePath, locale)', loginIndex);
+  assert.ok(loginIndex > -1 && readinessIndex > loginIndex,
+    'Locale/UI readiness must run after committed or verified-recovered login navigation');
   assert.match(source, /waitForNavigation\(\{ waitUntil: 'domcontentloaded', timeout: 15000 \}\)/,
     'Leave reload must observe DOM commit and then locale/UI readiness');
 });
