@@ -128,7 +128,7 @@ export async function GET(request: Request) {
           id: position.id,
           title: position.title,
           subtitle: `${position.positionCode} · ${position.orgUnit.name}`,
-          href: "/module/positions"
+          href: `/module/positions?q=${encodeURIComponent(position.positionCode)}`
         }))
       ];
     });

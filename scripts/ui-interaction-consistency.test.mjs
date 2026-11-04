@@ -12,6 +12,8 @@ const coreWorkspace = readFileSync("components/core-hr-live-workspace.tsx", "utf
 const growthModule = readFileSync("components/growth-module-page.tsx", "utf8");
 const workPayModule = readFileSync("components/work-pay-module-page.tsx", "utf8");
 const governanceModule = readFileSync("components/governance-planning-module-page.tsx", "utf8");
+const globalSearch = readFileSync("components/global-search.tsx", "utf8");
+const globalSearchRoute = readFileSync("app/api/search/route.ts", "utf8");
 
 test("all major cockpit links receive a visible keyboard focus treatment", () => {
   for (const selector of [
@@ -207,4 +209,18 @@ test("admin audit settings and workflow surfaces keep readable typography", () =
     ".workflow-version-summary small,",
     ".workflow-action-result-count{font-size:9.5px!important}"
   ]) assert.ok(pass.includes(rule), rule + " must retain readable admin/workflow typography");
+});
+
+test("global search keeps hidden results inert and deep-links position matches", () => {
+  assert.match(globalSearch, /event\.key === "Enter" && open/);
+  assert.doesNotMatch(globalSearch, /else if \(event\.key === "Enter"\) \{/);
+  assert.match(globalSearchRoute, /href: `\/module\/positions\?q=\$\{encodeURIComponent\(position\.positionCode\)\}`/);
+});
+
+test("global search reports degraded live-data state before ordinary empty results", () => {
+  const degradedIndex = globalSearch.indexOf("if (degraded)");
+  const emptyIndex = globalSearch.indexOf("if (!items.length)");
+  assert.ok(degradedIndex > -1 && emptyIndex > degradedIndex);
+  assert.match(globalSearch, /Live people\/position search is limited; no accessible module matches\./);
+  assert.match(globalSearch, /Canlı çalışan\/pozisyon araması sınırlı; erişilebilir modül eşleşmesi yok\./);
 });

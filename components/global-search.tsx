@@ -104,8 +104,11 @@ export function GlobalSearch() {
       ? (locale === "tr" ? "Staging modüllerini aramak için en az 2 karakter yaz." : "Type at least 2 characters to search staging modules.")
       : (locale === "tr" ? "Aramak için en az 2 karakter yaz." : "Type at least 2 characters to search.");
     if (loading) return locale === "tr" ? "Aranıyor…" : "Searching…";
+    if (degraded) return items.length
+      ? (locale === "tr" ? "Canlı çalışan/pozisyon araması sınırlı; modül sonuçları gösteriliyor." : "Live people/position search is limited; module results are shown.")
+      : (locale === "tr" ? "Canlı çalışan/pozisyon araması sınırlı; erişilebilir modül eşleşmesi yok." : "Live people/position search is limited; no accessible module matches.");
     if (!items.length) return locale === "tr" ? "Eşleşme bulunamadı." : "No matches found.";
-    return degraded ? (locale === "tr" ? "Canlı veri sınırlı; modül sonuçları gösteriliyor." : "Live data is limited; module results are shown.") : null;
+    return null;
   }, [degraded, items.length, loading, locale, publicStaging, query]);
 
   function choose(item: SearchItem) {
@@ -123,7 +126,7 @@ export function GlobalSearch() {
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setActiveIndex((value) => (value - 1 + items.length) % items.length);
-    } else if (event.key === "Enter") {
+    } else if (event.key === "Enter" && open) {
       event.preventDefault();
       choose(items[Math.min(activeIndex, items.length - 1)]);
     }
