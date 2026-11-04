@@ -33,18 +33,19 @@ const prisma = {
   DataClassification: { CONFIDENTIAL: "CONFIDENTIAL" },
   EmploymentStatus: { TERMINATED: "TERMINATED", PREBOARDING: "PREBOARDING", ACTIVE: "ACTIVE" },
   LifecycleEventType: { HIRED: "HIRED" },
-  PositionStatus: { OPEN: "OPEN", PLANNED: "PLANNED", FILLED: "FILLED" }
+  PositionStatus: { OPEN: "OPEN", PLANNED: "PLANNED", FILLED: "FILLED" },
+  Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } }
 };
 
-function peopleFixture({ positionStatus = "OPEN" } = {}) {
+function peopleFixture({ positionStatus = "OPEN", claimCount = 1, transactionError = null } = {}) {
   const calls = {
-    transactions: 0, personCreates: [], employmentCreates: [], positionUpdates: [],
+    transactions: 0, transactionOptions: [], personCreates: [], employmentCreates: [], positionUpdates: [],
     lifecycleCreates: [], onboardingCreates: [], audits: []
   };
   const tx = {
     position: {
       findFirst: async () => ({ id: "position-1", title: "Security Engineer", status: positionStatus, employments: [] }),
-      update: async (input) => { calls.positionUpdates.push(input); return input; }
+      updateMany: async (input) => { calls.positionUpdates.push(input); return { count: claimCount }; }
     },
     person: {
       findFirst: async () => null,
@@ -67,7 +68,11 @@ function peopleFixture({ positionStatus = "OPEN" } = {}) {
       db: {},
       withDb: async (operation) => {
         calls.transactions += 1;
-        return operation({ $transaction: async (work) => work(tx) });
+        return operation({ $transaction: async (work, options) => {
+          calls.transactionOptions.push(options);
+          if (transactionError) throw transactionError;
+          return work(tx);
+        }});
       }
     },
     "@/lib/authorization": {
@@ -92,8 +97,8 @@ function peopleFixture({ positionStatus = "OPEN" } = {}) {
   return { route, calls };
 }
 
-function positionFixture() {
-  const calls = { transactions: 0, creates: [], audits: [] };
+function positionFixture({ transactionError = null } = {}) {
+  const calls = { transactions: 0, transactionOptions: [], creates: [], audits: [] };
   const tx = {
     organizationUnit: { findFirst: async () => ({ id: "org-1" }) },
     position: {
@@ -108,7 +113,11 @@ function positionFixture() {
       db: {},
       withDb: async (operation) => {
         calls.transactions += 1;
-        return operation({ $transaction: async (work) => work(tx) });
+        return operation({ $transaction: async (work, options) => {
+          calls.transactionOptions.push(options);
+          if (transactionError) throw transactionError;
+          return work(tx);
+        }});
       }
     },
     "@/lib/authorization": {
@@ -190,7 +199,10 @@ test("valid employee create normalizes identity fields and preserves atomic life
   assert.equal(calls.employmentCreates[0].positionId, "position-1");
   assert.equal(calls.employmentCreates[0].status, "PREBOARDING");
   assert.equal(calls.employmentCreates[0].startDate.toISOString(), "2099-02-28T00:00:00.000Z");
+  assert.equal(calls.positionUpdates[0].where.status, "OPEN");
+  assert.equal(calls.positionUpdates[0].where.validTo, null);
   assert.equal(calls.positionUpdates[0].data.status, "FILLED");
+  assert.equal(calls.transactionOptions[0].isolationLevel, "Serializable");
   assert.equal(calls.lifecycleCreates.length, 1);
   assert.equal(calls.onboardingCreates.length, 1);
   assert.equal(calls.audits.length, 2);
@@ -236,6 +248,7 @@ test("valid position create normalizes bounded fields and keeps audit inside the
   assert.equal(calls.creates[0].location, "Istanbul / Remote EU");
   assert.equal(calls.creates[0].status, "PLANNED");
   assert.equal(calls.creates[0].critical, true);
+  assert.equal(calls.transactionOptions[0].isolationLevel, "Serializable");
   assert.equal(calls.audits.length, 1);
 });
 
@@ -263,4 +276,45 @@ test("Core HR master-data responses are explicitly private and nosniff", async (
   });
   assert.equal(positionPost.headers.get("cache-control"), "no-store");
   assert.equal(positionPost.headers.get("x-content-type-options"), "nosniff");
+});
+
+
+test("employee create fails closed when the OPEN seat claim loses a race", async () => {
+  const { route, calls } = peopleFixture({ claimCount: 0 });
+  const response = await post(route, "/api/people", {
+    employeeNumber: "E-RACE",
+    givenName: "Ada",
+    familyName: "Race",
+    workEmail: "race@example.com",
+    positionId: "position-1",
+    startDate: "2099-01-01"
+  });
+  assert.equal(response.status, 409);
+  assert.match((await response.json()).error, /changed concurrently/i);
+  assert.equal(calls.positionUpdates.length, 1);
+  assert.equal(calls.personCreates.length, 0);
+  assert.equal(calls.employmentCreates.length, 0);
+  assert.equal(calls.audits.length, 0);
+});
+
+test("serializable transaction conflicts become bounded 409 responses", async () => {
+  for (const [fixture, path, body] of [
+    [
+      () => peopleFixture({ transactionError: { code: "P2034" } }),
+      "/api/people",
+      { employeeNumber: "E-SERIAL", givenName: "Ada", familyName: "Serial", workEmail: "serial@example.com", positionId: "position-1", startDate: "2099-01-01" }
+    ],
+    [
+      () => positionFixture({ transactionError: { code: "P2034" } }),
+      "/api/positions",
+      { positionCode: "SER-1", title: "Serialized Position", orgUnitId: "org-1", status: "OPEN", critical: false }
+    ]
+  ]) {
+    const { route, calls } = fixture();
+    const response = await post(route, path, body);
+    assert.equal(response.status, 409);
+    assert.match((await response.json()).error, /concurrently/i);
+    assert.equal(calls.transactions, 1);
+    assert.equal(calls.audits.length, 0);
+  }
 });

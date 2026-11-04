@@ -1,5 +1,5 @@
 import { asDateOnly, asEmailAddress, asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
-import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatus } from "@prisma/client";
+import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatus, Prisma } from "@prisma/client";
 import { withDb, db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
@@ -94,6 +94,12 @@ export async function POST(request: Request) {
       });
       if (duplicate) throw new Error("PERSON_DUPLICATE");
 
+      const positionClaim = await tx.position.updateMany({
+        where: { id: position.id, tenantId: ctx.tenantId, status: PositionStatus.OPEN, validTo: null },
+        data: { status: PositionStatus.FILLED }
+      });
+      if (positionClaim.count !== 1) throw new Error("STATE_CONFLICT");
+
       const person = await tx.person.create({
         data: {
           tenantId: ctx.tenantId,
@@ -114,8 +120,6 @@ export async function POST(request: Request) {
           startDate
         }
       });
-
-      await tx.position.update({ where: { id: position.id }, data: { status: PositionStatus.FILLED } });
 
       await tx.employeeLifecycleEvent.create({
         data: {
@@ -158,7 +162,7 @@ export async function POST(request: Request) {
       });
 
       return { person, employment, status };
-    }));
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 
     return privateJson({ data: result }, { status: 201 });
   } catch (error) {
@@ -166,6 +170,7 @@ export async function POST(request: Request) {
     if (code === "POSITION_NOT_FOUND") return privateJson({ error: "The selected position does not exist in this tenant." }, { status: 404 });
     if (code === "POSITION_NOT_AVAILABLE" || code === "POSITION_OCCUPIED") return privateJson({ error: "The selected position is no longer available." }, { status: 409 });
     if (code === "PERSON_DUPLICATE" || (error as { code?: string })?.code === "P2002") return privateJson({ error: "Employee number or work email already exists." }, { status: 409 });
+    if (code === "STATE_CONFLICT" || (error as { code?: string })?.code === "P2034") return privateJson({ error: "Employee or position state changed concurrently. Refresh and retry." }, { status: 409 });
     console.error("Employee creation failed", error);
     return privateJson({ error: "Employee record could not be created." }, { status: 500 });
   }

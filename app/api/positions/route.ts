@@ -1,5 +1,5 @@
 import { asEnumValue, asIdentifier, asOptionalBoolean, asOptionalText, asText, readJsonObject } from "@/lib/input-validation";
-import { DataClassification, PositionStatus } from "@prisma/client";
+import { DataClassification, PositionStatus, Prisma } from "@prisma/client";
 import { db, withDb } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
@@ -84,13 +84,14 @@ export async function POST(request: Request) {
       });
 
       return created;
-    }));
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 
     return privateJson({ data: position }, { status: 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
     if (code === "ORG_NOT_FOUND") return privateJson({ error: "The selected organization unit is not available." }, { status: 404 });
     if (code === "POSITION_DUPLICATE" || (error as { code?: string })?.code === "P2002") return privateJson({ error: "A current position with this code already exists." }, { status: 409 });
+    if ((error as { code?: string })?.code === "P2034") return privateJson({ error: "Position state changed concurrently. Refresh and retry." }, { status: 409 });
     console.error("Position creation failed", error);
     return privateJson({ error: "Position could not be created." }, { status: 500 });
   }
