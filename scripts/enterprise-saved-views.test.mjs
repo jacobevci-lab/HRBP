@@ -181,6 +181,7 @@ test("saved view summaries localize technical status and sort keys", () => {
   assert.match(control, /function savedStatusLabel/);
   assert.match(control, /ACTIVE: \["Active", "Aktif"\]/);
   assert.match(control, /OPEN: \["Open", "Açık"\]/);
+  assert.match(control, /SUSPENDED: \["Suspended", "Askıya alındı"\]/);
   assert.match(control, /function savedSortLabel/);
   assert.match(control, /employeeNumber: \["Employee ID", "Çalışan no"\]/);
   assert.match(control, /critical: \["Criticality", "Kritiklik"\]/);

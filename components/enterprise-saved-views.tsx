@@ -27,7 +27,8 @@ function savedStatusLabel(moduleKey: EnterpriseViewModule, status: string, tr: b
     people: {
       ACTIVE: ["Active", "Aktif"],
       PREBOARDING: ["Preboarding", "İşe başlamadan önce"],
-      LEAVE: ["On leave", "İzinde"]
+      LEAVE: ["On leave", "İzinde"],
+      SUSPENDED: ["Suspended", "Askıya alındı"]
     },
     positions: {
       OPEN: ["Open", "Açık"],
