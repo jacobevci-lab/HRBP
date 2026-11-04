@@ -11,6 +11,8 @@ expect(routePath, route, /actorId:\s*ctx\.actorId/, "decision history must be ac
 expect(routePath, route, /tenantId:\s*ctx\.tenantId/, "decision history must remain tenant scoped");
 expect(routePath, route, /occurredAt:\s*\{\s*gte:\s*since\s*\}/, "decision history must be time bounded");
 expect(routePath, route, /take:\s*80/, "decision history must be record bounded");
+expect(routePath, route, /db\.auditEvent\.count\(\{ where \}\)/, "decision history must expose the total matching governed decisions");
+expect(routePath, route, /total,\s*items:/, "decision history response must return total alongside the bounded item window");
 expect(routePath, route, /cache-control[\s\S]*no-store/, "decision history must be uncached");
 expect(routePath, route, /actionPrefixes\.map/, "decision history must use an explicit governed action allowlist");
 expect(routePath, route, /resourceTypes = new Set/, "decision history domain filtering must use an explicit resource-type allowlist");
@@ -66,6 +68,9 @@ expect(componentPath, component, /actor-scoped|Actor scope/, "decision history m
 expect(componentPath, component, /Full hash-chained evidence remains in the Audit Ledger|Tam hash-zincirli kanıt Audit Ledger içinde kalır/, "decision history must direct full evidence to Audit Ledger");
 expect(componentPath, component, /hrbp:lifecycle-actions-changed/, "decision history must refresh after lifecycle decisions");
 expect(componentPath, component, /\/api\/action-center\/history\/export\?days=/, "decision history UI must expose actor-scoped CSV evidence export");
+expect(componentPath, component, /const exportBlocked = total > 500/, "decision history UI must preflight the CSV export limit");
+expect(componentPath, component, /workflow-history-export-disabled/, "decision history UI must visibly disable overflowed CSV export");
+expect(componentPath, component, /500-row CSV limit/, "decision history UI must explain export overflow");
 expect(componentPath, component, /Domain filter|Alan filtresi/, "decision history UI must expose an explicit domain filter");
 expect(componentPath, component, /params\.set\("resourceType", selectedResourceType\)/, "decision history UI must send the selected domain to the governed history route");
 expect(componentPath, component, /resourceType=\$\{encodeURIComponent\(resourceType\)\}/, "CSV export must preserve the active domain filter");
