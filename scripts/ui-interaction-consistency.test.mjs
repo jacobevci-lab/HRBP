@@ -273,3 +273,14 @@ test("global search closes when keyboard focus leaves the search surface", () =>
   assert.match(globalSearch, /setOpen\(false\)/);
   assert.match(globalSearch, /setActiveIndex\(0\)/);
 });
+
+test("global search has explicit focus visibility and readable helper typography", () => {
+  const searchCss = readFileSync("app/global-search.css", "utf8");
+  assert.match(searchCss, /\.global-search-clear\{width:30px;height:30px/);
+  assert.match(searchCss, /\.global-search-clear:focus-visible\{outline:2px solid var\(--accent\)/);
+  assert.match(searchCss, /\.global-search-result:focus-visible\{outline:2px solid var\(--accent\)/);
+  assert.match(searchCss, /\.global-search-result-copy small\{font-size:9\.5px/);
+  assert.match(searchCss, /\.global-search-result em\{[^}]*font-size:9\.5px/);
+  assert.match(searchCss, /\.global-search-hints\{[^}]*font-size:9\.5px/);
+  assert.match(searchCss, /@media\(prefers-reduced-motion:reduce\)\{\.global-search-root \.global-search\{transition:none\}\}/);
+});
