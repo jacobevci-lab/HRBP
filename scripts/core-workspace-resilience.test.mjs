@@ -134,6 +134,37 @@ test('people: HRBP write capability does not expose master-data create CTA', asy
   assert.ok(!nodes(tree).some(n => n.type === 'a' && n.props.href === '/module/people/new'));
 });
 
+for (const [slug, status, sort] of [['people', 'ACTIVE', 'employeeNumber'], ['positions', 'OPEN', 'title']]) {
+  test(`${slug}: dedicated route forwards bounded enterprise register state`, async () => {
+    const route = fixture(slug);
+    await route.default({ searchParams: Promise.resolve({
+      q: '  Deniz  ',
+      status,
+      columns: ['status', 'position'],
+      columnsMode: 'custom',
+      density: 'compact',
+      sort,
+      dir: 'desc',
+      page: '99999',
+      pageSize: '100',
+      view: ' saved-view-1 '
+    }) });
+    assert.deepEqual(JSON.parse(JSON.stringify(route.calls[0])), {
+      slug,
+      query: 'Deniz',
+      status,
+      columns: ['status', 'position'],
+      columnsCustomized: true,
+      density: 'compact',
+      sortKey: sort,
+      sortDirection: 'desc',
+      page: 10000,
+      pageSize: 100,
+      savedViewId: 'saved-view-1'
+    });
+  });
+}
+
 test('People search forwards an exact string, ignores duplicate/array query values', async () => {
   for (const q of ['Ayşe & Ömer', ['Ayşe', 'Ömer'], undefined]) {
     const route = fixture('people');
