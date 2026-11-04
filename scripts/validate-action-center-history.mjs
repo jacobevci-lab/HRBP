@@ -38,6 +38,8 @@ expect(exportPath, exported, /tenantId:\s*ctx\.tenantId/, "decision evidence exp
 expect(exportPath, exported, /take:\s*500/, "decision evidence export must remain record bounded");
 expect(exportPath, exported, /text\/csv/, "decision evidence export must return CSV");
 expect(exportPath, exported, /content-disposition/, "decision evidence export must provide a download filename");
+expect(exportPath, exported, /safeCsvCell/, "decision evidence export must use shared hardened CSV cell escaping");
+expect(exportPath, exported, /x-content-type-options[\s\S]*nosniff/, "decision evidence export must prevent content sniffing");
 expect(exportPath, exported, /classification:\s*true/, "decision evidence export may include classification metadata");
 expect(exportPath, exported, /resourceTypes = new Set/, "decision evidence export must use the same bounded domain allowlist");
 expect(exportPath, exported, /\.\.\.\(resourceType \? \{ resourceType \} : \{\}\)/, "decision evidence export must apply the selected domain inside the governed query");

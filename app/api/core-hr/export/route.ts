@@ -2,6 +2,7 @@ import { DataClassification, EmploymentStatus, PositionStatus, Prisma } from "@p
 import { recordAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { safeCsvCell } from "@/lib/csv";
 import { employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
 import { getRequestContext, unauthorized } from "@/lib/request-context";
 
@@ -11,14 +12,8 @@ const positionColumns = ["organization", "grade", "location", "incumbent", "stat
 
 type Direction = "asc" | "desc";
 
-function csvCell(value: unknown) {
-  const raw = value === null || value === undefined ? "" : String(value);
-  const protectedValue = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
-  return `"${protectedValue.replaceAll('"', '""')}"`;
-}
-
 function csvResponse(lines: unknown[][], filename: string) {
-  const body = `\uFEFF${lines.map((line) => line.map(csvCell).join(",")).join("\r\n")}`;
+  const body = `\uFEFF${lines.map((line) => line.map(safeCsvCell).join(",")).join("\r\n")}`;
   return new Response(body, {
     headers: {
       "content-type": "text/csv; charset=utf-8",

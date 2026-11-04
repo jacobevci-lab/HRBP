@@ -1,13 +1,8 @@
 import { DataClassification, Prisma } from "@prisma/client";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { safeCsvCell } from "@/lib/csv";
 import { getRequestContext, unauthorized } from "@/lib/request-context";
-
-function safeCell(value: unknown) {
-  const raw = value === null || value === undefined ? "" : String(value);
-  const protectedValue = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
-  return `"${protectedValue.replaceAll('"', '""')}"`;
-}
 
 function classification(value: string | null): DataClassification | undefined {
   return value && Object.values(DataClassification).includes(value as DataClassification) ? value as DataClassification : undefined;
@@ -55,7 +50,7 @@ export async function GET(request: Request) {
   });
 
   const header = ["ledgerSequence", "id", "occurredAt", "actorId", "action", "resourceType", "resourceId", "classification", "ipAddress", "purpose", "hash", "previousHash"];
-  const lines = [header.map(safeCell).join(",")];
+  const lines = [header.map(safeCsvCell).join(",")];
   for (const row of rows) {
     lines.push([
       row.ledgerSequence,
@@ -70,7 +65,7 @@ export async function GET(request: Request) {
       row.purpose,
       row.hash,
       row.previousHash
-    ].map(safeCell).join(","));
+    ].map(safeCsvCell).join(","));
   }
 
   const stamp = new Date().toISOString().slice(0, 10);

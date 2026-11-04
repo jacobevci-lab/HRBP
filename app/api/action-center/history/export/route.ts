@@ -1,5 +1,6 @@
 import { getRequestContext, unauthorized } from "@/lib/request-context";
 import { db } from "@/lib/db";
+import { safeCsvCell } from "@/lib/csv";
 
 const actionPrefixes = [
   "leave-request.",
@@ -42,10 +43,6 @@ function queryOptions(request: Request) {
   return { days, resourceType: resourceType && resourceTypes.has(resourceType) ? resourceType : null };
 }
 
-function csvCell(value: string) {
-  return `"${value.replaceAll('"', '""')}"`;
-}
-
 export async function GET(request: Request) {
   const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
@@ -72,14 +69,14 @@ export async function GET(request: Request) {
   });
 
   const lines = [
-    ["occurredAt", "action", "resourceType", "resourceId", "classification"].map(csvCell).join(","),
+    ["occurredAt", "action", "resourceType", "resourceId", "classification"].map(safeCsvCell).join(","),
     ...rows.map((row) => [
       row.occurredAt.toISOString(),
       row.action,
       row.resourceType,
       row.resourceId,
       row.classification
-    ].map(csvCell).join(","))
+    ].map(safeCsvCell).join(","))
   ];
 
   const date = new Date().toISOString().slice(0, 10);
@@ -88,7 +85,8 @@ export async function GET(request: Request) {
     headers: {
       "content-type": "text/csv; charset=utf-8",
       "content-disposition": `attachment; filename="hrbp-my-decision-evidence${suffix}-${date}.csv"`,
-      "cache-control": "no-store"
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
     }
   });
 }
