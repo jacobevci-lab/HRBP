@@ -177,9 +177,14 @@ test("People and Positions support URL-native sortable table headers", () => {
   assert.match(workspace, /sortDirection: active && currentDirection === "asc" \? "desc" : "asc"/);
   assert.match(workspace, /aria-sort=\{ariaSort\}/);
   assert.match(workspace, /moduleKey="people" state=\{currentView\} sortKey="name"[^>]*defaultActive/);
-  assert.match(workspace, /moduleKey="positions" state=\{currentView\} sortKey="title"/);
+  assert.match(workspace, /moduleKey="positions" state=\{currentView\} sortKey="code"[^>]*defaultActive/);
   assert.match(workspace, /sortKey="status"/);
   assert.match(workspace, /sortKey="critical"/);
   assert.match(unified, /\.enterprise-sort-header\{/);
   assert.match(unified, /\.enterprise-sort-header:focus-visible/);
+});
+
+test("Positions default header sort reflects position-code ordering", () => {
+  assert.match(workspace, /moduleKey="positions" state=\{currentView\} sortKey="code"[^>]*defaultActive/);
+  assert.match(data, /return \[\{ positionCode: direction \}, \{ title: "asc" \}\]/);
 });
