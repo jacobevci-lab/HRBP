@@ -28,6 +28,8 @@ const actionPrefixes = [
   "workflow.task-"
 ];
 
+const DECISION_EXPORT_LIMIT = 500;
+
 const resourceTypes = new Set([
   "LeaveRequest","TimeEntry","CompensationChange","PayrollRun","Requisition","Offer","PolicyRecord",
   "WorkforceScenario","WorkflowDefinition","WorkflowTask","SurveyCampaign","DataSubjectRequest",
@@ -58,7 +60,7 @@ export async function GET(request: Request) {
       OR: actionPrefixes.map((prefix) => ({ action: { startsWith: prefix } }))
     },
     orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-    take: 500,
+    take: DECISION_EXPORT_LIMIT + 1,
     select: {
       occurredAt: true,
       action: true,
@@ -67,6 +69,15 @@ export async function GET(request: Request) {
       classification: true
     }
   });
+
+  if (rows.length > DECISION_EXPORT_LIMIT) {
+    return Response.json({
+      error: `Decision evidence export exceeds ${DECISION_EXPORT_LIMIT} rows. Narrow the time window or domain filter before exporting.`
+    }, {
+      status: 422,
+      headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
+    });
+  }
 
   const lines = [
     ["occurredAt", "action", "resourceType", "resourceId", "classification"].map(safeCsvCell).join(","),
