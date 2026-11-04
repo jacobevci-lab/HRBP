@@ -56,6 +56,7 @@ function employmentStatusLabel(locale: "tr" | "en", value: EmploymentStatus | un
     ACTIVE: ["Active", "Aktif"],
     PREBOARDING: ["Preboarding", "İşe başlamadan önce"],
     LEAVE: ["On leave", "İzinde"],
+    SUSPENDED: ["Suspended", "Askıya alındı"],
     TERMINATED: ["Terminated", "Sonlandırıldı"]
   };
   const label = labels[value];

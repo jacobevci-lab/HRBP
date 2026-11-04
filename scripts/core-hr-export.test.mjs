@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 
 const routePath = "app/api/core-hr/export/route.ts";
+const routeSource = readFileSync(routePath, "utf8");
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
 function loadRoute(dependencies) {
@@ -34,7 +35,7 @@ function loadRoute(dependencies) {
 
 const enums = {
   DataClassification: { CONFIDENTIAL: "CONFIDENTIAL" },
-  EmploymentStatus: { ACTIVE: "ACTIVE", PREBOARDING: "PREBOARDING", LEAVE: "LEAVE", TERMINATED: "TERMINATED" },
+  EmploymentStatus: { ACTIVE: "ACTIVE", PREBOARDING: "PREBOARDING", LEAVE: "LEAVE", SUSPENDED: "SUSPENDED", TERMINATED: "TERMINATED" },
   PositionStatus: { OPEN: "OPEN", PLANNED: "PLANNED", FILLED: "FILLED", FROZEN: "FROZEN", CLOSED: "CLOSED" }
 };
 
@@ -320,4 +321,9 @@ test("Turkish export locale localizes register headers and boolean labels", asyn
   assert.ok(positionCsv.includes('"Evet"'));
   assert.ok(!positionCsv.includes('"OPEN"'));
   assert.ok(!positionCsv.includes('"Yes"'));
+});
+
+test("export status labels cover the full EmploymentStatus enum contract", () => {
+  assert.match(routeSource, /SUSPENDED: \["Suspended", "Askıya alındı"\]/);
+  assert.equal(enums.EmploymentStatus.SUSPENDED, "SUSPENDED");
 });
