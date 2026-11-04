@@ -2,8 +2,9 @@ import { ApplicationStage, DataClassification, EmploymentStatus, LifecycleEventT
 import { appendAudit } from "@/lib/audit";
 import { can, forbidden } from "@/lib/authorization";
 import { withDb } from "@/lib/db";
-import { asIdentifier, readJsonObject } from "@/lib/input-validation";
+import { asEmailAddress, asIdentifier, readJsonObject } from "@/lib/input-validation";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
+import { privateJson } from "@/lib/private-json";
 
 const OCCUPYING_EMPLOYMENT_STATUSES: EmploymentStatus[] = [
   EmploymentStatus.PREBOARDING,
@@ -29,13 +30,13 @@ export async function POST(request: Request) {
   if (!can(ctx, "recruiting:write") || !can(ctx, "onboarding:write")) return forbidden("Hire transition requires recruiting and onboarding privileges.");
 
   const body = await readJsonObject(request);
-  if (!body) return Response.json({ error: "A JSON object body is required." }, { status: 400 });
+  if (!body) return privateJson({ error: "A bounded JSON object body is required." }, { status: 400 });
   const applicationId = asIdentifier(body.applicationId);
-  const employeeNumber = String(body.employeeNumber ?? "").trim();
-  const workEmail = String(body.workEmail ?? "").trim().toLowerCase() || null;
-  if (!applicationId || !employeeNumber) return Response.json({ error: "A valid applicationId and employeeNumber are required." }, { status: 400 });
-  if (employeeNumber.length > 64) return Response.json({ error: "employeeNumber must be 64 characters or fewer." }, { status: 400 });
-  if (workEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(workEmail)) return Response.json({ error: "workEmail must be a valid email address." }, { status: 400 });
+  const employeeNumber = asIdentifier(body.employeeNumber, 64);
+  const workEmailProvided = body.workEmail !== undefined && body.workEmail !== null && body.workEmail !== "";
+  const workEmail = workEmailProvided ? asEmailAddress(body.workEmail) : null;
+  if (!applicationId || !employeeNumber) return privateJson({ error: "A valid applicationId and employeeNumber are required." }, { status: 400 });
+  if (workEmailProvided && !workEmail) return privateJson({ error: "workEmail must be a valid email address." }, { status: 400 });
 
   try {
     const result = await withDb((db) => db.$transaction(async (tx) => {
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
 
       if (workEmail) {
         const duplicateWorkEmail = await tx.person.findFirst({
-          where: { tenantId: ctx.tenantId, workEmail },
+          where: { tenantId: ctx.tenantId, workEmail: { equals: workEmail, mode: "insensitive" } },
           select: { id: true }
         });
         if (duplicateWorkEmail) throw new Error("WORK_EMAIL_EXISTS");
@@ -172,7 +173,7 @@ export async function POST(request: Request) {
       return { person, employment, onboardingPlan: plan };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 
-    return Response.json({ data: result }, { status: 201 });
+    return privateJson({ data: result }, { status: 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
     const status = code === "APPLICATION_NOT_FOUND" || code === "POSITION_NOT_FOUND" ? 404 : 409;
@@ -192,11 +193,11 @@ export async function POST(request: Request) {
       POSITION_ALREADY_FILLED: "The requisition position already has an active incumbent.",
       STATE_CONFLICT: "The hiring state changed concurrently. Refresh and try again."
     };
-    if (messages[code]) return Response.json({ error: messages[code] }, { status });
+    if (messages[code]) return privateJson({ error: messages[code] }, { status });
     if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2034" || error.code === "P2002")) {
-      return Response.json({ error: "The hiring state changed concurrently or a unique employee identity already exists. Refresh and try again." }, { status: 409 });
+      return privateJson({ error: "The hiring state changed concurrently or a unique employee identity already exists. Refresh and try again." }, { status: 409 });
     }
     console.error("Candidate hire conversion failed", error);
-    return Response.json({ error: "Candidate could not be converted to an employee." }, { status: 500 });
+    return privateJson({ error: "Candidate could not be converted to an employee." }, { status: 500 });
   }
 }

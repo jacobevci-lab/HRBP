@@ -57,7 +57,11 @@ expect(hirePath, hire, /application\.offer\.status\s*!==\s*OfferStatus\.ACCEPTED
 expect(hirePath, hire, /application\.requisition\.status\s*!==\s*RequisitionStatus\.OPEN/, "hire conversion must require an open requisition");
 expect(hirePath, hire, /application\.requisition\.openings\s*!==\s*1/, "hire conversion must enforce position-backed capacity semantics");
 expect(hirePath, hire, /existingHireCount[\s\S]*application\.requisition\.openings/, "hire conversion must reject exhausted requisition capacity");
-expect(hirePath, hire, /where:\s*\{\s*tenantId:\s*ctx\.tenantId,\s*workEmail\s*\}/, "work email uniqueness must be checked within the tenant before employee creation");
+expect(hirePath, hire, /asIdentifier\(body\.employeeNumber,\s*64\)/, "hire conversion employee numbers must use the shared bounded identifier validator");
+expect(hirePath, hire, /asEmailAddress\(body\.workEmail\)/, "hire conversion work emails must use the shared normalized email validator");
+expect(hirePath, hire, /where:\s*\{\s*tenantId:\s*ctx\.tenantId,\s*workEmail:\s*\{\s*equals:\s*workEmail,\s*mode:\s*"insensitive"\s*\}\s*\}/, "work email uniqueness must be case-insensitive and tenant scoped before employee creation");
+expect(hirePath, hire, /privateJson\(/, "hire conversion responses must use the private no-store JSON boundary");
+expect(hirePath, hire, /@\/lib\/private-json/, "hire conversion must import the shared private JSON response helper");
 expect(hirePath, hire, /tx\.position\.updateMany[\s\S]*status:\s*PositionStatus\.OPEN[\s\S]*positionUpdate\.count\s*!==\s*1/, "position fill must use an optimistic state guard");
 expect(hirePath, hire, /tx\.candidate\.updateMany[\s\S]*hiredPersonId:\s*null[\s\S]*candidateUpdate\.count\s*!==\s*1/, "candidate conversion must be single-use and concurrency guarded");
 expect(hirePath, hire, /tx\.application\.updateMany[\s\S]*stage:\s*ApplicationStage\.OFFER[\s\S]*applicationUpdate\.count\s*!==\s*1/, "application conversion must be concurrency guarded");
@@ -91,4 +95,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Validated recruiting lifecycle integrity: bounded candidate intake, governed offer preparation, position capacity, application-offer coupling, expiry and requisition guards, accepted-offer hire state, tenant identity uniqueness, optimistic writes, serializable conversion, onboarding deadlines, automated offer expiry, candidate retention minimization and audit chain-of-custody are enforced.");
+console.log("Validated recruiting lifecycle integrity: bounded candidate intake, governed offer preparation, position capacity, application-offer coupling, expiry and requisition guards, accepted-offer hire state, shared normalized tenant identity validation, private response handling, optimistic writes, serializable conversion, onboarding deadlines, automated offer expiry, candidate retention minimization and audit chain-of-custody are enforced.");
