@@ -188,3 +188,14 @@ test("Positions default header sort reflects position-code ordering", () => {
   assert.match(workspace, /moduleKey="positions" state=\{currentView\} sortKey="code"[^>]*defaultActive/);
   assert.match(data, /return \[\{ positionCode: direction \}, \{ title: "asc" \}\]/);
 });
+
+test("enterprise registers expose canonical shareable view links", () => {
+  const copy = readFileSync("components/enterprise-copy-view-link.tsx", "utf8");
+  assert.match(toolbar, /buildEnterpriseViewHref\(moduleKey, current\)/);
+  assert.match(toolbar, /<EnterpriseCopyViewLink locale=\{locale\} href=\{shareHref\}\/>/);
+  assert.match(copy, /new URL\(href, window\.location\.origin\)\.toString\(\)/);
+  assert.match(copy, /navigator\.clipboard\?\.writeText/);
+  assert.match(copy, /aria-live="polite"/);
+  assert.match(copy, /window\.setTimeout\(\(\) => setState\("idle"\), 2400\)/);
+  assert.match(unified, /\.enterprise-copy-view-link\{/);
+});

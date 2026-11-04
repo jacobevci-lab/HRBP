@@ -1029,3 +1029,7 @@ th{font-size:10px!important}
 
 .enterprise-saved-view-delete-error{grid-column:1/-1;padding:0 6px 7px;color:var(--danger-fg);font-size:9.5px;line-height:1.4}
 .enterprise-saved-view-row>form button:disabled{opacity:.55;cursor:wait}
+
+.enterprise-copy-view-link{height:38px!important;min-height:38px!important;display:inline-flex!important;align-items:center;gap:6px;white-space:nowrap;font-size:10.5px!important}
+.enterprise-copy-view-link.copied{color:var(--success-fg)!important;border-color:color-mix(in srgb,var(--success-fg) 30%,var(--line-strong))!important;background:color-mix(in srgb,var(--success-fg) 7%,var(--surface))!important}
+.enterprise-copy-view-link.error{color:var(--danger-fg)!important;border-color:color-mix(in srgb,var(--danger-fg) 28%,var(--line-strong))!important}

@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { ArrowUpDown, Columns3, Download, List, Search, SlidersHorizontal, X } from "lucide-react";
 import { EnterpriseSavedViews } from "@/components/enterprise-saved-views";
+import { EnterpriseCopyViewLink } from "@/components/enterprise-copy-view-link";
 import type { Locale } from "@/lib/i18n";
-import type {
-  EnterpriseViewModule,
-  SavedEnterpriseViewSummary
+import {
+  buildEnterpriseViewHref,
+  type EnterpriseViewModule,
+  type SavedEnterpriseViewSummary
 } from "@/lib/enterprise-saved-views";
 
 export type EnterpriseViewOption = { value: string; label: string };
@@ -64,6 +66,7 @@ export function EnterpriseViewToolbar({
   if (sortKey) exportParams.set("sort", sortKey);
   if (sortDirection === "desc") exportParams.set("dir", "desc");
   const exportHref = `/api/core-hr/export?${exportParams.toString()}`;
+  const shareHref = buildEnterpriseViewHref(moduleKey, current);
 
   return <div className="enterprise-view-toolbar">
     <form className="enterprise-view-controls" action={basePath} method="get">
@@ -121,6 +124,7 @@ export function EnterpriseViewToolbar({
       <Download size={14}/>{tr ? "CSV dışa aktar" : "Export CSV"}
     </a> : null}
 
+    <EnterpriseCopyViewLink locale={locale} href={shareHref}/>
     <EnterpriseSavedViews locale={locale} moduleKey={moduleKey} current={current} savedViews={savedViews}/>
 
     <span className="enterprise-view-count">{totalCount === shownCount
