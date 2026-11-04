@@ -137,6 +137,7 @@ test("enterprise registers use real server-side pagination rather than hard row 
 
 test("People and Positions expose scoped filtered CSV exports", () => {
   const route = readFileSync("app/api/core-hr/export/route.ts", "utf8");
+  const csvSafety = readFileSync("lib/csv.ts", "utf8");
   assert.match(toolbar, /Download/);
   assert.match(toolbar, /new URLSearchParams\(\{ module: moduleKey, locale \}\)/);
   assert.match(toolbar, /columnsMode/);
@@ -151,10 +152,12 @@ test("People and Positions expose scoped filtered CSV exports", () => {
   assert.match(route, /employmentPrimaryKeyFilter\(peopleScope\)/);
   assert.match(route, /take: EXPORT_LIMIT \+ 1/);
   assert.match(route, /status: 422/);
-  assert.match(route, /\^\[=\+\\-@\]/);
+  assert.match(route, /import \{ safeCsvCell \} from "@\/lib\/csv"/);
+  assert.match(route, /line\.map\(safeCsvCell\)/);
   assert.match(route, /PEOPLE_REGISTER_EXPORTED/);
   assert.match(route, /POSITIONS_REGISTER_EXPORTED/);
   assert.match(route, /DataClassification\.CONFIDENTIAL/);
+  assert.match(csvSafety, /\^\\s\*\[=\+\\-@\]/);
   assert.match(route, /cache-control": "no-store"/);
   assert.match(route, /x-content-type-options": "nosniff"/);
   assert.match(unified, /\.enterprise-view-export\{/);
