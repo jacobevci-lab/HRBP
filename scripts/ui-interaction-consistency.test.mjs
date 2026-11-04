@@ -142,3 +142,12 @@ test("enterprise visual system keeps readable minimum typography at normal and c
   assert.match(unified, /\.employee-360-rail-nav a\{[^]*font-size:10\.5px/);
   assert.match(unified, /\.enterprise-page-button,.enterprise-page-number\{[^]*font-size:10\.5px/);
 });
+
+
+test("cockpit cards and KPI helper text stay above the previous microtype scale", () => {
+  const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
+  assert.match(unified, /\.manager-hub-action strong[^]*font-size:11\.5px/);
+  assert.match(unified, /\.manager-hub-action small[^]*font-size:10px/);
+  assert.match(unified, /\.enterprise-stat span[^]*font-size:10\.5px/);
+  assert.match(unified, /\.enterprise-stat small[^]*font-size:9\.5px/);
+});
