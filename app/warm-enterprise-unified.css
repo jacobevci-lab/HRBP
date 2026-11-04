@@ -840,3 +840,70 @@ a.metric-card:hover{
 .journey-person small,.journey-owner small,.journey-progress small,.journey-list em{font-size:9.5px!important}
 .task-control-list strong{font-size:10.5px!important}
 .task-control-list small,.task-control-list b,.onboarding-policy p{font-size:9.5px!important}
+
+/* 2026-11 readability pass 3: normalize operational consoles and lifecycle modules. */
+/* Performance / talent operations */
+.performance-console-health,.performance-finalized{font-size:9.5px!important}
+.performance-notice,.performance-empty,.growth-principle-card p{font-size:10px!important}
+.performance-form-title small,.performance-panel-title small,.performance-operation-main small,
+.performance-rating-line span,.performance-goal-card small,.performance-goal-controls>span{font-size:9.5px!important}
+.performance-form label{font-size:10px!important}
+.performance-form input,.performance-form select,.performance-form textarea,
+.performance-review-controls input,.performance-review-controls select,
+.performance-goal-controls input,.performance-goal-controls select{font-size:10.5px!important}
+.performance-operation .secondary-button,.performance-goal-controls .secondary-button{font-size:9.5px!important}
+
+/* Recruiting ATS / onboarding operations */
+.ats-console-head p,.ats-notice,.ats-empty{font-size:10px!important}
+.ats-console-health,.ats-form-title small,.ats-panel-title small,.ats-operation-main>small,
+.ats-actions button,.ats-inline-form button,.ats-offer-line>span,.ats-operation .pill{font-size:9.5px!important}
+.ats-form label{font-size:10px!important}
+.ats-form input,.ats-form select,.ats-inline-form input{font-size:10.5px!important}
+.ats-operation-main>strong{font-size:10.5px!important}
+.onb-console-head p{font-size:10px!important}
+.onb-console-head>span,.onb-plan>header small,.onb-plan>header>span,.onb-task-copy small,.onb-task>.pill{font-size:9.5px!important}
+.onb-plan>header strong,.onb-task-copy strong{font-size:10.5px!important}
+
+/* Offboarding operations */
+.off-metric small{font-size:10px!important}
+.off-table th{font-size:10px!important}
+.off-pill,.off-controls small,.off-live-badge,.off-ops-head>span,.off-form-title small,
+.off-process-card>header small,.off-process-meta span,.off-process-meta b,.off-task-list small,
+.off-task-actions button,.off-ready,.off-not-ready{font-size:9.5px!important}
+.off-ops-head p,.off-ops-notice,.off-empty{font-size:10px!important}
+.off-create-form label{font-size:10px!important}
+.off-create-form input,.off-create-form select{font-size:10.5px!important}
+.off-task-list strong{font-size:10.5px!important}
+
+/* Employee lifecycle actions */
+.lifecycle-command-head p,.lifecycle-notice{font-size:10px!important}
+.lifecycle-command-health,.lifecycle-action-title small,.lifecycle-target-preview small,
+.lifecycle-rule-list span,.lifecycle-restricted,.lifecycle-control-note p{font-size:9.5px!important}
+.lifecycle-action-panel label{font-size:10px!important}
+.lifecycle-action-panel input,.lifecycle-action-panel select{font-size:10.5px!important}
+.lifecycle-target-preview strong,.lifecycle-rule-list p,.lifecycle-control-note strong{font-size:10px!important}
+
+/* Employee 360 operational controls */
+.audit-verify-ok,.audit-verify-error,.mini-action,.comp-decision-error{font-size:9.5px!important}
+.compensation-governance-note p{font-size:10px!important}
+
+/* Growth / talent */
+.growth-metric small{font-size:10px!important}
+.growth-table th{font-size:10px!important}
+.growth-pill,.growth-control-stack small,.matrix-note,.matrix-label small,.matrix-cell small,.matrix-axis,
+.skill-list strong{font-size:9.5px!important}
+.growth-rule,.growth-rule strong,.matrix-label strong,.readiness-list span,.readiness-list strong,
+.skill-list span{font-size:10px!important}
+
+/* Employee services */
+.services-metric small{font-size:10px!important}
+.services-table th{font-size:10px!important}
+.services-pill,.services-control-stack small,.workflow-chain span,.hr-escalation-filter,
+.hr-escalation-filter span{font-size:9.5px!important}
+.workflow-side p{font-size:10px!important}
+
+/* Work / pay */
+.workpay-metric small{font-size:10px!important}
+.workpay-table th{font-size:10px!important}
+.workpay-status,.control-stack small,.balance-ring span,.payroll-step small{font-size:9.5px!important}
+.mini-rule,.mini-rule strong{font-size:10px!important}

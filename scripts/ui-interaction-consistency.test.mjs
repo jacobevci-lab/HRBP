@@ -171,3 +171,22 @@ test("primary workflow secondary copy no longer falls back to 7–9px microtype"
     ".task-control-list small,.task-control-list b,.onboarding-policy p{font-size:9.5px!important}"
   ]) assert.ok(pass.includes(rule), rule + " must retain readable workflow microcopy");
 });
+
+test("operational consoles and lifecycle modules keep readable control text", () => {
+  const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
+  const pass = unified.slice(unified.lastIndexOf("/* 2026-11 readability pass 3"));
+  assert.ok(pass.length > 2000, "operational readability overrides must remain in the final visual contract");
+  for (const rule of [
+    ".performance-form label{font-size:10px!important}",
+    ".performance-form input,.performance-form select,.performance-form textarea,",
+    ".ats-form label{font-size:10px!important}",
+    ".onb-plan>header strong,.onb-task-copy strong{font-size:10.5px!important}",
+    ".off-create-form label{font-size:10px!important}",
+    ".off-task-list strong{font-size:10.5px!important}",
+    ".lifecycle-action-panel label{font-size:10px!important}",
+    ".lifecycle-action-panel input,.lifecycle-action-panel select{font-size:10.5px!important}",
+    ".growth-table th{font-size:10px!important}",
+    ".services-table th{font-size:10px!important}",
+    ".workpay-table th{font-size:10px!important}"
+  ]) assert.ok(pass.includes(rule), rule + " must retain readable operational typography");
+});
