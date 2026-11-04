@@ -42,8 +42,26 @@ function textParam(params: URLSearchParams, name: string, max: number) {
   return (params.get(name) ?? "").trim().slice(0, max);
 }
 
-function direction(params: URLSearchParams): Direction {
-  return params.get("dir") === "desc" ? "desc" : "asc";
+function direction(params: URLSearchParams): Direction | null {
+  const raw = params.get("dir");
+  if (!raw || raw === "asc") return "asc";
+  if (raw === "desc") return "desc";
+  return null;
+}
+
+function badRequest(message: string) {
+  return Response.json({ error: message }, {
+    status: 400,
+    headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
+  });
+}
+
+function validPeopleSort(value: string) {
+  return !value || value === "name" || value === "employeeNumber";
+}
+
+function validPositionSort(value: string) {
+  return !value || value === "code" || value === "title" || value === "status" || value === "critical";
 }
 
 function peopleStatus(value: string) {
@@ -86,9 +104,13 @@ async function exportPeople(ctx: NonNullable<Awaited<ReturnType<typeof getReques
   if (!can(ctx, "people:read")) return forbidden();
 
   const query = textParam(params, "q", 160);
-  const status = peopleStatus(textParam(params, "status", 40));
+  const rawStatus = textParam(params, "status", 40);
+  const status = peopleStatus(rawStatus);
   const sortKey = textParam(params, "sort", 40);
   const dir = direction(params);
+  if (rawStatus && !status) return badRequest("Invalid people status filter.");
+  if (!validPeopleSort(sortKey)) return badRequest("Invalid people sort field.");
+  if (!dir) return badRequest("Invalid sort direction.");
   const columns = requestedColumns(params, peopleColumns);
   const scope = await resolveEmploymentScope(db, ctx);
   const employmentScope = employmentPrimaryKeyFilter(scope);
@@ -181,9 +203,13 @@ async function exportPositions(ctx: NonNullable<Awaited<ReturnType<typeof getReq
   if (!can(ctx, "positions:read")) return forbidden();
 
   const query = textParam(params, "q", 160);
-  const status = positionStatus(textParam(params, "status", 40));
+  const rawStatus = textParam(params, "status", 40);
+  const status = positionStatus(rawStatus);
   const sortKey = textParam(params, "sort", 40);
   const dir = direction(params);
+  if (rawStatus && !status) return badRequest("Invalid position status filter.");
+  if (!validPositionSort(sortKey)) return badRequest("Invalid position sort field.");
+  if (!dir) return badRequest("Invalid sort direction.");
   const columns = requestedColumns(params, positionColumns);
   const peopleScope = can(ctx, "people:read") ? await resolveEmploymentScope(db, ctx) : [];
   const where: Prisma.PositionWhereInput = {
@@ -263,5 +289,5 @@ export async function GET(request: Request) {
   const moduleKey = params.get("module");
   if (moduleKey === "people") return exportPeople(ctx, params);
   if (moduleKey === "positions") return exportPositions(ctx, params);
-  return Response.json({ error: "module must be people or positions." }, { status: 400 });
+  return badRequest("module must be people or positions.");
 }

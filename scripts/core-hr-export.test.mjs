@@ -253,3 +253,25 @@ test("unknown export modules are rejected without data access", async () => {
   assert.equal(h.reads.length, 0);
   assert.equal(h.audits.length, 0);
 });
+
+test("malformed export view state fails closed before querying data", async () => {
+  for (const [query, error] of [
+    ["module=people&status=TERMINATED", "Invalid people status filter."],
+    ["module=people&sort=workEmail", "Invalid people sort field."],
+    ["module=people&dir=sideways", "Invalid sort direction."],
+    ["module=positions&status=ARCHIVED", "Invalid position status filter."],
+    ["module=positions&sort=incumbent", "Invalid position sort field."],
+    ["module=positions&dir=reverse", "Invalid sort direction."]
+  ]) {
+    const h = harness({ capabilities: ["people:read", "positions:read"] });
+    const response = await h.GET(request(query));
+    assert.equal(response.status, 400);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    const body = await response.json();
+    assert.equal(body.error, error);
+    assert.equal(h.reads.length, 0);
+    assert.equal(h.scopeCalls.length, 0);
+    assert.equal(h.audits.length, 0);
+  }
+});
