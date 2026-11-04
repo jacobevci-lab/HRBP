@@ -6,9 +6,30 @@ import type { Locale } from "@/lib/i18n";
 
 type CopyState = "idle" | "copied" | "error";
 
+function legacyCopy(value: string) {
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } finally {
+    textarea.remove();
+  }
+  return copied;
+}
+
 export function EnterpriseCopyViewLink({ locale, href }: { locale: Locale; href: string }) {
   const tr = locale === "tr";
   const [state, setState] = useState<CopyState>("idle");
+
+  useEffect(() => {
+    setState("idle");
+  }, [href]);
 
   useEffect(() => {
     if (state === "idle") return;
@@ -18,9 +39,12 @@ export function EnterpriseCopyViewLink({ locale, href }: { locale: Locale; href:
 
   async function copyViewLink() {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error("CLIPBOARD_UNAVAILABLE");
       const absolute = new URL(href, window.location.origin).toString();
-      await navigator.clipboard.writeText(absolute);
+      if (window.isSecureContext && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(absolute);
+      } else if (!legacyCopy(absolute)) {
+        throw new Error("CLIPBOARD_UNAVAILABLE");
+      }
       setState("copied");
     } catch {
       setState("error");

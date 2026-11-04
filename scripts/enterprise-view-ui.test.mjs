@@ -210,3 +210,13 @@ test("default columns stay default until the user changes visibility", () => {
   assert.match(columnPicker, /setSelected\(\(current\) => \{/);
   assert.doesNotMatch(toolbar, /<input type="hidden" name="columnsMode" value="custom"\/>/);
 });
+
+test("copy view link falls back for non-secure on-prem browser contexts", () => {
+  const copy = readFileSync("components/enterprise-copy-view-link.tsx", "utf8");
+  assert.match(copy, /function legacyCopy/);
+  assert.match(copy, /document\.createElement\("textarea"\)/);
+  assert.match(copy, /document\.execCommand\("copy"\)/);
+  assert.match(copy, /window\.isSecureContext && navigator\.clipboard\?\.writeText/);
+  assert.match(copy, /else if \(!legacyCopy\(absolute\)\)/);
+  assert.match(copy, /useEffect\(\(\) => \{\s*setState\("idle"\);\s*\}, \[href\]\)/);
+});
