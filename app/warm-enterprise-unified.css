@@ -215,7 +215,7 @@ html[data-theme="dark"]{
   border-radius:11px!important;
 }
 .enterprise-stat span,.growth-metric span,.services-metric span,.gov-metric span,.workpay-metric span,.off-metric span,.recruit-metric small{
-  font-size:9px!important;
+  font-size:10.5px!important;
   font-weight:760;
   letter-spacing:.15px;
 }
@@ -226,8 +226,8 @@ html[data-theme="dark"]{
   margin-top:4px!important;
 }
 .enterprise-stat small,.growth-metric small,.services-metric small,.gov-metric small,.workpay-metric small,.off-metric small,.recruit-metric em{
-  font-size:8.5px!important;
-  line-height:1.4;
+  font-size:9.5px!important;
+  line-height:1.45;
 }
 
 /* Primary cockpit cards */
@@ -254,12 +254,12 @@ html[data-theme="dark"]{
 .workspace-shortcut-icon,.employee-home-action>span{padding:0!important}
 .manager-hub-action strong,.employee-home-action strong,.workspace-shortcut strong,.growth-focus-card strong,
 .services-focus-card strong,.recruiting-focus-card strong,.compensation-focus-card strong,.offboarding-focus-card strong{
-  font-size:11px!important;
+  font-size:11.5px!important;
 }
 .manager-hub-action small,.employee-home-action small,.workspace-shortcut small,.growth-focus-card small,
 .services-focus-card small,.recruiting-focus-card small,.compensation-focus-card small,.offboarding-focus-card small{
-  font-size:8.8px!important;
-  line-height:1.45!important;
+  font-size:10px!important;
+  line-height:1.5!important;
 }
 .manager-hub-action:hover,.employee-home-action:hover,.workspace-shortcut:hover,.growth-focus-card:hover,.services-focus-card:hover,
 .recruiting-focus-card:hover,.compensation-focus-card:hover,.offboarding-focus-card:hover,.operations-attention-card:hover,.admin-studio-card:hover{
