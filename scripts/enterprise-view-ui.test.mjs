@@ -133,7 +133,7 @@ test("enterprise registers use real server-side pagination rather than hard row 
 test("People and Positions expose scoped filtered CSV exports", () => {
   const route = readFileSync("app/api/core-hr/export/route.ts", "utf8");
   assert.match(toolbar, /Download/);
-  assert.match(toolbar, /new URLSearchParams\(\{ module: moduleKey \}\)/);
+  assert.match(toolbar, /new URLSearchParams\(\{ module: moduleKey, locale \}\)/);
   assert.match(toolbar, /columnsMode/);
   assert.match(toolbar, /columns\.forEach\(\(column\) => exportParams\.append\("columns", column\)\)/);
   assert.match(toolbar, /exportEnabled = false/);

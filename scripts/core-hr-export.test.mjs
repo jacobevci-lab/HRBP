@@ -28,6 +28,8 @@ function loadRoute(dependencies) {
     Headers,
     URL,
     URLSearchParams,
+    TextDecoder,
+    Uint8Array,
     Date
   }, { filename: routePath, timeout: 2000 });
   return module.exports;
@@ -144,8 +146,9 @@ test("people CSV preserves filter, sort, visible columns, employment scope and s
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.match(response.headers.get("content-disposition") ?? "", /^attachment; filename="hrbp-people-\d{4}-\d{2}-\d{2}\.csv"$/);
 
-  const csv = await response.text();
-  assert.ok(csv.startsWith("\uFEFF"));
+  const rawCsv = new Uint8Array(await response.arrayBuffer());
+  assert.deepEqual([...rawCsv.slice(0, 3)], [0xEF, 0xBB, 0xBF]);
+  const csv = new TextDecoder("utf-8", { ignoreBOM: true }).decode(rawCsv);
   assert.ok(csv.includes('"Employee ID","Name","Work email","Position","Position code","Status"'));
   assert.ok(!csv.includes('"Department"'));
   assert.ok(!csv.includes('"Location"'));
