@@ -10,6 +10,7 @@ import test from "node:test";
 const platform = readFileSync(new URL("../.github/workflows/platform-regression.yml", import.meta.url), "utf8");
 const stacked = readFileSync(new URL("../.github/workflows/stacked-integration.yml", import.meta.url), "utf8");
 const leaveDecisionBrowser = readFileSync(new URL("./leave-decision-browser-regression.mjs", import.meta.url), "utf8");
+const timeDecisionBrowser = readFileSync(new URL("./time-decision-browser-regression.mjs", import.meta.url), "utf8");
 function step(name) {
   const prefix = `      - name: ${name}\n`;
   assert.equal(platform.split(prefix).length, 2, `unique step required: ${name}`);
@@ -162,6 +163,16 @@ test("leave browser login recovery requires a verified session before explicit n
   assert.match(leaveDecisionBrowser, /authenticated-session-after-redirect-timeout/);
   assert.match(leaveDecisionBrowser, /page\.goto\(target, \{ waitUntil: 'domcontentloaded', timeout: 30000 \}\)/);
   assert.doesNotMatch(leaveDecisionBrowser, /const signedIn = page\.waitForURL/);
+});
+
+test("time browser login recovery requires a verified session before explicit navigation", () => {
+  assert.match(timeDecisionBrowser, /async function submitLocalLogin/);
+  assert.match(timeDecisionBrowser, /page\.waitForURL\(target,\{waitUntil:"commit",timeout:30000\}\)/);
+  assert.match(timeDecisionBrowser, /context\.request\.get\(origin\+"\/api\/auth\/session"\)/);
+  assert.match(timeDecisionBrowser, /assert\.equal\(body\.authenticated,true/);
+  assert.match(timeDecisionBrowser, /authenticated-session-after-redirect-timeout/);
+  assert.match(timeDecisionBrowser, /page\.goto\(target,\{waitUntil:"domcontentloaded",timeout:30000\}\)/);
+  assert.doesNotMatch(timeDecisionBrowser, /const signedIn=page\.waitForURL/);
 });
 
 test("only evidence upload is unconditional; mandatory test steps cannot be skipped", () => {
