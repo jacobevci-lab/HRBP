@@ -42,6 +42,14 @@ function textParam(params: URLSearchParams, name: string, max: number) {
   return (params.get(name) ?? "").trim().slice(0, max);
 }
 
+function exportLocale(params: URLSearchParams) {
+  return params.get("locale") === "tr" ? "tr" : "en";
+}
+
+function copy(locale: "tr" | "en", en: string, tr: string) {
+  return locale === "tr" ? tr : en;
+}
+
 function direction(params: URLSearchParams): Direction | null {
   const raw = params.get("dir");
   if (!raw || raw === "asc") return "asc";
@@ -103,6 +111,7 @@ function positionOrderBy(sortKey: string, dir: Direction): Prisma.PositionOrderB
 async function exportPeople(ctx: NonNullable<Awaited<ReturnType<typeof getRequestContext>>>, params: URLSearchParams) {
   if (!can(ctx, "people:read")) return forbidden();
 
+  const locale = exportLocale(params);
   const query = textParam(params, "q", 160);
   const rawStatus = textParam(params, "status", 40);
   const status = peopleStatus(rawStatus);
@@ -165,12 +174,16 @@ async function exportPeople(ctx: NonNullable<Awaited<ReturnType<typeof getReques
   });
   if (rows.length > EXPORT_LIMIT) return tooLarge("people");
 
-  const header = ["Employee ID", "Name", "Work email"];
-  if (columns.has("position")) header.push("Position", "Position code");
-  if (columns.has("department")) header.push("Department");
-  if (columns.has("location")) header.push("Location");
-  if (columns.has("status")) header.push("Status");
-  if (columns.has("start")) header.push("Start date");
+  const header = [
+    copy(locale, "Employee ID", "Çalışan no"),
+    copy(locale, "Name", "Ad Soyad"),
+    copy(locale, "Work email", "İş e-postası")
+  ];
+  if (columns.has("position")) header.push(copy(locale, "Position", "Pozisyon"), copy(locale, "Position code", "Pozisyon kodu"));
+  if (columns.has("department")) header.push(copy(locale, "Department", "Departman"));
+  if (columns.has("location")) header.push(copy(locale, "Location", "Lokasyon"));
+  if (columns.has("status")) header.push(copy(locale, "Status", "Durum"));
+  if (columns.has("start")) header.push(copy(locale, "Start date", "Başlangıç tarihi"));
 
   const lines: unknown[][] = [header];
   for (const row of rows) {
@@ -202,6 +215,7 @@ async function exportPeople(ctx: NonNullable<Awaited<ReturnType<typeof getReques
 async function exportPositions(ctx: NonNullable<Awaited<ReturnType<typeof getRequestContext>>>, params: URLSearchParams) {
   if (!can(ctx, "positions:read")) return forbidden();
 
+  const locale = exportLocale(params);
   const query = textParam(params, "q", 160);
   const rawStatus = textParam(params, "status", 40);
   const status = positionStatus(rawStatus);
@@ -251,13 +265,13 @@ async function exportPositions(ctx: NonNullable<Awaited<ReturnType<typeof getReq
   });
   if (rows.length > EXPORT_LIMIT) return tooLarge("positions");
 
-  const header = ["Position code", "Title"];
-  if (columns.has("organization")) header.push("Organization");
-  if (columns.has("grade")) header.push("Grade");
-  if (columns.has("location")) header.push("Location");
-  if (columns.has("incumbent")) header.push("Incumbent");
-  if (columns.has("status")) header.push("Status");
-  if (columns.has("critical")) header.push("Critical");
+  const header = [copy(locale, "Position code", "Pozisyon kodu"), copy(locale, "Title", "Unvan")];
+  if (columns.has("organization")) header.push(copy(locale, "Organization", "Organizasyon"));
+  if (columns.has("grade")) header.push(copy(locale, "Grade", "Seviye"));
+  if (columns.has("location")) header.push(copy(locale, "Location", "Lokasyon"));
+  if (columns.has("incumbent")) header.push(copy(locale, "Incumbent", "Mevcut çalışan"));
+  if (columns.has("status")) header.push(copy(locale, "Status", "Durum"));
+  if (columns.has("critical")) header.push(copy(locale, "Critical", "Kritik"));
 
   const lines: unknown[][] = [header];
   for (const row of rows) {
@@ -268,7 +282,7 @@ async function exportPositions(ctx: NonNullable<Awaited<ReturnType<typeof getReq
     if (columns.has("location")) values.push(row.location ?? "");
     if (columns.has("incumbent")) values.push(incumbent ? `${incumbent.givenName} ${incumbent.familyName}` : "");
     if (columns.has("status")) values.push(row.status);
-    if (columns.has("critical")) values.push(row.critical ? "Yes" : "No");
+    if (columns.has("critical")) values.push(row.critical ? copy(locale, "Yes", "Evet") : copy(locale, "No", "Hayır"));
     lines.push(values);
   }
 

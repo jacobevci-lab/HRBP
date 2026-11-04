@@ -54,7 +54,7 @@ export function EnterpriseViewToolbar({
   const selectedColumns = new Set(columns);
   const filtered = Boolean(query || status || columnsCustomized || density === "compact" || sortKey || pageSize !== 50);
   const current = { query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize };
-  const exportParams = new URLSearchParams({ module: moduleKey });
+  const exportParams = new URLSearchParams({ module: moduleKey, locale });
   if (query) exportParams.set("q", query);
   if (status) exportParams.set("status", status);
   if (columnsCustomized) {

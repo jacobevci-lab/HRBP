@@ -275,3 +275,41 @@ test("malformed export view state fails closed before querying data", async () =
     assert.equal(h.audits.length, 0);
   }
 });
+
+test("Turkish export locale localizes register headers and boolean labels", async () => {
+  const people = harness({
+    capabilities: ["people:read"],
+    peopleRows: [{
+      employeeNumber: "E-1",
+      givenName: "Ada",
+      familyName: "Örnek",
+      workEmail: "ada@example.test",
+      employments: []
+    }]
+  });
+  const peopleResponse = await people.GET(request("module=people&locale=tr&columnsMode=custom&columns=status"));
+  assert.equal(peopleResponse.status, 200);
+  const peopleCsv = await peopleResponse.text();
+  assert.ok(peopleCsv.includes('"Çalışan no","Ad Soyad","İş e-postası","Durum"'));
+  assert.ok(!peopleCsv.includes('"Employee ID"'));
+
+  const positions = harness({
+    capabilities: ["positions:read"],
+    positionRows: [{
+      positionCode: "P-1",
+      title: "Mimar",
+      grade: "G7",
+      location: "İstanbul",
+      status: "OPEN",
+      critical: true,
+      orgUnit: { name: "Güvenlik" },
+      employments: []
+    }]
+  });
+  const positionResponse = await positions.GET(request("module=positions&locale=tr&columnsMode=custom&columns=critical"));
+  assert.equal(positionResponse.status, 200);
+  const positionCsv = await positionResponse.text();
+  assert.ok(positionCsv.includes('"Pozisyon kodu","Unvan","Kritik"'));
+  assert.ok(positionCsv.includes('"Evet"'));
+  assert.ok(!positionCsv.includes('"Yes"'));
+});
