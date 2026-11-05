@@ -5,17 +5,26 @@ import { can, forbidden } from "@/lib/authorization";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { appendAudit } from "@/lib/audit";
 import { privateJson } from "@/lib/private-json";
+import { paginationMeta, parseApiPagination } from "@/lib/api-pagination";
 
 export async function GET(request: Request) {
   const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "positions:read")) return forbidden();
-  const data = await db.position.findMany({
-    where: { tenantId: ctx.tenantId, validTo: null },
-    orderBy: { positionCode: "asc" },
-    include: { orgUnit: { select: { id: true, name: true } }, _count: { select: { employments: true } } }
-  });
-  return privateJson({ data });
+  const pagination = parseApiPagination(request);
+  if (!pagination) return privateJson({ error: "page must be 1–10000 and limit must be 1–200; each parameter may appear only once." }, { status: 400 });
+  const where = { tenantId: ctx.tenantId, validTo: null };
+  const [data, total] = await Promise.all([
+    db.position.findMany({
+      where,
+      orderBy: [{ positionCode: "asc" }, { id: "asc" }],
+      skip: pagination.skip,
+      take: pagination.limit,
+      include: { orgUnit: { select: { id: true, name: true } }, _count: { select: { employments: true } } }
+    }),
+    db.position.count({ where })
+  ]);
+  return privateJson({ data, meta: paginationMeta(pagination.page, pagination.limit, total) });
 }
 
 export async function POST(request: Request) {

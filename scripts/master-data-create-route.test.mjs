@@ -19,6 +19,7 @@ function loadPlain(path) {
 
 const validation = loadPlain("lib/input-validation.ts");
 const privateResponse = loadPlain("lib/private-json.ts");
+const apiPagination = loadPlain("lib/api-pagination.ts");
 
 function loadRoute(path, mocks) {
   const module = { exports: {} };
@@ -37,10 +38,10 @@ const prisma = {
   Prisma: { TransactionIsolationLevel: { Serializable: "Serializable" } }
 };
 
-function peopleFixture({ positionStatus = "OPEN", claimCount = 1, transactionError = null } = {}) {
+function peopleFixture({ positionStatus = "OPEN", claimCount = 1, transactionError = null, peopleRows = [], peopleTotal = peopleRows.length } = {}) {
   const calls = {
     transactions: 0, transactionOptions: [], personCreates: [], employmentCreates: [], positionUpdates: [],
-    lifecycleCreates: [], onboardingCreates: [], audits: []
+    lifecycleCreates: [], onboardingCreates: [], audits: [], peopleReads: [], peopleCounts: []
   };
   const tx = {
     position: {
@@ -65,7 +66,12 @@ function peopleFixture({ positionStatus = "OPEN", claimCount = 1, transactionErr
     "@/lib/input-validation": validation,
     "@prisma/client": prisma,
     "@/lib/db": {
-      db: {},
+      db: {
+        person: {
+          findMany: async (options) => { calls.peopleReads.push(options); return peopleRows; },
+          count: async (options) => { calls.peopleCounts.push(options); return peopleTotal; }
+        }
+      },
       withDb: async (operation) => {
         calls.transactions += 1;
         return operation({ $transaction: async (work, options) => {
@@ -92,13 +98,14 @@ function peopleFixture({ positionStatus = "OPEN", claimCount = 1, transactionErr
       appendAudit: async (_tx, _ctx, entry) => { calls.audits.push(entry); }
     },
     "@/lib/workforce-master-data-access": { canCreateEmployeeMasterRecord: () => true },
-    "@/lib/private-json": privateResponse
+    "@/lib/private-json": privateResponse,
+    "@/lib/api-pagination": apiPagination
   });
   return { route, calls };
 }
 
-function positionFixture({ transactionError = null } = {}) {
-  const calls = { transactions: 0, transactionOptions: [], creates: [], audits: [] };
+function positionFixture({ transactionError = null, positionRows = [], positionTotal = positionRows.length } = {}) {
+  const calls = { transactions: 0, transactionOptions: [], creates: [], audits: [], positionReads: [], positionCounts: [] };
   const tx = {
     organizationUnit: { findFirst: async () => ({ id: "org-1" }) },
     position: {
@@ -110,7 +117,12 @@ function positionFixture({ transactionError = null } = {}) {
     "@/lib/input-validation": validation,
     "@prisma/client": prisma,
     "@/lib/db": {
-      db: {},
+      db: {
+        position: {
+          findMany: async (options) => { calls.positionReads.push(options); return positionRows; },
+          count: async (options) => { calls.positionCounts.push(options); return positionTotal; }
+        }
+      },
       withDb: async (operation) => {
         calls.transactions += 1;
         return operation({ $transaction: async (work, options) => {
@@ -132,7 +144,8 @@ function positionFixture({ transactionError = null } = {}) {
     "@/lib/audit": {
       appendAudit: async (_tx, _ctx, entry) => { calls.audits.push(entry); }
     },
-    "@/lib/private-json": privateResponse
+    "@/lib/private-json": privateResponse,
+    "@/lib/api-pagination": apiPagination
   });
   return { route, calls };
 }
@@ -317,4 +330,69 @@ test("serializable transaction conflicts become bounded 409 responses", async ()
     assert.equal(calls.transactions, 1);
     assert.equal(calls.audits.length, 0);
   }
+});
+
+
+async function get(route, path) {
+  return route.GET(new Request("https://hrbp.example.test" + path));
+}
+
+test("Core HR read APIs expose bounded pagination metadata while preserving data arrays", async () => {
+  const peopleRows = [{ id: "person-26" }];
+  const peopleFixtureResult = peopleFixture({ peopleRows, peopleTotal: 61 });
+  const peopleResponse = await get(peopleFixtureResult.route, "/api/people?page=2&limit=25");
+  assert.equal(peopleResponse.status, 200);
+  assert.deepEqual(await peopleResponse.json(), {
+    data: peopleRows,
+    meta: { page: 2, limit: 25, total: 61, pageCount: 3, hasMore: true }
+  });
+  assert.equal(peopleFixtureResult.calls.peopleReads[0].skip, 25);
+  assert.equal(peopleFixtureResult.calls.peopleReads[0].take, 25);
+  assert.deepEqual(peopleFixtureResult.calls.peopleReads[0].orderBy, [
+    { familyName: "asc" }, { givenName: "asc" }, { id: "asc" }
+  ]);
+  assert.deepEqual(peopleFixtureResult.calls.peopleCounts[0].where, peopleFixtureResult.calls.peopleReads[0].where);
+
+  const positionRows = [{ id: "position-1" }];
+  const positionFixtureResult = positionFixture({ positionRows, positionTotal: 201 });
+  const positionResponse = await get(positionFixtureResult.route, "/api/positions");
+  assert.equal(positionResponse.status, 200);
+  assert.deepEqual(await positionResponse.json(), {
+    data: positionRows,
+    meta: { page: 1, limit: 200, total: 201, pageCount: 2, hasMore: true }
+  });
+  assert.equal(positionFixtureResult.calls.positionReads[0].skip, 0);
+  assert.equal(positionFixtureResult.calls.positionReads[0].take, 200);
+  assert.deepEqual(positionFixtureResult.calls.positionReads[0].orderBy, [
+    { positionCode: "asc" }, { id: "asc" }
+  ]);
+  assert.deepEqual(positionFixtureResult.calls.positionCounts[0].where, positionFixtureResult.calls.positionReads[0].where);
+});
+
+test("invalid or ambiguous Core HR pagination fails before database reads", async () => {
+  for (const [factory, path, readKey, countKey] of [
+    [peopleFixture, "/api/people?limit=201", "peopleReads", "peopleCounts"],
+    [peopleFixture, "/api/people?page=0", "peopleReads", "peopleCounts"],
+    [peopleFixture, "/api/people?page=1&page=2", "peopleReads", "peopleCounts"],
+    [positionFixture, "/api/positions?limit=abc", "positionReads", "positionCounts"],
+    [positionFixture, "/api/positions?page=10001", "positionReads", "positionCounts"]
+  ]) {
+    const result = factory();
+    const response = await get(result.route, path);
+    assert.equal(response.status, 400);
+    assert.equal(result.calls[readKey].length, 0);
+    assert.equal(result.calls[countKey].length, 0);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+  }
+});
+
+test("Core HR pagination helper retains the historical 200-row People default and bounds offsets", () => {
+  const parsed = apiPagination.parseApiPagination(new Request("https://hrbp.example.test/api/people"));
+  assert.deepEqual(parsed, { page: 1, limit: 200, skip: 0 });
+  assert.equal(apiPagination.parseApiPagination(new Request("https://hrbp.example.test/api/people?limit=0")), null);
+  assert.equal(apiPagination.parseApiPagination(new Request("https://hrbp.example.test/api/people?limit=201")), null);
+  assert.deepEqual(
+    apiPagination.paginationMeta(3, 25, 61),
+    { page: 3, limit: 25, total: 61, pageCount: 3, hasMore: false }
+  );
 });

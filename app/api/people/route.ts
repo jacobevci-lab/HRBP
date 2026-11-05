@@ -7,33 +7,41 @@ import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/re
 import { appendAudit } from "@/lib/audit";
 import { canCreateEmployeeMasterRecord } from "@/lib/workforce-master-data-access";
 import { privateJson } from "@/lib/private-json";
+import { paginationMeta, parseApiPagination } from "@/lib/api-pagination";
 
 export async function GET(request: Request) {
   const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "people:read")) return forbidden();
+  const pagination = parseApiPagination(request);
+  if (!pagination) return privateJson({ error: "page must be 1–10000 and limit must be 1–200; each parameter may appear only once." }, { status: 400 });
 
   const scope = await resolveEmploymentScope(db, ctx);
   const employmentWhere = {
     status: { not: EmploymentStatus.TERMINATED },
     ...employmentPrimaryKeyFilter(scope)
   };
-  const people = await db.person.findMany({
-    where: {
-      tenantId: ctx.tenantId,
-      ...(scope === null ? {} : { employments: { some: employmentWhere } })
-    },
-    orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
-    take: 200,
-    select: {
-      id: true, employeeNumber: true, givenName: true, familyName: true, workEmail: true, classification: true,
-      employments: { where: employmentWhere, take: 1, select: {
-        id: true, status: true, startDate: true,
-        position: { select: { id: true, positionCode: true, title: true, orgUnit: { select: { id: true, name: true } } } }
-      }}
-    }
-  });
-  return privateJson({ data: people });
+  const where = {
+    tenantId: ctx.tenantId,
+    ...(scope === null ? {} : { employments: { some: employmentWhere } })
+  };
+  const [people, total] = await Promise.all([
+    db.person.findMany({
+      where,
+      orderBy: [{ familyName: "asc" }, { givenName: "asc" }, { id: "asc" }],
+      skip: pagination.skip,
+      take: pagination.limit,
+      select: {
+        id: true, employeeNumber: true, givenName: true, familyName: true, workEmail: true, classification: true,
+        employments: { where: employmentWhere, take: 1, select: {
+          id: true, status: true, startDate: true,
+          position: { select: { id: true, positionCode: true, title: true, orgUnit: { select: { id: true, name: true } } } }
+        }}
+      }
+    }),
+    db.person.count({ where })
+  ]);
+  return privateJson({ data: people, meta: paginationMeta(pagination.page, pagination.limit, total) });
 }
 
 export async function POST(request: Request) {
