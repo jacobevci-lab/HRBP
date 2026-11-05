@@ -63,9 +63,13 @@ function provider(update){
   react,'react/jsx-runtime':{jsx:(_tag,props)=>props},'@/lib/i18n':i18n,
   '@/lib/locale-preference-client':client,'@/lib/locale-preference-action':{updateLocalePreference:update}
  });
- return {render(){stateIndex=0;refIndex=0;return LocaleProvider({children:null}).value;},
+ return {render(initialLocale='en'){stateIndex=0;refIndex=0;return LocaleProvider({children:null,initialLocale}).value;},
   effects,jobs,async flush(){await Promise.all(jobs);}};
 }
+test('server-resolved locale is present on the first provider render before effects run',()=>{
+ const b=browser({cookie:'hrbp-locale=tr',stored:'tr'});let calls=0;const p=provider(async()=>{calls++;return{ok:false};});
+ try{assert.equal(p.render('tr').locale,'tr');assert.equal(calls,0);}finally{b.close();}
+});
 test('provider changes selected locale only after the server commit; rapid duplicate is ignored',async()=>{
  const b=browser();let resolve;const calls=[];const p=provider(next=>{calls.push(next);return new Promise(r=>resolve=r);});
  try{
@@ -96,4 +100,6 @@ test('action-aware controls and repeated real-browser draft/download checks stay
  const e2e=readFileSync('scripts/platform-render-regression.mjs','utf8');assert.match(e2e,/\['tr','en','tr','en','tr','en'\]/);assert.match(e2e,/inputValue\(\),'unsaved locale draft'/);assert.match(e2e,/waitForEvent\('download'\)/);
  assert.match(readFileSync('.github/workflows/platform-regression.yml','utf8'),/locale-preference\.test\.mjs/);
  const layout=readFileSync('app/layout.tsx','utf8');assert.match(layout,/var locale = cookieLocale === 'tr' \|\| cookieLocale === 'en'/);
+ assert.match(layout,/getServerLocale\(\)/);assert.match(layout,/LocaleProvider initialLocale=\{locale\}/);assert.match(layout,/<html lang=\{locale\} data-locale=\{locale\}/);
+ const shell=readFileSync('components/app-shell.tsx','utf8');assert.doesNotMatch(shell,/<LocaleProvider/);
 });

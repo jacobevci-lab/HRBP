@@ -33,6 +33,8 @@ export async function AuditLivePage({ searchParams }: { searchParams: Record<str
   if (classification) exportParams.set("classification", classification);
   exportParams.set("days", String(days));
 
+  const exportBlocked = data.total > 5000;
+
   const integrityLabel = data.integrity.scope === "GENESIS"
     ? c(locale, "Full chain from genesis", "Genesis'ten tam zincir")
     : data.integrity.scope === "TAIL"
@@ -42,7 +44,12 @@ export async function AuditLivePage({ searchParams }: { searchParams: Record<str
   return <div className="audit-live-page" data-audit-locale={locale}>
     <div className="page-heading audit-live-heading">
       <div><span className="eyebrow">{c(locale, "Trust & evidence", "Güven & kanıt")}</span><h1>{c(locale, "Audit Ledger", "Denetim Defteri")}</h1><p>{c(locale, "Immutable tenant activity with hash-chain integrity verification.", "Hash-zinciri bütünlük doğrulamalı değiştirilemez tenant aktivitesi.")}</p></div>
-      <a className="secondary-button" download href={`/api/audit/export?${exportParams.toString()}`}><Download size={15}/>{c(locale, "Export CSV", "CSV dışa aktar")}</a>
+      <div className="audit-export-control">
+        {exportBlocked
+          ? <span className="secondary-button audit-export-disabled" aria-disabled="true" title={c(locale, "Narrow the current filters before exporting.", "Dışa aktarmadan önce geçerli filtreleri daraltın.")}><Download size={15}/>{c(locale, "Export CSV", "CSV dışa aktar")}</span>
+          : <a className="secondary-button" download href={`/api/audit/export?${exportParams.toString()}`}><Download size={15}/>{c(locale, "Export CSV", "CSV dışa aktar")}</a>}
+        {exportBlocked ? <small role="status">{c(locale, `${data.total} matches exceed the 5,000-row export limit. Narrow the filters.`, `${data.total} eşleşme 5.000 satırlık dışa aktarma sınırını aşıyor. Filtreleri daraltın.`)}</small> : null}
+      </div>
     </div>
 
     <section className="audit-metrics">

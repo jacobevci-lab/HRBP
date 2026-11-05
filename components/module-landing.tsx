@@ -7,6 +7,7 @@ import { getServerLocale } from "@/lib/i18n-server";
 import { translate, type Locale } from "@/lib/i18n";
 import { getServerRequestContext } from "@/lib/server-session";
 import { PublicModuleLanding } from "@/components/public-module-landing";
+import { canCreateEmployeeMasterRecord } from "@/lib/workforce-master-data-access";
 
 const descriptions: Record<string, { en: string; tr: string }> = {
   people: {
@@ -67,16 +68,16 @@ const descriptions: Record<string, { en: string; tr: string }> = {
   }
 };
 
-type WorkspaceProps = { slug: string; query?: string; personId?: string; tab?: string };
+type WorkspaceProps = { slug: string; query?: string; status?: string; columns?: string[]; columnsCustomized?: boolean; density?: "comfortable" | "compact"; sortKey?: string; sortDirection?: "asc" | "desc"; page?: number; pageSize?: 25 | 50 | 100; savedViewId?: string; personId?: string; tab?: string };
 
 /** Only live implementations belong in this authenticated dispatcher.
  * Rendering/import failures propagate intact to Next's route error boundary.
  * Anonymous catalog previews are handled before entering this function. */
-async function renderLiveWorkspace({ slug, query = "", personId, tab }: WorkspaceProps): Promise<ReactNode> {
+async function renderLiveWorkspace({ slug, query = "", status, columns = [], columnsCustomized = false, density = "comfortable", sortKey, sortDirection = "asc", page = 1, pageSize = 50, savedViewId, personId, tab }: WorkspaceProps): Promise<ReactNode> {
   switch (slug) {
     case "people": case "organization": case "positions": case "employee-360": {
       const { CoreHRLiveWorkspace } = await import("@/components/core-hr-live-workspace");
-      return await CoreHRLiveWorkspace({ slug, query, personId, tab });
+      return await CoreHRLiveWorkspace({ slug, query, status, columns, columnsCustomized, density, sortKey, sortDirection, page, pageSize, savedViewId, personId, tab });
     }
     case "documents": case "audit": {
       const { GovernanceLiveWorkspace } = await import("@/components/governance-live-workspace");
@@ -105,7 +106,7 @@ async function renderLiveWorkspace({ slug, query = "", personId, tab }: Workspac
   }
 }
 
-export async function ModuleLanding({ slug, query = "", personId, tab }: WorkspaceProps) {
+export async function ModuleLanding({ slug, query = "", status, columns = [], columnsCustomized = false, density = "comfortable", sortKey, sortDirection = "asc", page = 1, pageSize = 50, savedViewId, personId, tab }: WorkspaceProps) {
   const [ctx, locale] = await Promise.all([getServerRequestContext(), getServerLocale()]);
   if (!ctx) return <PublicModuleLanding slug={slug}/>;
   const item = navigation.flatMap(group => group.items).find(entry => entry.slug === slug);
@@ -119,16 +120,16 @@ export async function ModuleLanding({ slug, query = "", personId, tab }: Workspa
     <section className="card module-table"><div className="empty-state"><h3>{locale === "tr" ? "Erişim kısıtlı" : "Access is restricted"}</h3><p>{locale === "tr" ? "Mevcut rolünüz bu çalışma alanının veri erişim yetkisini içermiyor." : "Your current role does not include this workspace's data access capability."}</p></div></section>
   </section>;
 
-  const content = await renderLiveWorkspace({ slug, query, personId, tab });
+  const content = await renderLiveWorkspace({ slug, query, status, columns, columnsCustomized, density, sortKey, sortDirection, page, pageSize, savedViewId, personId, tab });
   if (content === null || content === undefined) throw new Error("Live workspace returned no content.");
-  const createHref = slug === "people" && can(ctx, "people:read") && can(ctx, "people:write")
+  const createHref = slug === "people" && can(ctx, "people:read") && canCreateEmployeeMasterRecord(ctx)
     ? "/module/people/new"
     : slug === "positions" && can(ctx, "positions:read") && can(ctx, "positions:write") ? "/module/positions/new" : null;
   return <section data-module-workspace-state="rendered" data-module-workspace={slug}>
     <section className="page-heading module-heading">
       <div><div className="eyebrow">HRBP One / {title}</div><h1>{title}</h1><p>{meta}</p></div>
       <div className="module-heading-actions">
-        <span className="secondary-button"><CircleCheckBig size={16}/>{locale === "tr" ? "Canlı veri görünümü" : "Live data view"}</span>
+        <span className="secondary-button module-state-badge"><CircleCheckBig size={16}/>{locale === "tr" ? "Canlı veri görünümü" : "Live data view"}</span>
         {createHref ? <Link className="create-button" href={createHref}><Plus size={17}/>{locale === "tr" ? (slug === "people" ? "Çalışan ekle" : "Yeni pozisyon") : (slug === "people" ? "Add employee" : "New position")}</Link> : null}
       </div>
     </section>

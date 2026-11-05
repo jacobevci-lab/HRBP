@@ -55,7 +55,13 @@ function fixture({ ctx = { tenantId: 'qa-tenant', actorId: 'qa-user' }, locale =
     '@/lib/i18n': { translate: (selected, key) => `${selected}:${key}` },
     '@/lib/authorization': { can: (actual, capability) => {
       assert.equal(actual, ctx); return !denied.includes(capability);
-    } }
+    } },
+    '@/lib/workforce-master-data-access': {
+      canCreateEmployeeMasterRecord: actual => {
+        assert.equal(actual, ctx);
+        return !denied.includes('people:write');
+      }
+    }
   };
   for (const [file, symbol] of registry) mocks[`@/components/${file}`] = importFail || {
     [symbol]: async args => {
@@ -75,7 +81,7 @@ for (const [, symbol, slugs] of registry) for (const slug of slugs) {
     assert.ok(!nodes(tree).some(n => n.type === 'public-preview' || n.type === 'button' || n.type === 'input'));
     if (symbol === 'EmployeeServicesLiveWorkspace') assert.equal(route.calls[0].args.focusId, 'filter & Ö');
     if (symbol === 'GovernanceLiveWorkspace') assert.equal(route.calls[0].args.query, 'filter & Ö');
-    if (symbol === 'CoreHRLiveWorkspace') assert.deepEqual(JSON.parse(JSON.stringify(route.calls[0].args)), {slug,query:'filter & Ö',personId:'person-a',tab:'history'});
+    if (symbol === 'CoreHRLiveWorkspace') assert.deepEqual(JSON.parse(JSON.stringify(route.calls[0].args)), {slug,query:'filter & Ö',columns:[],columnsCustomized:false,density:'comfortable',sortDirection:'asc',page:1,pageSize:50,personId:'person-a',tab:'history'});
     if (symbol === 'RecruitingWorkspace') assert.equal(route.calls[0].args.slug, slug);
   });
   for (const kind of ['data', 'import', 'redirect', 'not-found']) {
@@ -111,6 +117,14 @@ for (const slug of ['people','positions']) test(`${slug}: create navigation requ
   assert.ok(!nodes(await denied.ModuleLanding({slug})).some(n=>n.props.href===`/module/${slug}/new`));
   const allowed=fixture();
   assert.ok(nodes(await allowed.ModuleLanding({slug})).some(n=>n.props.href===`/module/${slug}/new`));
+});
+for (const slug of ['people','positions']) test(`${slug}: URL-native column view state reaches the live workspace`, async () => {
+  const route=fixture();
+  await route.ModuleLanding({slug,query:'needle',status:'ACTIVE',columns:['position','status'],columnsCustomized:true,density:'compact',sortKey:'employeeNumber',sortDirection:'desc',page:3,pageSize:100});
+  assert.equal(route.calls.length,1);
+  assert.deepEqual(JSON.parse(JSON.stringify(route.calls[0].args)), {
+    slug,query:'needle',status:'ACTIVE',columns:['position','status'],columnsCustomized:true,density:'compact',sortKey:'employeeNumber',sortDirection:'desc',page:3,pageSize:100
+  });
 });
 test('Unsupported dispatch and empty live result are explicit failures, not success placeholders', async () => {
   for(const slug of ['not-a-module','__proto__','constructor','learning']) {
@@ -182,4 +196,11 @@ test('Browser fault/healthy gate is mandatory and restricted to the disposable l
   assert.match(browser,/report\.healthy\.length,64/);assert.match(browser,/report\.faults\.length,2/);assert.match(browser,/report\.failures,\[\]/);
   const workflow=readFileSync('.github/workflows/platform-regression.yml','utf8');
   assert.match(workflow,/node scripts\/module-workspace-browser-regression\.mjs\s*node scripts\/core-workspace-browser-regression\.mjs\s*node scripts\/platform-remediation-gate\.mjs/);
+});
+
+
+test('ModuleLanding resilience harness explicitly provides workforce master-data access', () => {
+  const source=readFileSync('scripts/module-workspace-resilience.test.mjs','utf8');
+  assert.match(source, /'@\/lib\/workforce-master-data-access'/);
+  assert.match(source, /canCreateEmployeeMasterRecord/);
 });

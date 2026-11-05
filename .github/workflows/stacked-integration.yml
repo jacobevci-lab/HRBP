@@ -106,7 +106,10 @@ jobs:
           node --test scripts/audit-assurance-rehearsal.postgres.test.mjs
           node --test scripts/audit-verification-progress.postgres.test.mjs
       - name: Exercise governed lifecycle and identity transactions
+        env:
+          HRBP_DISPOSABLE_MASTER_DATA_CONCURRENCY: "true"
         run: |
+          node --test scripts/master-data-create-concurrency.postgres.test.mjs
           node --test scripts/job-change-impact-preview.postgres.test.mjs
           node --test scripts/scheduled-job-changes.postgres.test.mjs
           node --test scripts/emergency-access.postgres.test.mjs
@@ -116,7 +119,7 @@ jobs:
       - name: Build application with all existing prebuild checks
         run: npm run build
       - name: Build OpenNext Cloudflare bundle
-        run: npm run cf:build
+        run: env -u DATABASE_URL npm run cf:build
       - name: Validate Worker packaging without publishing
         run: npx --no-install wrangler deploy --dry-run
       - name: Exercise bundled Worker against disposable PostgreSQL

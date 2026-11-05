@@ -19,7 +19,7 @@ assert.ok(['localhost', '127.0.0.1'].includes(database.hostname));
 assert.equal(database.pathname, '/hrbp_audit'); assert.equal(database.search, '');
 assert.ok(process.env.HRBP_TEST_ADMIN_PASSWORD);
 const db = new PrismaClient(), browser = await chromium.launch({ headless: true });
-const report = { source: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), surface, checks: [], failures: [],
+const report = { source: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), surface, checks: [], failures: [], recoveries: [],
   scope: 'MANAGER and HR_OPERATIONS, EN desktop/TR mobile, real login/decision API/PostgreSQL. Request/identity seeds and deliberate response-loss/notification failures in fixed disposable localhost only.' };
 await mkdir('.audit', { recursive: true });
 async function scenario(name, fn) {
@@ -29,6 +29,24 @@ async function scenario(name, fn) {
 async function eventually(fn) {
   for (let i = 0; i < 100; i++) { if (await fn()) return; await new Promise(r => setTimeout(r, 50)); }
   assert.fail('Expected persisted state was not observed');
+}
+async function submitLocalLogin(page, context, submitButton, targetPath, label) {
+  const target = origin + targetPath;
+  const redirected = page.waitForURL(target, { waitUntil: 'commit', timeout: 30000 })
+    .then(() => true)
+    .catch(() => false);
+  await submitButton.click();
+  if (await redirected) return;
+
+  // A saturated CI worker may commit the signed session before the browser
+  // observes the redirect. Recover only after independently proving the real
+  // browser context owns an authenticated session; auth failures still fail.
+  const response = await context.request.get(origin + '/api/auth/session');
+  assert.equal(response.status(), 200, 'Login redirect timed out and session probe failed');
+  const body = await response.json();
+  assert.equal(body.authenticated, true, 'Login redirect timed out without an authenticated session');
+  report.recoveries.push({ name: label, reason: 'authenticated-session-after-redirect-timeout' });
+  await page.goto(target, { waitUntil: 'domcontentloaded', timeout: 30000 });
 }
 try {
   const seed = await db.userAccount.findUniqueOrThrow({ where: { id: 'qa-audit-admin' } });
@@ -61,9 +79,14 @@ try {
         await page.locator('#local-identifier').waitFor({ state: 'visible' });
         await page.locator('#local-identifier').fill(role === 'manager' ? 'audit.manager' : hrSubject);
         await page.locator('#local-password').fill(process.env.HRBP_TEST_ADMIN_PASSWORD);
-        const signedIn = page.waitForURL(origin + pagePath, { waitUntil: 'commit', timeout: 15000 });
-        await page.locator('.local-auth-card button[type="submit"]').click();
-        await signedIn; await waitForAuditLocale(page, pagePath, locale); actor = await identity();
+        await submitLocalLogin(
+          page,
+          context,
+          page.locator('.local-auth-card button[type="submit"]'),
+          pagePath,
+          name('login redirect recovery')
+        );
+        await waitForAuditLocale(page, pagePath, locale); actor = await identity();
       });
       const person = await db.person.create({ data: { tenantId: actor.tenantId, givenName: 'QA decision', familyName: 'Report', employeeNumber: randomUUID() } });
       employee = await db.employment.create({ data: { tenantId: actor.tenantId, personId: person.id, status: 'ACTIVE', startDate: new Date('2025-01-01'), managerEmploymentId: role === 'manager' ? actor.employmentId : null } });

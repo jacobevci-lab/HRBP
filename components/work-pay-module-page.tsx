@@ -47,7 +47,7 @@ export async function WorkPayModulePage({ slug, focusId }: { slug: Slug; focusId
   if (!ctx) {
     const { WorkPayWorkspace } = await import("@/components/work-pay-workspace");
     return <AppShell>
-      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><ShieldCheck size={16}/> {c(locale, "Read-only staging preview", "Salt-okunur staging önizlemesi")}</button></div></section>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><span className="secondary-button module-state-badge"><ShieldCheck size={16}/> {c(locale, "Read-only staging preview", "Salt-okunur staging önizlemesi")}</span></div></section>
       <section className="card module-degraded-banner" style={{ marginBottom: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}><ShieldCheck size={18} style={{ flex: "0 0 auto", marginTop: 1 }}/><div><strong style={{ display: "block", fontSize: 11 }}>{c(locale, "Safe demo data", "Güvenli demo verisi")}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5 }}>{c(locale, "This public staging view uses sample values only. Protected payroll, compensation and employee records remain unavailable until you sign in with an authorized role.", "Bu genel staging görünümü yalnızca örnek değerler kullanır. Korumalı bordro, ücret ve çalışan kayıtları, yetkili bir rolle giriş yapılana kadar kullanılamaz.")}</p></div></section>
       <WorkPayWorkspace slug={slug}/>
     </AppShell>;
@@ -112,14 +112,14 @@ export async function WorkPayModulePage({ slug, focusId }: { slug: Slug; focusId
     }
 
     return <AppShell>
-      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> {c(locale, "Governed live data", "Yönetişimli canlı veri")}</button></div></section>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><span className="secondary-button module-state-badge"><CircleCheckBig size={16}/> {c(locale, "Governed live data", "Yönetişimli canlı veri")}</span></div></section>
       {content}
       {participant}
     </AppShell>;
   } catch (error) {
     console.error(`[HRBP] Dedicated ${slug} workspace failed; protected fallback activated.`, error);
     return <AppShell>
-      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleAlert size={16}/> {c(locale, "Protected fallback", "Korumalı yedek mod")}</button></div></section>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><span className="secondary-button module-state-badge"><CircleAlert size={16}/> {c(locale, "Protected fallback", "Korumalı yedek mod")}</span></div></section>
       <section className="card module-table"><div className="empty-state"><CircleAlert size={24}/><h3>{c(locale, `${meta.title} is temporarily unavailable`, `${meta.title} geçici olarak kullanılamıyor`)}</h3><p>{c(locale, "The governed data plane could not initialize. No demo values are substituted and no protected mutation was attempted.", "Yönetişimli veri katmanı başlatılamadı. Yerine demo değer konulmadı ve hiçbir korumalı değişiklik işlemi denenmedi.")}</p></div></section>
     </AppShell>;
   }

@@ -1,68 +1,71 @@
-import { readJsonObject } from "@/lib/input-validation";
-import { DataClassification, EmploymentStatus, LifecycleEventType, PlatformRole, PositionStatus } from "@prisma/client";
+import { asDateOnly, asEmailAddress, asIdentifier, asText, readJsonObject } from "@/lib/input-validation";
+import { DataClassification, EmploymentStatus, LifecycleEventType, PositionStatus, Prisma } from "@prisma/client";
 import { withDb, db } from "@/lib/db";
 import { can, forbidden } from "@/lib/authorization";
 import { employmentPrimaryKeyFilter, resolveEmploymentScope } from "@/lib/employment-scope";
 import { getRequestContext, mutationOriginAllowed, unauthorized } from "@/lib/request-context";
 import { appendAudit } from "@/lib/audit";
-
-const workforceMasterDataWriters = new Set<PlatformRole>([
-  PlatformRole.HR_OPERATIONS,
-  PlatformRole.TENANT_ADMIN
-]);
+import { canCreateEmployeeMasterRecord } from "@/lib/workforce-master-data-access";
+import { privateJson } from "@/lib/private-json";
+import { paginationMeta, parseApiPagination } from "@/lib/api-pagination";
 
 export async function GET(request: Request) {
   const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!can(ctx, "people:read")) return forbidden();
+  const pagination = parseApiPagination(request);
+  if (!pagination) return privateJson({ error: "page must be 1–10000 and limit must be 1–200; each parameter may appear only once." }, { status: 400 });
 
   const scope = await resolveEmploymentScope(db, ctx);
   const employmentWhere = {
     status: { not: EmploymentStatus.TERMINATED },
     ...employmentPrimaryKeyFilter(scope)
   };
-  const people = await db.person.findMany({
-    where: {
-      tenantId: ctx.tenantId,
-      ...(scope === null ? {} : { employments: { some: employmentWhere } })
-    },
-    orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
-    take: 200,
-    select: {
-      id: true, employeeNumber: true, givenName: true, familyName: true, workEmail: true, classification: true,
-      employments: { where: employmentWhere, take: 1, select: {
-        id: true, status: true, startDate: true,
-        position: { select: { id: true, positionCode: true, title: true, orgUnit: { select: { id: true, name: true } } } }
-      }}
-    }
-  });
-  return Response.json({ data: people });
+  const where = {
+    tenantId: ctx.tenantId,
+    ...(scope === null ? {} : { employments: { some: employmentWhere } })
+  };
+  const [people, total] = await Promise.all([
+    db.person.findMany({
+      where,
+      orderBy: [{ familyName: "asc" }, { givenName: "asc" }, { id: "asc" }],
+      skip: pagination.skip,
+      take: pagination.limit,
+      select: {
+        id: true, employeeNumber: true, givenName: true, familyName: true, workEmail: true, classification: true,
+        employments: { where: employmentWhere, orderBy: [{ startDate: "desc" }, { id: "desc" }], take: 1, select: {
+          id: true, status: true, startDate: true,
+          position: { select: { id: true, positionCode: true, title: true, orgUnit: { select: { id: true, name: true } } } }
+        }}
+      }
+    }),
+    db.person.count({ where })
+  ]);
+  return privateJson({ data: people, meta: paginationMeta(pagination.page, pagination.limit, total) });
 }
 
 export async function POST(request: Request) {
   const ctx = await getRequestContext(request);
   if (!ctx) return unauthorized();
   if (!mutationOriginAllowed(request)) return forbidden("Cross-origin mutation blocked.");
-  if (!can(ctx, "people:write") || !workforceMasterDataWriters.has(ctx.role)) {
+  if (!canCreateEmployeeMasterRecord(ctx)) {
     return forbidden("Creating a workforce master record requires an operational tenant-wide role.");
   }
 
   const body = await readJsonObject(request) as Record<string, unknown>;
-  if (!body) return Response.json({ error: "A bounded JSON object body is required." }, { status: 400 });
-  const givenName = String(body.givenName ?? "").trim();
-  const familyName = String(body.familyName ?? "").trim();
-  const employeeNumber = String(body.employeeNumber ?? "").trim();
-  const workEmail = String(body.workEmail ?? "").trim().toLowerCase();
-  const positionId = String(body.positionId ?? "").trim();
-  const startDateValue = String(body.startDate ?? "").trim();
+  if (!body) return privateJson({ error: "A bounded JSON object body is required." }, { status: 400 });
+  const givenName = asText(body.givenName, 100);
+  const familyName = asText(body.familyName, 100);
+  const employeeNumber = asIdentifier(body.employeeNumber, 64);
+  const workEmail = asEmailAddress(body.workEmail);
+  const positionId = asIdentifier(body.positionId);
+  const startDate = asDateOnly(body.startDate);
 
-  if (!givenName || !familyName || !employeeNumber || !workEmail || !positionId || !startDateValue) {
-    return Response.json({ error: "givenName, familyName, employeeNumber, workEmail, positionId and startDate are required." }, { status: 400 });
+  if (!givenName || !familyName || !employeeNumber || !workEmail || !positionId || !startDate) {
+    return privateJson({
+      error: "A valid employeeNumber, givenName, familyName, workEmail, positionId and YYYY-MM-DD startDate are required."
+    }, { status: 400 });
   }
-  if (!workEmail.includes("@")) return Response.json({ error: "A valid work email is required." }, { status: 400 });
-
-  const startDate = new Date(`${startDateValue}T00:00:00.000Z`);
-  if (Number.isNaN(startDate.getTime())) return Response.json({ error: "startDate is invalid." }, { status: 400 });
 
   const now = new Date();
   const status = startDate.getTime() > now.getTime() ? EmploymentStatus.PREBOARDING : EmploymentStatus.ACTIVE;
@@ -84,7 +87,7 @@ export async function POST(request: Request) {
       });
 
       if (!position) throw new Error("POSITION_NOT_FOUND");
-      if (position.status !== PositionStatus.OPEN && position.status !== PositionStatus.PLANNED) throw new Error("POSITION_NOT_AVAILABLE");
+      if (position.status !== PositionStatus.OPEN) throw new Error("POSITION_NOT_AVAILABLE");
       if (position.employments.length) throw new Error("POSITION_OCCUPIED");
 
       const duplicate = await tx.person.findFirst({
@@ -98,6 +101,12 @@ export async function POST(request: Request) {
         select: { id: true }
       });
       if (duplicate) throw new Error("PERSON_DUPLICATE");
+
+      const positionClaim = await tx.position.updateMany({
+        where: { id: position.id, tenantId: ctx.tenantId, status: PositionStatus.OPEN, validTo: null },
+        data: { status: PositionStatus.FILLED }
+      });
+      if (positionClaim.count !== 1) throw new Error("STATE_CONFLICT");
 
       const person = await tx.person.create({
         data: {
@@ -119,8 +128,6 @@ export async function POST(request: Request) {
           startDate
         }
       });
-
-      await tx.position.update({ where: { id: position.id }, data: { status: PositionStatus.FILLED } });
 
       await tx.employeeLifecycleEvent.create({
         data: {
@@ -163,15 +170,16 @@ export async function POST(request: Request) {
       });
 
       return { person, employment, status };
-    }));
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }));
 
-    return Response.json({ data: result }, { status: 201 });
+    return privateJson({ data: result }, { status: 201 });
   } catch (error) {
     const code = error instanceof Error ? error.message : "UNKNOWN";
-    if (code === "POSITION_NOT_FOUND") return Response.json({ error: "The selected position does not exist in this tenant." }, { status: 404 });
-    if (code === "POSITION_NOT_AVAILABLE" || code === "POSITION_OCCUPIED") return Response.json({ error: "The selected position is no longer available." }, { status: 409 });
-    if (code === "PERSON_DUPLICATE" || (error as { code?: string })?.code === "P2002") return Response.json({ error: "Employee number or work email already exists." }, { status: 409 });
+    if (code === "POSITION_NOT_FOUND") return privateJson({ error: "The selected position does not exist in this tenant." }, { status: 404 });
+    if (code === "POSITION_NOT_AVAILABLE" || code === "POSITION_OCCUPIED") return privateJson({ error: "The selected position is no longer available." }, { status: 409 });
+    if (code === "PERSON_DUPLICATE" || (error as { code?: string })?.code === "P2002") return privateJson({ error: "Employee number or work email already exists." }, { status: 409 });
+    if (code === "STATE_CONFLICT" || (error as { code?: string })?.code === "P2034") return privateJson({ error: "Employee or position state changed concurrently. Refresh and retry." }, { status: 409 });
     console.error("Employee creation failed", error);
-    return Response.json({ error: "Employee record could not be created." }, { status: 500 });
+    return privateJson({ error: "Employee record could not be created." }, { status: 500 });
   }
 }

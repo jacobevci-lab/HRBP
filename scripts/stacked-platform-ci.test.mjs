@@ -9,6 +9,8 @@ import test from "node:test";
 // These are not browser tests, a YAML parser, or a sandbox for hostile PR code.
 const platform = readFileSync(new URL("../.github/workflows/platform-regression.yml", import.meta.url), "utf8");
 const stacked = readFileSync(new URL("../.github/workflows/stacked-integration.yml", import.meta.url), "utf8");
+const leaveDecisionBrowser = readFileSync(new URL("./leave-decision-browser-regression.mjs", import.meta.url), "utf8");
+const timeDecisionBrowser = readFileSync(new URL("./time-decision-browser-regression.mjs", import.meta.url), "utf8");
 function step(name) {
   const prefix = `      - name: ${name}\n`;
   assert.equal(platform.split(prefix).length, 2, `unique step required: ${name}`);
@@ -133,6 +135,44 @@ test("all fourteen browser/API gate invocations remain required in their origina
   assert.match(audit, /next start --hostname localhost --port 3100/);
   assert.match(audit, /trap 'kill \$PID 2>\/dev\/null \|\| true' EXIT/);
   assert.match(audit, /test "\$ready" -eq 1 \|\| \{ tail -70 \.audit\/server.log; exit 1; \}/);
+});
+
+test("anonymous create URLs must redirect to sign-in without rendering create forms", () => {
+  const authAudit = readFileSync(new URL("./platform-auth-browser-audit.mjs", import.meta.url), "utf8");
+  assert.match(authAudit, /anonymousCreate:\[\]/);
+  assert.match(authAudit, /\['\/module\/people\/new','\/module\/positions\/new'\]/);
+  assert.match(authAudit, /returnTo=current\.searchParams\.get\('returnTo'\)/);
+  assert.match(authAudit, /page\.locator\('\.record-form'\)\.count\(\)/);
+  assert.match(authAudit, /anonymousCreateFailures/);
+  assert.match(authAudit, /ANONYMOUS_CREATE_ACCESS_FAILED/);
+});
+
+test("create-workspace browser policy is a hard runtime gate", () => {
+  const authAudit = readFileSync(new URL("./platform-auth-browser-audit.mjs", import.meta.url), "utf8");
+  assert.match(authAudit, /createWorkspacePaths=new Set\(\['\/module\/people\/new','\/module\/positions\/new'\]\)/);
+  assert.match(authAudit, /x\.role==='admin'\?x\.denied===true:x\.denied!==true/);
+  assert.match(authAudit, /CREATE_WORKSPACE_AUTH_POLICY_FAILED/);
+  assert.match(authAudit, /createWorkspacePolicyFailures/);
+});
+
+test("leave browser login recovery requires a verified session before explicit navigation", () => {
+  assert.match(leaveDecisionBrowser, /async function submitLocalLogin/);
+  assert.match(leaveDecisionBrowser, /page\.waitForURL\(target, \{ waitUntil: 'commit', timeout: 30000 \}\)/);
+  assert.match(leaveDecisionBrowser, /context\.request\.get\(origin \+ '\/api\/auth\/session'\)/);
+  assert.match(leaveDecisionBrowser, /assert\.equal\(body\.authenticated, true/);
+  assert.match(leaveDecisionBrowser, /authenticated-session-after-redirect-timeout/);
+  assert.match(leaveDecisionBrowser, /page\.goto\(target, \{ waitUntil: 'domcontentloaded', timeout: 30000 \}\)/);
+  assert.doesNotMatch(leaveDecisionBrowser, /const signedIn = page\.waitForURL/);
+});
+
+test("time browser login recovery requires a verified session before explicit navigation", () => {
+  assert.match(timeDecisionBrowser, /async function submitLocalLogin/);
+  assert.match(timeDecisionBrowser, /page\.waitForURL\(target,\{waitUntil:"commit",timeout:30000\}\)/);
+  assert.match(timeDecisionBrowser, /context\.request\.get\(origin\+"\/api\/auth\/session"\)/);
+  assert.match(timeDecisionBrowser, /assert\.equal\(body\.authenticated,true/);
+  assert.match(timeDecisionBrowser, /authenticated-session-after-redirect-timeout/);
+  assert.match(timeDecisionBrowser, /page\.goto\(target,\{waitUntil:"domcontentloaded",timeout:30000\}\)/);
+  assert.doesNotMatch(timeDecisionBrowser, /const signedIn=page\.waitForURL/);
 });
 
 test("only evidence upload is unconditional; mandatory test steps cannot be skipped", () => {

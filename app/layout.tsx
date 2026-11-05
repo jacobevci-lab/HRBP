@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { LocaleProvider } from "@/components/locale-provider";
+import { getServerLocale } from "@/lib/i18n-server";
 import "./globals.css";
 import "./enterprise.css";
 import "./employee360.css";
@@ -20,6 +22,7 @@ import "./notifications.css";
 import "./workflows.css";
 import "./global-search.css";
 import "./dashboard-actions.css";
+import "./workspace-shell.css";
 import "./settings-live.css";
 import "./settings-connections.css";
 import "./connection-lifecycle.css";
@@ -57,11 +60,12 @@ const uiBootstrap = `
   }
 })();`;
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const locale = await getServerLocale();
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} data-locale={locale} suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: uiBootstrap }}/></head>
-      <body>{children}</body>
+      <body><LocaleProvider initialLocale={locale}>{children}</LocaleProvider></body>
     </html>
   );
 }

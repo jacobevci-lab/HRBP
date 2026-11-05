@@ -8,17 +8,26 @@ import { getRequestContext } from "@/lib/request-context";
 
 export const dynamic = "force-dynamic";
 
+function jsonHeaders() {
+  return { "cache-control": "no-store", "x-content-type-options": "nosniff" };
+}
+
 function requestLocale(request: Request): Locale {
   const cookie = request.headers.get("cookie") ?? "";
   const match = cookie.match(/(?:^|;\s*)hrbp-locale=([^;]+)/);
-  const value = match ? decodeURIComponent(match[1]) : null;
-  return isLocale(value) ? value : "en";
+  if (!match) return "en";
+  try {
+    const value = decodeURIComponent(match[1]);
+    return isLocale(value) ? value : "en";
+  } catch {
+    return "en";
+  }
 }
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const q = (url.searchParams.get("q") ?? "").trim().slice(0, 80);
-  if (q.length < 2) return Response.json({ data: [] }, { headers: { "cache-control": "no-store" } });
+  if (q.length < 2) return Response.json({ data: [] }, { headers: jsonHeaders() });
 
   const locale = requestLocale(request);
   const normalized = q.toLocaleLowerCase(locale === "tr" ? "tr-TR" : "en-US");
@@ -48,7 +57,7 @@ export async function GET(request: Request) {
       href: item.slug === "dashboard" ? "/" : `/module/${item.slug}`
     }));
 
-  if (!ctx) return Response.json({ data: moduleResults }, { headers: { "cache-control": "no-store" } });
+  if (!ctx) return Response.json({ data: moduleResults }, { headers: jsonHeaders() });
 
   try {
     const data = await withDb(async (db) => {
@@ -128,13 +137,13 @@ export async function GET(request: Request) {
           id: position.id,
           title: position.title,
           subtitle: `${position.positionCode} · ${position.orgUnit.name}`,
-          href: "/module/positions"
+          href: `/module/positions?q=${encodeURIComponent(position.positionCode)}`
         }))
       ];
     });
-    return Response.json({ data }, { headers: { "cache-control": "no-store" } });
+    return Response.json({ data }, { headers: jsonHeaders() });
   } catch (error) {
     console.error("Global search live data failed", error);
-    return Response.json({ data: moduleResults, degraded: true }, { headers: { "cache-control": "no-store" } });
+    return Response.json({ data: moduleResults, degraded: true }, { headers: jsonHeaders() });
   }
 }

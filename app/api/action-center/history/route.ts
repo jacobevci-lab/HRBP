@@ -77,30 +77,36 @@ export async function GET(request: Request) {
   const { days, resourceType } = queryOptions(request);
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-  const rows = await db.auditEvent.findMany({
-    where: {
-      tenantId: ctx.tenantId,
-      actorId: ctx.actorId,
-      occurredAt: { gte: since },
-      ...(resourceType ? { resourceType } : {}),
-      OR: actionPrefixes.map((prefix) => ({ action: { startsWith: prefix } }))
-    },
-    orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-    take: 80,
-    select: {
-      id: true,
-      action: true,
-      resourceType: true,
-      resourceId: true,
-      classification: true,
-      occurredAt: true
-    }
-  });
+  const where = {
+    tenantId: ctx.tenantId,
+    actorId: ctx.actorId,
+    occurredAt: { gte: since },
+    ...(resourceType ? { resourceType } : {}),
+    OR: actionPrefixes.map((prefix) => ({ action: { startsWith: prefix } }))
+  };
+
+  const [rows, total] = await Promise.all([
+    db.auditEvent.findMany({
+      where,
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+      take: 80,
+      select: {
+        id: true,
+        action: true,
+        resourceType: true,
+        resourceId: true,
+        classification: true,
+        occurredAt: true
+      }
+    }),
+    db.auditEvent.count({ where })
+  ]);
 
   return Response.json({
     data: {
       days,
       resourceType,
+      total,
       items: rows.map((row) => ({
         ...row,
         href: decisionHref(row.resourceType, row.resourceId)

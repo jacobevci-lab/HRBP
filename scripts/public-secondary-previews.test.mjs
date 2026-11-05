@@ -4,14 +4,6 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 
-const reason = {
-  en: "Read-only preview; this action is unavailable.",
-  tr: "Salt-okunur önizleme; bu işlem kullanılamaz."
-};
-const label = {
-  en: "More actions unavailable in preview",
-  tr: "Önizlemede diğer işlemler kullanılamaz"
-};
 const suites = [
   {
     path: "components/employee-services-workspace.tsx",
@@ -79,32 +71,32 @@ function elements(node, type) {
 for (const locale of ["en", "tr"]) {
   for (const spec of suites) {
     for (const [slug, expectedCount] of Object.entries(spec.expected)) {
-      test(`${locale}/${slug}: synthetic secondary preview never exposes an enabled placeholder menu`, async () => {
+      test(`${locale}/${slug}: synthetic secondary preview uses inert static affordances only`, async () => {
         const h = loader(spec, locale);
         const view = expand(await h.workspace({ slug }));
         const buttons = elements(view, "button");
-        assert.equal(buttons.length, expectedCount, "Do not hide or add preview actions to satisfy the check");
-        for (const button of buttons) {
-          assert.equal(button.props.disabled, true);
-          assert.equal(button.props.type, "button");
-          assert.equal(button.props.title, reason[locale]);
-          assert.equal(button.props["aria-label"], label[locale]);
-          assert.equal(button.props.onClick, undefined);
-          assert.equal(button.props.onKeyDown, undefined);
-          assert.equal(button.props.formAction, undefined);
+        const staticIcons = elements(view, "span").filter((item) => item.props.className === "preview-static-icon");
+        assert.equal(buttons.length, 0, "Public preview must not render fake placeholder buttons");
+        assert.equal(staticIcons.length, expectedCount, "Reviewed static affordance inventory changed unexpectedly");
+        for (const icon of staticIcons) {
+          assert.equal(icon.props["aria-hidden"], "true");
+          assert.equal(icon.props.onClick, undefined);
+          assert.equal(icon.props.onKeyDown, undefined);
+          assert.equal(icon.props.formAction, undefined);
         }
         assert.deepEqual([...new Set(h.imported)].sort(), ["@/lib/i18n-server", "lucide-react", "react/jsx-runtime"].sort());
       });
     }
   }
 }
-test("the three secondary preview sources contain exactly the twelve reviewed placeholder declarations", () => {
+test("the three secondary preview sources contain exactly twelve reviewed static icon affordances", () => {
   let total = 0;
   for (const spec of suites) {
     const source = readFileSync(spec.path, "utf8");
-    const count = [...source.matchAll(/<button\s+\{\.\.\.previewActionProps\(locale\)\}>/g)].length;
+    const count = [...source.matchAll(/className="preview-static-icon"/g)].length;
     assert.equal(count, 4, spec.path);
-    assert.doesNotMatch(source, /<button><MoreHorizontal\s+size=\{18\}\/><\/button>/);
+    assert.doesNotMatch(source, /<button\b/);
+    assert.doesNotMatch(source, /previewActionProps/);
     total += count;
   }
   assert.equal(total, 12);

@@ -1,13 +1,10 @@
 import { DataClassification, Prisma } from "@prisma/client";
 import { can, forbidden } from "@/lib/authorization";
 import { db } from "@/lib/db";
+import { safeCsvCell } from "@/lib/csv";
 import { getRequestContext, unauthorized } from "@/lib/request-context";
 
-function safeCell(value: unknown) {
-  const raw = value === null || value === undefined ? "" : String(value);
-  const protectedValue = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
-  return `"${protectedValue.replaceAll('"', '""')}"`;
-}
+const AUDIT_EXPORT_LIMIT = 5000;
 
 function classification(value: string | null): DataClassification | undefined {
   return value && Object.values(DataClassification).includes(value as DataClassification) ? value as DataClassification : undefined;
@@ -46,7 +43,7 @@ export async function GET(request: Request) {
   const rows = await db.auditEvent.findMany({
     where,
     orderBy: [{ ledgerSequence: "desc" }],
-    take: 5000,
+    take: AUDIT_EXPORT_LIMIT + 1,
     select: {
       id: true, ledgerSequence: true, actorId: true, action: true, resourceType: true, resourceId: true,
       purpose: true, classification: true, ipAddress: true, occurredAt: true,
@@ -54,8 +51,17 @@ export async function GET(request: Request) {
     }
   });
 
+  if (rows.length > AUDIT_EXPORT_LIMIT) {
+    return Response.json({
+      error: `Audit export exceeds ${AUDIT_EXPORT_LIMIT} rows. Narrow the filters or time window before exporting.`
+    }, {
+      status: 422,
+      headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
+    });
+  }
+
   const header = ["ledgerSequence", "id", "occurredAt", "actorId", "action", "resourceType", "resourceId", "classification", "ipAddress", "purpose", "hash", "previousHash"];
-  const lines = [header.map(safeCell).join(",")];
+  const lines = [header.map(safeCsvCell).join(",")];
   for (const row of rows) {
     lines.push([
       row.ledgerSequence,
@@ -70,7 +76,7 @@ export async function GET(request: Request) {
       row.purpose,
       row.hash,
       row.previousHash
-    ].map(safeCell).join(","));
+    ].map(safeCsvCell).join(","));
   }
 
   const stamp = new Date().toISOString().slice(0, 10);

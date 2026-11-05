@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { AnalyticsModulePage } from "@/components/analytics-module-page";
 import { AuditLivePage } from "@/components/audit-live-page";
@@ -20,7 +21,10 @@ import { SettingsLivePage } from "@/components/settings-live-page";
 import { WorkflowActionCenter } from "@/components/workflow-action-center";
 import { WorkPayModulePage } from "@/components/work-pay-module-page";
 import { can } from "@/lib/authorization";
+import { isHRServiceSelfServiceRole } from "@/lib/hr-service-access";
 import { getServerRequestContext } from "@/lib/server-session";
+import { getServerLocale } from "@/lib/i18n-server";
+import { parseEnterpriseViewRouteState } from "@/lib/enterprise-view-route-state";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -35,8 +39,9 @@ const workPaySlugs = new Set<WorkPaySlug>(["time-attendance", "leave", "compensa
 const governanceSlugs = new Set<GovernanceSlug>(["engagement", "workforce-planning", "ai-assistant", "privacy"]);
 
 export default async function ModulePage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: SearchParams }) {
-  const [{ slug }, search, ctx] = await Promise.all([params, searchParams, getServerRequestContext()]);
-  const explicitQuery = typeof search.q === "string" ? search.q : "";
+  const [{ slug }, search, ctx, locale] = await Promise.all([params, searchParams, getServerRequestContext(), getServerLocale()]);
+  const enterpriseView = parseEnterpriseViewRouteState(search);
+  const explicitQuery = enterpriseView.query;
   const requestFocus = typeof search.request === "string" ? search.request : "";
   const entryFocus = typeof search.entry === "string" ? search.entry : "";
   const compensationFocus = typeof search.change === "string" ? search.change : "";
@@ -60,6 +65,7 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   const taskId = typeof search.task === "string" ? search.task : undefined;
   const instanceId = typeof search.instance === "string" ? search.instance : undefined;
   const actionView = typeof search.view === "string" ? search.view : undefined;
+
   const employeeRelationsCaseId = typeof search.case === "string" ? search.case : undefined;
   const employeeRelationsActionId = typeof search.action === "string" ? search.action : undefined;
   const employeeRelationsAppealId = typeof search.appeal === "string" ? search.appeal : undefined;
@@ -87,15 +93,38 @@ export default async function ModulePage({ params, searchParams }: { params: Pro
   if (governanceSlugs.has(slug as GovernanceSlug)) return <GovernancePlanningModulePage slug={slug as GovernanceSlug} focusId={slug === "workforce-planning" ? scenarioFocus : slug === "privacy" ? (privacyAssessmentFocus || privacyTransferFocus || dsrFocus) : slug === "engagement" ? campaignFocus : undefined} mode={lifecycleMode}/>;
 
   const workflowAdminVisible = can(ctx, "workflows:read");
+  if (slug === "workflows") {
+    const workflowAdminMode = workflowAdminVisible && lifecycleMode === "admin";
+    return <AppShell>
+      {workflowAdminMode ? <>
+        <div className="my-work-admin-return"><Link className="secondary-button" href="/module/workflows">{locale === "tr" ? "← İşlerim" : "← My Work"}</Link></div>
+        <ModuleLanding slug="workflows" query={query} tab="admin"/>
+      </> : <>
+        <WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId} initialFilter={actionView} showAdministrationLink={workflowAdminVisible}/>
+        <details className="my-work-history-panel">
+          <summary><span>{locale === "tr" ? "Karar geçmişi" : "Decision history"}</span><small>{locale === "tr" ? "Denetim izi ve tamamlanan kararlar" : "Audit trail and completed decisions"}</small></summary>
+          <ActionCenterDecisionHistory/>
+        </details>
+      </>}
+    </AppShell>;
+  }
 
   return (
     <AppShell>
-      {slug === "workflows" ? <><WorkflowActionCenter initialTaskId={taskId} initialInstanceId={instanceId} initialFilter={actionView}/><ActionCenterDecisionHistory/></> : null}
-      {slug !== "workflows" || workflowAdminVisible ? <ModuleLanding slug={slug} query={query} personId={personId} tab={slug === "policies" || slug === "workflows" ? lifecycleMode : tab}/> : null}
+      <ModuleLanding slug={slug} query={query} status={enterpriseView.status} columns={enterpriseView.columns} columnsCustomized={enterpriseView.columnsCustomized} density={enterpriseView.density} sortKey={enterpriseView.sortKey} sortDirection={enterpriseView.sortDirection} page={enterpriseView.page} pageSize={enterpriseView.pageSize} savedViewId={slug === "people" || slug === "positions" ? enterpriseView.savedViewId : undefined} personId={personId} tab={slug === "policies" ? lifecycleMode : tab}/>
       {slug === "offboarding" && can(ctx, "offboarding:write") ? <OffboardingClearanceLoader/> : null}
-      {slug === "employee-relations" ? <EmployeeRelationsCaseLifecyclePanel focus={{ query, caseId: employeeRelationsCaseId, actionId: employeeRelationsActionId, appealId: employeeRelationsAppealId }}/> : null}
-      {slug === "hr-service" ? <HRServiceLifecyclePanel focus={query}/> : null}
-      {slug === "hr-service" ? <HRServiceEscalationPanel filterValue={escalation}/> : null}
+      {slug === "employee-relations" ? <details id="er-lifecycle" className="service-governance-panel" open={Boolean(query || employeeRelationsCaseId || employeeRelationsActionId || employeeRelationsAppealId)}>
+        <summary><span><strong>{locale === "tr" ? "Vaka yaşam döngüsü & kapanış" : "Case lifecycle & closure"}</strong><small>{locale === "tr" ? "Çözüm, düzeltici aksiyon ve itiraz kontrollerini gerektiğinde açın." : "Open resolution, corrective-action and appeal controls when needed."}</small></span><span>Case Wall</span></summary>
+        <div className="service-governance-panel-body"><EmployeeRelationsCaseLifecyclePanel focus={{ query, caseId: employeeRelationsCaseId, actionId: employeeRelationsActionId, appealId: employeeRelationsAppealId }}/></div>
+      </details> : null}
+      {slug === "hr-service" ? <details id="hr-service-lifecycle" className="service-governance-panel" open={Boolean(query)}>
+        <summary><span><strong>{locale === "tr" ? "Hizmet yaşam döngüsü & yanıtlar" : "Service lifecycle & replies"}</strong><small>{locale === "tr" ? "Geçiş geçmişi, SLA duraklamaları ve yönetişimli aksiyonları gerektiğinde açın." : "Open transition history, SLA pauses and governed actions when needed."}</small></span><span>{locale === "tr" ? "Yönetişimli" : "Governed"}</span></summary>
+        <div className="service-governance-panel-body"><HRServiceLifecyclePanel focus={query}/></div>
+      </details> : null}
+      {slug === "hr-service" && !isHRServiceSelfServiceRole(ctx.role) ? <details id="hr-service-escalation" className="service-governance-panel" open={Boolean(escalation)}>
+        <summary><span><strong>{locale === "tr" ? "SLA eskalasyon operasyonları" : "SLA escalation operations"}</strong><small>{locale === "tr" ? "Uyarı, ihlal ve kritik eskalasyonları gerektiğinde açın." : "Open warning, breached and severe escalation queues when needed."}</small></span><span>SLA</span></summary>
+        <div className="service-governance-panel-body"><HRServiceEscalationPanel filterValue={escalation}/></div>
+      </details> : null}
     </AppShell>
   );
 }

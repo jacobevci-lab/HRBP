@@ -82,3 +82,976 @@ html[data-theme="dark"] .pipeline-column article,html[data-theme="dark"] .off-pr
 html[data-theme="dark"] .decision-side,html[data-theme="dark"] .restricted-side,html[data-theme="dark"] .restricted-case,html[data-theme="dark"] .ai-governance-hero{background:var(--surface)!important}
 html[data-theme="dark"] .auth-panel{box-shadow:0 24px 80px rgba(0,0,0,.24)!important}
 html[data-theme="dark"] .enterprise-person strong,html[data-theme="dark"] .cell-strong,html[data-theme="dark"] .profile-card dd,html[data-theme="dark"] .growth-control-stack strong,html[data-theme="dark"] .services-control-stack strong,html[data-theme="dark"] .gov-controls strong,html[data-theme="dark"] .control-stack strong,html[data-theme="dark"] .security-list strong{color:var(--text)!important}
+
+
+/* 2026 visual overhaul: denser enterprise shell, stronger cockpit hierarchy, calmer data chrome. */
+:root{
+  --shell-sidebar:244px;
+  --shell-topbar:64px;
+  --panel-radius:16px;
+  --panel-shadow:0 1px 2px rgba(32,38,34,.035),0 12px 34px rgba(32,38,34,.055);
+  --panel-shadow-hover:0 2px 4px rgba(32,38,34,.045),0 18px 42px rgba(32,38,34,.09);
+  --panel-highlight:color-mix(in srgb,var(--accent) 7%,var(--surface));
+}
+html[data-theme="dark"]{
+  --panel-shadow:0 1px 2px rgba(0,0,0,.18),0 12px 34px rgba(0,0,0,.18);
+  --panel-shadow-hover:0 2px 4px rgba(0,0,0,.2),0 18px 42px rgba(0,0,0,.26);
+  --panel-highlight:color-mix(in srgb,var(--accent) 9%,var(--surface));
+}
+
+/* Shell */
+.sidebar{
+  width:var(--shell-sidebar)!important;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--sidebar) 94%,var(--accent) 6%),var(--sidebar))!important;
+  border-right-color:color-mix(in srgb,var(--accent) 10%,#20251f)!important;
+}
+.main-area{margin-left:var(--shell-sidebar)!important}
+.brand-row{height:var(--shell-topbar)!important;padding-inline:16px!important}
+.tenant-switcher{
+  margin:11px 10px 7px!important;
+  border-radius:12px!important;
+  background:color-mix(in srgb,#17201c 90%,var(--accent) 10%)!important;
+  border-color:color-mix(in srgb,#2d3730 82%,var(--accent) 18%)!important;
+}
+.nav-scroll{padding:4px 9px 18px!important}
+.nav-item{min-height:40px!important;border-radius:10px!important;margin:3px 0!important;font-size:12px!important}
+.nav-primary-item{font-size:12.5px!important}
+.nav-primary-item.active{
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 17%,#20251f),color-mix(in srgb,var(--accent) 7%,#20251f))!important;
+  box-shadow:inset 3px 0 0 var(--orange),0 1px 0 rgba(255,255,255,.025)!important;
+}
+.nav-disclosure>summary{min-height:34px!important;padding-inline:9px!important}
+.topbar{
+  height:var(--shell-topbar)!important;
+  padding:0 24px!important;
+  background:color-mix(in srgb,var(--surface) 88%,transparent)!important;
+  border-bottom-color:color-mix(in srgb,var(--line) 88%,transparent)!important;
+  box-shadow:0 1px 0 rgba(37,44,40,.025)!important;
+}
+.page-content{
+  max-width:1760px!important;
+  padding:26px 30px 46px!important;
+  scroll-padding-top:84px!important;
+}
+.global-search{max-width:560px!important;height:38px!important;border-radius:11px!important}
+
+/* Page / cockpit headers */
+.page-heading.module-heading,
+.manager-hub-heading{
+  position:relative;
+  overflow:hidden;
+  min-height:118px;
+  margin-bottom:18px!important;
+  padding:20px 22px;
+  align-items:center!important;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:
+    linear-gradient(118deg,var(--panel-highlight),var(--surface) 48%,color-mix(in srgb,var(--orange) 3%,var(--surface)));
+  box-shadow:var(--panel-shadow);
+}
+.page-heading.module-heading:after,
+.manager-hub-heading:after{
+  content:"";
+  position:absolute;
+  width:180px;
+  height:180px;
+  right:-70px;
+  top:-112px;
+  border-radius:50%;
+  background:color-mix(in srgb,var(--accent) 9%,transparent);
+  pointer-events:none;
+}
+.page-heading.module-heading>div:first-child,
+.manager-hub-heading>div:first-child{position:relative;z-index:1;max-width:980px}
+.page-heading.module-heading .eyebrow,
+.manager-hub-heading .eyebrow{color:var(--accent);letter-spacing:1.25px}
+.page-heading.module-heading h1,
+.manager-hub-heading h1{
+  margin:5px 0 6px!important;
+  font-size:30px!important;
+  line-height:1.05;
+  letter-spacing:-1px!important;
+}
+.page-heading.module-heading p,
+.manager-hub-heading p{max-width:920px;font-size:12.5px!important;line-height:1.55}
+.module-heading-actions{position:relative;z-index:1}
+.module-state-badge{
+  height:32px!important;
+  border-radius:999px!important;
+  padding-inline:11px!important;
+  background:color-mix(in srgb,var(--accent) 7%,var(--surface))!important;
+  border-color:color-mix(in srgb,var(--accent) 18%,var(--line))!important;
+  color:var(--accent)!important;
+  font-size:9.5px!important;
+}
+
+/* KPI system */
+.enterprise-stats,.growth-metrics,.services-metrics,.gov-metrics,.workpay-metrics,.off-metrics,.recruit-metrics{
+  gap:12px!important;
+}
+.enterprise-stat,.growth-metric,.services-metric,.gov-metric,.workpay-metric,.off-metric,.recruit-metric{
+  position:relative;
+  overflow:hidden;
+  min-height:104px;
+  padding:16px 17px!important;
+  border-radius:15px!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.enterprise-stat:after,.growth-metric:after,.services-metric:after,.gov-metric:after,.workpay-metric:after,.off-metric:after,.recruit-metric:after{
+  content:"";
+  position:absolute;
+  width:76px;
+  height:76px;
+  right:-31px;
+  top:-34px;
+  border-radius:50%;
+  background:color-mix(in srgb,var(--accent) 7%,transparent);
+  pointer-events:none;
+}
+.enterprise-stat-icon,.growth-metric-icon,.services-metric-icon,.gov-metric-icon,.platform-metric-icon,.off-icon,.metric-icon{
+  width:38px!important;
+  height:38px!important;
+  border-radius:11px!important;
+}
+.enterprise-stat span,.growth-metric span,.services-metric span,.gov-metric span,.workpay-metric span,.off-metric span,.recruit-metric small{
+  font-size:10.5px!important;
+  font-weight:760;
+  letter-spacing:.15px;
+}
+.enterprise-stat strong,.growth-metric strong,.services-metric strong,.gov-metric strong,.workpay-metric strong,.off-metric strong,.recruit-metric strong{
+  font-size:25px!important;
+  line-height:1.05!important;
+  letter-spacing:-.7px!important;
+  margin-top:4px!important;
+}
+.enterprise-stat small,.growth-metric small,.services-metric small,.gov-metric small,.workpay-metric small,.off-metric small,.recruit-metric em{
+  font-size:9.5px!important;
+  line-height:1.45;
+}
+
+/* Primary cockpit cards */
+.manager-hub-action,.employee-home-action,.workspace-shortcut,.growth-focus-card,.services-focus-card,
+.recruiting-focus-card,.compensation-focus-card,.offboarding-focus-card,.operations-attention-card,.admin-studio-card{
+  border-radius:14px!important;
+  box-shadow:var(--panel-shadow)!important;
+  border-color:color-mix(in srgb,var(--line) 92%,var(--accent) 8%)!important;
+}
+.manager-hub-action,.employee-home-action,.workspace-shortcut,.growth-focus-card,.services-focus-card,
+.recruiting-focus-card,.compensation-focus-card,.offboarding-focus-card{
+  min-height:80px!important;
+  padding:13px 14px!important;
+  grid-template-columns:40px minmax(0,1fr) 16px!important;
+}
+.manager-hub-action>svg:first-child,.growth-focus-card>svg:first-child,.services-focus-card>svg:first-child,
+.recruiting-focus-card>svg:first-child,.compensation-focus-card>svg:first-child,.offboarding-focus-card>svg:first-child,
+.workspace-shortcut-icon,.employee-home-action>span{
+  width:40px!important;
+  height:40px!important;
+  border-radius:11px!important;
+  padding:10px!important;
+}
+.workspace-shortcut-icon,.employee-home-action>span{padding:0!important}
+.manager-hub-action strong,.employee-home-action strong,.workspace-shortcut strong,.growth-focus-card strong,
+.services-focus-card strong,.recruiting-focus-card strong,.compensation-focus-card strong,.offboarding-focus-card strong{
+  font-size:11.5px!important;
+}
+.manager-hub-action small,.employee-home-action small,.workspace-shortcut small,.growth-focus-card small,
+.services-focus-card small,.recruiting-focus-card small,.compensation-focus-card small,.offboarding-focus-card small{
+  font-size:10px!important;
+  line-height:1.5!important;
+}
+.manager-hub-action:hover,.employee-home-action:hover,.workspace-shortcut:hover,.growth-focus-card:hover,.services-focus-card:hover,
+.recruiting-focus-card:hover,.compensation-focus-card:hover,.offboarding-focus-card:hover,.operations-attention-card:hover,.admin-studio-card:hover{
+  transform:translateY(-2px)!important;
+  box-shadow:var(--panel-shadow-hover)!important;
+  border-color:color-mix(in srgb,var(--accent) 32%,var(--line))!important;
+}
+
+/* Role-aware home surfaces */
+.employee-home-hero{
+  min-height:118px!important;
+  padding:20px!important;
+  border-radius:18px!important;
+  background:linear-gradient(120deg,var(--panel-highlight),var(--surface) 62%,color-mix(in srgb,var(--orange) 4%,var(--surface)))!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.employee-home-avatar{width:58px!important;height:58px!important;border-radius:16px!important}
+.employee-home-identity h1{font-size:24px!important;letter-spacing:-.7px!important}
+.operations-attention-card{
+  min-height:86px!important;
+  padding:14px!important;
+  grid-template-columns:48px minmax(0,1fr) 16px!important;
+}
+.operations-attention-count{width:48px!important;height:48px!important;border-radius:13px!important;font-size:18px!important}
+.operations-lane,.employee-home-panel{border-radius:16px!important;box-shadow:var(--panel-shadow)!important}
+
+/* Enterprise view controls */
+.enterprise-view-toolbar{
+  min-height:58px!important;
+  margin-bottom:14px!important;
+  padding:9px!important;
+  gap:8px!important;
+  border-radius:14px!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.enterprise-view-search,.enterprise-view-filter,.enterprise-view-density,.enterprise-view-page-size,.enterprise-view-sort,.enterprise-column-picker>summary{
+  height:38px!important;
+  border-radius:10px!important;
+}
+.enterprise-view-search{padding-inline:11px!important}
+.enterprise-view-search input{font-size:11.5px!important}
+.enterprise-view-filter select{font-size:11px!important}
+.enterprise-column-options{
+  top:calc(100% + 8px)!important;
+  min-width:230px!important;
+  padding:10px!important;
+  border-radius:12px!important;
+  box-shadow:var(--panel-shadow-hover)!important;
+}
+.enterprise-saved-views{height:38px!important}
+.enterprise-saved-views>summary{
+  height:38px!important;
+  border-radius:10px!important;
+  background:var(--surface-soft)!important;
+}
+.enterprise-saved-view-popover{
+  top:calc(100% + 8px)!important;
+  border-radius:14px!important;
+  box-shadow:var(--panel-shadow-hover)!important;
+}
+.enterprise-pagination{min-height:60px!important;padding:11px 14px!important}
+.enterprise-page-button,.enterprise-page-number{height:34px!important;border-radius:9px!important;font-size:10.5px!important}
+.enterprise-saved-view-row{border-radius:9px!important}
+.enterprise-saved-views>summary{font-size:10.5px!important}
+.enterprise-saved-view-head strong{font-size:11px!important}
+.enterprise-saved-view-row>a strong{font-size:10.5px!important}
+.enterprise-saved-view-row>a small{font-size:9.5px!important}
+.enterprise-save-view-form>label>span{font-size:9.5px!important}
+.enterprise-save-view-form input[name="name"]{font-size:10.5px!important}
+.enterprise-save-view-form input[name="name"]{height:38px!important;border-radius:10px!important}
+.enterprise-save-view-button{height:38px!important;min-height:38px!important}
+.position-bulk-bar{
+  min-height:58px!important;
+  padding:9px 10px!important;
+  border-radius:14px!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.position-bulk-button{height:38px!important;min-height:38px!important;border-radius:10px!important}
+.position-bulk-clear{color:var(--muted)!important}
+.position-bulk-bar>div:first-child span{font-size:10px!important}
+.position-bulk-bar>div:first-child strong{font-size:10.5px!important}
+.position-bulk-success,.position-bulk-error{font-size:10px!important}
+.position-bulk-select input{accent-color:var(--accent)}
+.enterprise-view-count{font-size:10.5px!important;font-weight:700}
+
+/* Data panels and tables */
+.enterprise-table-card,.growth-panel,.services-panel,.workpay-panel,.off-panel,.talent-matrix,.org-tree,.org-insight{
+  border-radius:16px!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.enterprise-table-card,.growth-panel,.services-panel,.workpay-panel,.off-panel{overflow:hidden}
+.table-title,.growth-panel-head,.services-panel-head,.workpay-panel-head,.off-head{
+  min-height:66px!important;
+  padding:14px 16px!important;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--surface-soft) 58%,var(--surface)),var(--surface))!important;
+}
+.table-title h3,.growth-panel-head h3,.services-panel-head h3,.workpay-panel-head h3,.off-head h3{
+  font-size:13.5px!important;
+  letter-spacing:-.12px;
+}
+.table-title p,.growth-panel-head p,.services-panel-head p,.workpay-panel-head p,.off-head p{
+  font-size:10.5px!important;
+  line-height:1.45!important;
+}
+.enterprise-table th,.growth-table th,.services-table th,.workpay-table th,.off-table th{
+  height:38px;
+  padding:10px 14px!important;
+  font-size:10px!important;
+  letter-spacing:.6px!important;
+  font-weight:800!important;
+}
+.enterprise-table td,.growth-table td,.services-table td,.workpay-table td,.off-table td{
+  padding:12px 14px!important;
+  font-size:11.5px!important;
+  line-height:1.45;
+}
+
+.enterprise-table-card .table-wrap{max-height:min(68vh,720px);overflow:auto}
+.enterprise-table-card .enterprise-table thead th{
+  position:sticky;
+  top:0;
+  z-index:4;
+  box-shadow:0 1px 0 var(--line);
+}
+.enterprise-density-compact .enterprise-table th{
+  height:32px!important;
+  padding:7px 11px!important;
+  font-size:9.5px!important;
+}
+.enterprise-density-compact .enterprise-table td{
+  padding:8px 11px!important;
+  font-size:10px!important;
+  line-height:1.35!important;
+}
+.enterprise-density-compact .enterprise-person>span{width:26px!important;height:26px!important;border-radius:8px!important}
+.enterprise-density-compact .cell-strong{font-size:11.5px!important}
+.enterprise-density-compact .cell-sub{font-size:9px!important;margin-top:2px!important}
+.enterprise-density-compact .pill,.enterprise-density-compact .critical-badge{transform:scale(.94);transform-origin:left center}
+.enterprise-table tbody tr:last-child td,.growth-table tbody tr:last-child td,.services-table tbody tr:last-child td,
+.workpay-table tbody tr:last-child td,.off-table tbody tr:last-child td{border-bottom:0!important}
+.enterprise-person>span{width:30px!important;height:30px!important;border-radius:9px!important}
+.cell-strong{font-size:10.5px!important}
+.cell-sub{font-size:9.5px!important;margin-top:3px!important}
+
+/* Progressive disclosure reads as secondary, not another full module. */
+.growth-governed-panel,.service-governance-panel,.service-admin-panel,.recruiting-operations-panel,
+.compensation-proposal-panel,.onboarding-operations-panel,.offboarding-operations-panel,.my-work-history-panel{
+  border-radius:14px!important;
+  box-shadow:0 1px 2px rgba(32,38,34,.025)!important;
+}
+.growth-governed-panel>summary,.service-governance-panel>summary,.service-admin-panel>summary,.recruiting-operations-panel>summary,
+.compensation-proposal-panel>summary,.onboarding-operations-panel>summary,.offboarding-operations-panel>summary,.my-work-history-panel>summary{
+  min-height:60px!important;
+  padding:12px 14px!important;
+}
+
+/* Responsive shell keeps the visual hierarchy without squeezing data surfaces. */
+@media(max-width:1180px){
+  .page-content{padding-inline:22px!important}
+  .page-heading.module-heading,.manager-hub-heading{min-height:108px;padding:18px!important}
+}
+@media(max-width:900px){
+  .sidebar{width:260px!important}
+  .main-area{margin-left:0!important}
+  .topbar{padding-inline:15px!important}
+  .page-content{padding:20px 16px 36px!important}
+}
+@media(max-width:760px){
+  .enterprise-table-card .table-wrap{max-height:none}
+}
+
+@media(max-width:620px){
+  .page-heading.module-heading,.manager-hub-heading{
+    min-height:0;
+    padding:16px!important;
+    border-radius:15px;
+    align-items:flex-start!important;
+  }
+  .page-heading.module-heading h1,.manager-hub-heading h1{font-size:24px!important}
+  .page-heading.module-heading p,.manager-hub-heading p{font-size:11px!important}
+  .module-heading-actions{width:100%}
+  .module-heading-actions .create-button,.module-heading-actions .secondary-button{width:100%;justify-content:center}
+  .enterprise-stat,.growth-metric,.services-metric,.gov-metric,.workpay-metric,.off-metric,.recruit-metric{min-height:92px}
+  .enterprise-view-toolbar{padding:8px!important}
+  .enterprise-view-filter,.enterprise-column-picker{min-width:calc(50% - 4px)}
+  .table-title,.growth-panel-head,.services-panel-head,.workpay-panel-head,.off-head{min-height:58px!important;padding:12px!important}
+}
+
+
+/* 2026 detail-workspace overhaul: master-detail depth, five-band talent matrix and clearer empty states. */
+.employee-360-layout{
+  grid-template-columns:300px minmax(0,1fr)!important;
+  gap:16px!important;
+}
+.employee-360-rail{
+  top:80px!important;
+  padding:16px!important;
+  border-radius:18px!important;
+  background:linear-gradient(180deg,var(--panel-highlight),var(--surface) 38%)!important;
+  box-shadow:var(--panel-shadow)!important;
+  border-color:color-mix(in srgb,var(--line) 90%,var(--accent) 10%)!important;
+}
+.employee-360-rail-identity{
+  grid-template-columns:54px minmax(0,1fr)!important;
+  gap:12px!important;
+  padding-bottom:14px!important;
+}
+.employee-360-rail-identity .employee-avatar{
+  width:54px!important;
+  height:54px!important;
+  border-radius:15px!important;
+  font-size:14px!important;
+}
+.employee-360-rail-identity h2{font-size:15px!important;letter-spacing:-.25px}
+.employee-360-rail-nav{gap:4px!important;padding:9px 0!important}
+.employee-360-rail-nav a{min-height:40px!important;padding:9px 10px!important;border-radius:9px!important;font-size:10.5px!important}
+.employee-360-rail-nav a.active{
+  background:linear-gradient(90deg,color-mix(in srgb,var(--accent) 13%,var(--surface)),var(--accent-soft))!important;
+  box-shadow:inset 3px 0 0 var(--accent);
+}
+.employee-360-main{gap:16px!important}
+.employee-360-main-head{
+  min-height:88px!important;
+  padding:16px 18px!important;
+  border-radius:16px!important;
+  background:linear-gradient(120deg,var(--panel-highlight),var(--surface) 64%)!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.employee-360-main-head h2{font-size:19px!important;letter-spacing:-.45px!important}
+.profile-card,.employee-action-card,.employee-history-card{
+  border-radius:16px!important;
+  box-shadow:var(--panel-shadow)!important;
+  overflow:hidden;
+}
+
+/* Growth and service detail layouts use an intentional main/rail relationship. */
+.growth-split,.growth-grid,.services-split{
+  grid-template-columns:minmax(0,1.7fr) minmax(310px,.72fr)!important;
+  gap:16px!important;
+}
+.growth-side,.services-side{
+  border-radius:16px!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.decision-side,.restricted-case{
+  border-top:3px solid color-mix(in srgb,var(--orange) 60%,var(--line))!important;
+}
+.growth-control-stack,.services-control-stack{padding:10px 16px!important}
+.growth-control-stack>div,.services-control-stack>div{padding:13px 0!important}
+
+/* Live talent data has five performance bands; preview remains the compact three-band matrix. */
+.talent-matrix.five-band{overflow:auto!important}
+.talent-matrix.five-band .matrix-body{min-width:820px;padding:16px 18px 10px!important}
+.talent-matrix.five-band .matrix-row{
+  grid-template-columns:148px repeat(5,minmax(96px,1fr))!important;
+  gap:9px!important;
+  margin-bottom:9px!important;
+}
+.talent-matrix.five-band .matrix-label,.talent-matrix.five-band .matrix-cell{
+  min-height:76px!important;
+  border-radius:11px!important;
+}
+.talent-matrix.five-band .matrix-cell strong{font-size:19px!important;letter-spacing:-.35px}
+.talent-matrix.five-band .matrix-cell small{
+  max-width:92px;
+  text-align:center;
+  font-size:7.8px!important;
+  line-height:1.3;
+}
+.talent-matrix.five-band .matrix-cell:nth-child(2){
+  background:color-mix(in srgb,var(--danger-bg) 62%,var(--surface))!important;
+}
+.talent-matrix.five-band .matrix-cell:nth-child(3){
+  background:color-mix(in srgb,var(--warning-bg) 62%,var(--surface))!important;
+}
+.talent-matrix.five-band .matrix-cell:nth-child(5),
+.talent-matrix.five-band .matrix-cell:nth-child(6){
+  background:color-mix(in srgb,var(--success-bg) 68%,var(--surface))!important;
+}
+
+/* Master rows should visually read as selectable records without becoming button-like. */
+.services-master-link{gap:3px!important}
+.services-master-link strong{font-size:10.5px!important;color:var(--text)}
+.services-table tbody tr.focused td{
+  background:color-mix(in srgb,var(--warning-bg) 50%,var(--surface))!important;
+}
+.services-table tbody tr.focused{
+  box-shadow:inset 3px 0 0 var(--orange)!important;
+}
+
+/* Calm, useful empty states instead of large blank white panels. */
+.empty-state{
+  max-width:540px!important;
+  padding:54px 26px!important;
+}
+.empty-state h3{font-size:15px!important;letter-spacing:-.2px}
+.empty-state p{font-size:10.5px!important;line-height:1.65!important}
+.workflow-action-empty,.growth-lifecycle-empty,.hr-escalation-empty{
+  color:var(--muted)!important;
+  background:linear-gradient(180deg,var(--surface),var(--surface-soft))!important;
+}
+.enterprise-table-card tbody:has(.workflow-action-empty),
+.growth-panel:has(.growth-lifecycle-empty){
+  background:linear-gradient(180deg,var(--surface),var(--surface-soft));
+}
+
+@media(max-width:1100px){
+  .growth-split,.growth-grid,.services-split{grid-template-columns:1fr!important}
+}
+@media(max-width:1040px){
+  .employee-360-layout{grid-template-columns:1fr!important}
+  .employee-360-rail{position:static!important;max-height:none!important}
+}
+@media(max-width:650px){
+  .talent-matrix.five-band .matrix-body{min-width:760px}
+  .employee-360-main-head{min-height:0!important;padding:14px!important}
+}
+
+
+/* 2026 command-center overhaul for HRBP / Admin dashboard. */
+.dashboard-command-heading{
+  position:relative;
+  overflow:hidden;
+  min-height:116px;
+  margin-bottom:18px!important;
+  padding:20px 22px;
+  align-items:center!important;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:
+    linear-gradient(118deg,color-mix(in srgb,var(--accent) 8%,var(--surface)),var(--surface) 50%,color-mix(in srgb,var(--orange) 4%,var(--surface)));
+  box-shadow:var(--panel-shadow);
+}
+.dashboard-command-heading:after{
+  content:"";
+  position:absolute;
+  width:190px;
+  height:190px;
+  right:-80px;
+  top:-116px;
+  border-radius:50%;
+  background:color-mix(in srgb,var(--accent) 9%,transparent);
+  pointer-events:none;
+}
+.dashboard-command-heading>div{position:relative;z-index:1}
+.dashboard-command-heading .eyebrow{color:var(--accent);letter-spacing:1.25px}
+.dashboard-command-heading h1{font-size:31px!important;line-height:1.05;letter-spacing:-1px!important;margin:5px 0 6px!important}
+.dashboard-command-heading p{font-size:12.5px!important;line-height:1.55;max-width:900px}
+
+.dashboard-focus-brief{
+  min-height:82px;
+  margin-bottom:16px!important;
+  padding:16px 18px!important;
+  border-radius:16px!important;
+  background:
+    linear-gradient(110deg,color-mix(in srgb,var(--accent) 88%,#16251f),color-mix(in srgb,var(--accent) 56%,#1a2b25) 58%,color-mix(in srgb,var(--orange) 25%,#1a2b25))!important;
+  box-shadow:0 10px 30px rgba(25,39,33,.12)!important;
+}
+.dashboard-focus-brief .ai-orb{
+  width:44px!important;
+  height:44px!important;
+  border-radius:13px!important;
+  background:color-mix(in srgb,var(--surface) 12%,transparent)!important;
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:none!important;
+}
+.dashboard-focus-brief .ai-copy h2{font-size:15.5px!important;letter-spacing:-.15px}
+.dashboard-focus-brief .ai-copy p{font-size:10.8px!important;line-height:1.55!important}
+.dashboard-focus-brief>a{
+  min-height:34px;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  padding:0 10px;
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:9px;
+  color:#f4f7f5;
+  text-decoration:none;
+  font-size:9.5px;
+  font-weight:750;
+  background:rgba(255,255,255,.06);
+}
+
+.metrics-grid{gap:12px!important;margin-bottom:16px!important}
+.metric-card{
+  position:relative;
+  overflow:hidden;
+  min-height:124px;
+  padding:16px 17px!important;
+  border-radius:15px!important;
+  box-shadow:var(--panel-shadow)!important;
+  text-decoration:none;
+  color:inherit;
+  transition:transform .14s ease,border-color .14s ease,box-shadow .14s ease;
+}
+.metric-card:after{
+  content:"";
+  position:absolute;
+  width:82px;
+  height:82px;
+  right:-34px;
+  top:-37px;
+  border-radius:50%;
+  background:color-mix(in srgb,var(--accent) 7%,transparent);
+  pointer-events:none;
+}
+a.metric-card:hover{
+  transform:translateY(-2px);
+  border-color:color-mix(in srgb,var(--accent) 30%,var(--line))!important;
+  box-shadow:var(--panel-shadow-hover)!important;
+}
+.metric-icon{width:38px!important;height:38px!important;border-radius:11px!important}
+.metric-label{font-size:9.5px!important;font-weight:760;margin-top:13px!important}
+.metric-value{font-size:28px!important;line-height:1;letter-spacing:-.85px!important;margin-top:5px!important}
+.metric-meta{font-size:8.8px!important;margin-top:7px!important}
+
+.dashboard-grid{gap:16px!important;margin-bottom:16px!important}
+.dashboard-grid>.card{
+  border-radius:16px!important;
+  box-shadow:var(--panel-shadow)!important;
+  overflow:hidden;
+}
+.card-header{
+  min-height:64px;
+  padding:14px 16px!important;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--surface-soft) 56%,var(--surface)),var(--surface));
+}
+.card-header h3{font-size:13.5px!important;letter-spacing:-.12px}
+.card-header p{font-size:9px!important;line-height:1.45}
+.card-header>a{
+  display:inline-flex;
+  align-items:center;
+  gap:3px;
+  color:var(--accent);
+  text-decoration:none;
+  font-size:8.8px;
+  font-weight:760;
+}
+.attention-list{padding:6px 10px 8px!important}
+.attention-row{
+  min-height:60px;
+  padding:10px 7px!important;
+  border-radius:9px;
+  text-decoration:none;
+}
+.attention-row:hover{background:color-mix(in srgb,var(--accent) 4%,var(--surface))!important}
+.attention-row strong{font-size:10.5px!important}
+.attention-row small{font-size:8.5px!important;line-height:1.4}
+.attention-row em{font-size:7.8px!important;font-weight:750}
+.workforce-summary{padding:16px 18px 0!important}
+.workforce-summary strong{font-size:26px!important;letter-spacing:-.7px}
+.bar-chart{height:210px!important;padding-top:28px!important}
+.department-list{padding:11px 17px 17px!important}
+.department-row{min-height:42px}
+.lifecycle-item{padding:14px!important}
+.lifecycle-item strong{font-size:19px!important}
+.trust-score{padding:17px!important}
+.score-ring{width:66px!important;height:66px!important}
+
+@media(max-width:620px){
+  .dashboard-command-heading{
+    min-height:0;
+    padding:16px!important;
+    border-radius:15px;
+    align-items:flex-start!important;
+  }
+  .dashboard-command-heading h1{font-size:25px!important}
+  .dashboard-command-heading>div:last-child{width:100%}
+  .dashboard-command-heading>div:last-child .secondary-button{width:100%;justify-content:center}
+  .dashboard-focus-brief{align-items:flex-start!important}
+  .dashboard-focus-brief>a{display:none}
+  .metric-card{min-height:112px}
+}
+
+
+/* 2026 lifecycle consistency pass: recruiting, onboarding, offboarding and disclosure panels. */
+.secondary-button,.create-button,.ai-button{
+  min-height:38px!important;
+  border-radius:9px!important;
+}
+.recruit-grid,.onboarding-grid{gap:16px!important}
+.pipeline-card,.requisition-card,.off-ops-console,.ats-console,.onb-console{
+  border-radius:16px!important;
+  box-shadow:var(--panel-shadow)!important;
+}
+.pipeline-board{padding:14px!important;gap:10px!important}
+.pipeline-column{
+  padding:10px!important;
+  border-radius:12px!important;
+  background:color-mix(in srgb,var(--surface-soft) 72%,var(--surface))!important;
+}
+.pipeline-column header{padding:3px 3px 10px!important}
+.pipeline-column article{
+  min-height:52px;
+  padding:9px!important;
+  margin-bottom:7px!important;
+  border-radius:10px!important;
+  box-shadow:0 1px 2px rgba(32,38,34,.025)!important;
+}
+.candidate-avatar{width:30px!important;height:30px!important;border-radius:9px!important}
+.journey-list{padding:7px 15px 13px!important}
+.journey-list article{min-height:66px;padding:12px 3px!important}
+.task-control-list{padding:7px 15px!important}
+.task-control-list>div{min-height:54px;padding:11px 0!important}
+.onboarding-policy{margin:10px 14px 14px!important;padding:12px!important;border-radius:11px!important}
+.off-process-card{border-radius:13px!important;box-shadow:0 1px 2px rgba(32,38,34,.03)!important}
+.off-task-list>div{min-height:52px}
+:is(
+  .growth-governed-panel,
+  .service-governance-panel,
+  .service-admin-panel,
+  .recruiting-operations-panel,
+  .compensation-proposal-panel,
+  .onboarding-operations-panel,
+  .offboarding-operations-panel,
+  .my-work-source-panel,
+  .my-work-history-panel
+)[open]>summary{
+  background:color-mix(in srgb,var(--accent) 4%,var(--surface))!important;
+}
+:is(
+  .growth-governed-panel,
+  .service-governance-panel,
+  .service-admin-panel,
+  .recruiting-operations-panel,
+  .compensation-proposal-panel,
+  .onboarding-operations-panel,
+  .offboarding-operations-panel
+)>summary:hover{
+  background:color-mix(in srgb,var(--accent) 3%,var(--surface))!important;
+}
+
+/* 2026-11 readability pass 2: remove residual microtype from primary workflows. */
+.module-state-badge{font-size:10px!important}
+.enterprise-stat small,.growth-metric small,.services-metric small,.gov-metric small,.workpay-metric small,.off-metric small,.recruit-metric em{font-size:10px!important}
+.enterprise-saved-view-row>a small,.enterprise-save-view-form>label>span{font-size:10px!important}
+.enterprise-density-compact .cell-sub,.cell-sub{font-size:10px!important}
+
+.metric-label{font-size:10.5px!important}
+.metric-meta{font-size:10px!important}
+.card-header p{font-size:10px!important}
+.card-header>a{font-size:10px!important}
+.attention-row small{font-size:10px!important}
+.attention-row em{font-size:9.5px!important}
+
+.nav-disclosure>summary{font-size:10px!important}
+.my-work-source-panel>summary>span{font-size:10.5px!important}
+.my-work-source-panel>summary>small,.my-work-history-panel>summary small{font-size:9.5px!important}
+.operations-lane>a>small{font-size:10px!important}
+.employee-home-balance-list small,.employee-home-next small,.employee-home-next span,.employee-home-learning-list small{font-size:9.5px!important}
+
+.enterprise-column-picker>summary small{font-size:9.5px!important}
+.enterprise-column-options>strong,.enterprise-column-options>label,.enterprise-column-options>small{font-size:10px!important}
+
+.employee-360-rail-nav small{font-size:9.5px!important}
+.employee-360-access small{font-size:9.5px!important}
+.employee-360-access strong{font-size:10.5px!important}
+.employee-360-access-line,.employee-360-critical{font-size:9.5px!important}
+.employee-360-main-head p{font-size:10.5px!important}
+
+.recruiting-operations-panel>summary small,.compensation-proposal-panel>summary small,.growth-governed-panel>summary small,
+.onboarding-operations-panel>summary small,.offboarding-operations-panel>summary small,
+.service-governance-panel>summary small,.service-admin-panel>summary small{font-size:10px!important}
+.recruiting-operations-panel>summary>span:last-child,.compensation-proposal-panel>summary>span:last-child,
+.growth-governed-panel>summary>span:last-child,.onboarding-operations-panel>summary>span:last-child,
+.offboarding-operations-panel>summary>span:last-child,.service-governance-panel>summary>span:last-child,
+.service-admin-panel>summary>span:last-child{font-size:9.5px!important}
+.growth-section-head p{font-size:10px!important}
+
+.recruit-title p{font-size:10px!important}
+.recruit-title>span{font-size:9.5px!important}
+.pipeline-column header strong{font-size:10.5px!important}
+.pipeline-column header span{font-size:9.5px!important}
+.candidate-avatar{font-size:9.5px!important}
+.pipeline-column article strong{font-size:10.5px!important}
+.pipeline-column article small,.pipeline-column article em{font-size:9.5px!important}
+.pipeline-column>.pipeline-count-label,.pipeline-column>.preview-static-label{font-size:9.5px!important}
+.privacy-strip strong{font-size:10.5px!important}
+.privacy-strip p,.privacy-strip>span{font-size:9.5px!important}
+.journey-avatar{font-size:9.5px!important}
+.journey-person strong,.journey-owner strong{font-size:10.5px!important}
+.journey-person small,.journey-owner small,.journey-progress small,.journey-list em{font-size:9.5px!important}
+.task-control-list strong{font-size:10.5px!important}
+.task-control-list small,.task-control-list b,.onboarding-policy p{font-size:9.5px!important}
+
+/* 2026-11 readability pass 3: normalize operational consoles and lifecycle modules. */
+/* Performance / talent operations */
+.performance-console-health,.performance-finalized{font-size:9.5px!important}
+.performance-notice,.performance-empty,.growth-principle-card p{font-size:10px!important}
+.performance-form-title small,.performance-panel-title small,.performance-operation-main small,
+.performance-rating-line span,.performance-goal-card small,.performance-goal-controls>span{font-size:9.5px!important}
+.performance-form label{font-size:10px!important}
+.performance-form input,.performance-form select,.performance-form textarea,
+.performance-review-controls input,.performance-review-controls select,
+.performance-goal-controls input,.performance-goal-controls select{font-size:10.5px!important}
+.performance-operation .secondary-button,.performance-goal-controls .secondary-button{font-size:9.5px!important}
+
+/* Recruiting ATS / onboarding operations */
+.ats-console-head p,.ats-notice,.ats-empty{font-size:10px!important}
+.ats-console-health,.ats-form-title small,.ats-panel-title small,.ats-operation-main>small,
+.ats-actions button,.ats-inline-form button,.ats-offer-line>span,.ats-operation .pill{font-size:9.5px!important}
+.ats-form label{font-size:10px!important}
+.ats-form input,.ats-form select,.ats-inline-form input{font-size:10.5px!important}
+.ats-operation-main>strong{font-size:10.5px!important}
+.onb-console-head p{font-size:10px!important}
+.onb-console-head>span,.onb-plan>header small,.onb-plan>header>span,.onb-task-copy small,.onb-task>.pill{font-size:9.5px!important}
+.onb-plan>header strong,.onb-task-copy strong{font-size:10.5px!important}
+
+/* Offboarding operations */
+.off-metric small{font-size:10px!important}
+.off-table th{font-size:10px!important}
+.off-pill,.off-controls small,.off-live-badge,.off-ops-head>span,.off-form-title small,
+.off-process-card>header small,.off-process-meta span,.off-process-meta b,.off-task-list small,
+.off-task-actions button,.off-ready,.off-not-ready{font-size:9.5px!important}
+.off-ops-head p,.off-ops-notice,.off-empty{font-size:10px!important}
+.off-create-form label{font-size:10px!important}
+.off-create-form input,.off-create-form select{font-size:10.5px!important}
+.off-task-list strong{font-size:10.5px!important}
+
+/* Employee lifecycle actions */
+.lifecycle-command-head p,.lifecycle-notice{font-size:10px!important}
+.lifecycle-command-health,.lifecycle-action-title small,.lifecycle-target-preview small,
+.lifecycle-rule-list span,.lifecycle-restricted,.lifecycle-control-note p{font-size:9.5px!important}
+.lifecycle-action-panel label{font-size:10px!important}
+.lifecycle-action-panel input,.lifecycle-action-panel select{font-size:10.5px!important}
+.lifecycle-target-preview strong,.lifecycle-rule-list p,.lifecycle-control-note strong{font-size:10px!important}
+
+/* Employee 360 operational controls */
+.audit-verify-ok,.audit-verify-error,.mini-action,.comp-decision-error{font-size:9.5px!important}
+.compensation-governance-note p{font-size:10px!important}
+
+/* Growth / talent */
+.growth-metric small{font-size:10px!important}
+.growth-table th{font-size:10px!important}
+.growth-pill,.growth-control-stack small,.matrix-note,.matrix-label small,.matrix-cell small,.matrix-axis,
+.skill-list strong{font-size:9.5px!important}
+.growth-rule,.growth-rule strong,.matrix-label strong,.readiness-list span,.readiness-list strong,
+.skill-list span{font-size:10px!important}
+
+/* Employee services */
+.services-metric small{font-size:10px!important}
+.services-table th{font-size:10px!important}
+.services-pill,.services-control-stack small,.workflow-chain span,.hr-escalation-filter,
+.hr-escalation-filter span{font-size:9.5px!important}
+.workflow-side p{font-size:10px!important}
+
+/* Work / pay */
+.workpay-metric small{font-size:10px!important}
+.workpay-table th{font-size:10px!important}
+.workpay-status,.control-stack small,.balance-ring span,.payroll-step small{font-size:9.5px!important}
+.mini-rule,.mini-rule strong{font-size:10px!important}
+
+/* 2026-11 readability pass 4: admin, audit, settings, workflow and global surfaces. */
+/* Global / enterprise utility copy */
+a.card-footer-button strong{font-size:10px!important}
+.table-title>span,.org-node small,.identity-meta span,.profile-timeline small,.security-status small,
+.processing-list span,.processing-list small,.processing-list em,.control-score small,.enterprise-table code{font-size:9.5px!important}
+.pill,.critical-badge,.classification,.mini-policy{font-size:9.5px!important}
+.governance-note p,.profile-card dt,.privacy-controls li{font-size:10px!important}
+.global-search-result-copy small,.global-search-result em,.global-search-hints{font-size:9.5px!important}
+
+/* Governance and connected growth */
+.gov-metric small{font-size:10px!important}
+.gov-table th{font-size:10px!important}
+.gov-pill,.gov-controls small,.planning-chain span{font-size:9.5px!important}
+.gov-copy{font-size:10px!important}
+.growth-lifecycle-copy small,.growth-lifecycle-copy span,.growth-lifecycle-actions .secondary-button{font-size:9.5px!important}
+.growth-lifecycle-empty{font-size:10px!important}
+
+/* Audit ledger and integrity */
+.audit-metric small,.audit-metric p,.audit-integrity-alert p{font-size:10px!important}
+.audit-search input,.audit-filter-bar select{font-size:10.5px!important}
+.audit-ledger-head>small,.audit-action,.audit-classification,.audit-table code{font-size:9.5px!important}
+.audit-table th{font-size:10px!important}
+.audit-table td,.audit-table td strong{font-size:10.5px!important}
+.audit-table td small{font-size:9.5px!important}
+
+/* Authentication */
+.auth-screen .auth-brand small,.auth-screen .auth-kicker,.form-field label{font-size:10px!important}
+.auth-brand-trail,.auth-method-divider,.local-auth-head>span,
+.auth-screen .auth-footnote span:not(.auth-footnote-icon),.form-hint,.form-check small{font-size:9.5px!important}
+
+/* Legacy global shell helpers still visible in supporting screens */
+.brand small,.nav-label,.workforce-summary small,.lifecycle-item p,.trust-score p,.trust-list span{font-size:10px!important}
+.nav-item em,.global-search kbd,.eyebrow,.section-kicker,.bar-col span,.lifecycle-item small,
+.timeline-item small,.timeline-item time,.person-cell>span,.status,.score-ring small,.trust-list strong{font-size:9.5px!important}
+th{font-size:10px!important}
+
+/* Platform administration */
+.platform-metric small{font-size:10px!important}
+.platform-table th{font-size:10px!important}
+.platform-pill,.platform-controls small{font-size:9.5px!important}
+.security-list div,.security-list strong{font-size:10px!important}
+
+/* Settings / connections */
+.settings-connections-heading p{font-size:10px!important}
+.settings-connection-title small,.settings-connection-flags label,.connection-edit-select,.connection-edit-empty{font-size:9.5px!important}
+.settings-connection-fields label{font-size:10px!important}
+.settings-connection-fields input,.settings-connection-fields select,.connection-edit-select select{font-size:10.5px!important}
+
+.settings-live-state,.settings-live-checks small,.settings-live-footnote,.settings-notification-counts small,
+.settings-notification-action small,.settings-policy-toggle small,.settings-policy-footer small,
+.local-account-table td small,.notification-ops-metrics button span,.notification-ops-table td small,
+.notification-ops-error,.settings-smtp-test .workflow-action-message{font-size:9.5px!important}
+.settings-live-metric small,.settings-live-metric p,.settings-security-policy dt,.settings-security-policy dd,
+.settings-policy-warning,.settings-policy-toggle strong,.settings-policy-message,
+.local-account-admin .settings-live-panel-head p,.settings-local-auth-observability .settings-live-panel-head p,
+.notification-ops-console .settings-live-panel-head p{font-size:10px!important}
+.settings-live-table th{font-size:10px!important}
+.settings-live-table td,.settings-live-table td strong{font-size:10.5px!important}
+.settings-policy-fields label,.local-account-create label>span{font-size:10px!important}
+.settings-policy-kms{font-size:9.5px!important}
+.local-account-create input,.local-account-create select,.local-account-reset input{font-size:10.5px!important}
+
+/* Notifications */
+.notification-count,.notification-menu-header small,.notification-menu-header button,.notification-menu-copy time,
+.notifications-filter button span,.notification-row-title span,.notification-row-meta,
+.notification-row-actions button,.notification-row-actions a{font-size:9.5px!important}
+
+/* Connection lifecycle */
+.connection-lifecycle-heading p{font-size:10px!important}
+.connection-lifecycle-title small,.connection-lifecycle-table td small,.connection-readiness,.connection-status,
+.connection-lifecycle-actions button,.connection-lifecycle-actions small{font-size:9.5px!important}
+.connection-lifecycle-table th{font-size:10px!important}
+.connection-lifecycle-table td,.connection-lifecycle-table td strong{font-size:10.5px!important}
+
+/* Workflow action center, editor, history and diff */
+.workflow-action-source-filters button{font-size:10px!important}
+.workflow-action-table th{font-size:10px!important}
+.workflow-action-table td small,.workflow-due,.workflow-source,.workflow-urgency,.workflow-task-status,
+.primary-button.compact,.secondary-button.compact{font-size:9.5px!important}
+.workflow-editor-head p,.workflow-decision-history-head p{font-size:10px!important}
+.workflow-editor-mode label>span,.workflow-editor-metadata label>span,.workflow-step-fields label>span,
+.workflow-version-compare-selects label>span{font-size:10px!important}
+.workflow-editor-mode select,.workflow-editor-metadata input,.workflow-editor-metadata textarea,
+.workflow-step-fields input,.workflow-step-fields select,.workflow-history-controls select,
+.workflow-version-compare-selects select,.workflow-action-search input{font-size:10.5px!important}
+.workflow-step-builder-head>div>span,.workflow-step-builder-head strong,.workflow-version-compare-head span{font-size:10px!important}
+.workflow-step-index>span,.workflow-editor-footer small,.workflow-history-metrics span,.workflow-history-chips>span,
+.workflow-history-footnote,.workflow-version-compare-head small,.workflow-version-summary small,
+.workflow-version-summary span,.workflow-version-diff-row small,.workflow-version-diff-row span,
+.workflow-version-diff-row>div:first-child span,.workflow-action-toggle,.workflow-action-toggle strong,
+.workflow-action-result-count{font-size:9.5px!important}
+.workflow-editor-message,.workflow-version-diff-row strong,.workflow-version-compare-empty{font-size:10px!important}
+
+/* 2026-11 readability pass 5: close residual topbar utility microtype. */
+.locale-toggle button,.topbar-avatar,.topbar-account-copy small{font-size:9.5px!important}
+
+/* Enterprise register export stays compact but visibly actionable. */
+.enterprise-view-export{height:38px!important;display:inline-flex!important;align-items:center;gap:6px;white-space:nowrap;font-size:10.5px!important;text-decoration:none}
+
+/* Filter-aware register empty states distinguish no data from no matches. */
+.enterprise-empty-cell{padding:0!important}
+.enterprise-empty-row{min-height:112px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:22px;text-align:center}
+.enterprise-empty-row>span{max-width:560px;color:var(--muted);font-size:11px;line-height:1.5}
+.enterprise-empty-row>.secondary-button{min-height:34px;padding-inline:12px;font-size:10.5px!important;text-decoration:none}
+
+/* Sortable enterprise register headers keep URL-native view state and visible affordance. */
+.enterprise-sort-header{display:inline-flex;align-items:center;gap:5px;color:inherit;text-decoration:none;font:inherit;letter-spacing:inherit;text-transform:inherit}
+.enterprise-sort-header svg{opacity:.55;flex:0 0 auto}
+.enterprise-sort-header:hover,.enterprise-sort-header:focus-visible,.enterprise-sort-header.active{color:var(--accent)!important}
+.enterprise-sort-header:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:4px}
+.enterprise-sort-header.active svg{opacity:1}
+
+/* Saved-view destructive/update affordances stay explicit. */
+.enterprise-save-view-hint{display:block;margin-top:6px;color:var(--muted);font-size:9.5px!important;line-height:1.45}
+
+.enterprise-saved-view-delete-error{grid-column:1/-1;padding:0 6px 7px;color:var(--danger-fg);font-size:9.5px;line-height:1.4}
+.enterprise-saved-view-row>form button:disabled{opacity:.55;cursor:wait}
+
+.enterprise-copy-view-link{height:38px!important;min-height:38px!important;display:inline-flex!important;align-items:center;gap:6px;white-space:nowrap;font-size:10.5px!important}
+.enterprise-copy-view-link.copied{color:var(--success-fg)!important;border-color:color-mix(in srgb,var(--success-fg) 30%,var(--line-strong))!important;background:color-mix(in srgb,var(--success-fg) 7%,var(--surface))!important}
+.enterprise-copy-view-link.error{color:var(--danger-fg)!important;border-color:color-mix(in srgb,var(--danger-fg) 28%,var(--line-strong))!important}
+
+.enterprise-column-reset{min-height:32px;display:inline-flex;align-items:center;justify-content:center;gap:5px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-size:9.5px;font-weight:700;cursor:pointer}
+.enterprise-column-reset:hover:not(:disabled),.enterprise-column-reset:focus-visible{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,var(--line));background:var(--accent-soft)}
+.enterprise-column-reset:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.enterprise-column-reset:disabled{opacity:.45;cursor:default}
+
+.enterprise-view-active-state{width:100%;display:flex;align-items:center;gap:8px;padding:7px 2px 0;border-top:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
+.enterprise-view-active-state>span{flex:0 0 auto;color:var(--muted);font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px}
+.enterprise-view-active-state>div{min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.enterprise-view-chip{min-height:28px;max-width:280px;display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border:1px solid var(--line);border-radius:999px;background:var(--surface-soft);color:var(--text);font-size:9.5px;font-weight:700;text-decoration:none}
+.enterprise-view-chip>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.enterprise-view-chip svg{flex:0 0 auto;color:var(--muted)}
+.enterprise-view-chip:hover,.enterprise-view-chip:focus-visible{border-color:color-mix(in srgb,var(--accent) 35%,var(--line));background:var(--accent-soft);color:var(--accent)}
+.enterprise-view-chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media(max-width:760px){.enterprise-view-active-state{align-items:flex-start;flex-direction:column;gap:5px}.enterprise-view-active-state>div{width:100%}.enterprise-view-chip{max-width:100%}}
+
+.enterprise-saved-view-row>a{grid-template-columns:18px minmax(0,1fr) auto!important}
+.enterprise-saved-view-row.modified{background:color-mix(in srgb,var(--warning-bg) 52%,transparent);box-shadow:inset 2px 0 0 var(--warning-fg)}
+.enterprise-saved-view-status{justify-self:end;white-space:nowrap;border:1px solid var(--line);border-radius:999px;padding:2px 5px;font-size:8.5px!important;font-weight:800;line-height:1.2}
+.enterprise-saved-view-status.active,.enterprise-saved-view-context.active{color:var(--success-fg);background:var(--success-bg)}
+.enterprise-saved-view-status.modified,.enterprise-saved-view-context.modified{color:var(--warning-fg);background:var(--warning-bg)}
+.enterprise-saved-view-context{min-width:auto!important;width:auto!important;padding:2px 6px!important}

@@ -9,7 +9,7 @@ if(process.env.HRBP_DISPOSABLE_AUDIT!=='true'||!['localhost','127.0.0.1'].includ
 const roles={admin:'TENANT_ADMIN',employee:'EMPLOYEE',manager:'MANAGER',hrbp:'HRBP'};
 const slugs=['dashboard','people','organization','employee-360','recruiting','onboarding','offboarding','positions','time-attendance','leave','payroll','compensation','benefits','performance','talent','succession','learning','engagement','employee-relations','hr-service','documents','policies','workforce-planning','analytics','ai-assistant','workflows','privacy','audit','settings'];
 const paths=[...slugs.map(x=>x==='dashboard'?'/':`/module/${x}`),'/module/notifications','/module/people/new','/module/positions/new','/module/employee-360/lifecycle'];
-const report={source:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),natural:[],controlled:[],links:[],ui:[],limitations:['Natural authenticated navigation: no logout request interception. External hosts are blocked to isolate providers.','Page renders and links do not prove every business workflow or external provider works.']};
+const report={source:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),natural:[],controlled:[],anonymousCreate:[],links:[],ui:[],limitations:['Natural authenticated navigation: no logout request interception. External hosts are blocked to isolate providers.','Page renders and links do not prove every business workflow or external provider works.']};
 await mkdir('.audit/screenshots',{recursive:true});
 const db=new PrismaClient();
 // The previous disposable probe deactivated this synthetic account deliberately.
@@ -42,6 +42,23 @@ try{
   await context.close();
  }
  console.log('AUDIT_NATURAL_SESSION '+JSON.stringify(report.natural));
+ {
+  const context=await browser.newContext({viewport:{width:1280,height:900}});
+  await context.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
+  const page=await context.newPage();
+  for(const path of ['/module/people/new','/module/positions/new']){
+   try{
+    await page.goto(origin+path,{waitUntil:'load',timeout:25000});
+    const session=await principal(context);
+    const current=new URL(page.url());
+    const returnTo=current.searchParams.get('returnTo');
+    const formCount=await page.locator('.record-form').count();
+    report.anonymousCreate.push({path,finalPath:current.pathname,returnTo,authenticated:session.authenticated,formCount});
+   }catch(e){report.anonymousCreate.push({path,finalPath:null,returnTo:null,authenticated:false,formCount:-1,error:e.message.slice(0,300)});}
+  }
+  await context.close();
+  console.log('ANONYMOUS_CREATE_ACCESS '+JSON.stringify(report.anonymousCreate));
+ }
  for(const [role,expectedRole] of Object.entries(roles)){
   const context=await browser.newContext({viewport:{width:1440,height:1000}});let blocked=0;
   await context.route('**/*',route=>{const u=new URL(route.request().url());if(u.origin!==origin)return route.abort();return route.continue();});
@@ -92,6 +109,18 @@ try{
   await context.close();
  }
 }finally{await browser.close();}
-const summary={source:report.source,natural:report.natural,controlledCount:report.controlled.length,principalVerifiedCount:report.controlled.filter(x=>x.principalVerified).length,principalFailures:report.controlled.filter(x=>!x.principalVerified),httpFailures:report.controlled.filter(x=>x.status>=500||x.status===0),jsFailures:report.controlled.filter(x=>x.errors?.length),serverFailures:report.controlled.filter(x=>x.serverFailures?.length),adminProtectedFallbacks:report.controlled.filter(x=>x.role==='admin'&&x.protectedFallback),unexpectedPreviews:report.controlled.filter(x=>x.preview),mobileOverflow:report.controlled.filter(x=>x.role==='admin-mobile'&&x.overflow),adminLinks:report.links.length,nonSuccessfulLinks:report.links.filter(x=>x.status>=400||x.status===0),ui:report.ui,modules:report.controlled.map(x=>({role:x.role,path:x.path,status:x.status,principalVerified:x.principalVerified,denied:x.denied,preview:x.preview,protectedFallback:x.protectedFallback,overflow:x.overflow})),limitations:report.limitations};
+const createWorkspacePaths=new Set(['/module/people/new','/module/positions/new']);
+const anonymousCreateFailures=report.anonymousCreate.filter(x=>x.finalPath!=='/auth/sign-in'||x.returnTo!==x.path||x.authenticated!==false||x.formCount!==0);
+const createWorkspacePolicyFailures=report.controlled.filter(x=>{
+ if(!createWorkspacePaths.has(x.path)||!['admin','employee','manager','hrbp'].includes(x.role))return false;
+ return x.role==='admin'?x.denied===true:x.denied!==true;
+});
+const summary={source:report.source,natural:report.natural,anonymousCreate:report.anonymousCreate,anonymousCreateFailures,controlledCount:report.controlled.length,principalVerifiedCount:report.controlled.filter(x=>x.principalVerified).length,principalFailures:report.controlled.filter(x=>!x.principalVerified),httpFailures:report.controlled.filter(x=>x.status>=500||x.status===0),jsFailures:report.controlled.filter(x=>x.errors?.length),serverFailures:report.controlled.filter(x=>x.serverFailures?.length),adminProtectedFallbacks:report.controlled.filter(x=>x.role==='admin'&&x.protectedFallback),unexpectedPreviews:report.controlled.filter(x=>x.preview),mobileOverflow:report.controlled.filter(x=>x.role==='admin-mobile'&&x.overflow),createWorkspacePolicyFailures,adminLinks:report.links.length,nonSuccessfulLinks:report.links.filter(x=>x.status>=400||x.status===0),ui:report.ui,modules:report.controlled.map(x=>({role:x.role,path:x.path,status:x.status,principalVerified:x.principalVerified,denied:x.denied,preview:x.preview,protectedFallback:x.protectedFallback,overflow:x.overflow})),limitations:report.limitations};
 await writeFile('.audit/auth-browser-report.json',JSON.stringify(report,null,2));await writeFile('.audit/auth-browser-summary.json',JSON.stringify(summary,null,2));
 console.log('AUDIT_AUTHENTICATED_BROWSER '+JSON.stringify(summary));
+if(anonymousCreateFailures.length){
+ throw new Error('ANONYMOUS_CREATE_ACCESS_FAILED '+JSON.stringify(anonymousCreateFailures));
+}
+if(createWorkspacePolicyFailures.length){
+ throw new Error('CREATE_WORKSPACE_AUTH_POLICY_FAILED '+JSON.stringify(createWorkspacePolicyFailures.map(x=>({role:x.role,path:x.path,denied:x.denied,status:x.status}))));
+}

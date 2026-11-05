@@ -1,5 +1,6 @@
 import { getRequestContext, unauthorized } from "@/lib/request-context";
 import { db } from "@/lib/db";
+import { safeCsvCell } from "@/lib/csv";
 
 const actionPrefixes = [
   "leave-request.",
@@ -27,6 +28,8 @@ const actionPrefixes = [
   "workflow.task-"
 ];
 
+const DECISION_EXPORT_LIMIT = 500;
+
 const resourceTypes = new Set([
   "LeaveRequest","TimeEntry","CompensationChange","PayrollRun","Requisition","Offer","PolicyRecord",
   "WorkforceScenario","WorkflowDefinition","WorkflowTask","SurveyCampaign","DataSubjectRequest",
@@ -40,10 +43,6 @@ function queryOptions(request: Request) {
   const days = Number.isFinite(rawDays) ? Math.min(90, Math.max(1, Math.floor(rawDays))) : 30;
   const resourceType = params.get("resourceType")?.trim() || null;
   return { days, resourceType: resourceType && resourceTypes.has(resourceType) ? resourceType : null };
-}
-
-function csvCell(value: string) {
-  return `"${value.replaceAll('"', '""')}"`;
 }
 
 export async function GET(request: Request) {
@@ -61,7 +60,7 @@ export async function GET(request: Request) {
       OR: actionPrefixes.map((prefix) => ({ action: { startsWith: prefix } }))
     },
     orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
-    take: 500,
+    take: DECISION_EXPORT_LIMIT + 1,
     select: {
       occurredAt: true,
       action: true,
@@ -71,15 +70,24 @@ export async function GET(request: Request) {
     }
   });
 
+  if (rows.length > DECISION_EXPORT_LIMIT) {
+    return Response.json({
+      error: `Decision evidence export exceeds ${DECISION_EXPORT_LIMIT} rows. Narrow the time window or domain filter before exporting.`
+    }, {
+      status: 422,
+      headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
+    });
+  }
+
   const lines = [
-    ["occurredAt", "action", "resourceType", "resourceId", "classification"].map(csvCell).join(","),
+    ["occurredAt", "action", "resourceType", "resourceId", "classification"].map(safeCsvCell).join(","),
     ...rows.map((row) => [
       row.occurredAt.toISOString(),
       row.action,
       row.resourceType,
       row.resourceId,
       row.classification
-    ].map(csvCell).join(","))
+    ].map(safeCsvCell).join(","))
   ];
 
   const date = new Date().toISOString().slice(0, 10);
@@ -88,7 +96,8 @@ export async function GET(request: Request) {
     headers: {
       "content-type": "text/csv; charset=utf-8",
       "content-disposition": `attachment; filename="hrbp-my-decision-evidence${suffix}-${date}.csv"`,
-      "cache-control": "no-store"
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
     }
   });
 }

@@ -18,6 +18,7 @@ type DecisionHistoryItem = {
 type HistoryResponse = {
   data?: {
     days: number;
+    total: number;
     items: DecisionHistoryItem[];
   };
   error?: string;
@@ -71,6 +72,7 @@ export function ActionCenterDecisionHistory() {
   const [days, setDays] = useState(30);
   const [resourceType, setResourceType] = useState("");
   const [items, setItems] = useState<DecisionHistoryItem[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -84,6 +86,7 @@ export function ActionCenterDecisionHistory() {
       const body = await response.json() as HistoryResponse;
       if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
       setItems(body.data?.items ?? []);
+      setTotal(body.data?.total ?? 0);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : (tr ? "Karar geçmişi yüklenemedi." : "Decision history could not be loaded."));
     } finally {
@@ -104,6 +107,8 @@ export function ActionCenterDecisionHistory() {
     for (const item of items) counts.set(item.resourceType, (counts.get(item.resourceType) ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
   }, [items]);
+
+  const exportBlocked = total > 500;
 
   function fmt(value: string) {
     return new Intl.DateTimeFormat(tr ? "tr-TR" : "en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
@@ -132,18 +137,21 @@ export function ActionCenterDecisionHistory() {
           }).map((type) => <option key={type} value={type}>{sourceLabel(type, tr)}</option>)}
         </select>
         <button className="secondary-button compact" type="button" onClick={() => void load(days, resourceType)} disabled={loading}><RefreshCw size={14}/>{tr ? "Yenile" : "Refresh"}</button>
-        <a className="secondary-button compact" href={`/api/action-center/history/export?days=${days}${resourceType ? `&resourceType=${encodeURIComponent(resourceType)}` : ""}`}><Download size={14}/>{tr ? "CSV kanıt" : "Export CSV"}</a>
+        {exportBlocked
+          ? <span className="secondary-button compact workflow-history-export-disabled" aria-disabled="true" title={tr ? "CSV kanıtı için zaman aralığını veya alan filtresini daraltın." : "Narrow the time window or domain filter before exporting CSV evidence."}><Download size={14}/>{tr ? "CSV kanıt" : "Export CSV"}</span>
+          : <a className="secondary-button compact" href={`/api/action-center/history/export?days=${days}${resourceType ? `&resourceType=${encodeURIComponent(resourceType)}` : ""}`}><Download size={14}/>{tr ? "CSV kanıt" : "Export CSV"}</a>}
       </div>
     </div>
 
     <div className="workflow-history-metrics">
-      <div><History size={16}/><span>{tr ? "Karar kaydı" : "Decision records"}</span><strong>{items.length}</strong></div>
+      <div><History size={16}/><span>{tr ? "Eşleşen karar" : "Matching decisions"}</span><strong>{total}</strong></div>
       <div><ShieldCheck size={16}/><span>{tr ? "Actor scope" : "Actor scope"}</span><strong>{tr ? "Kişisel" : "Personal"}</strong></div>
       <div><Clock3 size={16}/><span>{tr ? "Pencere" : "Window"}</span><strong>{days}d</strong></div>
     </div>
 
     {grouped.length ? <div className="workflow-history-chips">{grouped.map(([resource, count]) => <span key={resource}>{sourceLabel(resource, tr)} <strong>{count}</strong></span>)}</div> : null}
     {error ? <div className="workflow-action-message error">{error}</div> : null}
+    {exportBlocked ? <div className="workflow-action-message warning" role="status">{tr ? `${total} karar 500 satırlık CSV sınırını aşıyor. Zaman aralığını veya alan filtresini daraltın.` : `${total} decisions exceed the 500-row CSV limit. Narrow the time window or domain filter.`}</div> : null}
 
     <div className="workflow-action-table-wrap">
       <table className="workflow-action-table workflow-history-table">
@@ -162,6 +170,6 @@ export function ActionCenterDecisionHistory() {
         </tbody>
       </table>
     </div>
-    <p className="workflow-history-footnote">{tr ? "En fazla son 80 actor-scoped karar gösterilir. Tam hash-zincirli kanıt Audit Ledger içinde kalır." : "Up to the latest 80 actor-scoped decisions are shown. Full hash-chained evidence remains in the Audit Ledger."}</p>
+    <p className="workflow-history-footnote">{tr ? `En fazla son 80 / ${total} actor-scoped karar gösterilir. Tam hash-zincirli kanıt Audit Ledger içinde kalır.` : `Up to the latest 80 / ${total} actor-scoped decisions are shown. Full hash-chained evidence remains in the Audit Ledger.`}</p>
   </section>;
 }

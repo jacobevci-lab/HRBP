@@ -238,6 +238,7 @@ model Tenant {
   payrollRuns         PayrollRun[]
   payrollResults      PayrollResult[]
   payrollLineItems    PayrollLineItem[]
+  savedEnterpriseViews SavedEnterpriseView[]
 }
 
 model UserAccount {
@@ -267,11 +268,36 @@ model UserAccount {
   emergencyAccessDecisions EmergencyAccessGrant[] @relation("EmergencyAccessDecider")
   emergencyAccessRevocations EmergencyAccessGrant[] @relation("EmergencyAccessRevoker")
   scimGroupMemberships ScimGroupMember[]
+  savedEnterpriseViews SavedEnterpriseView[]
 
   @@unique([tenantId, subject])
   @@unique([tenantId, provisioningSource, provisioningExternalId])
   @@index([tenantId, role])
   @@index([tenantId, provisioningSource, active])
+}
+
+model SavedEnterpriseView {
+  id                String   @id @default(cuid())
+  tenantId          String
+  userId            String
+  moduleKey         String
+  name              String
+  normalizedName    String
+  query             String   @default("")
+  status            String?
+  columns           String[] @default([])
+  columnsCustomized Boolean  @default(false)
+  density           String   @default("comfortable")
+  sortKey           String?
+  sortDirection     String   @default("asc")
+  pageSize          Int      @default(50)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user              UserAccount @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, moduleKey, normalizedName])
+  @@index([tenantId, userId, moduleKey, updatedAt])
 }
 
 model Person {

@@ -1,13 +1,9 @@
 import { AppShell } from "@/components/app-shell";
-import { Dashboard } from "@/components/dashboard";
+import { RoleAwareHome } from "@/components/role-aware-home";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default function Home() {
-  return (
-    <AppShell>
-      <Dashboard />
-    </AppShell>
-  );
+  return <AppShell><RoleAwareHome/></AppShell>;
 }

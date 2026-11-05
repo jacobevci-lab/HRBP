@@ -4,6 +4,7 @@ import { can, type Capability } from "@/lib/authorization";
 import { getServerLocale } from "@/lib/i18n-server";
 import type { Locale } from "@/lib/i18n";
 import { getServerRequestContext } from "@/lib/server-session";
+import { GrowthWorkspaceFocus } from "@/components/growth-workspace-focus";
 
 type GrowthSlug = "benefits" | "performance" | "talent" | "succession" | "learning";
 type GrowthWriteSlug = Exclude<GrowthSlug, "performance">;
@@ -61,7 +62,7 @@ export async function GrowthModulePage({ slug, focusId }: { slug: GrowthSlug; fo
   if (!ctx) {
     const { GrowthWorkspace } = await import("@/components/growth-workspace");
     return <AppShell>
-      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><ShieldCheck size={16}/> {c(locale, "Read-only staging preview", "Salt-okunur staging önizlemesi")}</button></div></section>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><span className="secondary-button module-state-badge"><ShieldCheck size={16}/> {c(locale, "Read-only staging preview", "Salt-okunur staging önizlemesi")}</span></div></section>
       <section className="card module-degraded-banner" style={{ marginBottom: 14, padding: "12px 14px", display: "flex", alignItems: "flex-start", gap: 10 }}><ShieldCheck size={18} style={{ flex: "0 0 auto", marginTop: 1 }}/><div><strong style={{ display: "block", fontSize: 11 }}>{c(locale, "Safe demo data", "Güvenli demo verisi")}</strong><p style={{ margin: "3px 0 0", fontSize: 9.5, lineHeight: 1.5 }}>{c(locale, "This public staging view uses sample values only. Protected employee records and mutations remain unavailable until you sign in with an authorized role.", "Bu genel staging görünümü yalnızca örnek değerler kullanır. Korumalı çalışan kayıtları ve değişiklik işlemleri, yetkili bir rolle giriş yapılana kadar kullanılamaz.")}</p></div></section>
       <GrowthWorkspace slug={slug}/>
     </AppShell>;
@@ -194,17 +195,44 @@ export async function GrowthModulePage({ slug, focusId }: { slug: GrowthSlug; fo
       }
     }
 
+    const focusEnabled = slug === "performance" || slug === "talent";
+    const showParticipantFocus = slug === "performance" && Boolean(participant);
+    const showAdministrationFocus = (slug === "performance" || slug === "talent") && Boolean(operations || lifecycle);
+    const canReadLearning = can(ctx, "learning:read");
+    const canReadSuccession = can(ctx, "succession:read");
+
     return <AppShell>
-      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleCheckBig size={16}/> {c(locale, "Governed live data", "Yönetişimli canlı veri")}</button></div></section>
-      {liveWorkspace}
-      {participant}
-      {operations}
-      {lifecycle}
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><span className="secondary-button module-state-badge"><CircleCheckBig size={16}/> {c(locale, "Governed live data", "Yönetişimli canlı veri")}</span></div></section>
+      {focusEnabled ? <GrowthWorkspaceFocus
+        slug={slug}
+        locale={locale}
+        showParticipant={showParticipantFocus}
+        showAdministration={showAdministrationFocus}
+        canReadLearning={canReadLearning}
+        canReadSuccession={canReadSuccession}
+      /> : null}
+
+      <div id={focusEnabled ? "growth-overview" : undefined}>{liveWorkspace}</div>
+
+      {slug === "performance" && participant ? <section id="growth-participant-actions" className="growth-personal-actions">
+        <div className="growth-section-head"><div><span className="section-kicker">{c(locale, "My actions", "Aksiyonlarım")}</span><h3>{c(locale, "Review and goal work assigned to you", "Size atanmış değerlendirme ve hedef işleri")}</h3><p>{c(locale, "Participant identity scope remains enforced by the existing performance controls.", "Katılımcı kimlik kapsamı mevcut performans kontrolleri tarafından uygulanmaya devam eder.")}</p></div></div>
+        {participant}
+      </section> : participant}
+
+      {(slug === "performance" || slug === "talent") && operations ? <details id="growth-governed-admin" className="growth-governed-panel">
+        <summary><span><strong>{c(locale, "Governed administration", "Yönetişimli yönetim")}</strong><small>{c(locale, "Open write tools only when you need to administer the domain.", "Yazma araçlarını yalnız alanı yönetmeniz gerektiğinde açın.")}</small></span><span>{writeCapability ?? ""}</span></summary>
+        <div className="growth-governed-panel-body">{operations}</div>
+      </details> : operations}
+
+      {slug === "talent" && lifecycle ? <details id="growth-governance" className="growth-governed-panel">
+        <summary><span><strong>{c(locale, "Talent governance & development", "Yetenek yönetişimi & gelişim")}</strong><small>{c(locale, "Human assessments, development plans and learning handoff remain explicit.", "İnsan değerlendirmeleri, gelişim planları ve öğrenme devri açık biçimde korunur.")}</small></span><span>{c(locale, "Human-owned", "İnsan sahipliğinde")}</span></summary>
+        <div className="growth-governed-panel-body">{lifecycle}</div>
+      </details> : lifecycle}
     </AppShell>;
   } catch (error) {
     console.error(`[HRBP] Dedicated ${slug} workspace failed; protected fallback activated.`, error);
     return <AppShell>
-      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><button className="secondary-button" disabled><CircleAlert size={16}/> {c(locale, "Protected fallback", "Korumalı yedek mod")}</button></div></section>
+      <section className="page-heading module-heading"><div><div className="eyebrow">HRBP One / {meta.title}</div><h1>{meta.title}</h1><p>{meta.description}</p></div><div className="module-heading-actions"><span className="secondary-button module-state-badge"><CircleAlert size={16}/> {c(locale, "Protected fallback", "Korumalı yedek mod")}</span></div></section>
       <section className="card module-table"><div className="empty-state"><CircleAlert size={24}/><h3>{c(locale, `${meta.title} is temporarily unavailable`, `${meta.title} geçici olarak kullanılamıyor`)}</h3><p>{c(locale, "The governed data plane could not initialize. No demo values are substituted and no mutation was attempted.", "Yönetişimli veri katmanı başlatılamadı. Yerine demo değer konulmadı ve hiçbir değişiklik işlemi denenmedi.")}</p></div></section>
     </AppShell>;
   }

@@ -6,17 +6,21 @@ import { can } from "@/lib/authorization";
 import { coreWorkspaceCopy } from "@/lib/core-workspace-copy";
 import { getServerLocale } from "@/lib/i18n-server";
 import { getServerRequestContext } from "@/lib/server-session";
+import { parseEnterpriseViewRouteState } from "@/lib/enterprise-view-route-state";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-export default async function PositionsPage() {
+export default async function PositionsPage({ searchParams }: { searchParams: SearchParams }) {
   const ctx = await getServerRequestContext();
   if (!ctx) return <AppShell><PublicCoreLanding slug="positions"/></AppShell>;
   const locale = await getServerLocale();
   const { title, description } = coreWorkspaceCopy("positions", locale);
+  const search = await searchParams;
+  const view = parseEnterpriseViewRouteState(search);
   const { CoreHRLiveWorkspace } = await import("@/components/core-hr-live-workspace");
-  const content = await CoreHRLiveWorkspace({ slug: "positions" });
+  const content = await CoreHRLiveWorkspace({ slug: "positions", ...view });
   const readable = can(ctx, "positions:read");
   return <AppShell>
     <section className="page-heading module-heading">

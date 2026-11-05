@@ -1,0 +1,275 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const toolbar = readFileSync("components/enterprise-view-toolbar.tsx", "utf8");
+const columnPicker = readFileSync("components/enterprise-column-picker.tsx", "utf8");
+const workspace = readFileSync("components/core-hr-live-workspace.tsx", "utf8");
+const data = readFileSync("lib/core-hr-live-data.ts", "utf8");
+const moduleLanding = readFileSync("components/module-landing.tsx", "utf8");
+const modulePage = readFileSync("app/module/[slug]/page.tsx", "utf8");
+const peoplePage = readFileSync("app/module/people/page.tsx", "utf8");
+const positionsPage = readFileSync("app/module/positions/page.tsx", "utf8");
+const routeState = readFileSync("lib/enterprise-view-route-state.ts", "utf8");
+const css = readFileSync("app/workspace-shell.css", "utf8");
+const unified = readFileSync("app/warm-enterprise-unified.css", "utf8");
+
+test("shared enterprise toolbar uses URL-native query and status filters", () => {
+  assert.match(toolbar, /<div className="enterprise-view-toolbar">/);
+  assert.match(toolbar, /<form className="enterprise-view-controls" action=\{basePath\} method="get">/);
+  assert.match(toolbar, /name="q"/);
+  assert.match(toolbar, /maxLength=\{160\}/);
+  assert.match(toolbar, /name="status"/);
+  assert.doesNotMatch(toolbar, /name="columnsMode" value="custom"/);
+  assert.match(toolbar, /<EnterpriseColumnPicker/);
+  assert.match(columnPicker, /name="columnsMode" value=\{customized \? "custom" : "default"\}/);
+  assert.match(columnPicker, /name="columns"/);
+  assert.match(columnPicker, /enterprise-column-picker/);
+  assert.match(toolbar, /name="density"/);
+  assert.match(toolbar, /name="sort"/);
+  assert.match(toolbar, /name="dir"/);
+  assert.match(toolbar, /name="pageSize"/);
+  assert.match(toolbar, /value="comfortable"/);
+  assert.match(toolbar, /value="compact"/);
+  assert.match(toolbar, /<EnterpriseSavedViews/);
+  assert.match(toolbar, /savedViews=\{savedViews\}/);
+  assert.match(toolbar, /href=\{basePath\}/);
+  assert.match(toolbar, /shownCount/);
+  assert.match(toolbar, /totalCount/);
+});
+
+test("People and Positions use the same governed table controls", () => {
+  assert.ok((workspace.match(/<EnterpriseViewToolbar/g) ?? []).length >= 2);
+  assert.match(workspace, /moduleKey="people"/);
+  assert.match(workspace, /moduleKey="positions"/);
+  assert.match(workspace, /basePath="\/module\/people"/);
+  assert.match(workspace, /basePath="\/module\/positions"/);
+  assert.match(workspace, /listSavedEnterpriseViews\(ctx, "people"\)/);
+  assert.match(workspace, /listSavedEnterpriseViews\(ctx, "positions"\)/);
+  assert.match(workspace, /sanitizeEnterpriseViewState\("people"/);
+  assert.match(workspace, /sanitizeEnterpriseViewState\("positions"/);
+  assert.match(workspace, /getPeopleWorkspaceData\(currentView\.query, tenantId, currentView\.status, currentView\.sortKey, currentView\.sortDirection, page, currentView\.pageSize\)/);
+  assert.match(workspace, /getPositionsWorkspaceData\(currentView\.query, tenantId, currentView\.status, currentView\.sortKey, currentView\.sortDirection, page, currentView\.pageSize\)/);
+  assert.match(workspace, /peopleSortOptions/);
+  assert.match(workspace, /positionSortOptions/);
+  assert.match(workspace, /peopleColumnOptions/);
+  assert.match(workspace, /positionColumnOptions/);
+  assert.match(workspace, /visiblePeopleColumns\.has\("position"\)/);
+  assert.match(workspace, /visiblePositionColumns\.has\("organization"\)/);
+});
+
+test("status filters are allowlisted and relationship scope remains part of database predicates", () => {
+  assert.match(data, /normalizedEmploymentStatus/);
+  assert.match(data, /EmploymentStatus\.ACTIVE/);
+  assert.match(data, /EmploymentStatus\.PREBOARDING/);
+  assert.match(data, /EmploymentStatus\.LEAVE/);
+  assert.match(data, /EmploymentStatus\.SUSPENDED/);
+  assert.match(workspace, /value: "SUSPENDED", label: c\(locale,"Suspended","Askıya alındı"\)/);
+  assert.match(data, /normalizedPositionStatus/);
+  for (const value of ["OPEN","PLANNED","FILLED","FROZEN","CLOSED"]) {
+    assert.match(data, new RegExp("PositionStatus\\." + value));
+  }
+  assert.match(data, /employmentPrimaryKeyFilter\(scope\)/);
+  assert.match(data, /tenantId: tenant\.id/);
+  assert.match(data, /query\.trim\(\)\.slice\(0, 160\)/);
+});
+
+test("filtered totals are server-derived and route filter input is bounded", () => {
+  assert.ok((data.match(/filteredTotal/g) ?? []).length >= 8);
+  assert.match(data, /db\.person\.count\(\{ where \}\)/);
+  assert.match(data, /db\.position\.count\(\{ where \}\)/);
+  assert.match(modulePage, /parseEnterpriseViewRouteState\(search\)/);
+  assert.match(routeState, /search\.status === "string" \? search\.status\.slice\(0, 40\)/);
+  assert.match(routeState, /Array\.isArray\(search\.columns\)/);
+  assert.match(routeState, /rawColumns\.slice\(0, 12\)/);
+  assert.match(routeState, /search\.columnsMode === "custom"/);
+  assert.match(routeState, /search\.density === "compact"/);
+  assert.match(routeState, /search\.sort === "string"/);
+  assert.match(routeState, /search\.dir === "desc"/);
+  assert.match(routeState, /search\.page === "string"/);
+  assert.match(routeState, /search\.pageSize === "string"/);
+  assert.match(routeState, /boundedSingle\(search\.view, 191\)/);
+  assert.match(peoplePage, /parseEnterpriseViewRouteState\(search\)/);
+  assert.match(peoplePage, /CoreHRLiveWorkspace\(\{ slug: "people", \.\.\.view \}\)/);
+  assert.match(positionsPage, /parseEnterpriseViewRouteState\(search\)/);
+  assert.match(positionsPage, /CoreHRLiveWorkspace\(\{ slug: "positions", \.\.\.view \}\)/);
+  assert.match(moduleLanding, /columns\?: string\[\]/);
+  assert.match(moduleLanding, /density\?: "comfortable" \| "compact"/);
+  assert.match(moduleLanding, /sortKey\?: string/);
+  assert.match(moduleLanding, /sortDirection\?: "asc" \| "desc"/);
+  assert.match(moduleLanding, /page\?: number/);
+  assert.match(moduleLanding, /pageSize\?: 25 \| 50 \| 100/);
+  assert.match(moduleLanding, /CoreHRLiveWorkspace\(\{ slug, query, status, columns, columnsCustomized, density, sortKey, sortDirection, page, pageSize, savedViewId, personId, tab \}\)/);
+});
+
+test("enterprise view controls are responsive Warm Enterprise surfaces", () => {
+  for (const selector of [".enterprise-view-toolbar", ".enterprise-view-controls", ".enterprise-view-actions", ".enterprise-view-search", ".enterprise-view-filter", ".enterprise-view-density", ".enterprise-view-page-size", ".enterprise-view-sort", ".enterprise-column-picker", ".enterprise-column-options", ".enterprise-saved-views", ".enterprise-saved-view-popover", ".enterprise-view-count", ".enterprise-pagination"]) {
+    assert.match(css, new RegExp(selector.replace(".", "\\.")));
+  }
+});
+
+
+test("compact density is URL-native, persisted by the workspace and uses sticky enterprise headers", () => {
+  assert.ok((workspace.match(/density=\{currentView\.density\}/g) ?? []).length >= 2);
+  assert.ok((workspace.match(/enterprise-density-\$\{currentView\.density\}/g) ?? []).length >= 2);
+  assert.match(unified, /\.enterprise-table-card \.enterprise-table thead th/);
+  assert.match(unified, /position:sticky/);
+  assert.match(unified, /\.enterprise-density-compact \.enterprise-table td/);
+});
+
+
+test("enterprise sorting is allowlisted in UI and executed in PostgreSQL queries", () => {
+  assert.match(data, /function peopleOrderBy/);
+  assert.match(data, /sortKey === "employeeNumber"/);
+  assert.match(data, /function positionOrderBy/);
+  for (const key of ["title","status","critical"]) assert.match(data, new RegExp('sortKey === "' + key + '"'));
+  assert.match(data, /orderBy: peopleOrderBy\(sortKey, sortDirection\)/);
+  assert.match(data, /orderBy: positionOrderBy\(sortKey, sortDirection\)/);
+  assert.doesNotMatch(toolbar, /\.sort\(/);
+});
+
+
+test("enterprise registers use real server-side pagination rather than hard row caps", () => {
+  assert.match(data, /normalizeEnterprisePage\(page\)/);
+  assert.match(data, /normalizeEnterprisePageSize\(pageSize\)/);
+  assert.ok((data.match(/skip,/g) ?? []).length >= 2);
+  assert.ok((data.match(/take: normalizedPageSize/g) ?? []).length >= 2);
+  assert.ok((data.match(/pageCount = Math\.max\(1, Math\.ceil\(filteredTotal \/ normalizedPageSize\)\)/g) ?? []).length >= 2);
+  const peopleBody = data.slice(data.indexOf("export async function getPeopleWorkspaceData"), data.indexOf("export type OrganizationRow"));
+  const positionsBody = data.slice(data.indexOf("export async function getPositionsWorkspaceData"), data.indexOf("const employee360Select"));
+  assert.doesNotMatch(peopleBody, /take: 250/);
+  assert.doesNotMatch(positionsBody, /take: 500/);
+  assert.ok((workspace.match(/<EnterprisePagination/g) ?? []).length >= 2);
+  assert.match(workspace, /page=\{data\.page\}/);
+  assert.match(workspace, /pageCount=\{data\.pageCount\}/);
+});
+
+test("People and Positions expose scoped filtered CSV exports", () => {
+  const route = readFileSync("app/api/core-hr/export/route.ts", "utf8");
+  const csvSafety = readFileSync("lib/csv.ts", "utf8");
+  assert.match(toolbar, /Download/);
+  assert.match(toolbar, /new URLSearchParams\(\{ module: moduleKey, locale \}\)/);
+  assert.match(toolbar, /columnsMode/);
+  assert.match(toolbar, /columns\.forEach\(\(column\) => exportParams\.append\("columns", column\)\)/);
+  assert.match(toolbar, /exportEnabled = false/);
+  assert.match(toolbar, /exportEnabled \? <a className="secondary-button enterprise-view-export"/);
+  assert.ok((workspace.match(/exportEnabled=\{!!ctx\}/g) ?? []).length >= 2);
+  assert.match(route, /can\(ctx, "people:read"\)/);
+  assert.match(route, /can\(ctx, "positions:read"\)/);
+  assert.match(route, /tenantId: ctx\.tenantId/);
+  assert.match(route, /resolveEmploymentScope\(db, ctx\)/);
+  assert.match(route, /employmentPrimaryKeyFilter\(peopleScope\)/);
+  assert.match(route, /take: EXPORT_LIMIT \+ 1/);
+  assert.match(route, /status: 422/);
+  assert.match(route, /import \{ safeCsvCell \} from "@\/lib\/csv"/);
+  assert.match(route, /line\.map\(safeCsvCell\)/);
+  assert.match(route, /PEOPLE_REGISTER_EXPORTED/);
+  assert.match(route, /POSITIONS_REGISTER_EXPORTED/);
+  assert.match(route, /DataClassification\.CONFIDENTIAL/);
+  assert.match(csvSafety, /\^\\s\*\[=\+\\-@\]/);
+  assert.match(route, /cache-control": "no-store"/);
+  assert.match(route, /x-content-type-options": "nosniff"/);
+  assert.match(unified, /\.enterprise-view-export\{/);
+});
+
+test("People and Positions distinguish empty registers from empty filtered results", () => {
+  assert.match(workspace, /const peopleFiltered = Boolean\(currentView\.query \|\| currentView\.status\)/);
+  assert.match(workspace, /No people match the current filters\./);
+  assert.match(workspace, /No people records are available\./);
+  assert.match(workspace, /actionHref=\{peopleFiltered \? "\/module\/people" : undefined\}/);
+  assert.match(workspace, /const positionsFiltered = Boolean\(currentView\.query \|\| currentView\.status\)/);
+  assert.match(workspace, /No positions match the current filters\./);
+  assert.match(workspace, /No positions are configured\./);
+  assert.match(workspace, /actionHref=\{positionsFiltered \? "\/module\/positions" : undefined\}/);
+  assert.match(unified, /\.enterprise-empty-row\{/);
+});
+
+test("People and Positions support URL-native sortable table headers", () => {
+  assert.match(workspace, /buildEnterpriseViewHref/);
+  assert.doesNotMatch(workspace, /function enterpriseSortHref/);
+  assert.match(workspace, /const active = state\.sortKey === sortKey \|\| \(!state\.sortKey && defaultActive\)/);
+  assert.match(workspace, /const currentDirection = active \? state\.sortDirection : "asc"/);
+  assert.match(workspace, /sortDirection: active && currentDirection === "asc" \? "desc" : "asc"/);
+  assert.match(workspace, /aria-sort=\{ariaSort\}/);
+  assert.match(workspace, /moduleKey="people" state=\{currentView\} sortKey="name"[^>]*defaultActive/);
+  assert.match(workspace, /moduleKey="positions" state=\{currentView\} sortKey="code"[^>]*defaultActive/);
+  assert.match(workspace, /sortKey="status"/);
+  assert.match(workspace, /sortKey="critical"/);
+  assert.match(unified, /\.enterprise-sort-header\{/);
+  assert.match(unified, /\.enterprise-sort-header:focus-visible/);
+});
+
+test("Positions default header sort reflects position-code ordering", () => {
+  assert.match(workspace, /moduleKey="positions" state=\{currentView\} sortKey="code"[^>]*defaultActive/);
+  assert.match(data, /return \[\{ positionCode: direction \}, \{ title: "asc" \}\]/);
+});
+
+test("enterprise registers expose canonical shareable view links", () => {
+  const copy = readFileSync("components/enterprise-copy-view-link.tsx", "utf8");
+  assert.match(toolbar, /const shareHref = buildEnterpriseViewHref\(moduleKey, \{ \.\.\.current, savedViewId: undefined \}\)/);
+  assert.match(toolbar, /const current = \{ query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize, savedViewId \}/);
+  assert.doesNotMatch(toolbar, /const shareHref = buildEnterpriseViewHref\(moduleKey, current\)/);
+  assert.match(toolbar, /<EnterpriseCopyViewLink locale=\{locale\} href=\{shareHref\}\/>/);
+  assert.match(copy, /new URL\(href, window\.location\.origin\)\.toString\(\)/);
+  assert.match(copy, /navigator\.clipboard\?\.writeText/);
+  assert.match(copy, /aria-live="polite"/);
+  assert.match(copy, /window\.setTimeout\(\(\) => setState\("idle"\), 2400\)/);
+  assert.match(unified, /\.enterprise-copy-view-link\{/);
+});
+
+test("default columns stay default until the user changes visibility", () => {
+  assert.match(columnPicker, /selectionFromProps\(options, columns, columnsCustomized\)/);
+  assert.match(columnPicker, /const customized = selected\.length !== options\.length/);
+  assert.match(columnPicker, /value=\{customized \? "custom" : "default"\}/);
+  assert.match(columnPicker, /setSelected\(\(current\) => \{/);
+  assert.doesNotMatch(toolbar, /<input type="hidden" name="columnsMode" value="custom"\/>/);
+});
+
+test("copy view link falls back for non-secure on-prem browser contexts", () => {
+  const copy = readFileSync("components/enterprise-copy-view-link.tsx", "utf8");
+  assert.match(copy, /function legacyCopy/);
+  assert.match(copy, /document\.createElement\("textarea"\)/);
+  assert.match(copy, /document\.execCommand\("copy"\)/);
+  assert.match(copy, /window\.isSecureContext && navigator\.clipboard\?\.writeText/);
+  assert.match(copy, /else if \(!legacyCopy\(absolute\)\)/);
+  assert.match(copy, /useEffect\(\(\) => \{\s*setState\("idle"\);\s*\}, \[href\]\)/);
+});
+
+test("column picker can restore canonical default visibility in one action", () => {
+  assert.match(columnPicker, /RotateCcw/);
+  assert.match(columnPicker, /className="enterprise-column-reset"/);
+  assert.match(columnPicker, /disabled=\{!customized\}/);
+  assert.match(columnPicker, /setSelected\(options\.map\(\(option\) => option\.value\)\)/);
+  assert.match(columnPicker, /<small aria-live="polite">\{selected\.length\}\/\{options\.length\}<\/small>/);
+  assert.match(unified, /\.enterprise-column-reset\{/);
+  assert.match(unified, /\.enterprise-column-reset:focus-visible/);
+});
+
+test("enterprise toolbar secondary actions stay grouped on narrow screens", () => {
+  assert.match(toolbar, /<div className="enterprise-view-actions">/);
+  assert.match(toolbar, /enterprise-view-export[\s\S]*EnterpriseCopyViewLink[\s\S]*EnterpriseSavedViews/);
+  assert.match(css, /\.enterprise-view-actions\{display:flex;align-items:center;gap:7px;flex-wrap:wrap\}/);
+  assert.match(css, /@media\(max-width:760px\)[\s\S]*\.enterprise-view-actions\{width:100%;flex:1 1 100%\}/);
+  assert.match(css, /\.enterprise-view-actions>\.secondary-button,.enterprise-view-actions>\.enterprise-saved-views\{flex:1\}/);
+});
+
+test("enterprise registers expose removable active-view state chips", () => {
+  assert.match(toolbar, /const activeViewChips = \[/);
+  assert.match(toolbar, /buildEnterpriseViewHref\(moduleKey, \{ \.\.\.current, query: "" \}\)/);
+  assert.match(toolbar, /buildEnterpriseViewHref\(moduleKey, \{ \.\.\.current, status: undefined \}\)/);
+  assert.match(toolbar, /columnsCustomized: false/);
+  assert.match(toolbar, /density: "comfortable"/);
+  assert.match(toolbar, /sortKey: undefined, sortDirection: "asc"/);
+  assert.match(toolbar, /pageSize: 50/);
+  assert.match(toolbar, /className="enterprise-view-active-state"/);
+  assert.match(toolbar, /className="enterprise-view-chip"/);
+  assert.match(unified, /\.enterprise-view-active-state\{/);
+  assert.match(unified, /\.enterprise-view-chip:focus-visible/);
+});
+
+
+test("saved view provenance is private navigation context and copy links remain portable", () => {
+  assert.match(toolbar, /name="view" value=\{savedViewId\}/);
+  assert.match(toolbar, /buildEnterpriseViewHref\(moduleKey, \{ \.\.\.current, savedViewId: undefined \}\)/);
+  assert.match(workspace, /savedViewId=\{currentView\.savedViewId\}/);
+});

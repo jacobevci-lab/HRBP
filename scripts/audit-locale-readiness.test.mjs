@@ -3,12 +3,15 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { waitForAuditLocale } from './audit-locale-readiness.mjs';
 
-function fixture({ lang = 'tr', busy = 'false', toggle = true, error = false, marker = true } = {}) {
+function fixture({ lang = 'tr', busy = 'false', selected = lang, toggle = true, error = false, marker = true } = {}) {
   const calls = [];
   const document = {
     documentElement: { lang },
     querySelector(selector) {
-      if (selector === '.locale-toggle') return toggle ? { getAttribute: key => key === 'aria-busy' ? busy : null } : null;
+      if (selector === '.locale-toggle') return toggle ? {
+        getAttribute: key => key === 'aria-busy' ? busy : null,
+        querySelector: inner => inner === 'button[aria-pressed="true"]' && selected ? { textContent: selected.toUpperCase() } : null
+      } : null;
       if (selector === '.locale-error') return error ? {} : null;
       throw new Error(`Unexpected DOM query: ${selector}`);
     }
@@ -56,6 +59,8 @@ for (const locale of ['en', 'tr']) {
 for (const [name, options] of [
   ['old language', { lang: 'en' }],
   ['pending transition', { busy: 'true' }],
+  ['provider selection still English', { lang: 'tr', selected: 'en' }],
+  ['missing selected locale', { lang: 'tr', selected: null }],
   ['missing readiness attribute', { busy: null }],
   ['missing toggle', { toggle: false }],
   ['visible locale failure', { error: true }]
@@ -101,8 +106,19 @@ test('leave decision browser uses deterministic locale readiness instead of netw
   assert.match(source, /import \{ waitForAuditLocale \} from '\.\/audit-locale-readiness\.mjs'/);
   assert.match(source, /waitForAuditLocale\(page, pagePath, locale\)/);
   assert.ok(!source.includes('networkidle'), 'Leave decision acceptance must not depend on global network silence');
-  assert.match(source, /waitForURL\(origin \+ pagePath, \{ waitUntil: 'commit', timeout: 15000 \}\)/,
-    'Leave login must observe navigation commit before locale/UI readiness');
+  assert.match(source, /async function submitLocalLogin/);
+  assert.match(source, /page\.waitForURL\(target, \{ waitUntil: 'commit', timeout: 30000 \}\)/,
+    'Leave login must first observe a navigation commit');
+  assert.match(source, /context\.request\.get\(origin \+ '\/api\/auth\/session'\)/,
+    'Slow redirects may recover only after independently probing the signed session');
+  assert.match(source, /assert\.equal\(body\.authenticated, true/,
+    'Redirect recovery must hard-fail without an authenticated session');
+  assert.match(source, /page\.goto\(target, \{ waitUntil: 'domcontentloaded', timeout: 30000 \}\)/,
+    'Verified slow redirects may explicitly complete target navigation');
+  const loginIndex = source.indexOf('await submitLocalLogin(');
+  const readinessIndex = source.indexOf('waitForAuditLocale(page, pagePath, locale)', loginIndex);
+  assert.ok(loginIndex > -1 && readinessIndex > loginIndex,
+    'Locale/UI readiness must run after committed or verified-recovered login navigation');
   assert.match(source, /waitForNavigation\(\{ waitUntil: 'domcontentloaded', timeout: 15000 \}\)/,
     'Leave reload must observe DOM commit and then locale/UI readiness');
 });
@@ -113,8 +129,19 @@ test('time decision browser uses deterministic locale readiness instead of netwo
   assert.match(source, /import \{ waitForAuditLocale \} from "\.\/audit-locale-readiness\.mjs"/);
   assert.match(source, /waitForAuditLocale\(page,pagePath,locale\)/);
   assert.ok(!source.includes('networkidle'), 'Time decision acceptance must not depend on global network silence');
-  assert.match(source, /waitForURL\(origin\+pagePath,\{waitUntil:"commit",timeout:15000\}\)/,
-    'Login navigation must observe URL commit before locale/UI readiness instead of waiting for the load event');
+  assert.match(source, /async function submitLocalLogin/);
+  assert.match(source, /page\.waitForURL\(target,\{waitUntil:"commit",timeout:30000\}\)/,
+    'Time login must first observe a navigation commit');
+  assert.match(source, /context\.request\.get\(origin\+"\/api\/auth\/session"\)/,
+    'Slow redirects may recover only after independently probing the signed session');
+  assert.match(source, /assert\.equal\(body\.authenticated,true/,
+    'Redirect recovery must hard-fail without an authenticated session');
+  assert.match(source, /page\.goto\(target,\{waitUntil:"domcontentloaded",timeout:30000\}\)/,
+    'Verified slow redirects may explicitly complete target navigation');
+  const loginIndex = source.indexOf('await submitLocalLogin(');
+  const readinessIndex = source.indexOf('waitForAuditLocale(page,pagePath,locale)', loginIndex);
+  assert.ok(loginIndex > -1 && readinessIndex > loginIndex,
+    'Locale/UI readiness must run after committed or verified-recovered login navigation');
   assert.match(source, /waitForNavigation\(\{waitUntil:"domcontentloaded",timeout:15000\}\)/);
 });
 

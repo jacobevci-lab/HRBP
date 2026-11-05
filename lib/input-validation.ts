@@ -75,3 +75,33 @@ export function asDate(value: unknown): Date | null {
   const date = new Date(normalized);
   return Number.isNaN(date.getTime()) ? null : date;
 }
+
+export function asEmailAddress(value: unknown, maxLength = 254): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized.length > maxLength) return null;
+  if (/[\u0000-\u001f\u007f\s]/u.test(normalized)) return null;
+  const at = normalized.indexOf("@");
+  if (at <= 0 || at !== normalized.lastIndexOf("@") || at === normalized.length - 1) return null;
+  return normalized;
+}
+
+export function asDateOnly(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(normalized);
+  if (!match) return null;
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) return null;
+  return date;
+}
+
+export function asOptionalBoolean(value: unknown): boolean | null | undefined {
+  if (value === undefined || value === null) return undefined;
+  return typeof value === "boolean" ? value : null;
+}

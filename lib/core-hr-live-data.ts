@@ -44,6 +44,50 @@ function enumLabel(value: string) {
     .join(" ");
 }
 
+function normalizedEmploymentStatus(value?: string): EmploymentStatus | null {
+  const normalized = value?.trim().toUpperCase();
+  if (normalized === EmploymentStatus.ACTIVE) return EmploymentStatus.ACTIVE;
+  if (normalized === EmploymentStatus.PREBOARDING) return EmploymentStatus.PREBOARDING;
+  if (normalized === EmploymentStatus.LEAVE) return EmploymentStatus.LEAVE;
+  if (normalized === EmploymentStatus.SUSPENDED) return EmploymentStatus.SUSPENDED;
+  return null;
+}
+
+function normalizedPositionStatus(value?: string): PositionStatus | null {
+  const normalized = value?.trim().toUpperCase();
+  if (normalized === PositionStatus.OPEN) return PositionStatus.OPEN;
+  if (normalized === PositionStatus.PLANNED) return PositionStatus.PLANNED;
+  if (normalized === PositionStatus.FILLED) return PositionStatus.FILLED;
+  if (normalized === PositionStatus.FROZEN) return PositionStatus.FROZEN;
+  if (normalized === PositionStatus.CLOSED) return PositionStatus.CLOSED;
+  return null;
+}
+
+type EnterpriseSortDirection = "asc" | "desc";
+type EnterprisePageSize = 25 | 50 | 100;
+
+function normalizeEnterprisePage(value: number) {
+  return Number.isInteger(value) && value > 0 ? Math.min(value, 10000) : 1;
+}
+
+function normalizeEnterprisePageSize(value: number): EnterprisePageSize {
+  return value === 25 || value === 100 ? value : 50;
+}
+
+function peopleOrderBy(sortKey?: string, sortDirection: EnterpriseSortDirection = "asc"): Prisma.PersonOrderByWithRelationInput[] {
+  const direction = sortDirection === "desc" ? "desc" as const : "asc" as const;
+  if (sortKey === "employeeNumber") return [{ employeeNumber: direction }, { familyName: "asc" }, { givenName: "asc" }];
+  return [{ familyName: direction }, { givenName: direction }, { employeeNumber: "asc" }];
+}
+
+function positionOrderBy(sortKey?: string, sortDirection: EnterpriseSortDirection = "asc"): Prisma.PositionOrderByWithRelationInput[] {
+  const direction = sortDirection === "desc" ? "desc" as const : "asc" as const;
+  if (sortKey === "title") return [{ title: direction }, { positionCode: "asc" }];
+  if (sortKey === "status") return [{ status: direction }, { positionCode: "asc" }];
+  if (sortKey === "critical") return [{ critical: direction }, { positionCode: "asc" }];
+  return [{ positionCode: direction }, { title: "asc" }];
+}
+
 export type LivePersonRow = {
   id: string;
   employeeNumber: string;
@@ -65,31 +109,33 @@ export type PeopleWorkspaceData = {
   onLeave: number;
   dataQuality: number;
   needsReview: number;
+  filteredTotal: number;
+  page: number;
+  pageSize: EnterprisePageSize;
+  pageCount: number;
   people: LivePersonRow[];
 };
 
-export async function getPeopleWorkspaceData(query = "", tenantId?: string): Promise<PeopleWorkspaceData> {
+export async function getPeopleWorkspaceData(query = "", tenantId?: string, status?: string, sortKey?: string, sortDirection: EnterpriseSortDirection = "asc", page = 1, pageSize = 50): Promise<PeopleWorkspaceData> {
   return withDb(async (db) => {
     const tenant = await resolveTenant(db, tenantId);
     if (!tenant) {
-      return { tenantName: "Workspace", active: 0, preboarding: 0, onLeave: 0, dataQuality: 100, needsReview: 0, people: [] };
+      return { tenantName: "Workspace", active: 0, preboarding: 0, onLeave: 0, dataQuality: 100, needsReview: 0, filteredTotal: 0, page: 1, pageSize: normalizeEnterprisePageSize(pageSize), pageCount: 1, people: [] };
     }
 
     const scope = await resolvePeopleScope(db, tenant.id);
     const employmentScope = employmentPrimaryKeyFilter(scope);
-    const personScope: Prisma.PersonWhereInput = scope === null
+    const statusFilter = normalizedEmploymentStatus(status);
+    const normalized = query.trim().slice(0, 160);
+    const listEmploymentWhere: Prisma.EmploymentWhereInput = {
+      tenantId: tenant.id,
+      ...employmentScope,
+      status: statusFilter ?? { not: EmploymentStatus.TERMINATED }
+    };
+    const listPersonScope: Prisma.PersonWhereInput = scope === null && !statusFilter
       ? {}
-      : {
-          employments: {
-            some: {
-              tenantId: tenant.id,
-              status: { not: EmploymentStatus.TERMINATED },
-              ...employmentScope
-            }
-          }
-        };
-    const normalized = query.trim();
-    const where: Prisma.PersonWhereInput = { tenantId: tenant.id, ...personScope };
+      : { employments: { some: listEmploymentWhere } };
+    const where: Prisma.PersonWhereInput = { tenantId: tenant.id, ...listPersonScope };
     if (normalized) {
       where.OR = [
         { givenName: { contains: normalized, mode: "insensitive" } },
@@ -99,12 +145,27 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string): Pro
       ];
     }
 
-    const scopedEmploymentBase = { tenantId: tenant.id, ...employmentScope };
+    const scopedEmploymentBase: Prisma.EmploymentWhereInput = { tenantId: tenant.id, ...employmentScope };
+    const qualityEmploymentWhere: Prisma.EmploymentWhereInput = {
+      ...scopedEmploymentBase,
+      status: { not: EmploymentStatus.TERMINATED }
+    };
+    const qualityPersonScope: Prisma.PersonWhereInput = scope === null
+      ? {}
+      : { employments: { some: qualityEmploymentWhere } };
+
+    const normalizedPageSize = normalizeEnterprisePageSize(pageSize);
+    const filteredTotal = await db.person.count({ where });
+    const pageCount = Math.max(1, Math.ceil(filteredTotal / normalizedPageSize));
+    const currentPage = Math.min(normalizeEnterprisePage(page), pageCount);
+    const skip = (currentPage - 1) * normalizedPageSize;
+
     const [people, active, preboarding, onLeave, qualityRows] = await Promise.all([
       db.person.findMany({
         where,
-        orderBy: [{ familyName: "asc" }, { givenName: "asc" }],
-        take: 250,
+        orderBy: peopleOrderBy(sortKey, sortDirection),
+        skip,
+        take: normalizedPageSize,
         select: {
           id: true,
           employeeNumber: true,
@@ -112,7 +173,7 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string): Pro
           familyName: true,
           workEmail: true,
           employments: {
-            where: { status: { not: EmploymentStatus.TERMINATED }, ...scopedEmploymentBase },
+            where: listEmploymentWhere,
             orderBy: { startDate: "desc" },
             take: 1,
             select: {
@@ -134,11 +195,11 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string): Pro
       db.employment.count({ where: { ...scopedEmploymentBase, status: EmploymentStatus.PREBOARDING } }),
       db.employment.count({ where: { ...scopedEmploymentBase, status: EmploymentStatus.LEAVE } }),
       db.person.findMany({
-        where: { tenantId: tenant.id, ...personScope },
+        where: { tenantId: tenant.id, ...qualityPersonScope },
         select: {
           workEmail: true,
           employments: {
-            where: { status: { not: EmploymentStatus.TERMINATED }, ...scopedEmploymentBase },
+            where: qualityEmploymentWhere,
             orderBy: { startDate: "desc" },
             take: 1,
             select: { positionId: true }
@@ -157,6 +218,10 @@ export async function getPeopleWorkspaceData(query = "", tenantId?: string): Pro
       onLeave,
       dataQuality,
       needsReview,
+      filteredTotal,
+      page: currentPage,
+      pageSize: normalizedPageSize,
+      pageCount,
       people: people.map((person) => {
         const employment = person.employments[0];
         const position = employment?.position;
@@ -280,42 +345,74 @@ export type PositionsWorkspaceData = {
   open: number;
   planned: number;
   critical: number;
+  filteredTotal: number;
+  page: number;
+  pageSize: EnterprisePageSize;
+  pageCount: number;
   rows: LivePositionRow[];
 };
 
-export async function getPositionsWorkspaceData(tenantId?: string): Promise<PositionsWorkspaceData> {
+export async function getPositionsWorkspaceData(query = "", tenantId?: string, status?: string, sortKey?: string, sortDirection: EnterpriseSortDirection = "asc", page = 1, pageSize = 50): Promise<PositionsWorkspaceData> {
   return withDb(async (db) => {
     const tenant = await resolveTenant(db, tenantId);
-    if (!tenant) return { positions: 0, filled: 0, open: 0, planned: 0, critical: 0, rows: [] };
+    if (!tenant) return { positions: 0, filled: 0, open: 0, planned: 0, critical: 0, filteredTotal: 0, page: 1, pageSize: normalizeEnterprisePageSize(pageSize), pageCount: 1, rows: [] };
     const scope = await resolvePeopleScope(db, tenant.id);
+    const normalized = query.trim().slice(0, 160);
+    const statusFilter = normalizedPositionStatus(status);
+    const baseWhere: Prisma.PositionWhereInput = { tenantId: tenant.id, validTo: null };
+    const where: Prisma.PositionWhereInput = { ...baseWhere };
+    if (statusFilter) where.status = statusFilter;
+    if (normalized) {
+      where.OR = [
+        { positionCode: { contains: normalized, mode: "insensitive" } },
+        { title: { contains: normalized, mode: "insensitive" } },
+        { location: { contains: normalized, mode: "insensitive" } },
+        { orgUnit: { name: { contains: normalized, mode: "insensitive" } } }
+      ];
+    }
 
-    const positions = await db.position.findMany({
-      where: { tenantId: tenant.id, validTo: null },
-      orderBy: { positionCode: "asc" },
-      select: {
-        id: true,
-        positionCode: true,
-        title: true,
-        grade: true,
-        location: true,
-        status: true,
-        critical: true,
-        orgUnit: { select: { name: true } },
-        employments: {
-          where: { status: { not: EmploymentStatus.TERMINATED }, ...employmentPrimaryKeyFilter(scope) },
-          orderBy: { startDate: "desc" },
-          take: 1,
-          select: { person: { select: { givenName: true, familyName: true } } }
+    const normalizedPageSize = normalizeEnterprisePageSize(pageSize);
+    const filteredTotal = await db.position.count({ where });
+    const pageCount = Math.max(1, Math.ceil(filteredTotal / normalizedPageSize));
+    const currentPage = Math.min(normalizeEnterprisePage(page), pageCount);
+    const skip = (currentPage - 1) * normalizedPageSize;
+
+    const [positions, allPositions] = await Promise.all([
+      db.position.findMany({
+        where,
+        orderBy: positionOrderBy(sortKey, sortDirection),
+        skip,
+        take: normalizedPageSize,
+        select: {
+          id: true,
+          positionCode: true,
+          title: true,
+          grade: true,
+          location: true,
+          status: true,
+          critical: true,
+          orgUnit: { select: { name: true } },
+          employments: {
+            where: { status: { not: EmploymentStatus.TERMINATED }, ...employmentPrimaryKeyFilter(scope) },
+            orderBy: { startDate: "desc" },
+            take: 1,
+            select: { person: { select: { givenName: true, familyName: true } } }
+          }
         }
-      }
-    });
+      }),
+      db.position.findMany({ where: baseWhere, select: { status: true, critical: true } })
+    ]);
 
     return {
-      positions: positions.length,
-      filled: positions.filter((position) => position.status === PositionStatus.FILLED).length,
-      open: positions.filter((position) => position.status === PositionStatus.OPEN).length,
-      planned: positions.filter((position) => position.status === PositionStatus.PLANNED).length,
-      critical: positions.filter((position) => position.critical).length,
+      positions: allPositions.length,
+      filled: allPositions.filter((position) => position.status === PositionStatus.FILLED).length,
+      open: allPositions.filter((position) => position.status === PositionStatus.OPEN).length,
+      planned: allPositions.filter((position) => position.status === PositionStatus.PLANNED).length,
+      critical: allPositions.filter((position) => position.critical).length,
+      filteredTotal,
+      page: currentPage,
+      pageSize: normalizedPageSize,
+      pageCount,
       rows: positions.map((position) => ({
         id: position.id,
         code: position.positionCode,

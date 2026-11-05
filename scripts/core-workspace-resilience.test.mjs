@@ -21,6 +21,7 @@ function load(path, mocks = {}, globals = {}) {
     if (name === '@/components/app-shell') return { AppShell: 'app-shell' };
     if (name === '@/components/public-core-landing') return { PublicCoreLanding: 'public-preview' };
     if (name === '@/lib/core-workspace-copy') return load('lib/core-workspace-copy.ts');
+    if (name === '@/lib/enterprise-view-route-state') return load('lib/enterprise-view-route-state.ts');
     if (Object.hasOwn(mocks, name)) {
       const value = mocks[name];
       if (value instanceof Error) throw value;
@@ -42,7 +43,7 @@ function text(tree) {
   if (typeof tree === 'object') return text(tree.props?.children);
   return String(tree);
 }
-function fixture(slug, { locale = 'en', ctx = { tenantId: 'tenant-test', actorId: 'test-user' },
+function fixture(slug, { locale = 'en', ctx = { tenantId: 'tenant-test', actorId: 'test-user', role: 'HR_OPERATIONS' },
   capabilities = ['people:read', 'people:write', 'positions:read', 'positions:write', 'organization:read'],
   fail, importFail } = {}) {
   const calls = [];
@@ -53,6 +54,12 @@ function fixture(slug, { locale = 'en', ctx = { tenantId: 'tenant-test', actorId
       assert.equal(actual, ctx, 'capability checks must use the resolved identity');
       return capabilities.includes(capability);
     } },
+    '@/lib/workforce-master-data-access': {
+      canCreateEmployeeMasterRecord: actual => {
+        assert.equal(actual, ctx, 'master-data checks must use the resolved identity');
+        return capabilities.includes('people:write') && ['HR_OPERATIONS', 'TENANT_ADMIN'].includes(actual?.role);
+      }
+    },
     '@/components/core-hr-live-workspace': importFail || { CoreHRLiveWorkspace: async args => {
       calls.push(JSON.parse(JSON.stringify(args)));
       if (fail) throw fail;
@@ -118,6 +125,46 @@ for (const slug of ['people', 'positions']) {
     });
   }
 }
+test('people: HRBP write capability does not expose master-data create CTA', async () => {
+  const route = fixture('people', {
+    ctx: { tenantId: 'tenant-test', actorId: 'hrbp-user', role: 'HRBP' },
+    capabilities: ['people:read', 'people:write']
+  });
+  const tree = await route.default({ searchParams: Promise.resolve({}) });
+  assert.ok(!nodes(tree).some(n => n.type === 'a' && n.props.href === '/module/people/new'));
+});
+
+for (const [slug, status, sort] of [['people', 'ACTIVE', 'employeeNumber'], ['positions', 'OPEN', 'title']]) {
+  test(`${slug}: dedicated route forwards bounded enterprise register state`, async () => {
+    const route = fixture(slug);
+    await route.default({ searchParams: Promise.resolve({
+      q: '  Deniz  ',
+      status,
+      columns: ['status', 'position'],
+      columnsMode: 'custom',
+      density: 'compact',
+      sort,
+      dir: 'desc',
+      page: '99999',
+      pageSize: '100',
+      view: ' saved-view-1 '
+    }) });
+    assert.deepEqual(JSON.parse(JSON.stringify(route.calls[0])), {
+      slug,
+      query: 'Deniz',
+      status,
+      columns: ['status', 'position'],
+      columnsCustomized: true,
+      density: 'compact',
+      sortKey: sort,
+      sortDirection: 'desc',
+      page: 10000,
+      pageSize: 100,
+      savedViewId: 'saved-view-1'
+    });
+  });
+}
+
 test('People search forwards an exact string, ignores duplicate/array query values', async () => {
   for (const q of ['Ayşe & Ömer', ['Ayşe', 'Ömer'], undefined]) {
     const route = fixture('people');

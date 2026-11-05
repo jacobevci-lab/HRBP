@@ -11,9 +11,9 @@ const componentPath = "components/core-hr-workspace.tsx";
 const source = readFileSync(componentPath, "utf8");
 const validatorPath = "scripts/validate-public-staging.mjs";
 const validator = readFileSync(validatorPath, "utf8");
-const reason = {
-  en: "Read-only preview; this action is unavailable.",
-  tr: "Salt-okunur önizleme; bu işlem kullanılamaz."
+const staticPreviewTitle = {
+  en: "Static preview",
+  tr: "Statik önizleme"
 };
 const fixtures = {
   employees: [
@@ -85,21 +85,31 @@ function text(node) {
   if (node === null || node === undefined || typeof node === "boolean") return "";
   return typeof node === "object" ? text(node.props.children) : String(node);
 }
-const expectedButtons = { people: 3, organization: 1, positions: 1, "employee-360": 8, documents: 1, audit: 1 };
+function staticAffordances(node) {
+  return elements(node, "span").filter((item) =>
+    typeof item.props.className === "string" &&
+    /\bpreview-static-(?:label|icon|tab)\b/.test(item.props.className)
+  );
+}
+const expectedAffordances = { people: 3, organization: 1, positions: 1, "employee-360": 8, documents: 1, audit: 1 };
 for (const locale of ["en", "tr"]) {
-  for (const [slug, expected] of Object.entries(expectedButtons)) {
-    test(`${locale}/${slug}: every unavailable action is named, explained and natively disabled`, () => {
+  for (const [slug, expected] of Object.entries(expectedAffordances)) {
+    test(`${locale}/${slug}: public preview exposes inert static affordances instead of fake actions`, () => {
       const view = harness(locale).render(slug);
       const buttons = elements(view, "button");
-      assert.equal(buttons.length, expected, "Do not hide controls to satisfy the check");
-      for (const button of buttons) {
-        assert.equal(button.props.disabled, true);
-        assert.equal(button.props.type, "button", "Preview controls must not accidentally submit an outer form");
-        assert.equal(button.props.title, reason[locale]);
-        assert.ok((button.props["aria-label"] || text(button)).trim(), "Every action must have an accessible name");
-        assert.equal(button.props.onClick, undefined);
-        assert.equal(button.props.onKeyDown, undefined);
-        assert.equal(button.props.formAction, undefined);
+      const affordances = staticAffordances(view);
+      assert.equal(buttons.length, 0, "Public preview must not render fake action buttons");
+      assert.equal(affordances.length, expected, "Reviewed static affordance inventory changed unexpectedly");
+      for (const item of affordances) {
+        assert.equal(item.props.onClick, undefined);
+        assert.equal(item.props.onKeyDown, undefined);
+        assert.equal(item.props.formAction, undefined);
+        if (item.props.className.includes("preview-static-label")) {
+          assert.equal(item.props.title, staticPreviewTitle[locale]);
+        }
+        if (item.props.className.includes("preview-static-icon")) {
+          assert.equal(item.props["aria-hidden"], "true");
+        }
       }
     });
   }
@@ -116,12 +126,13 @@ for (const locale of ["en", "tr"]) {
       assert.ok(text(view).includes("Deniz Sample"));
       assert.ok(!text(view).includes("Ada Example"));
       assert.equal(elements(view, "input")[0].props.value, query);
-      assert.equal(elements(view, "button").length, 2);
+      assert.equal(elements(view, "button").length, 0);
+      assert.equal(staticAffordances(view).length, 2);
     }
     input.props.onChange({ target: { value: "no-such-demo-record" } });
-    assert.equal(elements(h.render("people"), "button").length, 1);
+    assert.equal(staticAffordances(h.render("people")).length, 1);
     input.props.onChange({ target: { value: "" } });
-    assert.equal(elements(h.render("people"), "button").length, 3);
+    assert.equal(staticAffordances(h.render("people")).length, 3);
   });
   test(`${locale}/privacy: the existing noninteractive preview content is retained`, () => {
     const view = harness(locale).render("privacy");
@@ -129,14 +140,20 @@ for (const locale of ["en", "tr"]) {
     assert.ok(text(view).includes(locale === "tr" ? "Gizlilik kontrolleri" : "Privacy controls"));
   });
 }
-test("locale changes update disabled-action explanations without losing a search draft", () => {
+test("locale changes update static preview copy without losing a search draft", () => {
   const h = harness();
   elements(h.render("people"), "input")[0].props.onChange({ target: { value: "DEMO-2" } });
   h.setLocale("tr");
   const view = h.render("people");
   assert.equal(elements(view, "input")[0].props.value, "DEMO-2");
-  assert.ok(elements(view, "button").every((button) => button.props.title === reason.tr && button.props.disabled));
-  assert.equal(elements(view, "button")[1].props["aria-label"], "Deniz Sample kaydını aç");
+  assert.equal(elements(view, "button").length, 0);
+  const affordances = staticAffordances(view);
+  assert.equal(affordances.length, 2);
+  const label = affordances.find((item) => item.props.className.includes("preview-static-label"));
+  const icon = affordances.find((item) => item.props.className.includes("preview-static-icon"));
+  assert.equal(label?.props.title, staticPreviewTitle.tr);
+  assert.ok(text(label).includes("Dışa aktar"));
+  assert.equal(icon?.props["aria-hidden"], "true");
 });
 test("the existing preview slug inventory and unknown-slug result remain unchanged", () => {
   const h = harness();

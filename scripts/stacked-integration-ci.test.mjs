@@ -49,7 +49,7 @@ test("application runs migrations and the real PostgreSQL audit and domain cases
   const commands = ["npx --no-install prisma validate", "npm run db:migrate:verify", "npm run db:migrate:upgrade",
     ...["audit-ledger-concurrency.test.mjs", "audit-full-history-postgres.test.mjs",
       "audit-assurance-rehearsal.postgres.test.mjs", "audit-verification-progress.postgres.test.mjs",
-      "job-change-impact-preview.postgres.test.mjs", "scheduled-job-changes.postgres.test.mjs",
+      "master-data-create-concurrency.postgres.test.mjs", "job-change-impact-preview.postgres.test.mjs", "scheduled-job-changes.postgres.test.mjs",
       "emergency-access.postgres.test.mjs", "identity-provider-lifecycle.postgres.test.mjs"].map(file => `node --test scripts/${file}`)];
   let position = -1;
   for (const command of commands) {
@@ -58,17 +58,19 @@ test("application runs migrations and the real PostgreSQL audit and domain cases
     position = next;
   }
   assert.match(application, /^          HRBP_DISPOSABLE_AUDIT_LEDGER_TEST: "true"$/m);
+  assert.match(application, /^          HRBP_DISPOSABLE_MASTER_DATA_CONCURRENCY: "true"$/m);
   assert.match(application, /^    timeout-minutes: 35$/m);
 });
 
 test("typecheck, full prebuild, Next build and OpenNext packaging remain mandatory", () => {
-  const commands = ["npm run typecheck", "npm run build", "npm run cf:build", "npx --no-install wrangler deploy --dry-run"];
+  const commands = ["npm run typecheck", "npm run build", "env -u DATABASE_URL npm run cf:build", "npx --no-install wrangler deploy --dry-run"];
   let position = -1;
   for (const command of commands) {
     const next = application.indexOf(`run: ${command}\n`);
     assert.ok(next > position, `missing or reordered mandatory build: ${command}`);
     position = next;
   }
+  assert.match(application, /env -u DATABASE_URL npm run cf:build/);
   assert.doesNotMatch(application, /--ignore-scripts|--skip|SKIP_|DISABLE_|npm exec.*next|npx next|npm run build --/);
 });
 
