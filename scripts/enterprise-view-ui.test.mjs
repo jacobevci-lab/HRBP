@@ -206,7 +206,9 @@ test("Positions default header sort reflects position-code ordering", () => {
 
 test("enterprise registers expose canonical shareable view links", () => {
   const copy = readFileSync("components/enterprise-copy-view-link.tsx", "utf8");
-  assert.match(toolbar, /buildEnterpriseViewHref\(moduleKey, current\)/);
+  assert.match(toolbar, /const shareHref = buildEnterpriseViewHref\(moduleKey, \{ \.\.\.current, savedViewId: undefined \}\)/);
+  assert.match(toolbar, /const current = \{ query, status, columns, columnsCustomized, density, sortKey, sortDirection, pageSize, savedViewId \}/);
+  assert.doesNotMatch(toolbar, /const shareHref = buildEnterpriseViewHref\(moduleKey, current\)/);
   assert.match(toolbar, /<EnterpriseCopyViewLink locale=\{locale\} href=\{shareHref\}\/>/);
   assert.match(copy, /new URL\(href, window\.location\.origin\)\.toString\(\)/);
   assert.match(copy, /navigator\.clipboard\?\.writeText/);
