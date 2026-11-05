@@ -33,7 +33,7 @@ export async function GET(request: Request) {
       take: pagination.limit,
       select: {
         id: true, employeeNumber: true, givenName: true, familyName: true, workEmail: true, classification: true,
-        employments: { where: employmentWhere, take: 1, select: {
+        employments: { where: employmentWhere, orderBy: [{ startDate: "desc" }, { id: "desc" }], take: 1, select: {
           id: true, status: true, startDate: true,
           position: { select: { id: true, positionCode: true, title: true, orgUnit: { select: { id: true, name: true } } } }
         }}

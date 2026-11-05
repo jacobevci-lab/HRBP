@@ -351,6 +351,9 @@ test("Core HR read APIs expose bounded pagination metadata while preserving data
   assert.deepEqual(peopleFixtureResult.calls.peopleReads[0].orderBy, [
     { familyName: "asc" }, { givenName: "asc" }, { id: "asc" }
   ]);
+  assert.deepEqual(peopleFixtureResult.calls.peopleReads[0].select.employments.orderBy, [
+    { startDate: "desc" }, { id: "desc" }
+  ]);
   assert.deepEqual(peopleFixtureResult.calls.peopleCounts[0].where, peopleFixtureResult.calls.peopleReads[0].where);
 
   const positionRows = [{ id: "position-1" }];
